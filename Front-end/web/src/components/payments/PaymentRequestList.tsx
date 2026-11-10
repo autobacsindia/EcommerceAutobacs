@@ -9,7 +9,7 @@ import {
   ListAmountRange, ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
 } from '@/components/panel/ListControls';
 import {
-  amountText, categoryName, errorMessage, foreignBill, getListFilterOptions, listRequests, money, paymentKeys, rupees, STATUS_TONE,
+  accountName, amountText, categoryName, errorMessage, foreignBill, foreignTotals, getListFilterOptions, listRequests, money, paymentKeys, rupees, STATUS_TONE,
 } from './api';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import { DealLine } from './DealSummary';
@@ -150,9 +150,12 @@ export default function PaymentRequestList({
             ? (
               <div className="flex flex-wrap items-baseline gap-x-2">
                 <ListResultLine count={summary.count} capped={summary.capped} total={summary.total} noun={['payment', 'payments']} formatTotal={rupees} />
-                {/* Foreign bills not yet paid have no rupees: counted, left out of the total, and said so. */}
+                {/* Foreign bills with no rupees (not paid yet, or paid from a foreign account): counted,
+                    left out of the rupee total, and their own amounts shown beside it — never added in. */}
                 {!summary.capped && summary.pending ? (
-                  <span className="text-xs text-gray-500">+ {summary.pending} foreign bill{summary.pending === 1 ? '' : 's'} not in the total (rupees known when paid)</span>
+                  <span className="text-xs text-gray-500">
+                    + {foreignTotals(summary.foreign) || `${summary.pending} foreign bill${summary.pending === 1 ? '' : 's'}`} not in the ₹ total (foreign bills with no rupees)
+                  </span>
                 ) : null}
               </div>
             )
@@ -188,7 +191,9 @@ export default function PaymentRequestList({
                 </div>
                 <span className="shrink-0 text-right text-sm font-semibold text-gray-900">
                   {amountText(r)}
-                  {r.rupeesPending
+                  {r.paidFrom
+                    ? <span className="block text-xs font-normal text-gray-500">from {accountName(r.paidFrom)}</span>
+                    : r.rupeesPending
                     ? <span className="block text-xs font-normal text-gray-500">₹ when paid</span>
                     : foreignBill(r) && <span className="block text-xs font-normal text-gray-500">{foreignBill(r)}</span>}
                 </span>

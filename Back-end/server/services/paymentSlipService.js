@@ -15,7 +15,7 @@ import { formatLongDateIST, formatDateTimeIST } from '../utils/datetime.js';
 import { rupeesInWords } from '../utils/amountInWords.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { BASE_CURRENCY, categoryLabel } from '../config/expenseCategories.js';
-import { STATUS_LABELS, maskAccount, rupeesPending } from './paymentRequestService.js';
+import { STATUS_LABELS, maskAccount, paidFromForeign, rupeesPending } from './paymentRequestService.js';
 import { richTextToPlain } from '../utils/richText.js';
 
 const { HAS_UNICODE, FONT, FONT_BOLD, CURRENCY, unicodeFonts } = pdfFonts;
@@ -74,6 +74,7 @@ const foreignMoney = (r) => `${r.currency} ${Number(r.foreignAmount).toLocaleStr
 const billLine = (r) => {
   if (!(r.currency && r.currency !== BASE_CURRENCY && r.foreignAmount != null)) return '';
   if (rupeesPending(r)) return `${foreignMoney(r)} — rupees recorded when paid`;
+  if (paidFromForeign(r)) return `${foreignMoney(r)} — paid from a ${r.currency} account, no rupees debited`;
   const rate = Number(r.fxRate).toLocaleString('en-IN', { maximumFractionDigits: 4 });
   return `${foreignMoney(r)} at ${CURRENCY} ${rate} per ${r.currency} = ${money(r.amount)}`;
 };
@@ -125,9 +126,11 @@ export async function renderPaymentSlip(r) {
       doc.roundedRect(L, y, R - L, 64, 8).fill(C.zebra);
       doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? `SUPPLIER PAYMENT${r.dealSummary?.partLabel ? ` — ${r.dealSummary.partLabel.toUpperCase()}` : ''}` : `${categoryLabel(r.category).toUpperCase()} EXPENSE`, L + 16, y + 12, { characterSpacing: 1 });
       // A foreign bill not yet paid has no rupee figure: the bill is the amount.
+      // Nor one paid from a foreign-currency account: no rupees were debited at all.
       const pending = rupeesPending(r);
-      doc.font(FONT_BOLD).fontSize(22).fillColor(C.ink).text(pending ? foreignMoney(r) : money(r.amount), L + 16, y + 26, { lineBreak: false });
-      doc.font(FONT).fontSize(8.6).fillColor(C.body).text(pending ? 'Rupee amount: what the bank debits, recorded when paid' : rupeesInWords(r.amount), L + 200, y + 34, { width: R - L - 216, align: 'right' });
+      const abroad = paidFromForeign(r);
+      doc.font(FONT_BOLD).fontSize(22).fillColor(C.ink).text(pending || abroad ? foreignMoney(r) : money(r.amount), L + 16, y + 26, { lineBreak: false });
+      doc.font(FONT).fontSize(8.6).fillColor(C.body).text(abroad ? `Paid from a ${r.currency} account — no rupees debited` : pending ? 'Rupee amount: what the bank debits, recorded when paid' : rupeesInWords(r.amount), L + 200, y + 34, { width: R - L - 216, align: 'right' });
       y += 80;
 
       // Supplier credit: the amount above is what is transferred; say why it is less than the bill.
@@ -198,7 +201,7 @@ export async function renderPaymentSlip(r) {
         doc.roundedRect(L, y, R - L, 72, 8).lineWidth(1).strokeColor(C.brand).stroke();
         doc.font(FONT_BOLD).fontSize(10).fillColor(C.brand).text('PAID', L + 16, y + 12);
         doc.font(FONT).fontSize(9).fillColor(C.body)
-          .text(`${METHOD_LABELS[r.payment.method] || r.payment.method}${r.payment.reference ? ` · Reference ${r.payment.reference}` : ''}`, L + 16, y + 28, { width: R - L - 32 })
+          .text(`${METHOD_LABELS[r.payment.method] || r.payment.method}${paidFromForeign(r) ? ` · from ${paidFromForeign(r).label || `a ${r.currency} account`}` : ''}${r.payment.reference ? ` · Reference ${r.payment.reference}` : ''}`, L + 16, y + 28, { width: R - L - 32 })
           // When the money moved, and (separately) when it was recorded here — they
           // differ whenever a transfer is recorded later.
           .text(`Transaction: ${dateTime(r.payment.transactionAt || r.payment.paidAt)}`, L + 16, doc.y + 2, { width: R - L - 32 })

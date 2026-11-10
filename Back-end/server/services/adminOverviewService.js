@@ -90,7 +90,7 @@ export async function companyOverview(actor, now = Date.now()) {
   const staffIds = staff.map((u) => u._id);
 
   const [
-    paidToday, unpaidSales, pendingRefunds, requestsByStatus, paidThisMonth,
+    paidToday, unpaidSales, pendingRefunds, requestsByStatus, paidThisMonth, paidAbroadThisMonth,
     newConsultations, openTickets, board, recentActions, actionsByUser, online,
   ] = await Promise.all([
     orderRepository.findPaidWorkflowOrdersSince(todayStart, 1000),
@@ -98,6 +98,7 @@ export async function companyOverview(actor, now = Date.now()) {
     orderRepository.countPendingCancellationRefunds(),
     paymentRequestRepository.countByStatus(),
     paymentRequestRepository.paidSinceByTeam(monthStart),
+    paymentRequestRepository.paidNoRupeesSince(monthStart),
     consultationRepository.count({ status: 'new' }),
     supportTicketRepository.count({ status: { $in: ['new', 'open', 'pending_customer', 'on_hold'] } }),
     waitingBoard(actor, now),
@@ -142,6 +143,8 @@ export async function companyOverview(actor, now = Date.now()) {
       n: paidThisMonth.reduce((s, r) => s + r.n, 0),
       amount: round2(paidThisMonth.reduce((s, r) => s + r.amount, 0)),
       byTeam: paidThisMonth.map((r) => ({ team: r._id, label: STAFF_TEAM_LABELS[r._id] || r._id, n: r.n, amount: round2(r.amount) })),
+      // Paid from foreign-currency accounts: not rupees, so never in `amount` — per currency.
+      foreign: paidAbroadThisMonth,
     },
     itemRefundsToPay: pendingRefunds,
   };

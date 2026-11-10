@@ -411,6 +411,52 @@ describe('each team’s own options', () => {
     expect(form.get('rupees')).toBe('56227');
   });
 
+  describe('paid from a foreign-currency account', () => {
+    const thb = {
+      ...base, team: 'procurement', category: 'import_purchase', categoryLabel: 'Import purchase', amount: 0, currency: 'THB',
+      foreignAmount: 10000, fxRate: null, rupeesPending: true,
+      payee: { name: 'Robust Shocks Thailand', method: 'bank' as const, accountName: 'Robust', accountNumber: '1234567890', swift: 'KASITHBK', ifsc: '', bankName: 'KASIKORNBANK' },
+    };
+
+    it('choosing the THB account asks for the baht sent (not rupees) and sends it', async () => {
+      get.mockResolvedValue({ request: thb });
+      wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+      const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+      fireEvent.click(await within(panel).findByRole('button', { name: 'Record payment' }));
+      // The rupee account is the default: as before.
+      expect(within(panel).getByLabelText('Rupees debited')).toBeRequired();
+      fireEvent.click(within(panel).getByLabelText(/THB account/));
+      expect(within(panel).queryByLabelText('Rupees debited')).toBeNull();
+      const sent = within(panel).getByLabelText('Amount sent in THB');
+      expect(sent).toBeRequired();
+      fireEvent.change(sent, { target: { value: '10,000' } });
+      fireEvent.change(within(panel).getByLabelText('Account paid from'), { target: { value: "HR's Thailand account" } });
+      fireEvent.click(within(panel).getByRole('button', { name: /Mark as paid/ }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const form = fetchMock.mock.calls[0][1].body as FormData;
+      expect(form.get('paidFrom')).toBe('foreign');
+      expect(form.get('sentAmount')).toBe('10000');
+      expect(form.get('accountLabel')).toBe("HR's Thailand account");
+      expect(form.get('rupees')).toBeNull();
+      expect(form.get('transactionAt')).toBeTruthy();
+    });
+
+    it('a paid one shows the baht and the account — never ₹0', async () => {
+      get.mockResolvedValue({ request: {
+        ...thb, status: 'paid', statusLabel: 'Paid', rupeesPending: false,
+        paidFrom: { currency: 'THB', amount: 10000, label: "HR's Thailand account" },
+        payment: { method: 'bank', reference: 'UTR9', paidAt: '2026-11-10T05:00:00Z', transactionAt: '2026-11-10T04:00:00Z', paidByName: 'Admin' },
+        can: { ...base.can, pay: false, editPayment: true },
+      } });
+      wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+      const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+      expect(await within(panel).findByText('THB 10,000')).toBeInTheDocument();
+      expect(within(panel).queryByText('₹0')).toBeNull();
+      expect(within(panel).getByText(/Paid from HR's Thailand account — no rupees debited/)).toBeInTheDocument();
+      expect(within(panel).getByText(/HR's Thailand account · THB 10,000 sent/)).toBeInTheDocument();
+    });
+  });
+
   it('a rupee request pays as before — no rupees box', async () => {
     get.mockResolvedValue({ request: base });
     wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);

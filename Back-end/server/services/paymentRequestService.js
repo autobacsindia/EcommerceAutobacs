@@ -265,8 +265,47 @@ function netOfCredit(money, creditPaise) {
   return { ...money, [field]: fromPaise(billPaise - creditPaise) };
 }
 
-/** A foreign bill whose rupees are not recorded yet (raised without a rate, not paid). */
-export const rupeesPending = (r) => Boolean(r?.currency && r.currency !== BASE_CURRENCY && !(Number(r.amount) > 0));
+/** Paid from a foreign-currency account (no rupees were debited): its `payment.fromAccount`, or null. */
+export const paidFromForeign = (r) => (r?.status === 'paid' && r.payment?.fromAccount?.currency ? r.payment.fromAccount : null);
+
+/**
+ * A foreign bill whose rupees are not recorded yet (raised without a rate, not paid).
+ * Not one paid from a foreign account: that has no rupees at all, by design.
+ */
+export const rupeesPending = (r) => Boolean(r?.currency && r.currency !== BASE_CURRENCY && !(Number(r.amount) > 0) && !paidFromForeign(r));
+
+/** "THB 10,000" — a foreign amount in its currency. */
+const unitsText = (currency, amount) => `${currency} ${Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+/**
+ * A foreign bill paid from a foreign-currency account (e.g. HR's Thai bank
+ * account): no rupees were debited. What was sent must be the bill itself — the
+ * same currency, and the same amount to the last satang / cent — so the supplier's
+ * balance moves exactly as for a payment from the rupee account. A wrong bill is
+ * edited first; a figure that does not match is refused, never recorded.
+ * Returns the `payment.fromAccount` record.
+ */
+function cleanFromAccount(r, { sentAmount, sentCurrency, accountLabel }) {
+  const bill = r.currency || BASE_CURRENCY;
+  if (bill === BASE_CURRENCY || r.foreignAmount == null) {
+    throw fail('This bill is in rupees — record it as paid from the Indian rupee account.', 400);
+  }
+  const cur = filled(sentCurrency) ? String(sentCurrency).trim().toUpperCase().slice(0, 8) : bill;
+  if (cur !== bill) throw fail(`This bill is in ${bill} — it can be paid from a ${bill} account or the Indian rupee account, not ${cur}.`, 400);
+  const typed = String(sentAmount ?? '').replace(/,/g, '').trim();
+  if (!typed) throw fail(`Enter the ${bill} amount sent.`, 400);
+  if (!/^\d+(\.\d{1,2})?$/.test(typed) || !(Number(typed) > 0)) {
+    throw fail(`Enter the ${bill} amount sent as a number with at most two decimals, e.g. 10000 or 10000.50.`, 400);
+  }
+  if (toPaise(typed) !== toPaise(r.foreignAmount)) {
+    throw fail(`This bill is ${unitsText(bill, r.foreignAmount)}, so that is what is sent — you entered ${unitsText(bill, typed)}. If the bill is wrong, edit the request first.`, 400);
+  }
+  const label = String(accountLabel ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return { currency: bill, amount: fromPaise(toPaise(typed)), label };
+}
+
+/** "THB 10,000 sent from HR's Thailand account (no rupees debited)". */
+const fromAccountText = (a) => `${unitsText(a.currency, a.amount)} sent from ${a.label || `a ${a.currency} account`} (no rupees debited)`;
 
 /**
  * The rupees the bank debited for a foreign bill, and the rate they come to.
@@ -290,7 +329,9 @@ export const foreignLine = (r) => (r?.currency && r.currency !== BASE_CURRENCY &
   : '');
 
 /** The money in one phrase: "₹24,500 (THB 10,000 @ ₹2.45)", "₹800", or "THB 22,950 (rupees when paid)". */
-const moneyText = (r) => (rupeesPending(r)
+const moneyText = (r) => (paidFromForeign(r)
+  ? `${foreignLine(r)} (paid from ${paidFromForeign(r).label || `a ${r.currency} account`})`
+  : rupeesPending(r)
   ? `${foreignLine(r)} (rupees when paid)`
   : `${inr(r.amount)}${foreignLine(r) ? ` (${foreignLine(r)})` : ''}`);
 
@@ -412,6 +453,8 @@ export function shape(r, viewer) {
     // A foreign bill not yet paid: no rupee figure exists — show the bill, and the
     // admin enters the bank's rupee debit when paying.
     rupeesPending: rupeesPending(r),
+    // Paid from a foreign-currency account: what was sent, from which account. No rupees.
+    paidFrom: paidFromForeign(r) ? { currency: r.payment.fromAccount.currency, amount: r.payment.fromAccount.amount, label: r.payment.fromAccount.label || '' } : null,
     category: r.category,
     categoryLabel: categoryLabel(r.category),
     description: r.description,
@@ -807,7 +850,7 @@ export async function hold(actor, id, { note } = {}, req) {
  * worked out from it. A rupee request's amount is what accounts approved: a
  * different figure is refused, never applied.
  */
-export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees } = {}, proofFiles = [], req) {
+export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees, paidFrom, sentAmount, sentCurrency, accountLabel } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
@@ -818,8 +861,14 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   const r0 = await loadVisible(actor, id);
   await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
+  const fromForeign = paidFrom === 'foreign';
+  if (filled(paidFrom) && !['inr', 'foreign'].includes(paidFrom)) throw fail('Choose which account it was paid from.', 400);
   let priced = null;
-  if (isForeign && filled(rupees)) {
+  let fromAccount = null;
+  if (fromForeign) {
+    if (filled(rupees)) throw fail('Paid from a foreign account means no rupees were debited — leave the rupees empty, or choose the Indian rupee account.', 400);
+    fromAccount = cleanFromAccount(r0, { sentAmount, sentCurrency, accountLabel });
+  } else if (isForeign && filled(rupees)) {
     priced = cleanDebit(r0, rupees);
     if (priced.amount === r0.amount) priced = null;
   } else if (rupeesPending(r0)) {
@@ -831,15 +880,22 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   const from = ['submitted', 'approved', 'on_hold'];
   const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
   const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor, { existing: (r0.files || []).length }) : [];
-  const debit = priced ? `${inr(priced.amount)} debited for ${foreignLine({ ...r0, fxRate: null })} (₹${rateText(priced.fxRate)} per ${r0.currency})` : '';
-  // A priced payment is also pinned to the bill it priced: an edit to the bill
-  // between reading it and paying makes this a lost race, not a wrong rate.
+  const debit = priced ? `${inr(priced.amount)} debited for ${foreignLine({ ...r0, fxRate: null })} (₹${rateText(priced.fxRate)} per ${r0.currency})`
+    : fromAccount ? `${fromAccountText(fromAccount)}${r0.amount > 0 ? ` — the earlier estimate of ${inr(r0.amount)} is dropped` : ''}` : '';
+  // No rupees left the company: an older request's rupee estimate is not what it
+  // cost, so it comes out of the rupee totals (the history keeps it).
+  const unpriced = fromAccount ? { amount: 0, fxRate: null } : null;
+  // A priced (or foreign-account) payment is also pinned to the bill it checked: an
+  // edit to the bill between reading it and paying makes this a lost race, not a wrong figure.
   const r = await paymentRequestRepository.transitionInSession(id, from,
-    priced ? { foreignAmount: r0.foreignAmount, amount: r0.amount } : {}, {
+    priced || fromAccount ? { foreignAmount: r0.foreignAmount, amount: r0.amount, currency: r0.currency } : {}, {
       ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
-      ...(priced || {}),
+      ...(priced || unpriced || {}),
       status: 'paid',
-      payment: { method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '' },
+      payment: {
+        method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '',
+        ...(fromAccount ? { fromAccount } : {}),
+      },
     }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), debit, note].filter(Boolean).join(' — ')),
     proof.length ? { files: { $each: proof } } : {}, undefined);
   if (!r) {
@@ -847,7 +903,11 @@ export async function markPaid(actor, id, { method, reference, note, transaction
     await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     throw fail(MOVED, 409);
   }
-  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'paid', method: how, reference: ref, ...(priced ? { amount: priced.amount, fxRate: priced.fxRate } : {}) });
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, {
+    change: 'paid', method: how, reference: ref,
+    ...(priced ? { amount: priced.amount, fxRate: priced.fxRate } : {}),
+    ...(fromAccount ? { fromAccount } : {}),
+  });
   await followOnOrder(r, actor, 'paid');
   const next = r.kind === 'supplier' ? ' Procurement: get the shipping details from the supplier and upload them.' : '';
   await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''}.${next}`, { mentionRequester: true });
@@ -980,7 +1040,7 @@ export async function update(actor, id, input = {}, req) {
  * (payBatch) is corrected together with them: it was one transfer. One
  * transaction; every change is in each request's history.
  */
-export async function editPayment(actor, id, { method, reference, note, removeFileIds, transactionAt, rupees } = {}, proofFiles = [], req) {
+export async function editPayment(actor, id, { method, reference, note, removeFileIds, transactionAt, rupees, accountLabel } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin can edit a payment record.', 403);
   const r0 = await loadVisible(actor, id);
   if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
@@ -999,7 +1059,9 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   // typo in them is theirs to correct. A rupee payment's amount is not: it was
   // approved, and a wrong one is a new payment or a refund.
   let priced = null;
+  const abroad = paidFromForeign(r0);
   if (filled(rupees)) {
+    if (abroad) throw fail(`This was paid from ${abroad.label || `a ${abroad.currency} account`} — no rupees were debited, so there are none to change.`, 400);
     if (!foreignLine(r0)) throw fail('The amount of a paid rupee payment cannot be changed — a wrong amount is a new payment or a refund.', 400);
     if (r0.payment?.batch) throw fail('This was paid in one transfer with others — its amount cannot be changed alone.', 400);
     priced = cleanDebit(r0, rupees);
@@ -1013,6 +1075,8 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   if (txAt && (!wasAt || new Date(txAt).getTime() !== new Date(wasAt).getTime())) {
     changes.push(`transaction time ${wasAt ? istTime(wasAt) : '—'} → ${istTime(txAt)}`);
   }
+  const label = abroad && accountLabel != null ? String(accountLabel).replace(/\s+/g, ' ').trim().slice(0, 80) : null;
+  if (label != null && label !== (abroad.label || '')) changes.push(`paid from ${abroad.label || '—'} → ${label || '—'}`);
   if (removing.length) changes.push(`${removing.length} screenshot${removing.length === 1 ? '' : 's'} removed`);
   if (uploads.length) changes.push(`${uploads.length} screenshot${uploads.length === 1 ? '' : 's'} added`);
   const extra = String(note || '').trim().slice(0, 500);
@@ -1033,7 +1097,7 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
       let mine = null;
       for (const tid of targets) {
         if (publicIds.length) await paymentRequestRepository.pullProofsInSession(tid, publicIds, session);
-        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref, ...(txAt ? { 'payment.transactionAt': txAt } : {}), ...(priced || {}) }, log, stored, session);
+        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref, ...(txAt ? { 'payment.transactionAt': txAt } : {}), ...(label != null ? { 'payment.fromAccount.label': label } : {}), ...(priced || {}) }, log, stored, session);
         if (!next) throw fail(MOVED, 409);
         if (idOf(tid) === idOf(r0._id)) mine = next;
       }
@@ -1274,6 +1338,7 @@ export async function forOrder(actor, orderId) {
     kind: r.kind, categoryLabel: r.kind === 'expense' ? categoryLabel(r.category) : 'Supplier', team: r.team,
     dealId: r.deal ? idOf(r.deal) : null, part: r.part || '', partLabel: deals.PART_LABELS[r.part] || '',
     amount: r.amount, currency: r.currency || BASE_CURRENCY, foreignAmount: r.foreignAmount ?? null, rupeesPending: rupeesPending(r),
+    paidFrom: paidFromForeign(r) ? { currency: r.payment.fromAccount.currency, amount: r.payment.fromAccount.amount, label: r.payment.fromAccount.label || '' } : null,
     itemIds: (r.itemIds || []).map(idOf), itemNames: r.itemNames || [],
     payee: r.payee?.name || '', paidAt: r.payment?.paidAt || null, createdAt: r.createdAt,
     requestedByName: r.requestedByName || '',

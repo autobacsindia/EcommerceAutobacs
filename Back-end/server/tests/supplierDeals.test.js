@@ -476,6 +476,23 @@ describe('Supplier deals — advance and balance', () => {
       expect(d).toMatchObject({ paid: 29400, balanceDue: 0, fullyPaid: true, rupeesPaid: 71400 });
     });
 
+    it('a part paid from a THB account (no rupees) moves the deal by its baht, exactly as a rupee-debited one', async () => {
+      const { id, deal, adv } = await withDeal(thb);
+      await accounts.session.post(`/payment-requests/${adv.id}/approve`);
+      const paid = await admin.session.form(`/payment-requests/${adv.id}/pay`, {
+        method: 'bank', reference: 'UTR1', paidFrom: 'foreign', sentAmount: '10000', accountLabel: "HR's Thailand account",
+      });
+      expect(paid.status).toBe(200);
+      expect(paid.body.request).toMatchObject({ amount: 0, foreignAmount: 10000, paidFrom: { currency: 'THB', amount: 10000 } });
+      const d = await dealOf(procurement.session, id);
+      expect(d).toMatchObject({ currency: 'THB', paid: 10000, balanceDue: 19400, leftToAsk: 19400, rupeesPaid: 0 });
+      expect(d.payments[0]).toMatchObject({ amount: 10000, rupees: null });
+      // The balance part, paid the same way, completes the deal.
+      const bal = (await raisePart(procurement.session, id, deal.id, 19400)).body.request.id;
+      await approveAndPay(bal, { paidFrom: 'foreign', sentAmount: '19400' });
+      expect(await dealOf(procurement.session, id)).toMatchObject({ paid: 29400, balanceDue: 0, fullyPaid: true, rupeesPaid: 0 });
+    });
+
     it('a foreign supplier bill is paid on its own, never in a batch transfer', async () => {
       const { adv } = await withDeal(thb);
       expect((await accounts.session.post(`/payment-requests/${adv.id}/approve`)).status).toBe(200);
