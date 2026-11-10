@@ -697,6 +697,12 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasklinks').createIndex({ to: 1, kind: 1 }, { name: 'staff_task_link_to', background: true });
     await db.collection('stafflessons').createIndex({ archivedAt: 1, audience: 1, _id: -1 }, { name: 'staff_lesson_audience', background: true });
     await db.collection('stafflessons').createIndex({ owner: 1, archivedAt: 1, _id: 1 }, { name: 'staff_lesson_owner', background: true });
+    await db.collection('stafflessons').createIndex({ createdBy: 1, archivedAt: 1, _id: -1 }, { name: 'staff_lesson_creator', background: true });
+    // Past members: one team's former staff. Partial, so shoppers add no entries.
+    await db.collection('users').createIndex(
+      { 'staff.team': 1, 'staff.deactivatedAt': -1, _id: -1 },
+      { name: 'staff_past_members', partialFilterExpression: { 'staff.active': false }, background: true }
+    );
     await db.collection('stafflessons').createIndex({ archivedAt: 1, _id: -1 }, { name: 'staff_lesson_all', background: true });
     await db.collection('stafftrainingassignments').createIndex({ path: 1, user: 1 }, { unique: true, partialFilterExpression: { active: true }, name: 'staff_training_one_live', background: true });
     await db.collection('stafftrainingassignments').createIndex({ user: 1, _id: -1 }, { name: 'staff_training_mine', background: true });

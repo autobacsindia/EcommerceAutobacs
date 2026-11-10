@@ -61,5 +61,7 @@ StaffLessonSchema.index({ archivedAt: 1, _id: -1 }, { name: 'staff_lesson_all' }
 
 // Whose lessons: measured in tests/staffHandoverIndexUsage.test.js; also in ensureCriticalIndexes.
 StaffLessonSchema.index({ owner: 1, archivedAt: 1, _id: 1 }, { name: 'staff_lesson_owner' });
+// Past members: the lessons one person wrote (services/staffPastMemberService.js).
+StaffLessonSchema.index({ createdBy: 1, archivedAt: 1, _id: -1 }, { name: 'staff_lesson_creator' });
 
 export default mongoose.models.StaffLesson || mongoose.model('StaffLesson', StaffLessonSchema);

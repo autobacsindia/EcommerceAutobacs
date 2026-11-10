@@ -234,6 +234,11 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Handover', href: '/team/handover' }],
       },
       {
+        question: 'Where can I see the work of people who left my team?',
+        answer: 'Open Past members. It lists everyone who used to be on your team. Open a name to see when they joined and left, who took over, the tasks they finished, their training, the lessons they wrote and their handover note. GTM profiles also show their orders, quotations and leads. The reason they left and customer details are never shown.',
+        links: [{ label: 'Past members', href: '/team/past-members' }],
+      },
+      {
         question: 'How does training work?',
         answer: 'Open Training. Finish your lessons in order, then take the test at the end. The pass mark is 80% and you get 3 attempts. Your team head then signs you off. Team heads set up the training and assign it.',
         links: [{ label: 'Training', href: '/team/training' }],

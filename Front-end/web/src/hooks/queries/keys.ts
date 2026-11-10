@@ -277,6 +277,14 @@ export const handoverKeys = {
   work: (id: string) => [...handoverKeys.all, 'work', id] as const,
 };
 
+export const pastMemberKeys = {
+  all: [...staffKeys.all, 'past-members'] as const,
+  list: (team: string) => [...pastMemberKeys.all, 'list', team] as const,
+  one: (id: string) => [...pastMemberKeys.all, 'one', id] as const,
+  tasks: (id: string) => [...pastMemberKeys.all, 'tasks', id] as const,
+  orders: (id: string) => [...pastMemberKeys.all, 'orders', id] as const,
+};
+
 export const trainingKeys = {
   all: [...staffKeys.all, 'training'] as const,
   meta: () => [...trainingKeys.all, 'meta'] as const,
