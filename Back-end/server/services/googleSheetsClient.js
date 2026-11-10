@@ -15,6 +15,8 @@ const SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
 const TIMEOUT_MS = 30_000;
 const TOKEN_LIFETIME_S = 3600;
 const RANGES_PER_CALL = 50;
+const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [500, 2000];
 
 let cached = { token: null, expiresAt: 0, email: null };
 
@@ -33,10 +35,20 @@ export function readServiceAccount(raw = process.env.GOOGLE_SHEETS_SERVICE_ACCOU
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 
+/** Fetch JSON, trying again after a short wait when Google says "busy" or the network blips. */
 async function call(url, init, what) {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`Google ${what} failed (HTTP ${res.status})`);
-  return res.json();
+  for (let attempt = 0; ; attempt += 1) {
+    const retrying = attempt < RETRY_DELAYS_MS.length;
+    let res;
+    try {
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    } catch (err) {
+      if (!retrying) throw err;
+    }
+    if (res?.ok) return res.json();
+    if (res && !(retrying && RETRY_STATUSES.has(res.status))) throw new Error(`Google ${what} failed (HTTP ${res.status})`);
+    await new Promise((resolve) => { setTimeout(resolve, RETRY_DELAYS_MS[attempt]); });
+  }
 }
 
 async function accessToken(account) {

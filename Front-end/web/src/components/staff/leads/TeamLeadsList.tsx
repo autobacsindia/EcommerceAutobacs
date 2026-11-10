@@ -14,10 +14,9 @@ import {
   LEAD_SOURCE_COLORS, LEAD_SOURCE_LABELS, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, scoreBadge,
   type LeadSourceType, type LeadStatus,
 } from '@/lib/leads';
-import { FOLLOW_UP_NOTE_MAX, FOLLOW_UP_OPTIONS, followUpOption, type FollowUpStatus } from './followUpStatus';
-import RichTextBox from '@/components/ui/RichTextBox';
+import { FOLLOW_UP_OPTIONS, followUpOption, type FollowUpStatus } from './followUpStatus';
+import FollowUpRecorder, { type FollowUpWrite } from './FollowUpRecorder';
 import RichText from '@/components/ui/RichText';
-import { isRichTextEmpty, richTextToPlain } from '@/lib/richText';
 
 /** One product behind the lead. `removed` = the name is gone (product deleted, nothing saved). */
 export type LeadItem = { name: string | null; variantLabel: string | null; quantity: number | null; removed: boolean };
@@ -54,7 +53,7 @@ type HistoryLine = {
 type You = { canFollowUp: boolean; canReassign: boolean; repId: string | null };
 type Page = { leads: TeamLead[]; nextCursor: string | null; you: You };
 type People = { people: { repId: string; name: string }[]; sellers?: { userId: string; name: string }[] };
-type WriteResult = { success: boolean; outcome: string; message?: string; warning?: string; lead: TeamLead };
+type WriteResult = FollowUpWrite<TeamLead>;
 
 const VIEWS = [
   { value: 'all', label: 'All' },
@@ -107,76 +106,6 @@ function patchRow(queryClient: ReturnType<typeof useQueryClient>, lead: TeamLead
     ...data,
     pages: data.pages.map((p) => ({ ...p, leads: p.leads.map((r) => (r.id === lead.id ? lead : r)) })),
   }));
-}
-
-/**
- * "How did it go?" — one tap on a status, an optional note (required for Others),
- * Save. Never optimistic: the badge and history change only to what the server saved.
- */
-function FollowUpRecorder({ path, onSaved, onClose }: {
-  path: string;
-  onSaved: (res: WriteResult) => void;
-  onClose: () => void;
-}) {
-  const [status, setStatus] = useState<FollowUpStatus | ''>('');
-  const [note, setNote] = useState('');
-  const [error, setError] = useState('');
-  const save = useMutation({
-    mutationFn: () => apiClient.post<WriteResult>(`${path}/follow-ups`, { status, note: isRichTextEmpty(note) ? '' : note.trim() }),
-    onSuccess: (res) => { setStatus(''); setNote(''); setError(''); onSaved(res); },
-    onError: (e: unknown) => {
-      const body = (e as { rawData?: WriteResult })?.rawData;
-      if (body?.lead) onSaved({ ...body, warning: body.message });
-      else setError(errorMessage(e, 'Could not save the follow-up. Please try again.'));
-    },
-  });
-  const needsNote = status === 'other' && isRichTextEmpty(note);
-  const chosen = followUpOption(status);
-  const noteId = `fu-note-${path.replace(/\W/g, '')}`;
-
-  return (
-    <form
-      className="mt-3 space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-3"
-      onSubmit={(e) => { e.preventDefault(); if (status && !needsNote && !save.isPending) save.mutate(); }}
-    >
-      <fieldset>
-        <legend className="text-sm font-semibold text-gray-900">How did the follow-up go?</legend>
-        <div role="radiogroup" aria-label="Follow-up status" className="mt-2 flex flex-wrap gap-2">
-          {FOLLOW_UP_OPTIONS.map((o) => (
-            <button key={o.value} type="button" role="radio" aria-checked={status === o.value}
-              onClick={() => { setStatus(o.value); setError(''); }}
-              className={`rounded-full border px-3 py-1.5 text-sm font-medium ${status === o.value ? `${o.tone} ring-2 ring-blue-500` : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-        {chosen && <p className="mt-1.5 text-xs text-gray-600">{chosen.hint}</p>}
-      </fieldset>
-      {status && (
-        <div>
-          <label htmlFor={noteId} className="block text-sm font-medium text-gray-800">
-            {status === 'other' ? 'What happened? (required)' : 'Note (optional)'}
-          </label>
-          <RichTextBox id={noteId} value={note} maxLength={FOLLOW_UP_NOTE_MAX} minHeightClass="min-h-[3.5rem]"
-            onChange={setNote}
-            ariaLabel={status === 'other' ? 'What happened' : 'Note'}
-            placeholder={status === 'other' ? 'e.g. Asked us to call back after Diwali' : 'e.g. Rang twice, will try tomorrow'}
-            className={`mt-1 ${needsNote ? 'border-red-400' : ''}`} />
-          <p className="text-right text-xs text-gray-500">{richTextToPlain(note).length}/{FOLLOW_UP_NOTE_MAX}</p>
-        </div>
-      )}
-      {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={!status || needsNote || save.isPending}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-          {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Save follow-up
-        </button>
-        <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
 }
 
 function LeadCard({ lead, you, sellers }: { lead: TeamLead; you: You; sellers: People['sellers'] }) {
@@ -353,7 +282,7 @@ function LeadCard({ lead, you, sellers }: { lead: TeamLead; you: You; sellers: P
       </div>
 
       {recording && mayRecord && (
-        <FollowUpRecorder path={path} onSaved={onRecorded} onClose={() => setRecording(false)} />
+        <FollowUpRecorder<TeamLead> path={path} onSaved={onRecorded} onClose={() => setRecording(false)} />
       )}
 
       {open && (

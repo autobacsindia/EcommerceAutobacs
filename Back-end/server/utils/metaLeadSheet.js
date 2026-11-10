@@ -41,22 +41,60 @@ export function columnOfLabel(label) {
   return COLUMN_OF.get(key(label)) ?? null;
 }
 
-/** A date cell → the moment it means. A date with no time is that day in India. */
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const monthNumber = (word) => MONTHS.indexOf(String(word).slice(0, 3).toLowerCase()) + 1;
+const UNREAD = Object.freeze({ date: null, hasTime: false });
+
+// Each is [year, month, day, the rest of the cell (a time, if any)] in some order.
+const DATE_SHAPES = [
+  { re: /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T,\s]+(.+))?$/, read: (m) => [m[1], m[2], m[3], m[4]] },
+  { re: /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})(?:[,\s]+(.+))?$/, read: (m) => [m[3], m[2], m[1], m[4]] },
+  { re: /^(\d{1,2})[\s-]+([a-z]{3,9})\.?,?[\s-]+(\d{4}|\d{2})(?:[,\s]+(.+))?$/i, read: (m) => [m[3], monthNumber(m[2]), m[1], m[4]] },
+  { re: /^([a-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4}|\d{2})(?:[,\s]+(.+))?$/i, read: (m) => [m[3], monthNumber(m[1]), m[2], m[4]] },
+];
+
+/** "14:30", "2:30 pm", "2 pm" → 24-hour HH:MM:SS, or null. */
+function readClock(text) {
+  const m = /^(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?\s*([ap])\.?m\.?$|^(\d{1,2}):(\d{2})(?::(\d{2}))?$/i.exec(text.trim());
+  if (!m) return null;
+  const twelve = !!m[4];
+  let hour = Number(twelve ? m[1] : m[5]);
+  const minute = Number((twelve ? m[2] : m[6]) ?? 0);
+  const second = Number((twelve ? m[3] : m[7]) ?? 0);
+  if (twelve) {
+    if (hour < 1 || hour > 12) return null;
+    hour = (hour % 12) + (m[4].toLowerCase() === 'p' ? 12 : 0);
+  }
+  if (hour > 23 || minute > 59 || second > 59) return null;
+  return [hour, minute, second].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
+/**
+ * A date cell → the moment it means. A cell carrying its own offset is exact;
+ * anything else is India time (a date alone is that day in India). Day comes
+ * before month, as the team types it. Never guesses: unread stays unread.
+ */
 export function parseSheetDate(raw) {
   const text = String(raw ?? '').trim();
-  if (!text) return { date: null, hasTime: false };
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) {
+  if (!text) return UNREAD;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}.*(?:z|[+-]\d{2}:?\d{2})$/i.test(text)) {
     const date = new Date(text);
-    return Number.isNaN(date.getTime()) ? { date: null, hasTime: false } : { date, hasTime: true };
+    return Number.isNaN(date.getTime()) ? UNREAD : { date, hasTime: true };
   }
-  const m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(text);
-  if (!m) return { date: null, hasTime: false };
-  const [, d, mo, y] = m;
-  const iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
-  const date = new Date(`${iso}T00:00:00${IST_OFFSET}`);
-  // Reject 31-02-2026 instead of letting it roll into March.
-  const valid = !Number.isNaN(date.getTime()) && new Date(date.getTime() + 5.5 * 3600e3).toISOString().slice(0, 10) === iso;
-  return valid ? { date, hasTime: false } : { date: null, hasTime: false };
+  for (const { re, read } of DATE_SHAPES) {
+    const m = re.exec(text);
+    if (m) {
+      const [y, mo, d, rest] = read(m);
+      const clock = rest ? readClock(rest) : '00:00:00';
+      if (!clock || !Number(mo)) return UNREAD;
+      const iso = `${String(y).padStart(4, '20')}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const date = new Date(`${iso}T${clock}${IST_OFFSET}`);
+      // Reject 31-02-2026 instead of letting it roll into March.
+      const valid = !Number.isNaN(date.getTime()) && new Date(date.getTime() + 5.5 * 3600e3).toISOString().slice(0, 10) === iso;
+      return valid ? { date, hasTime: !!rest } : UNREAD;
+    }
+  }
+  return UNREAD;
 }
 
 /** Meta writes phones as `p:+919876543210`. */
@@ -147,7 +185,9 @@ export function parseTab({ name, gid, values }, seenMetaIds = new Set()) {
     const core = {};
     labels.forEach((l, i) => { if (l.column && !(l.column in core)) core[l.column] = text[i]; });
 
-    const metaLeadId = /^l:/i.test(core.metaId ?? '') ? core.metaId : null;
+    // Each row finds its own id, so people typing over part of the column cannot
+    // take the stable id away from every other row of the tab.
+    const metaLeadId = /^l:/i.test(core.metaId ?? '') ? core.metaId : (text.find((c) => META_ID.test(c)) ?? null);
     if (metaLeadId && seenMetaIds.has(metaLeadId)) { report.repeatedMetaIds += 1; return; }
     if (metaLeadId) seenMetaIds.add(metaLeadId);
 
@@ -174,6 +214,7 @@ export function parseTab({ name, gid, values }, seenMetaIds = new Set()) {
       dateHasTime: hasTime,
       name: core.name ?? '',
       phone,
+      phoneKey: digits ?? '',
       email: core.email ?? '',
       product: core.product || core.form || '',
       campaign: core.campaign ?? '',
