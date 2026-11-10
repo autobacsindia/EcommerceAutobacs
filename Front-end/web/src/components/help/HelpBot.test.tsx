@@ -6,8 +6,9 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import HelpBot from './HelpBot';
+import { OPEN_HELP_BOT_EVENT } from './helpBotVisibility';
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/' }));
 jest.mock('@/lib/api', () => ({ __esModule: true, default: { get: jest.fn().mockResolvedValue({ suggestions: [] }) } }));
@@ -16,6 +17,13 @@ jest.mock('@/lib/analytics', () => ({ capture: jest.fn() }));
 describe('help panel', () => {
   // jsdom has no scrollIntoView; the panel scrolls to its newest message.
   beforeAll(() => { Element.prototype.scrollIntoView = () => {}; });
+
+  it('opens when the phone Contact button asks it to', () => {
+    render(<HelpBot />);
+    expect(screen.queryByRole('button', { name: 'Close help' })).not.toBeInTheDocument();
+    act(() => { window.dispatchEvent(new Event(OPEN_HELP_BOT_EVENT)); });
+    expect(screen.getAllByRole('button', { name: 'Close help' }).length).toBeGreaterThan(0);
+  });
 
   it('has no call / email / WhatsApp footer', () => {
     render(<HelpBot />);

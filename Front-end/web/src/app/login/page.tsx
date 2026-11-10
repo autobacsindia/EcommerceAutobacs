@@ -179,7 +179,7 @@ function LoginPageInner() {
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="text-xs text-gold hover:text-ink transition-colors"
+                  className="inline-block -my-2 py-2 text-xs text-gold hover:text-ink transition-colors"
                 >
                   Forgot Password
                 </Link>

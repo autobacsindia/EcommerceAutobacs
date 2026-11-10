@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { MessageCircle, Send, X, Search, ExternalLink, ArrowRight } from 'lucide-react';
+import { isHelpBotSuppressed, OPEN_HELP_BOT_EVENT } from './helpBotVisibility';
 import apiClient from '@/lib/api';
 import { capture } from '@/lib/analytics';
 import { whatsappLink } from '@/lib/contactInfo';
@@ -49,19 +50,6 @@ const isProductPage = (pathname: string | null) =>
   !!pathname && /^\/products\/(?!search(\/|$))[^/]+$/.test(pathname);
 
 /** Where a chat bubble would be in the way or out of place. */
-function isSuppressed(pathname: string | null): boolean {
-  if (!pathname) return false;
-  const p = pathname.replace(/\/+$/, '') || '/';
-  return (
-    p.startsWith('/admin') ||
-    p === '/team' || p.startsWith('/team/') ||
-    p.startsWith('/checkout') ||      // nothing competes with Pay
-    p.startsWith('/staff-invite') ||
-    p === '/careers' ||
-    p === '/login' || p === '/register'
-  );
-}
-
 const GREETING =
   "Hi! I can help you find a part, check an order, or explain delivery and returns. What do you need?";
 
@@ -166,7 +154,14 @@ export default function HelpBot() {
     };
   }, [open]);
 
-  if (isSuppressed(pathname)) return null;
+  // The phone Contact button opens the bot from outside this component.
+  useEffect(() => {
+    const openBot = () => setOpen(true);
+    window.addEventListener(OPEN_HELP_BOT_EVENT, openBot);
+    return () => window.removeEventListener(OPEN_HELP_BOT_EVENT, openBot);
+  }, []);
+
+  if (isHelpBotSuppressed(pathname)) return null;
 
   const showStarters = turns.length <= 1;
   // Clear of the sticky Add-to-cart bar (~72px + the iOS home indicator).
@@ -186,7 +181,8 @@ export default function HelpBot() {
         aria-expanded={open}
         aria-controls="help-bot-panel"
         aria-label={open ? 'Close help' : 'Open help'}
-        className={`fixed ${launcherBottom} right-4 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
+        // Phones: the Contact button carries this, so two identical buttons don't stack.
+        className={`fixed ${launcherBottom} right-4 z-[60] hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>

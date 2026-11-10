@@ -186,7 +186,7 @@ export default function OrdersPage() {
     );
   }
 
-  const selectClass = 'bg-obsidian-raised border border-hairline text-ink/70 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-gold font-display';
+  const selectClass = 'w-full min-w-0 sm:w-auto bg-obsidian-raised border border-hairline text-ink/70 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-gold font-display';
 
   return (
     <div className="min-h-screen bg-obsidian-deep py-8">
@@ -213,7 +213,7 @@ export default function OrdersPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex">
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectClass}>
                 <option value="all">All Status</option>
                 <option value="awaiting_payment">Awaiting payment</option>
