@@ -288,6 +288,15 @@ UserSchema.index(
   { name: 'username_unique', unique: true, partialFilterExpression: { username: { $type: 'string' } } }
 );
 
+// Past members (services/staffPastMemberService.js): one team's former staff, latest
+// leaver first. Partial on removed access, so shoppers and current staff add no
+// entries. An equality on `false`, not `$ne: true` (a partial filter rejects $ne).
+// Also built by config/db.js ensureCriticalIndexes under the same name.
+UserSchema.index(
+  { 'staff.team': 1, 'staff.deactivatedAt': -1, _id: -1 },
+  { name: 'staff_past_members', partialFilterExpression: { 'staff.active': false } }
+);
+
 UserSchema.index({ 'refreshTokens.token': 1 });
 
 export default mongoose.model("User", UserSchema);

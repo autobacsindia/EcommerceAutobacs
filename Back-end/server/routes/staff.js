@@ -59,6 +59,7 @@ import staffTaskRoutes from './staffTasks.js';
 import staffLessonRoutes from './staffLessons.js';
 import staffTrainingRoutes from './staffTraining.js';
 import staffDepartureRoutes from './staffDepartures.js';
+import staffPastMemberRoutes from './staffPastMembers.js';
 import pastSaleRoutes from './pastSales.js';
 import staffReturnRoutes from './staffReturns.js';
 import staffLeadRoutes from './staffLeads.js';
@@ -171,6 +172,9 @@ router.use('/training', staffTrainingRoutes);
 
 // Resignations and handovers.
 router.use('/departures', staffDepartureRoutes);
+
+// People who left a team, and their work history.
+router.use('/past-members', staffPastMemberRoutes);
 
 // Past (offline) sales (routes/pastSales.js) — GTM sellers, accounts, admin.
 router.use('/past-sales', pastSaleRoutes);
