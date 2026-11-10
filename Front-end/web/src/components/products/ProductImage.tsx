@@ -10,6 +10,8 @@ interface ProductImageProps {
   height?: number;
   priority?: boolean;
   className?: string;
+  /** How wide the picture shows, so the browser picks the right file. */
+  sizes?: string;
 }
 
 export default function ProductImage({ 
@@ -18,7 +20,8 @@ export default function ProductImage({
   width, 
   height, 
   priority = false,
-  className = ''
+  className = '',
+  sizes
 }: ProductImageProps) {
   return (
     <EnhancedImage
@@ -28,6 +31,7 @@ export default function ProductImage({
       height={height}
       priority={priority}
       className={className}
+      sizes={sizes}
       context="product"
     />
   );

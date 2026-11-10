@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, Calendar, Eye, Tag, ChevronLeft, ChevronRight, Newspaper, BookOpen } from 'lucide-react';
@@ -8,7 +8,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { articleHref } from '@/lib/articleRoutes';
 import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
-interface Article {
+export interface Article {
   _id: string;
   title: string;
   slug: string;
@@ -24,25 +24,30 @@ interface Article {
   featured: boolean;
 }
 
-interface Pagination {
+export interface Pagination {
   page: number;
   limit: number;
   total: number;
   pages: number;
 }
 
+/** The first card is the phone's main picture. More would compete with it on a slow connection. */
+const EAGER_CARDS = 1;
+
 interface ArticleListPageProps {
   type: 'news' | 'blog';
+  /** First page from the server, for the plain URL only (no page, category or search). */
+  initial?: { articles: Article[]; pagination: Pagination | null };
 }
 
-function ArticleListContent({ type }: ArticleListPageProps) {
+function ArticleListContent({ type, initial }: ArticleListPageProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [articles, setArticles] = useState<Article[]>(initial?.articles ?? []);
+  const [pagination, setPagination] = useState<Pagination | null>(initial?.pagination ?? null);
   const [categories, setCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initial);
 
   const page = parseInt(searchParams.get('page') || '1');
   const category = searchParams.get('category') || '';
@@ -70,7 +75,12 @@ function ArticleListContent({ type }: ArticleListPageProps) {
     finally { setLoading(false); }
   }, [type, page, category, search]);
 
-  useEffect(() => { fetchArticles(); }, [fetchArticles]);
+  // The server already sent page one; the first effect would only fetch it again.
+  const seeded = useRef(!!initial);
+  useEffect(() => {
+    if (seeded.current) { seeded.current = false; return; }
+    fetchArticles();
+  }, [fetchArticles]);
 
   useEffect(() => {
     fetch(`/api/v1${API_ENDPOINTS.MEDIA_ARTICLE_CATEGORIES}?type=${type}`)
@@ -203,8 +213,8 @@ function ArticleListContent({ type }: ArticleListPageProps) {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {articles.map(article => (
-              <ArticleCard key={article._id} article={article} colorClasses={colorClasses} />
+            {articles.map((article, index) => (
+              <ArticleCard key={article._id} article={article} colorClasses={colorClasses} eager={index < EAGER_CARDS} />
             ))}
           </div>
         )}
@@ -242,7 +252,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
   );
 }
 
-function ArticleCard({ article, colorClasses }: { article: Article; colorClasses: Record<string, string> }) {
+function ArticleCard({ article, colorClasses, eager }: { article: Article; colorClasses: Record<string, string>; eager: boolean }) {
   return (
     <Link
       href={articleHref(article.type, article.slug)}
@@ -250,10 +260,13 @@ function ArticleCard({ article, colorClasses }: { article: Article; colorClasses
     >
       {article.coverImage ? (
         <img
-          {...r2ImgProps(article.coverImage, '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 400px')}
+          // 320px, not the card's full width: the photo is cropped to 192px tall, and on a 2x
+          // phone this picks the 76 KB file instead of the 147 KB one with no visible loss.
+          {...r2ImgProps(article.coverImage, '(max-width: 640px) 320px, (max-width: 1280px) 50vw, 400px')}
           onError={(e) => { retryWithoutSrcSet(e.currentTarget); }}
           alt={article.title}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
+          fetchPriority={eager ? 'high' : 'auto'}
           className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
         />
       ) : (
@@ -297,10 +310,10 @@ function ArticleCard({ article, colorClasses }: { article: Article; colorClasses
   );
 }
 
-export default function ArticleListPage({ type }: ArticleListPageProps) {
+export default function ArticleListPage({ type, initial }: ArticleListPageProps) {
   return (
     <Suspense fallback={<div className="h-96 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-red-600 border-t-transparent rounded-full" /></div>}>
-      <ArticleListContent type={type} />
+      <ArticleListContent type={type} initial={initial} />
     </Suspense>
   );
 }

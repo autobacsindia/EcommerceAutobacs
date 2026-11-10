@@ -3,6 +3,7 @@
 import { useEffect, Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import posthog from 'posthog-js';
+import { flushWaitingAnalytics, whenAnalyticsReady } from '@/lib/analytics';
 
 /**
  * PostHog Provider — forward-looking product/behavioral analytics (ADR-005).
@@ -22,7 +23,9 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
     const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
     if (!key) return; // disabled until configured
 
-    if (!posthog.__loaded) {
+    if (posthog.__loaded) return;
+
+    const start = () => {
       posthog.init(key, {
         // Reverse-proxy through our own domain (see next.config.ts rewrites).
         api_host: '/ingest',
@@ -34,8 +37,29 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         // PostHog dashboard, no extra dependency or cost.
         capture_performance: { web_vitals: true },
         persistence: 'localStorage+cookie',
+        loaded: flushWaitingAnalytics,
       });
-    }
+    };
+
+    // PostHog pulls in about 60 KB more while it starts up. On a phone on 4G that
+    // competed with the page's own pictures, so it waits until the page has loaded.
+    let cancelled = false;
+    let idleId: number | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startWhenIdle = () => {
+      if (cancelled) return;
+      if ('requestIdleCallback' in window) idleId = window.requestIdleCallback(start, { timeout: 3000 });
+      else timer = setTimeout(start, 1500);
+    };
+    if (document.readyState === 'complete') startWhenIdle();
+    else window.addEventListener('load', startWhenIdle, { once: true });
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('load', startWhenIdle);
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   return (
@@ -54,11 +78,9 @@ function PostHogPageview() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_POSTHOG_KEY || !posthog.__loaded) return;
     const qs = searchParams?.toString();
-    posthog.capture('$pageview', {
-      $current_url: window.location.origin + pathname + (qs ? `?${qs}` : ''),
-    });
+    const url = window.location.origin + pathname + (qs ? `?${qs}` : '');
+    whenAnalyticsReady(() => posthog.capture('$pageview', { $current_url: url }));
   }, [pathname, searchParams]);
 
   return null;
