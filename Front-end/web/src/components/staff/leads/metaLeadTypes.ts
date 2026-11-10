@@ -31,3 +31,19 @@ export function metaLeadDate(l: MetaLead): string {
   if (!l.leadDate) return l.dateRaw || 'No date';
   return l.dateHasTime ? formatDateTimeIST(l.leadDate) : formatDateIST(l.leadDate);
 }
+
+/**
+ * Facebook names sheet columns like `which_suspension_brand_are_you_interested_in?`.
+ * With no spaces the browser cannot wrap them, so they ran over their answers.
+ * For showing only: saving still uses the column's real name.
+ */
+export function readableSheetLabel(raw: string): string {
+  const text = raw.replace(/_+/g, ' ').replace(/\s+/g, ' ').replace(/\s+\?/g, '?').trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : raw;
+}
+
+/** Answers come the same way (`automotive_dealer_/_reseller`). Links and e-mails are left alone. */
+export function readableSheetValue(raw: string): string {
+  if (!raw.includes('_') || /\s|@|:\/\//.test(raw)) return raw;
+  return readableSheetLabel(raw);
+}

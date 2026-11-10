@@ -257,6 +257,14 @@
 @media (min-width: 768px) {
   .pn-rail-peek { box-shadow: 1px 0 0 rgba(0, 0, 0, 0.06), 18px 0 40px -10px rgba(6, 51, 29, 0.45); }
 }
+/* The slim rail is 60px wide. A computer that always shows scrollbars (a mouse
+   plugged in, or that system setting) spends 15px of it on the menu's scrollbar and
+   squashes every icon's highlight, so the slim rail scrolls without drawing one.
+   Opened or pinned, the menu keeps its scrollbar. */
+@media (min-width: 768px) {
+  .pn-side[data-rail='rail'] nav { scrollbar-width: none; }
+  .pn-side[data-rail='rail'] nav::-webkit-scrollbar { display: none; }
+}
 /* Touch tablets cannot hover: keep the top-bar menu button (and its backdrop)
    so the full menu is one tap away. Unlayered, so it beats Tailwind's md:hidden. */
 @media (min-width: 768px) and (hover: none) {

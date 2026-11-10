@@ -493,10 +493,10 @@ export default function AdminPromoBannersPage() {
       ) : (
         <div className="bg-white rounded-lg shadow divide-y">
           {banners.map((b) => (
-            <div key={b._id} className="flex items-center gap-4 p-4">
+            <div key={b._id} className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4">
               {/* eslint-disable-next-line @next/next/no-img-element -- admin-only thumbnail */}
               <img src={b.imageUrl as string} alt="" className="h-10 w-40 rounded object-cover border border-gray-200" />
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1 basis-48">
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{b.title}</span>
                   <span className={`shrink-0 rounded-full text-[11px] font-semibold px-2 py-0.5 ${STATE_BADGE[b.state].className}`}>

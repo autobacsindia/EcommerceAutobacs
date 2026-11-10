@@ -175,7 +175,7 @@ export default function CareerCategoriesPanel({ categories, onChanged, loadError
                       if (e.key === 'Enter') saveEdit(c._id);
                       if (e.key === 'Escape') setEditingId(null);
                     }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="min-w-0 flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                   <button
                     onClick={() => saveEdit(c._id)}
@@ -223,7 +223,7 @@ export default function CareerCategoriesPanel({ categories, onChanged, loadError
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="New category name"
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+          className="min-w-0 flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
         />
         <button
           type="submit"

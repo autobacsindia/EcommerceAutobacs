@@ -205,7 +205,7 @@ export default function LeadDetailPage() {
           {/* Log contact */}
           <section className="rounded-lg border border-gray-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Log a contact</h2>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 sm:flex-nowrap">
               <select value={activityType} onChange={(e) => setActivityType(e.target.value as 'call' | 'note' | 'email')} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
                 <option value="call">Call</option>
                 <option value="email">Email</option>
@@ -216,7 +216,7 @@ export default function LeadDetailPage() {
                 onChange={(e) => setActivityNotes(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') logActivity(); }}
                 placeholder="What happened?"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="min-w-0 flex-1 basis-40 rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
               <button onClick={logActivity} disabled={saving || !activityNotes.trim()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
                 Log

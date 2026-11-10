@@ -145,7 +145,7 @@ test('edit sends only what changed, with the version it was based on', async () 
   fireEvent.click(await screen.findByRole('button', { name: 'Edit Asha' }));
   const status = await screen.findByLabelText('Status');
   fireEvent.change(status, { target: { value: 'called' } });
-  fireEvent.change(screen.getByLabelText('your_car?'), { target: { value: 'Thar' } });
+  fireEvent.change(screen.getByLabelText('Your car?'), { target: { value: 'Thar' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/staff/meta-leads/a1', { revision: 0, changes: { status: 'called' }, extras: { 'your_car?': 'Thar' } }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -155,7 +155,7 @@ test("Meta's own id can be read but not changed", async () => {
   mockApi(page([lead()], HEAD));
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'Edit Asha' }));
-  expect(await screen.findByLabelText('id')).toBeDisabled();
+  expect(await screen.findByLabelText('Id')).toBeDisabled();
 });
 
 test('someone saved first: the message shows, the form reloads their version and stays open', async () => {
@@ -174,7 +174,7 @@ test('view-only people read the details as text, with no form to save', async ()
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'View Asha' }));
   const dialog = await screen.findByRole('dialog');
-  expect(await within(dialog).findByText('your_car?')).toBeInTheDocument();
+  expect(await within(dialog).findByText('Your car?')).toBeInTheDocument();
   expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
   expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 });

@@ -133,7 +133,7 @@ function AdminAffiliates() {
           label="Search affiliates" placeholder="Search the start of a code, email or name" />
         <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
 
-        <div className="flex gap-1" role="group" aria-label="Filter by status">
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by status">
           {FILTERS.map((f) => (
             <button
               key={f || 'all'}

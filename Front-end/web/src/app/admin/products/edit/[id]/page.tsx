@@ -754,8 +754,8 @@ export default function EditProductPage() {
         <h1 className="text-3xl font-bold">Edit Product <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded ml-2">New</span></h1>
       </div>
       
-      <div className="flex gap-6 items-start">
-      <form onSubmit={handleSubmit} className="flex-1 min-w-0 bg-white rounded-lg shadow p-6">
+      <div className="flex flex-col gap-6 items-start lg:flex-row">
+      <form onSubmit={handleSubmit} className="w-full min-w-0 bg-white rounded-lg shadow p-6 lg:w-auto lg:flex-1">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Product Information */}
           <div className="md:col-span-2">
@@ -1281,7 +1281,7 @@ export default function EditProductPage() {
             <h2 className="text-xl font-semibold mb-4">Technical Specifications</h2>
             <div className="space-y-3">
               {specifications.map((spec, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={spec.key}
@@ -1301,7 +1301,7 @@ export default function EditProductPage() {
                       next[index] = { ...next[index], value: e.target.value };
                       setSpecifications(next);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="Value (e.g. Powder-coated steel)"
                   />
                   <button
@@ -1331,7 +1331,7 @@ export default function EditProductPage() {
             </p>
             <div className="space-y-4">
               {features.map((feature, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={feature}
@@ -1340,7 +1340,7 @@ export default function EditProductPage() {
                       newFeatures[index] = e.target.value;
                       setFeatures(newFeatures);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="e.g. Advanced Foam Cell Technology – Reduces shock fade on long off-road runs"
                   />
                   <button
@@ -1370,7 +1370,7 @@ export default function EditProductPage() {
             </p>
             <div className="space-y-4">
               {whyChoose.map((item, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={item}
@@ -1379,7 +1379,7 @@ export default function EditProductPage() {
                       next[index] = e.target.value;
                       setWhyChoose(next);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="e.g. Built for Adventure – Handles demanding off-road while staying road-comfortable"
                   />
                   <button
@@ -1409,7 +1409,7 @@ export default function EditProductPage() {
             </p>
             <div className="space-y-4">
               {packageContents.map((item, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={item}
@@ -1418,7 +1418,7 @@ export default function EditProductPage() {
                       next[index] = e.target.value;
                       setPackageContents(next);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="e.g. 1 × Front Bumper Assembly"
                   />
                   <button
@@ -1521,7 +1521,7 @@ export default function EditProductPage() {
       </form>
 
       {/* Sticky SEO Score sidebar */}
-      <aside className="w-72 shrink-0 sticky top-6 self-start space-y-4">
+      <aside className="w-full shrink-0 self-start space-y-4 lg:sticky lg:top-6 lg:w-72">
         <SeoScorePanel
           data={{
             name: formData.name,

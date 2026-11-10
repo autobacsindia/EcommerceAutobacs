@@ -739,7 +739,7 @@ export default function CreateProductPage() {
             <h2 className="text-xl font-semibold mb-4">Technical Specifications</h2>
             <div className="space-y-3">
               {specifications.map((spec, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={spec.key}
@@ -759,7 +759,7 @@ export default function CreateProductPage() {
                       next[index] = { ...next[index], value: e.target.value };
                       setSpecifications(next);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="Value (e.g. Powder-coated steel)"
                   />
                   <button
@@ -789,7 +789,7 @@ export default function CreateProductPage() {
             </p>
             <div className="space-y-4">
               {features.map((feature, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={feature}
@@ -798,7 +798,7 @@ export default function CreateProductPage() {
                       newFeatures[index] = e.target.value;
                       setFeatures(newFeatures);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="e.g. Advanced Foam Cell Technology – Reduces shock fade on long off-road runs"
                   />
                   <button
@@ -828,7 +828,7 @@ export default function CreateProductPage() {
             </p>
             <div className="space-y-4">
               {whyChoose.map((item, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={item}
@@ -837,7 +837,7 @@ export default function CreateProductPage() {
                       next[index] = e.target.value;
                       setWhyChoose(next);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="Reason (e.g. Durable construction – built for long-term use)"
                   />
                   <button
@@ -867,7 +867,7 @@ export default function CreateProductPage() {
             </p>
             <div className="space-y-4">
               {packageContents.map((item, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <input
                     type="text"
                     value={item}
@@ -876,7 +876,7 @@ export default function CreateProductPage() {
                       next[index] = e.target.value;
                       setPackageContents(next);
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                    className="min-w-0 flex-1 basis-36 px-3 py-2 border border-gray-300 rounded-md sm:basis-0"
                     placeholder="e.g. 1 × Front Bumper Assembly"
                   />
                   <button

@@ -604,8 +604,8 @@ function ProductCalculatorPanel({ campaignId }: { campaignId: string }) {
         Uses the SAVED ladder and the SAVED assignments — save first to test a change.
       </p>
 
-      <div className="flex items-end gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[12rem] flex-1">
           <label className={label} htmlFor="tier-calc-query">Product search</label>
           <input id="tier-calc-query" className={field} value={input} placeholder="e.g. profender"
             onChange={(e) => setInput(e.target.value)}
