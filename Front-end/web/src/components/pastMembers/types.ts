@@ -31,6 +31,16 @@ export type PastMemberProfile = PastMember & {
   } | null;
 };
 
+export type PastMemberNote = {
+  id: string;
+  body: string;
+  authorName: string;
+  createdAt: string;
+  editedAt: string | null;
+  rev: number;
+  can: { edit: boolean; delete: boolean };
+};
+
 export type PastTask = { id: string; number: number; title: string; completedAt: string | null };
 export type PastOrder = { id: string; number: string; createdAt: string; totalAmount: number; status: string; paymentStatus: string };
 

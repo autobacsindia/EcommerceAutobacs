@@ -103,7 +103,7 @@ export async function listPastMembers(actor, { team, cursor } = {}) {
 
 // ── Profile ───────────────────────────────────────────────────────────────
 
-async function loadMember(actor, id) {
+export async function loadMember(actor, id) {
   if (!mongoose.isValidObjectId(id)) throw fail('Not found.', 404);
   const m = await repo.findMember(id);
   if (!m || !canViewPastMember(actor, m)) throw fail('Not found.', 404);

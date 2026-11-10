@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import RichText from '@/components/ui/RichText';
 import { quietButton } from '@/components/training/types';
+import TeamNotes from './TeamNotes';
 import { usePastMember, usePastMemberOrders, usePastMemberTasks } from './hooks';
 import {
   MOVE_KIND_LABEL, dateLabel, orderStatusLabel, rupees, timeOnTeam, trainingStatusLabel, type PastMemberProfile, type PastMemberSales,
@@ -173,6 +174,7 @@ export default function PastMemberProfileView({ id, base }: { id: string; base: 
         ) : <None>No lessons.</None>}
       </Section>
       {m.handover ? <Handover h={m.handover} /> : <Section title="Handover"><None>No resignation was recorded for this person.</None></Section>}
+      <TeamNotes memberId={m.id} />
     </div>
   );
 }

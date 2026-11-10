@@ -235,7 +235,7 @@ export const TEAM_HELP: TeamHelpSection[] = [
       },
       {
         question: 'Where can I see the work of people who left my team?',
-        answer: 'Open Past members. It lists everyone who used to be on your team. Open a name to see when they joined and left, who took over, the tasks they finished, their training, the lessons they wrote and their handover note. GTM profiles also show their orders, quotations and leads. The reason they left and customer details are never shown.',
+        answer: 'Open Past members. It lists everyone who used to be on your team. Open a name to see when they joined and left, who took over, the tasks they finished, their training, the lessons they wrote and their handover note. GTM profiles also show their orders, quotations and leads. The team head and admins can add team notes for whoever joins next. The reason they left and customer details are never shown.',
         links: [{ label: 'Past members', href: '/team/past-members' }],
       },
       {

@@ -6,15 +6,21 @@
  *   - the order list is not even fetched for non-GTM profiles
  *   - no recorded resignation, no tasks, no training: each section says so
  *   - a hidden or unknown profile shows a plain "not found"
+ *   - team notes: writers get the box, readers do not; edit sends the rev; delete confirms
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PastMembersHome from './PastMembersHome';
 import PastMemberProfileView from './PastMemberProfile';
-import { timeOnTeam, type PastMemberProfile } from './types';
+import { timeOnTeam, type PastMemberNote, type PastMemberProfile } from './types';
 
 const get = jest.fn();
-jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a) } }));
+const post = jest.fn();
+const patch = jest.fn();
+const del = jest.fn();
+jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), patch: (...a: unknown[]) => patch(...a), delete: (...a: unknown[]) => del(...a) } }));
+jest.mock('react-hot-toast', () => ({ __esModule: true, default: { success: jest.fn(), error: jest.fn() } }));
+jest.mock('@/components/ui/RichTextBox', () => ({ __esModule: true, default: ({ value, onChange, ariaLabel }: { value: string; onChange: (v: string) => void; ariaLabel: string }) => <textarea aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)} /> }));
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a> }));
 jest.mock('@/components/ui/RichText', () => ({ __esModule: true, default: ({ value }: { value: string }) => <div>{value}</div> }));
 
@@ -25,13 +31,15 @@ const person = (over: Partial<PastMemberProfile> = {}): PastMemberProfile => ({
   sales: { orders: { paid: 2, paidValue: 1500.5, notPaid: 1, returned: 1, cancelled: 0 }, quotations: { sent: 3, accepted: 2 }, leads: { total: 4, won: 2, lost: 1 } },
   ...over,
 });
+let notesReply: { notes: PastMemberNote[]; canWrite: boolean; nextCursor: string | null } = { notes: [], canWrite: false, nextCursor: null };
 const serve = (p: PastMemberProfile | Error) => get.mockImplementation((u: string) => {
+  if (u.includes('/notes')) return Promise.resolve(notesReply);
   if (u.includes('/orders')) return Promise.resolve({ orders: [{ id: 'O1', number: '#ABC12345', createdAt: '2026-10-01T06:00:00Z', totalAmount: 1000, status: 'delivered', paymentStatus: 'paid' }], nextCursor: null });
   if (u.includes('/tasks')) return Promise.resolve({ tasks: [{ id: 'T1', number: 7, title: 'Call Ravi', completedAt: '2026-09-01T06:00:00Z' }], nextCursor: null });
   return p instanceof Error ? Promise.reject(p) : Promise.resolve({ member: p });
 });
 
-beforeEach(() => { get.mockReset(); });
+beforeEach(() => { get.mockReset(); post.mockReset(); patch.mockReset(); del.mockReset(); notesReply = { notes: [], canWrite: false, nextCursor: null }; });
 
 describe('list', () => {
   test('links to each profile, with no team picker for staff', async () => {
@@ -111,4 +119,63 @@ test('time on the team reads naturally', () => {
   expect(timeOnTeam(12)).toBe('12 days');
   expect(timeOnTeam(95)).toBe('3 months');
   expect(timeOnTeam(400)).toBe('1 year 1 month');
+});
+
+describe('team notes', () => {
+  const note = (over: Partial<PastMemberNote> = {}): PastMemberNote => ({
+    id: 'N1', body: 'Call Ravi first', authorName: 'Head', createdAt: '2026-11-01T06:00:00Z', editedAt: null, rev: 2, can: { edit: false, delete: false }, ...over,
+  });
+
+  test('readers see notes with author, but no box and no buttons', async () => {
+    notesReply = { notes: [note()], canWrite: false, nextCursor: null };
+    serve(person({ sales: null }));
+    wrap(<PastMemberProfileView id="U1" base="/team/past-members" />);
+    expect(await screen.findByText('Call Ravi first')).toBeInTheDocument();
+    expect(screen.getByText(/Head, 1 Nov 2026/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('New note')).not.toBeInTheDocument();
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+  });
+
+  test('the head adds a note', async () => {
+    notesReply = { notes: [], canWrite: true, nextCursor: null };
+    serve(person({ sales: null }));
+    post.mockResolvedValue({ note: note() });
+    wrap(<PastMemberProfileView id="U1" base="/team/past-members" />);
+    fireEvent.change(await screen.findByLabelText('New note'), { target: { value: 'Ravi likes calls' } });
+    fireEvent.click(screen.getByText('Add note'));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/past-members/U1/notes', { body: 'Ravi likes calls' }));
+  });
+
+  test('the author edits with the rev, and deletes only after confirming', async () => {
+    notesReply = { notes: [note({ can: { edit: true, delete: true } })], canWrite: true, nextCursor: null };
+    serve(person({ sales: null }));
+    patch.mockResolvedValue({ note: note({ body: 'New', rev: 3 }) });
+    wrap(<PastMemberProfileView id="U1" base="/team/past-members" />);
+    fireEvent.click(await screen.findByText('Edit'));
+    fireEvent.change(screen.getByLabelText('Edit note'), { target: { value: 'New' } });
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/past-members/U1/notes/N1', { body: 'New', rev: 2 }));
+    const confirm = jest.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    del.mockResolvedValue({ deleted: true });
+    fireEvent.click(await screen.findByText('Delete'));
+    expect(del).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Delete'));
+    await waitFor(() => expect(del).toHaveBeenCalledWith('/staff/past-members/U1/notes/N1'));
+    confirm.mockRestore();
+  });
+
+  test('an admin sees Delete on someone else’s note, but not Edit', async () => {
+    notesReply = { notes: [note({ can: { edit: false, delete: true } })], canWrite: true, nextCursor: null };
+    serve(person({ sales: null }));
+    wrap(<PastMemberProfileView id="U1" base="/admin/past-members" />);
+    expect(await screen.findByText('Delete')).toBeInTheDocument();
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+  });
+
+  test('no notes yet', async () => {
+    serve(person({ sales: null }));
+    wrap(<PastMemberProfileView id="U1" base="/team/past-members" />);
+    expect(await screen.findByText('No notes yet.')).toBeInTheDocument();
+  });
 });
