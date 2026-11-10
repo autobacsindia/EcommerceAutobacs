@@ -16,6 +16,8 @@ import StaffDeparture from '../models/StaffDeparture.js';
 import StaffHandoverMove from '../models/StaffHandoverMove.js';
 import { StaffTrainingAssignment } from '../models/StaffTraining.js';
 import repo from '../repositories/staffPastMemberRepository.js';
+import StaffPastMemberNote from '../models/StaffPastMemberNote.js';
+import noteRepo from '../repositories/staffPastMemberNoteRepository.js';
 
 jest.setTimeout(120000);
 
@@ -32,7 +34,7 @@ const stats = (e) => {
 
 beforeAll(async () => {
   await dbHandler.connect();
-  await Promise.all([User, Order, Lead, StaffLesson, StaffTask, SalesQuotation, StaffDeparture, StaffHandoverMove, StaffTrainingAssignment].map((m) => m.syncIndexes()));
+  await Promise.all([User, Order, Lead, StaffLesson, StaffTask, SalesQuotation, StaffDeparture, StaffHandoverMove, StaffTrainingAssignment, StaffPastMemberNote].map((m) => m.syncIndexes()));
 });
 beforeEach(async () => {
   // 6,000 shoppers with no staff record, 300 people who were ever staff, half gone.
@@ -48,6 +50,7 @@ beforeEach(async () => {
   await StaffTrainingAssignment.collection.insertMany(seed((user, i) => ({ user, path: new mongoose.Types.ObjectId(), pathTitle: `P${i}`, team: 'sales', status: 'learning' })));
   const deps = await StaffDeparture.collection.insertMany(people.map((user, i) => ({ user, team: TEAMS[i % 6], wasHead: false, lastDay: '2026-02-01', status: i % 2 ? 'left' : 'cancelled' })));
   await StaffHandoverMove.collection.insertMany(seed((_u, i) => ({ departure: deps.insertedIds[i % 300], kind: 'task', ref: new mongoose.Types.ObjectId(), to: who, state: 'moved', at: new Date() })));
+  await StaffPastMemberNote.collection.insertMany(seed((member, i) => ({ member, team: 'sales', body: `<p>${i}</p>`, author: who, rev: 0 })));
   const rep = new mongoose.Types.ObjectId();
   await Lead.collection.insertMany(seed((_u, i) => ({ name: `L${i}`, identityKey: `k${i}`, assignedRep: i % 300 === 1 ? rep : new mongoose.Types.ObjectId(), status: 'won' })));
 });
@@ -67,6 +70,9 @@ test.each([
   ['training', () => repo.trainings(who, 50), 10],
   ['lessons', () => repo.lessons(who, ['company', 'sales'], 50), 10],
   ['order page', () => repo.orderPage(who, null, 21), 21],
+  ['notes page', () => noteRepo.page(who, null, 21), 10],
+  ['notes next page', () => noteRepo.page(who, new mongoose.Types.ObjectId(), 21), 10],
+  ['one note', () => noteRepo.findOne(who, new mongoose.Types.ObjectId()), 1],
 ])('%s reads few rows', async (name, q, max) => {
   const s = stats(await one(q()).explain('executionStats'));
   console.log('past-members', name, s.docs, s.keys);

@@ -283,6 +283,7 @@ export const pastMemberKeys = {
   one: (id: string) => [...pastMemberKeys.all, 'one', id] as const,
   tasks: (id: string) => [...pastMemberKeys.all, 'tasks', id] as const,
   orders: (id: string) => [...pastMemberKeys.all, 'orders', id] as const,
+  notes: (id: string) => [...pastMemberKeys.all, 'notes', id] as const,
 };
 
 export const trainingKeys = {

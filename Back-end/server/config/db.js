@@ -698,6 +698,7 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafflessons').createIndex({ archivedAt: 1, audience: 1, _id: -1 }, { name: 'staff_lesson_audience', background: true });
     await db.collection('stafflessons').createIndex({ owner: 1, archivedAt: 1, _id: 1 }, { name: 'staff_lesson_owner', background: true });
     await db.collection('stafflessons').createIndex({ createdBy: 1, archivedAt: 1, _id: -1 }, { name: 'staff_lesson_creator', background: true });
+    await db.collection('staffpastmembernotes').createIndex({ member: 1, _id: -1 }, { name: 'staff_past_note_member', background: true });
     // Past members: one team's former staff. Partial, so shoppers add no entries.
     await db.collection('users').createIndex(
       { 'staff.team': 1, 'staff.deactivatedAt': -1, _id: -1 },

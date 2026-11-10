@@ -1,9 +1,9 @@
 'use client';
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import { pastMemberKeys } from '@/hooks/queries/keys';
-import type { PastMember, PastMemberProfile, PastOrder, PastTask } from './types';
+import type { PastMember, PastMemberNote, PastMemberProfile, PastOrder, PastTask } from './types';
 
 const BASE = '/staff/past-members';
 const qs = (params: Record<string, string>) => {
@@ -44,3 +44,25 @@ export function usePastMemberOrders(id: string, enabled: boolean) {
     enabled,
   });
 }
+
+export function usePastMemberNotes(id: string) {
+  return useInfiniteQuery({
+    queryKey: pastMemberKeys.notes(id),
+    queryFn: ({ pageParam }) => apiClient.get<{ notes: PastMemberNote[]; canWrite: boolean; nextCursor: string | null }>(`${BASE}/${id}/notes${qs({ cursor: pageParam })}`),
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextCursor || undefined,
+  });
+}
+
+/** Every note change reloads the list from the server: no guessing at order or rights. */
+function useNoteMutation<V>(id: string, fn: (v: V) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: pastMemberKeys.notes(id) }),
+  });
+}
+
+export const useAddNote = (id: string) => useNoteMutation(id, (body: string) => apiClient.post(`${BASE}/${id}/notes`, { body }));
+export const useEditNote = (id: string) => useNoteMutation(id, (v: { noteId: string; body: string; rev: number }) => apiClient.patch(`${BASE}/${id}/notes/${v.noteId}`, { body: v.body, rev: v.rev }));
+export const useDeleteNote = (id: string) => useNoteMutation(id, (noteId: string) => apiClient.delete(`${BASE}/${id}/notes/${noteId}`));
