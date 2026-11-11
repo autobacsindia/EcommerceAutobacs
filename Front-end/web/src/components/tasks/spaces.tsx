@@ -415,13 +415,14 @@ export function ListPicker({ team, teamLabel, value, onChange, disabled, label =
   const current = known.find((l) => l.id === value);
   if (!known.length && !value) return <span className="text-sm text-gray-400">No lists in {s.teamLabel} yet</span>;
   return (
-    <span className={`inline-flex min-w-0 items-center gap-1.5 ${className}`}>
+    <span className={`inline-flex min-w-0 max-w-full items-center gap-1.5 ${className}`}>
       <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${current ? dotOf(current.colour) : 'border border-gray-400'}`} />
       <select
         value={current ? current.id : ''}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value || null)}
         aria-label={label}
+        title={current?.name}
         // `!`: the panel styles every select with a white box (globals.css); a quiet inline picker has to win that.
         className={`min-w-0 max-w-full truncate rounded-md border-transparent! bg-transparent! py-0.5 text-sm text-gray-800 ${disabled ? 'cursor-default appearance-none pr-1' : 'pr-6 hover:border-gray-200!'}`}
       >
