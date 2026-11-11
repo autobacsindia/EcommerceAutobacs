@@ -137,6 +137,16 @@ export function enqueueNotification(jobName, data) {
   }
 }
 
+/**
+ * One delayed flush job per window. Same jobId = BullMQ keeps one job, so a burst
+ * of edits is one write. Returns the add() promise; a missing queue Redis is a
+ * no-op (the 5-minute sync writes it instead).
+ */
+export function enqueueMetaLeadSheetWrite({ jobId, delay }) {
+  if (!process.env.REDIS_URL && !process.env.QUEUE_REDIS_URL) return null;
+  return getNotificationsQueue().add('write-meta-lead-sheet', {}, { jobId, delay, attempts: 5, backoff: { type: 'exponential', delay: 30_000 } });
+}
+
 export async function closeQueues() {
   await Promise.all([
     notificationsQueue?.close(),

@@ -110,3 +110,24 @@ export const CONSULTATION_TO_LEAD = {
   completed: 'won',
   cancelled: 'lost',
 };
+
+/*
+  Meta leads: next follow-up deadlines (services/metaLeadDeadlineService.js).
+  Deadlines and reminders live inside office hours, India time: a follow-up set
+  for 9 pm moves to 10 am the next working day, and nobody is pinged at night.
+*/
+export const META_LEAD_OFFICE = Object.freeze({
+  startHour: 10,
+  endHour: 19,
+  // 0 = Sunday … 6 = Saturday
+  days: Object.freeze([1, 2, 3, 4, 5, 6]),
+});
+export const META_LEAD_REMINDER_MIN = 10; // pop-up this long before a deadline
+export const META_LEAD_ESCALATE_HEAD_MIN = 2 * 60; // overdue this long → GTM head
+export const META_LEAD_ESCALATE_MANAGERS_MIN = 24 * 60; // overdue this long → admin + Marketing head
+export const META_LEAD_FIRST_FOLLOW_UP_MIN = 60; // office minutes after taking a lead
+export const META_LEAD_NEXT_MAX_DAYS = 60; // furthest a next follow-up may be set
+export const META_LEAD_REASON_MIN = 5; // characters: "ok" is not a reason
+export const META_LEAD_REASON_MAX = 500;
+// These close the lead: no next follow-up is asked for.
+export const FOLLOW_UP_CLOSING = Object.freeze(['converted', 'not_interested']);

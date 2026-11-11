@@ -5,6 +5,8 @@ import { runWordPressSync } from './wordpressSyncService.js';
 import { expireEndedSales } from './productSaleService.js';
 import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
 import { runScheduledMetaLeadSync } from './metaLeadSync.js';
+import { runScheduledSheetWrite } from './metaLeadSheetWriter.js';
+import { runDeadlineSweep } from './metaLeadDeadlineService.js';
 import { reconcileStuckPayments, reconcileSalesLinks } from './paymentReconciliationService.js';
 import { recomputeSalesScores } from './salesScoreService.js';
 import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
@@ -287,11 +289,24 @@ class CronService {
       console.error(`[CronService] Invalid META_LEADS_SYNC_CRON "${schedule}" — Meta leads sync NOT scheduled`);
       return;
     }
+    // Read the sheet, then write back anything the panel changed that has not
+    // reached it yet (the queue job normally has; this is the safety net).
     const task = cron.schedule(schedule, () =>
-      this.withDistributedLock('cron:lock:metaLeadSync', 240, () => runScheduledMetaLeadSync()),
+      this.withDistributedLock('cron:lock:metaLeadSync', 240, async () => {
+        await runScheduledMetaLeadSync();
+        await runScheduledSheetWrite();
+      }),
       { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
     );
-    this.scheduledTasks.push({ name: 'metaLeadSync', task, schedule, description: 'Sales lead Google Sheet into the Meta leads tab' });
+    this.scheduledTasks.push({ name: 'metaLeadSync', task, schedule, description: 'Sales lead Google Sheet <-> Meta leads tab' });
+
+    // Follow-up reminders (10 min before) and overdue escalations. Every minute,
+    // lock-guarded; each message is claimed per deadline, so a double run sends once.
+    const deadlines = cron.schedule('* * * * *', () =>
+      this.withDistributedLock('cron:lock:metaLeadDeadlines', 55, () => runDeadlineSweep()),
+      { scheduled: true, timezone: 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({ name: 'metaLeadDeadlines', task: deadlines, schedule: '* * * * *', description: 'Meta lead follow-up reminders and overdue alerts' });
   }
 
   /**

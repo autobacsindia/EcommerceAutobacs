@@ -35,12 +35,31 @@ const EditSchema = new mongoose.Schema(
 
 const FollowUpEntrySchema = new mongoose.Schema(
   {
-    type: { type: String, enum: ['claim', 'release', 'reassign', 'follow_up'], required: true },
+    type: { type: String, enum: ['claim', 'release', 'reassign', 'follow_up', 'reschedule', 'late_reason', 'explain_ask', 'explain_answer'], required: true },
     at: { type: Date, default: Date.now },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     byName: { type: String, default: '' },
     status: { type: String, enum: FOLLOW_UP_STATUS_KEYS, default: undefined },
     notes: { type: String, default: '' },
+    // follow_up / reschedule: the next follow-up it set, and the deadline it answered.
+    nextAt: { type: Date, default: undefined },
+    dueAt: { type: Date, default: undefined },
+    // follow_up: done after its deadline had passed.
+    late: { type: Boolean, default: undefined },
+    // follow_up: the first one after the lead was taken, this many minutes later.
+    minutesSinceClaim: { type: Number, default: undefined },
+  },
+  { _id: false },
+);
+
+const ExplanationSchema = new mongoose.Schema(
+  {
+    askedAt: { type: Date, required: true },
+    askedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    askedByName: { type: String, default: '' },
+    question: { type: String, default: '' },
+    answer: { type: String, default: '' },
+    answeredAt: { type: Date, default: null },
   },
   { _id: false },
 );
@@ -92,6 +111,32 @@ const MetaLeadSchema = new mongoose.Schema(
     followUpStatus: { type: String, enum: FOLLOW_UP_STATUS_KEYS, default: null },
     followUpStatusAt: { type: Date, default: null },
     followUpLog: { type: [FollowUpEntrySchema], default: [] },
+
+    // When the next follow-up is due (null = none asked: free, or closed). Set by
+    // taking a lead and by every follow-up; services/metaLeadDeadlineService.js
+    // reminds before it and escalates after it.
+    nextFollowUpAt: { type: Date, default: null },
+    // The deadline each message was already sent for: one message per deadline,
+    // however often the sweep runs.
+    reminderSentFor: { type: Date, default: null },
+    escalatedHeadFor: { type: Date, default: null },
+    escalatedManagersFor: { type: Date, default: null },
+    // Why the deadline `lateReasonFor` was missed (typed by the person following up).
+    lateReason: { type: String, default: '' },
+    lateReasonFor: { type: Date, default: null },
+    reschedules: { type: Number, default: 0 },
+    // An open or answered "explain this" from the admin / a head; the history keeps all of them.
+    explanation: { type: ExplanationSchema, default: null },
+
+    // Panel → sheet (services/metaLeadSheetWriter.js). Every panel change sets
+    // sheetDirty and bumps sheetWanted; a write clears sheetDirty only if
+    // sheetWanted is still what it wrote, so a change during the write is not lost.
+    sheetDirty: { type: Boolean, default: false },
+    sheetWanted: { type: Number, default: 0 },
+    sheetChangedAt: { type: Date, default: null },
+    sheetWrittenAt: { type: Date, default: null },
+    // '' | 'not_in_sheet' | 'ambiguous': why the last write found no row.
+    sheetWriteError: { type: String, default: '' },
   },
   { timestamps: true },
 );
@@ -109,5 +154,13 @@ MetaLeadSchema.index({ tab: 1, sortAt: -1, _id: -1 }); // one tab, newest first
 MetaLeadSchema.index({ followingUpBy: 1, sortAt: -1, _id: -1 }); // Unclaimed / Mine / a person
 MetaLeadSchema.index({ followUpStatus: 1, sortAt: -1, _id: -1 }); // by follow-up status
 MetaLeadSchema.index({ phoneKey: 1 }); // the same customer on another tab
+// Waiting to be written to the sheet: a handful of rows at any moment.
+MetaLeadSchema.index({ sheetDirty: 1 }, { partialFilterExpression: { sheetDirty: true }, name: 'meta_lead_sheet_dirty' });
+// Deadlines: the minute sweep, "due / overdue", per person.
+MetaLeadSchema.index({ nextFollowUpAt: 1 }, { partialFilterExpression: { nextFollowUpAt: { $type: 'date' } }, name: 'meta_lead_next_follow_up' });
+// Team activity reads only leads with history in its period (measured: 20,000
+// leads read per page view without it).
+MetaLeadSchema.index({ 'followUpLog.at': 1 }, { name: 'meta_lead_log_at' });
+MetaLeadSchema.index({ followingUpBy: 1, nextFollowUpAt: 1 }, { partialFilterExpression: { nextFollowUpAt: { $type: 'date' } }, name: 'meta_lead_owner_next_follow_up' });
 
 export default mongoose.model('MetaLead', MetaLeadSchema);

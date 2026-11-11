@@ -10,9 +10,10 @@ import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { validateTeamLeadFollowUp, validateTeamLeadReassign } from '../validators/staffLeads.validator.js';
 import { FOLLOW_UP_STATUS_KEYS } from '../config/leadConstants.js';
-import { listMetaLeads, getMetaLead, updateMetaLead } from '../services/metaLeadService.js';
+import { listMetaLeads, getMetaLead, updateMetaLead, metaLeadActivity } from '../services/metaLeadService.js';
 import {
   metaLeadPeople, takeMetaLead, releaseMetaLead, reassignMetaLead, recordMetaLeadFollowUp,
+  rescheduleMetaLead, askMetaLeadExplanation, answerMetaLeadExplanation,
 } from '../services/metaLeadFollowUpService.js';
 
 const router = express.Router();
@@ -24,6 +25,7 @@ router.get('/', [
   query('view').optional().isIn(['all', 'free', 'mine']).withMessage('Unknown list'),
   query('owner').optional().custom(isObjectId).withMessage('Invalid person'),
   query('followUp').optional().isIn(['none', ...FOLLOW_UP_STATUS_KEYS]).withMessage('Unknown follow-up status'),
+  query('due').optional().isIn(['overdue', 'today']).withMessage('Unknown due filter'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
 ], validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listMetaLeads(req.user, req.query)) });
@@ -31,6 +33,12 @@ router.get('/', [
 
 router.get('/people', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await metaLeadPeople(req.user)) });
+}));
+
+router.get('/activity', [
+  query('days').optional().isIn(['1', '7', '30']).withMessage('Pick 1, 7 or 30 days'),
+], validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await metaLeadActivity(req.user, req.query)) });
 }));
 
 router.get('/:id', validId, validateRequest, asyncHandler(async (req, res) => {
@@ -68,6 +76,29 @@ router.post('/:id/release', validId, validateRequest, asyncHandler(async (req, r
 
 router.post('/:id/reassign', validateTeamLeadReassign, validateRequest, asyncHandler(async (req, res) => {
   answer(res, await reassignMetaLead(req.user, req.params.id, req.body.userId), { changed: CHANGED });
+}));
+
+const text = (name) => body(name).optional({ values: 'null' }).isString().isLength({ max: 600 }).withMessage('Must be text');
+
+router.post('/:id/next-follow-up', [validId, body('nextAt').isString().isLength({ max: 40 }).withMessage('Pick when the next follow-up is due'), text('reason')],
+  validateRequest, asyncHandler(async (req, res) => {
+    answer(res, await rescheduleMetaLead(req.user, req.params.id, req.body), {
+      not_following: () => 'Nobody is following up on this lead.',
+      changed: CHANGED,
+    });
+  }));
+
+router.post('/:id/explanation', [validId, text('question')], validateRequest, asyncHandler(async (req, res) => {
+  answer(res, await askMetaLeadExplanation(req.user, req.params.id, req.body), {
+    already_asked: () => 'An explanation is already waiting on this lead.',
+  });
+}));
+
+router.post('/:id/explanation/answer', [validId, text('answer')], validateRequest, asyncHandler(async (req, res) => {
+  answer(res, await answerMetaLeadExplanation(req.user, req.params.id, req.body), {
+    nothing_open: () => 'There is no question waiting on this lead.',
+    changed: CHANGED,
+  });
 }));
 
 router.post('/:id/follow-ups', validateTeamLeadFollowUp, validateRequest, asyncHandler(async (req, res) => {

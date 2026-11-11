@@ -1,7 +1,8 @@
 /**
- * Read-only Google Sheets access with a service account ("robot" account the
- * sheet is shared with as Viewer). Signs its own token with node's crypto: two
- * REST calls do not justify the googleapis package.
+ * Google Sheets access with a service account ("robot" account the sheet is
+ * shared with). Reading needs Viewer; writing the panel's follow-ups back
+ * (services/metaLeadSheetWriter.js) needs Editor. Signs its own token with
+ * node's crypto: a few REST calls do not justify the googleapis package.
  *
  * Credentials come only from GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON (the key file's
  * JSON, or that JSON base64-encoded). Errors carry a status, never response
@@ -11,7 +12,9 @@ import crypto from 'crypto';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
-const SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+// Read AND write. What the robot may actually do is still decided by how the
+// sheet is shared with it (Viewer → every write is a 403).
+const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 const TIMEOUT_MS = 30_000;
 const TOKEN_LIFETIME_S = 3600;
 const RANGES_PER_CALL = 50;
@@ -46,7 +49,11 @@ async function call(url, init, what) {
       if (!retrying) throw err;
     }
     if (res?.ok) return res.json();
-    if (res && !(retrying && RETRY_STATUSES.has(res.status))) throw new Error(`Google ${what} failed (HTTP ${res.status})`);
+    if (res && !(retrying && RETRY_STATUSES.has(res.status))) {
+      const err = new Error(`Google ${what} failed (HTTP ${res.status})`);
+      err.status = res.status;
+      throw err;
+    }
     await new Promise((resolve) => { setTimeout(resolve, RETRY_DELAYS_MS[attempt]); });
   }
 }
@@ -71,7 +78,7 @@ export async function readAllTabs(spreadsheetId, account = readServiceAccount())
   const headers = { Authorization: `Bearer ${token}` };
   const id = encodeURIComponent(spreadsheetId);
 
-  const meta = await call(`${API}/${id}?fields=sheets.properties(sheetId,title,hidden,sheetType)`, { headers }, 'sheet list');
+  const meta = await call(`${API}/${id}?fields=sheets.properties(sheetId,title,hidden,sheetType,gridProperties.columnCount)`, { headers }, 'sheet list');
   const tabs = (meta.sheets ?? []).map((s) => s.properties).filter((p) => (p.sheetType ?? 'GRID') === 'GRID');
 
   const out = [];
@@ -81,7 +88,45 @@ export async function readAllTabs(spreadsheetId, account = readServiceAccount())
     group.forEach((t) => qs.append('ranges', quoteTab(t.title)));
     const { valueRanges = [] } = await call(`${API}/${id}/values:batchGet?${qs}`, { headers }, 'sheet read');
     if (valueRanges.length !== group.length) throw new Error('Google sheet read returned the wrong number of tabs');
-    group.forEach((t, n) => out.push({ name: t.title, gid: t.sheetId, values: valueRanges[n].values ?? [] }));
+    group.forEach((t, n) => out.push({
+      name: t.title, gid: t.sheetId, values: valueRanges[n].values ?? [],
+      ...(t.gridProperties?.columnCount && { columnCount: t.gridProperties.columnCount }),
+    }));
   }
   return out;
 }
+
+const json = (token, body) => ({ method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+/**
+ * Write cells. `grow` = [{ gid, columns }]: add columns to a tab first (writing
+ * past a tab's last column is refused by Google). `data` = [{ range, values }].
+ * RAW, never USER_ENTERED: a note typed as "=IMPORTXML(…)" must land as text,
+ * not run as a formula inside the team's sheet.
+ */
+export async function writeCells(spreadsheetId, { grow = [], data = [] }, account = readServiceAccount()) {
+  if (!account) throw new Error('GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON is not set');
+  if (!grow.length && !data.length) return { updatedCells: 0 };
+  const token = await accessToken(account);
+  const id = encodeURIComponent(spreadsheetId);
+  if (grow.length) {
+    const requests = grow.map((g) => ({ appendDimension: { sheetId: g.gid, dimension: 'COLUMNS', length: g.columns } }));
+    await call(`${API}/${id}:batchUpdate`, json(token, { requests }), 'sheet columns');
+  }
+  if (!data.length) return { updatedCells: 0 };
+  const res = await call(`${API}/${id}/values:batchUpdate`, json(token, { valueInputOption: 'RAW', data }), 'sheet write');
+  return { updatedCells: res.totalUpdatedCells ?? 0 };
+}
+
+/** The robot's address (not secret): shown so the owner knows whom to share the sheet with. */
+export function serviceAccountEmail() {
+  try { return readServiceAccount()?.email ?? null; } catch { return null; }
+}
+
+export const a1Column = (index) => {
+  let n = index + 1;
+  let out = '';
+  while (n > 0) { const r = (n - 1) % 26; out = String.fromCharCode(65 + r) + out; n = Math.floor((n - 1) / 26); }
+  return out;
+};
+export const a1Cell = (tab, row, col) => `${quoteTab(tab)}!${a1Column(col)}${row}`;
