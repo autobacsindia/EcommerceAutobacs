@@ -265,9 +265,21 @@ describe('initiateReturnRefund — deductions + gate', () => {
 
   it('409s when the atomic claim is lost to a concurrent refund', async () => {
     mockReturnRepo.claimForRefund.mockResolvedValue(null);
+    // The re-read after the lost claim finds the other refund in flight.
+    mockReturnRepo.findById
+      .mockResolvedValueOnce(makeReturn())
+      .mockResolvedValueOnce(makeReturn({ refund: { status: 'processing' } }));
     const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
     expect(status).toBe(409);
     expect(error.message).toMatch(/already being processed/i);
+    expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+  });
+
+  it('409s with "refresh and check" when the claim misses because the return was just edited', async () => {
+    mockReturnRepo.claimForRefund.mockResolvedValue(null);
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/just changed.*check the amount/i);
     expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
   });
 

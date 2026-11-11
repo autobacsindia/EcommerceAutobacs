@@ -376,6 +376,21 @@ const ReturnRequestSchema = new mongoose.Schema({
     // the legacy `shippingDeduction`, which carries the same figure for older readers.
     pickupDeduction:       { type: Number, default: 0 },
     pickupDeductionReason: { type: String, trim: true, maxlength: 500, default: null },
+    // Every later change to the pickup cost (operations, before the refund is sent), so
+    // Accounts sees what moved and why before sending (owner, 2026-11-11). Rupees.
+    // Append-only; bounded in practice by the edit window (received → refund sent).
+    deductionChanges: {
+      type: [{
+        from:   { type: Number, required: true },
+        to:     { type: Number, required: true },
+        reason: { type: String, trim: true, maxlength: 500, required: true },
+        by:     { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        byName: { type: String, trim: true, maxlength: 120 },
+        at:     { type: Date, required: true },
+        _id: false,
+      }],
+      default: [],
+    },
     // GST credit note number accounts types on the refund. Free text; never computed.
     creditNoteNo:          { type: String, trim: true, maxlength: 60, default: null },
     restockingDeduction:  { type: Number, default: 0 }, // 10% on >₹1L (suggested) / oversized (manual)

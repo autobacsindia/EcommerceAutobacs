@@ -509,6 +509,21 @@ export async function initiateRefund(req, { authorize = null } = {}) {
     }
   }
 
+  /*
+    The amount the sender LOOKED AT. Never used as the amount (that is `finalAmount`,
+    recomputed above); it only refuses a send whose figure moved after the screen was
+    opened — e.g. operations corrected the pickup cost while Accounts had the preview
+    up. Accounts then sees the new figure and approves it, instead of sending money
+    they never saw.
+  */
+  const expected = req.body.expectedAmount;
+  if (expected != null && expected !== '' && money(Number(expected)) !== finalAmount) {
+    throw new AppError(
+      `The refund amount changed to ₹${finalAmount} since you opened it (you saw ₹${money(Number(expected)) || 0}). Check the new figure and send again.`,
+      409,
+    );
+  }
+
   // The caller's own rule on who may send this much, by which route — checked on the
   // SERVER's figure and before the claim, so a refused request moves nothing.
   if (authorize) authorize(finalAmount, method);
@@ -531,6 +546,10 @@ export async function initiateRefund(req, { authorize = null } = {}) {
       serviceLines: breakdown.serviceLines,
       pickupDeductionReason: shippingDeduction > 0 ? choices.pickupDeductionReason : null,
       creditNoteNo,
+      // The stored pickup cost this figure was computed from — so an edit landing
+      // between our read and the claim makes the claim miss instead of paying a
+      // figure nobody sees any more.
+      expectStoredPickupDeduction: existing.refund?.pickupDeduction ?? 0,
     });
   } catch (err) {
     // unique_refunded_service_line: another return claimed the same installation line
@@ -541,7 +560,13 @@ export async function initiateRefund(req, { authorize = null } = {}) {
     throw err;
   }
   if (!rr) {
-    throw new AppError('This refund is already being processed.', 409);
+    const now = await returnRequestRepository.findById(req.params.id);
+    throw new AppError(
+      ['processing', 'completed'].includes(now?.refund?.status)
+        ? 'This refund is already being processed.'
+        : 'This return was just changed. Refresh and check the amount before sending.',
+      409,
+    );
   }
 
   /*

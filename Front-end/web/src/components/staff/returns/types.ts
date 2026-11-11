@@ -80,6 +80,8 @@ export interface ReturnDetail extends ReturnRow {
     pickupDeduction?: number; pickupDeductionReason?: string | null; creditNoteNo?: string | null;
     serviceLines?: { orderItemId: string; name: string; amountPaise: number }[];
     method?: string; reference?: string;
+    /** Each later change to the pickup cost (operations, before the refund is sent). */
+    deductionChanges?: { from: number; to: number; reason: string; byName?: string; at: string }[];
   } | null;
   refundRoute: 'gateway' | 'offline';
   supplierClaims: SupplierClaim[];
@@ -90,6 +92,8 @@ export interface ReturnDetail extends ReturnRow {
     inspect: boolean; refund: boolean; supplierClaims: boolean; supplierMoney: boolean;
     /** Edit is open to this person (the raiser, operations, admin) and the refund hasn't started. */
     edit?: boolean; editReason?: boolean; editRemoveLine?: boolean;
+    /** Operations/admin may correct the pickup cost (after inspection, before the refund). */
+    editPickupCost?: boolean;
   };
   /** Why Edit is closed for someone who could otherwise edit (e.g. the refund is with Accounts). */
   editLock?: string | null;

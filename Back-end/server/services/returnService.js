@@ -1594,6 +1594,7 @@ export async function getReturn(actor, id) {
       edit: mayEdit(actor, rr) && !editBlock(rr),
       editReason: rr.status === 'pending',
       editRemoveLine: LINE_REMOVABLE_STATUSES.includes(rr.status),
+      editPickupCost: mayEditPickupCost(actor, rr),
     },
     // Why Edit is closed (shown on the card); null when it is open or not this person's.
     editLock: mayEdit(actor, rr) ? editBlock(rr) : null,
@@ -1722,6 +1723,62 @@ function editedLines(rr, order, products, input) {
   return { lines, changes };
 }
 
+/** May this person change the pickup cost on this return now? Operations/admin, after a passed inspection, before the refund is sent. */
+const mayEditPickupCost = (u, rr) => can.operations(u) && rr.status === 'received'
+  && rr.inspection?.passed === true && !editBlock(rr);
+
+/**
+ * The pickup cost after an edit (owner, 2026-11-11: a shipping cost entered by mistake
+ * at inspection had no way back). Only the DEDUCTION is taken from the client — the
+ * refund itself is never typed: Accounts' preview and send recompute it from the order
+ * with this stored figure. A reason is mandatory, and the change is kept on
+ * `refund.deductionChanges` so Accounts sees what moved before sending.
+ *
+ * @returns {Promise<null|{ set: object, change: string, entry: object }>} null when unchanged
+ */
+async function editedPickupCost(actor, rr, wanted, editedItems) {
+  if (wanted == null) return null;
+  if (typeof wanted !== 'object') throw fail('Invalid pickup cost.', 400);
+  if (!mayEditPickupCost(actor, rr)) {
+    throw fail(can.operations(actor)
+      ? 'The pickup cost can be changed only after the item passes inspection and before the refund is sent.'
+      : 'Only operations or admin can change the pickup cost.', can.operations(actor) ? 409 : 403);
+  }
+  const to = Number(wanted.rupees);
+  if (!Number.isFinite(to) || to < 0) throw fail('Enter the pickup cost in rupees (0 for none).', 400);
+  const next = money(to);
+  const from = money(rr.refund?.pickupDeduction ?? rr.refund?.shippingDeduction ?? 0);
+  if (next === from) return null;
+  const reason = trimmed(wanted.reason, 500);
+  if (!reason || reason.length < 3) throw fail('Say why the pickup cost is changing.', 400);
+
+  if (next > 0) {
+    // The same bound the inspection and the send apply: never more than the
+    // customer-reason lines' own net, and none at all on our-fault lines.
+    const order = await orderRepository.findById(rr.order);
+    if (!order) throw fail('The order for this return no longer exists.', 404);
+    try {
+      returnRefundBreakdown(order, { items: editedItems || rr.items }, {
+        pickupDeductionPaise: toPaise(next), pickupDeductionReason: reason,
+      });
+    } catch (err) {
+      if (err instanceof RefundBreakdownError) throw fail(err.message, err.status);
+      throw err;
+    }
+  }
+
+  const diff = money(Math.abs(next - from));
+  return {
+    set: {
+      'refund.pickupDeduction': next,
+      'refund.shippingDeduction': next,
+      'refund.pickupDeductionReason': next > 0 ? reason : null,
+    },
+    change: `pickup cost ${rupees(from)} → ${rupees(next)} (refund ${next < from ? 'up' : 'down'} by ${rupees(diff)}) — reason: ${reason}`,
+    entry: { from, to: next, reason, by: actor._id, byName: actorName(actor), at: new Date() },
+  };
+}
+
 /**
  * Edit a return staff already raised: the problem text, the evidence, and the lines
  * (quantity down, drop a line, the reason before review). Money is never typed: the
@@ -1781,6 +1838,12 @@ export async function editReturn(actor, id, input = {}, req = null) {
     changes.push(...evidence.changes);
   }
 
+  const pickup = await editedPickupCost(actor, rr, input.pickupCost, lineEdit?.lines);
+  if (pickup) {
+    Object.assign(set, pickup.set);
+    changes.push(pickup.change);
+  }
+
   if (!changes.length) return getReturn(actor, id);
 
   const note = `Edited by ${actorName(actor)}: ${changes.join('; ')}`;
@@ -1790,7 +1853,10 @@ export async function editReturn(actor, id, input = {}, req = null) {
     'refund.status': { $nin: REFUND_LOCKED },
   }, {
     $set: set,
-    $push: { timeline: timelineEntry(rr.status, note, actor) },
+    $push: {
+      timeline: timelineEntry(rr.status, note, actor),
+      ...(pickup && { 'refund.deductionChanges': pickup.entry }),
+    },
   });
   if (!done) {
     const now = await returnRequestRepository.findById(id).select('refund.status status').lean();
@@ -1802,7 +1868,11 @@ export async function editReturn(actor, id, input = {}, req = null) {
     make the order fully returned. (An order already rolled up to `returned` stays there;
     `returned` orders remain returnable, so the units left with the customer are not lost.)
   */
-  auditLogger.logAction(req, 'RETURN_EDIT', 'ReturnRequest', done._id, { changes, by: actorName(actor) });
+  auditLogger.logAction(req, 'RETURN_EDIT', 'ReturnRequest', done._id, {
+    changes,
+    by: actorName(actor),
+    ...(pickup && { pickupCost: { from: pickup.entry.from, to: pickup.entry.to, reason: pickup.entry.reason } }),
+  });
   return getReturn(actor, id);
 }
 
