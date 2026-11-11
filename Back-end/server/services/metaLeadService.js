@@ -254,8 +254,8 @@ function ownerClause(f, actor) {
 
 /** due=overdue|today: deadlines that have passed, or fall before tonight (India time). */
 function dueClause(v, now = new Date()) {
-  if (v === 'overdue') return { nextFollowUpAt: { $lt: now }, followingUpBy: { $ne: null } };
-  if (v === 'today') return { nextFollowUpAt: { $lt: istEndOfDay(formatIsoDateIST(now)) }, followingUpBy: { $ne: null } };
+  if (v === 'overdue') return { nextFollowUpAt: { $type: 'date', $lt: now }, followingUpBy: { $ne: null } };
+  if (v === 'today') return { nextFollowUpAt: { $type: 'date', $lt: istEndOfDay(formatIsoDateIST(now)) }, followingUpBy: { $ne: null } };
   return null;
 }
 

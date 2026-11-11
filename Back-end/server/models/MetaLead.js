@@ -158,6 +158,9 @@ MetaLeadSchema.index({ phoneKey: 1 }); // the same customer on another tab
 MetaLeadSchema.index({ sheetDirty: 1 }, { partialFilterExpression: { sheetDirty: true }, name: 'meta_lead_sheet_dirty' });
 // Deadlines: the minute sweep, "due / overdue", per person.
 MetaLeadSchema.index({ nextFollowUpAt: 1 }, { partialFilterExpression: { nextFollowUpAt: { $type: 'date' } }, name: 'meta_lead_next_follow_up' });
+// Team activity reads only leads with history in its period (measured: 20,000
+// leads read per page view without it).
+MetaLeadSchema.index({ 'followUpLog.at': 1 }, { name: 'meta_lead_log_at' });
 MetaLeadSchema.index({ followingUpBy: 1, nextFollowUpAt: 1 }, { partialFilterExpression: { nextFollowUpAt: { $type: 'date' } }, name: 'meta_lead_owner_next_follow_up' });
 
 export default mongoose.model('MetaLead', MetaLeadSchema);
