@@ -1,0 +1,15 @@
+{
+  "_comment": "Which Diwali setting prices one model (resolveFestivalSetting). Run by BOTH tests/festivalOfferVariants.test.js (server, charges) and Front-end/web/src/lib/festival/festivalOffer.test.ts (display mirror) so they cannot drift. A model entry overrides the product; no entry = same as product; 'auto' on a model is explicit; an invalid entry = no offer; an entry for another model is ignored. expected: null = Automatic tier ladder.",
+  "cases": [
+    { "name": "simple product, no setting → Automatic", "product": {}, "variantId": null, "expected": null },
+    { "name": "simple product follows the product setting", "product": { "festivalOfferSetting": { "mode": "custom", "percent": 7 } }, "variantId": null, "expected": { "mode": "custom", "percent": 7 } },
+    { "name": "model with no entry follows the product (None)", "product": { "festivalOfferSetting": { "mode": "none" }, "festivalOfferVariantSettings": [{ "variantId": "b", "mode": "auto" }] }, "variantId": "a", "expected": { "mode": "none" } },
+    { "name": "model Automatic overrides a product None", "product": { "festivalOfferSetting": { "mode": "none" }, "festivalOfferVariantSettings": [{ "variantId": "a", "mode": "auto" }] }, "variantId": "a", "expected": null },
+    { "name": "model None overrides product Automatic", "product": { "festivalOfferVariantSettings": [{ "variantId": "a", "mode": "none" }] }, "variantId": "a", "expected": { "mode": "none" } },
+    { "name": "model Custom overrides product Custom", "product": { "festivalOfferSetting": { "mode": "custom", "percent": 7 }, "festivalOfferVariantSettings": [{ "variantId": "a", "mode": "custom", "percent": 15 }] }, "variantId": "a", "expected": { "mode": "custom", "percent": 15 } },
+    { "name": "invalid model Custom (31%) → no offer, never a guess", "product": { "festivalOfferVariantSettings": [{ "variantId": "a", "mode": "custom", "percent": 31 }] }, "variantId": "a", "expected": { "mode": "none" } },
+    { "name": "unknown model mode → no offer", "product": { "festivalOfferVariantSettings": [{ "variantId": "a", "mode": "free" }] }, "variantId": "a", "expected": { "mode": "none" } },
+    { "name": "entry for a deleted model is ignored", "product": { "festivalOfferSetting": { "mode": "custom", "percent": 5 }, "festivalOfferVariantSettings": [{ "variantId": "gone", "mode": "none" }] }, "variantId": "a", "expected": { "mode": "custom", "percent": 5 } },
+    { "name": "product-level call ignores model entries", "product": { "festivalOfferVariantSettings": [{ "variantId": "a", "mode": "none" }] }, "variantId": null, "expected": null }
+  ]
+}

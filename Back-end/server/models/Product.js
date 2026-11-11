@@ -5,7 +5,7 @@ import { snapshotStock, diffRecoveredTargets } from '../utils/restockDetect.js';
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
 import { SHIPPING_SIZE_LIMITS as SZ } from '../utils/shippingSize.js';
-import { FESTIVAL_SETTING_MODE, FESTIVAL_CUSTOM_PERCENT_MIN, FESTIVAL_CUSTOM_PERCENT_MAX } from '../utils/festivalOffer.js';
+import { FESTIVAL_SETTING_MODE, FESTIVAL_CUSTOM_PERCENT_MIN, FESTIVAL_CUSTOM_PERCENT_MAX, VARIANT_SETTING_MODES } from '../utils/festivalOffer.js';
 
 // One selectable model of a `variable` product (e.g. the car model a filter fits).
 // Each variant carries its OWN price + stock status, independent of its siblings —
@@ -364,6 +364,30 @@ const ProductSchema = new mongoose.Schema({
         required() { return this.mode === FESTIVAL_SETTING_MODE.CUSTOM; },
       },
     }, { _id: false }),
+    default: undefined,
+  },
+
+  /*
+    Per-MODEL override of the Diwali offer (variable products). A model with no entry
+    follows `festivalOfferSetting` above; here 'auto' is explicit because absent means
+    "same as product". Kept on the product (keyed by variant _id), not on the variant
+    rows, because the normal product save rebuilds `variants` and would wipe it.
+    Written ONLY by services/productFestivalOfferService.js; the normal product save
+    only PRUNES entries whose model was deleted. Resolved by
+    utils/festivalOffer.js resolveFestivalSetting — the one function pricing uses.
+  */
+  festivalOfferVariantSettings: {
+    type: [new mongoose.Schema({
+      variantId: { type: mongoose.Schema.Types.ObjectId, required: true },
+      mode: { type: String, enum: VARIANT_SETTING_MODES, required: true },
+      percent: {
+        type: Number,
+        min: FESTIVAL_CUSTOM_PERCENT_MIN,
+        max: FESTIVAL_CUSTOM_PERCENT_MAX,
+        validate: { validator: (v) => v == null || Number.isInteger(v), message: 'Must be a whole number' },
+        required() { return this.mode === FESTIVAL_SETTING_MODE.CUSTOM; },
+      },
+    }, { _id: false })],
     default: undefined,
   },
 

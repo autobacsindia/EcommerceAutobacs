@@ -3,10 +3,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   applyFestivalOffer,
+  festivalPriceRange,
   isOfferLive,
   msUntilOfferBoundary,
   type FestivalOfferResult,
   type FestivalOfferSetting,
+  type FestivalRange,
+  type FestivalRangeProduct,
   type PublicFestivalOffer,
 } from '@/lib/festival/festivalOffer';
 
@@ -68,4 +71,15 @@ export function useFestivalOfferPrice(
   const offer = useFestivalOffer();
   if (!offer || typeof price !== 'number') return null;
   return applyFestivalOffer({ unitPrice: price, setting }, offer.tiers, offer.code);
+}
+
+/**
+ * The Diwali price range of a product across its models, each priced with its OWN
+ * setting (see festivalPriceRange). Null while the offer is off — callers then show
+ * the normal range.
+ */
+export function useFestivalPriceRange(product: FestivalRangeProduct | null | undefined): FestivalRange | null {
+  const offer = useFestivalOffer();
+  if (!offer || !product) return null;
+  return festivalPriceRange(product, offer.tiers, offer.code);
 }

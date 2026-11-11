@@ -90,6 +90,61 @@ export function offerPercentForSetting(basePaise, setting, tiers = FESTIVAL_OFFE
   return 0;
 }
 
+/**
+ * Per-model control (owner decision, 2026-11-11). Stored on the PRODUCT as
+ * `festivalOfferVariantSettings: [{ variantId, mode, percent? }]` — on the product, not
+ * on the variant rows, because the normal product save rebuilds the variant list and
+ * would wipe anything stored there. A model with NO entry follows the product's
+ * setting; an entry overrides it, and here 'auto' is stored explicitly because
+ * "absent" already means "same as product".
+ */
+export const VARIANT_SETTING_MODES = Object.freeze([
+  FESTIVAL_SETTING_MODE.AUTO, FESTIVAL_SETTING_MODE.NONE, FESTIVAL_SETTING_MODE.CUSTOM,
+]);
+/** Admin-only choice: drop the model's own entry so it follows the product again. */
+export const FESTIVAL_VARIANT_INHERIT = 'inherit';
+
+/** Stored form of one model's choice, or null for "same as product". Throws RangeError. */
+export function toStoredVariantSetting(mode, percent) {
+  if (mode === FESTIVAL_VARIANT_INHERIT) return null;
+  if (mode === FESTIVAL_SETTING_MODE.AUTO || mode === FESTIVAL_SETTING_MODE.NONE) return { mode };
+  if (mode === FESTIVAL_SETTING_MODE.CUSTOM && isValidCustomPercent(percent)) return { mode, percent };
+  throw new RangeError('Invalid Diwali offer setting');
+}
+
+/**
+ * THE one resolver: which setting prices this unit. Cart, checkout, order creation,
+ * the Razorpay amount and the shopping feeds all call this (via pricingService /
+ * feedFormat); the storefront mirrors it for display only.
+ *
+ * Returns a value `offerPercentForSetting` understands: null = Automatic,
+ * { mode: 'none' } or { mode: 'custom', percent }. A model entry that is present but
+ * invalid resolves to { mode: 'none' } — a corrupted row falls back to the normal
+ * price, never to a guessed discount. An entry for a model that no longer exists is
+ * simply never matched.
+ */
+export function resolveFestivalSetting(product, variantId = null) {
+  const productSetting = product?.festivalOfferSetting ?? null;
+  if (variantId == null) return productSetting;
+  const entries = Array.isArray(product?.festivalOfferVariantSettings) ? product.festivalOfferVariantSettings : [];
+  const id = String(variantId);
+  const entry = entries.find((e) => e && String(e.variantId) === id);
+  if (!entry) return productSetting;
+  if (entry.mode === FESTIVAL_SETTING_MODE.AUTO) return null;
+  if (entry.mode === FESTIVAL_SETTING_MODE.NONE) return { mode: FESTIVAL_SETTING_MODE.NONE };
+  if (entry.mode === FESTIVAL_SETTING_MODE.CUSTOM && isValidCustomPercent(entry.percent)) {
+    return { mode: FESTIVAL_SETTING_MODE.CUSTOM, percent: entry.percent };
+  }
+  return { mode: FESTIVAL_SETTING_MODE.NONE };
+}
+
+/** Entries whose model still exists (by id). Used to prune after a model is deleted. */
+export function pruneVariantSettings(entries, variants) {
+  if (!Array.isArray(entries) || entries.length === 0) return [];
+  const live = new Set((variants || []).filter((v) => v && v._id != null).map((v) => String(v._id)));
+  return entries.filter((e) => e && live.has(String(e.variantId)));
+}
+
 /** The percentage a base price (paise) earns, or 0 when it is not a positive price. */
 export function tierPercentForPaise(basePaise, tiers = FESTIVAL_OFFER_TIERS) {
   if (!Number.isFinite(basePaise) || basePaise <= 0) return 0;
@@ -136,4 +191,5 @@ export function applyFestivalOffer({ unitPrice, setting = null }, tiers = FESTIV
 export default {
   FESTIVAL_OFFER_CODE, FESTIVAL_OFFER_TIERS, FESTIVAL_SETTING_MODE,
   tierPercentForPaise, offerPercentForSetting, isValidCustomPercent, toStoredSetting, applyFestivalOffer,
+  VARIANT_SETTING_MODES, FESTIVAL_VARIANT_INHERIT, toStoredVariantSetting, resolveFestivalSetting, pruneVariantSettings,
 };

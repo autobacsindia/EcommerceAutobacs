@@ -17,8 +17,8 @@ import {
   validateProductSearch
 } from "../middleware/validationMiddleware.js";
 import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
-import { setFestivalOfferSetting, listFestivalOfferExceptions } from "../controllers/productFestivalOfferController.js";
-import { validateSetFestivalOfferSetting, validateFestivalOfferExceptions } from "../validators/festivalOffer.validator.js";
+import { setFestivalOfferSetting, listFestivalOfferExceptions, setProductFestivalOffer } from "../controllers/productFestivalOfferController.js";
+import { validateSetFestivalOfferSetting, validateFestivalOfferExceptions, validateSetProductFestivalOffer } from "../validators/festivalOffer.validator.js";
 import { httpCache } from "../middleware/httpCache.js";
 import { invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 import {
@@ -426,6 +426,18 @@ router.patch(
   validateSetFestivalOfferSetting,
   validateRequest,
   asyncHandler(setFestivalOfferSetting)
+);
+
+// @route   PUT /products/:id/festival-offer  { mode, percent?, variants?[] }
+// @desc    The product editor's Diwali box: product choice + per-model choices, saved together
+// @access  Private/Admin, Marketing
+router.put(
+  "/:id/festival-offer",
+  protect,
+  adminOrMarketing,
+  validateSetProductFestivalOffer,
+  validateRequest,
+  asyncHandler(setProductFestivalOffer)
 );
 
 // @route   PATCH /products/:id/seo-review  { status: todo|in_progress|done }
