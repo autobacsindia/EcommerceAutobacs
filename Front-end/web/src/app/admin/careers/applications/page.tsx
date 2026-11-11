@@ -15,6 +15,7 @@ import {
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import RichTextBox from '@/components/ui/RichTextBox';
+import ApplicationReplyPanel, { type ApplicationReply } from './ApplicationReplyPanel';
 
 type Status = 'new' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired';
 
@@ -34,6 +35,8 @@ interface AppDetail extends AppRow {
   whatYouBring: string;
   howFound?: string;
   posting?: { title: string; slug: string } | null;
+  adminNotes?: string;
+  replies?: ApplicationReply[];
   files: {
     videoOne?: SignedFile; videoTwo?: SignedFile; resume?: SignedFile; support?: SignedFile;
   };
@@ -62,6 +65,9 @@ export default function AdminCareersApplicationsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [notes, setNotes] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
+  // Outcome of the last status/notes save — shown, never swallowed.
+  const [saveNotice, setSaveNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [detailError, setDetailError] = useState('');
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -86,15 +92,19 @@ export default function AdminCareersApplicationsPage() {
   async function openDetail(id: string) {
     setDetailLoading(true);
     setDetail(null);
+    setSaveNotice(null);
+    setDetailError('');
     try {
       const res = await apiClient.get<{ success: boolean; application: AppDetail }>(
         API_ENDPOINTS.ADMIN_CAREERS_APPLICATION(id),
       );
       if (res.success) {
         setDetail(res.application);
-        setNotes((res.application as AppDetail & { adminNotes?: string }).adminNotes || '');
+        setNotes(res.application.adminNotes || '');
       }
-    } catch (_) {}
+    } catch (err: unknown) {
+      setDetailError((err as { message?: string })?.message || 'Could not open this application.');
+    }
     finally { setDetailLoading(false); }
   }
 
@@ -113,6 +123,7 @@ export default function AdminCareersApplicationsPage() {
 
   async function patchApplication(id: string, body: Record<string, unknown>) {
     setSavingStatus(true);
+    setSaveNotice(null);
     try {
       const res = await apiClient.patch<{ success: boolean; application: AppDetail }>(
         API_ENDPOINTS.ADMIN_CAREERS_APPLICATION(id), body,
@@ -120,8 +131,11 @@ export default function AdminCareersApplicationsPage() {
       if (res.success) {
         setDetail((d) => (d ? { ...d, ...res.application } : d));
         setRows((rs) => rs.map((r) => (r._id === id ? { ...r, status: res.application.status } : r)));
+        setSaveNotice({ kind: 'ok', text: 'status' in body ? `Status changed to "${res.application.status}".` : 'Notes saved.' });
       }
-    } catch (_) {}
+    } catch (err: unknown) {
+      setSaveNotice({ kind: 'err', text: `Not saved. ${(err as { message?: string })?.message || 'Please try again.'}` });
+    }
     finally { setSavingStatus(false); }
   }
 
@@ -209,10 +223,12 @@ export default function AdminCareersApplicationsPage() {
       )}
 
       {/* Detail drawer */}
-      {(detail || detailLoading) && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setDetail(null)}>
+      {(detail || detailLoading || detailError) && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => { setDetail(null); setDetailError(''); }}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-8" onClick={(e) => e.stopPropagation()}>
-            {detailLoading || !detail ? (
+            {detailError ? (
+              <div className="p-10 text-center text-red-700">{detailError}</div>
+            ) : detailLoading || !detail ? (
               <div className="p-10 text-center text-gray-400">Loading…</div>
             ) : (
               <>
@@ -225,8 +241,8 @@ export default function AdminCareersApplicationsPage() {
                 </div>
                 <div className="p-6 space-y-5">
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-gray-400 block text-xs">Email</span>{detail.email}</div>
-                    <div><span className="text-gray-400 block text-xs">Phone</span>{detail.phone || '—'}</div>
+                    <div className="min-w-0"><span className="text-gray-400 block text-xs">Email</span><a href={`mailto:${detail.email}`} className="text-red-600 hover:underline break-all">{detail.email}</a></div>
+                    <div><span className="text-gray-400 block text-xs">Phone</span>{detail.phone ? <a href={`tel:${detail.phone.replace(/[^\d+]/g, '')}`} className="text-red-600 hover:underline">{detail.phone}</a> : '—'}</div>
                     <div><span className="text-gray-400 block text-xs">City</span>{detail.city}</div>
                     <div><span className="text-gray-400 block text-xs">How found</span>{detail.howFound || '—'}</div>
                   </div>
@@ -274,6 +290,17 @@ export default function AdminCareersApplicationsPage() {
                     </div>
                   </div>
 
+                  <ApplicationReplyPanel
+                    applicationId={detail._id}
+                    applicantEmail={detail.email}
+                    roleTitle={detail.roleTitle}
+                    initialReplies={detail.replies || []}
+                  />
+
+                  {saveNotice && (
+                    <p role="status" className={`text-sm ${saveNotice.kind === 'ok' ? 'text-green-700' : 'text-red-700'}`}>{saveNotice.text}</p>
+                  )}
+
                   <div>
                     <span className="text-gray-400 block text-xs mb-1">Internal notes</span>
                     <RichTextBox ariaLabel="Internal notes" compact maxLength={5000} value={notes} onChange={setNotes} minHeightClass="min-h-[4.5rem]" />
@@ -289,7 +316,7 @@ export default function AdminCareersApplicationsPage() {
                   </div>
                 </div>
                 <div className="p-4 border-t border-gray-100 flex justify-end">
-                  <button onClick={() => setDetail(null)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Close</button>
+                  <button onClick={() => { setDetail(null); setDetailError(''); }} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Close</button>
                 </div>
               </>
             )}

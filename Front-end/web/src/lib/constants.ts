@@ -285,6 +285,7 @@ export const API_ENDPOINTS = {
   CAREERS_APPLICATIONS: '/careers/applications',
   ADMIN_CAREERS_APPLICATIONS: '/careers/admin/applications',
   ADMIN_CAREERS_APPLICATION: (id: string) => `/careers/admin/applications/${id}`,
+  ADMIN_CAREERS_APPLICATION_REPLY: (id: string) => `/careers/admin/applications/${id}/reply`,
 };
 
 // Order Status

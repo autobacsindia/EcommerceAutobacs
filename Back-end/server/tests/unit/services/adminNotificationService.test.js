@@ -451,6 +451,24 @@ describe('the careers mailbox: employment email only', () => {
     expect(calls[0].subject).toBe('New job application — Nikhil R (Service Advisor)');
   });
 
+  test('replying to the application alert goes to the applicant (Reply-To)', async () => {
+    process.env.CAREERS_NOTIFICATION_EMAILS = 'careers@autobacsindia.com';
+    mockApplicationFindById.mockResolvedValue(application);
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminCareersAlert('app1');
+    expect(mockSendEmail.mock.calls[0][0].replyTo).toBe('nikhil@example.com');
+  });
+
+  test('no careers mailbox: the admin-inbox fallback alert also replies to the applicant', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'support@autobacsindia.com';
+    mockApplicationFindById.mockResolvedValue(application);
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminCareersAlert('app1');
+    expect(mockSendEmail.mock.calls[0][0].replyTo).toBe('nikhil@example.com');
+  });
+
   test('with only the careers sender set, the application alert goes there', async () => {
     process.env.CAREERS_FROM_EMAIL = 'careers@autobacsindia.com';
     mockApplicationFindById.mockResolvedValue(application);

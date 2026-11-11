@@ -172,10 +172,10 @@ const alertBanner = (title, subtitle) =>
 const sendToAdmins = (message, context) => sendToInboxes(adminRecipients(), message, context);
 
 /** Same contract as sendToAdmins, for an explicit recipient list and email purpose. */
-const sendToInboxes = async (recipients, { subject, text, html }, context, purpose) => {
+const sendToInboxes = async (recipients, { subject, text, html, replyTo }, context, purpose) => {
   let anySent = false;
   for (const to of recipients) {
-    const result = await emailHandler.sendEmail({ to, subject, text, html, purpose });
+    const result = await emailHandler.sendEmail({ to, subject, text, html, purpose, ...(replyTo && { replyTo }) });
     if (result?.success) anySent = true;
     else if (!result?.fallbackToConsole) {
       throw new Error(`Admin alert email failed (${context} → ${to}): ${result?.error || 'unknown error'}`);
@@ -339,11 +339,15 @@ export const emailAdminCareersAlert = async (applicationId) => {
   const htmlRows = fields.map(([k, v]) => [k, escapeHtml(String(v ?? '')).replace(/\n/g, '<br>')]);
   const html = renderEmail(subject, intro, htmlRows, 'Review application', adminLink);
 
+  // Reply-To the applicant: HR hitting "Reply" on this alert in their inbox must
+  // reach the candidate, not the website's own sender address.
+  const replyTo = a.email;
+
   // The careers mailbox when one is configured; otherwise the admin inboxes, as before.
   const careers = careersAlertRecipients();
   return careers.length
-    ? sendToInboxes(careers, { subject, text, html }, `careers application ${applicationId}`, MAIL_PURPOSE.CAREERS)
-    : sendToAdmins({ subject, text, html }, `careers application ${applicationId}`);
+    ? sendToInboxes(careers, { subject, text, html, replyTo }, `careers application ${applicationId}`, MAIL_PURPOSE.CAREERS)
+    : sendToAdmins({ subject, text, html, replyTo }, `careers application ${applicationId}`);
 };
 
 /**
