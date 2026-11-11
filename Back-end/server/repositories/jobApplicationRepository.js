@@ -1,4 +1,4 @@
-import JobApplication from '../models/JobApplication.js';
+import JobApplication, { REPLY_LIMIT } from '../models/JobApplication.js';
 
 /**
  * JobApplication data access. Passthrough to the model plus a paginated admin
@@ -15,6 +15,9 @@ class JobApplicationRepository {
     const skip = (Math.max(1, page) - 1) * limit;
     const [items, total] = await Promise.all([
       JobApplication.find(filter)
+        // The inbox list never shows the reply history; it is up to REPLY_LIMIT
+        // emails per row, so it is fetched only with the detail view.
+        .select('-replies')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -38,6 +41,31 @@ class JobApplicationRepository {
       { $or: slotKeys.map((k) => ({ [`files.${k}.publicId`]: { $in: publicIds } })) },
       slotKeys.map((k) => `files.${k}.publicId`).join(' '),
     ).lean();
+  }
+
+  /**
+   * Atomically claim a reply draft: push `entry` only if no reply with the same
+   * key exists AND the history is under REPLY_LIMIT. One round trip, so two
+   * concurrent requests for the same key cannot both win (MongoDB applies the
+   * filter + $push to the single document atomically).
+   * @returns the updated application (lean) or null when the claim lost.
+   */
+  claimReply(id, entry) {
+    return JobApplication.findOneAndUpdate(
+      { _id: id, 'replies.key': { $ne: entry.key }, [`replies.${REPLY_LIMIT - 1}`]: { $exists: false } },
+      { $push: { replies: entry } },
+      { new: true, runValidators: true },
+    ).select('email replies').lean();
+  }
+
+  /** Record the provider outcome on the claimed reply (matched by key). */
+  settleReply(id, key, fields) {
+    const set = Object.fromEntries(Object.entries(fields).map(([k, v]) => [`replies.$.${k}`, v]));
+    return JobApplication.findOneAndUpdate(
+      { _id: id, 'replies.key': key },
+      { $set: set },
+      { new: true },
+    ).select('replies').lean();
   }
 
   findByIdPopulated(id) {

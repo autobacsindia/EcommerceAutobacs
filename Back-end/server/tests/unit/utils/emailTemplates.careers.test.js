@@ -46,3 +46,15 @@ describe('careersRejectionEmail', () => {
     expect(out.html).toContain('&lt;script&gt;');
   });
 });
+
+describe('careersReplyEmail', () => {
+  test('keeps HR\'s text, escapes HTML, and keeps paragraphs + line breaks', async () => {
+    const { careersReplyEmail } = await import('../../../utils/emailTemplates.js');
+    const out = careersReplyEmail({ subject: 'Interview', message: 'Hi <b>there</b>,\nLine two\n\nPara two' });
+    expect(out.subject).toBe('Interview');
+    expect(out.text).toBe('Hi <b>there</b>,\nLine two\n\nPara two');
+    expect(out.html).toContain('Hi &lt;b&gt;there&lt;/b&gt;,<br>Line two');
+    expect(out.html).toContain('>Para two</p>');
+    expect(out.html).not.toContain('<b>there</b>');
+  });
+});

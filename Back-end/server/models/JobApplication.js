@@ -35,6 +35,35 @@ const FileRefSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/*
+  One email HR sent the applicant from the admin inbox ("Reply"). Kept on the
+  application so HR can see what went out, who sent it and when — the record
+  replaces "did anyone answer this person?" guesswork.
+
+  `key` is the client-generated idempotency key for one draft: the send path
+  claims it atomically ($push guarded by `replies.key $ne key`), so a
+  double-click or a client retry of the same draft sends ONE email.
+  `status` starts at 'sending' (claimed, provider not yet answered) and ends at
+  'sent' or 'failed'. A failed draft is re-sent under a NEW key.
+*/
+export const REPLY_LIMIT = 50;
+const ReplySchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, trim: true, maxlength: 100 },
+    subject: { type: String, required: true, trim: true, maxlength: 200 },
+    text: { type: String, required: true, trim: true, maxlength: 5000 },
+    to: { type: String, trim: true, default: "" },
+    sentBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    sentByName: { type: String, trim: true, maxlength: 160, default: "" },
+    status: { type: String, enum: ["sending", "sent", "failed"], default: "sending" },
+    error: { type: String, trim: true, maxlength: 500, default: "" },
+    messageId: { type: String, trim: true, default: "" },
+    createdAt: { type: Date, default: Date.now },
+    sentAt: { type: Date, default: null },
+  },
+  { _id: true }
+);
+
 const JobApplicationSchema = new mongoose.Schema(
   {
     // The role applied for. `posting` may be null for an open application; the
@@ -69,6 +98,10 @@ const JobApplicationSchema = new mongoose.Schema(
       index: true,
     },
     adminNotes: { type: String, trim: true, maxlength: 30000, default: "" },
+
+    // Emails HR sent the applicant from the admin inbox (see ReplySchema).
+    // Bounded by REPLY_LIMIT at write time so the document cannot grow unbounded.
+    replies: { type: [ReplySchema], default: [] },
 
     // Applicant-facing email idempotency stamps — set only once the provider
     // accepts the send, so a BullMQ retry (or an admin toggling status back and

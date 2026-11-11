@@ -1523,6 +1523,27 @@ export const careersRejectionEmail = ({ application, company = {} }) => {
 };
 
 /**
+ * Careers: a free-text reply HR writes to an applicant from the admin inbox.
+ * The message is plain text typed by HR — escaped for HTML, line breaks kept.
+ *
+ * @param {Object} params
+ * @param {string} params.subject - Subject HR chose
+ * @param {string} params.message - Plain-text body HR typed
+ * @param {Object} [params.company] - companyInfo (for the support email)
+ * @returns {{ subject: string, text: string, html: string }}
+ */
+export const careersReplyEmail = ({ subject, message, company = {} }) => {
+  const supportEmail = company.email || 'support@autobacsindia.com';
+  const text = String(message || '').trim();
+  const body = text
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 16px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('\n      ');
+  const html = careersShell('Your application', body, supportEmail);
+  return { subject, text, html };
+};
+
+/**
  * Back-in-stock notification. Sent once, to a logged-in customer who tapped
  * "Notify me" on an out-of-stock item that has since returned. `variantLabel`
  * names the exact model for a variable product (null for simple products).

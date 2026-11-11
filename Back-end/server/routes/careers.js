@@ -26,6 +26,7 @@ import {
   listApplications,
   getApplication,
   updateApplication,
+  replyToApplication,
   cleanupOrphanedUploads,
 } from '../controllers/jobApplicationController.js';
 import {
@@ -57,6 +58,7 @@ router.delete('/admin/postings/:id', protect, admin, asyncHandler(deletePosting)
 router.get('/admin/applications', protect, admin, asyncHandler(listApplications));
 router.get('/admin/applications/:id', protect, admin, asyncHandler(getApplication));
 router.patch('/admin/applications/:id', protect, admin, asyncHandler(updateApplication));
+router.post('/admin/applications/:id/reply', protect, admin, asyncHandler(replyToApplication));
 
 // ── Public postings ──
 router.get('/postings', cacheMiddleware('static-data'), asyncHandler(listOpenPostings));

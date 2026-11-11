@@ -36,6 +36,7 @@ import {
   newCareersFolder,
 } from '../services/storage/careersUploadTargets.js';
 import { cleanRichTextWithin } from '../utils/richText.js';
+import { sendCareersReply, ReplyError } from '../services/careersReplyService.js';
 
 const MB = 1024 * 1024;
 const VIDEO_MAX_BYTES = 30 * MB;
@@ -410,4 +411,31 @@ export const updateApplication = async (req, res) => {
   }
 
   res.json({ success: true, application: app });
+};
+
+// @desc    Email the applicant a reply written by HR, and record it on the application
+// @route   POST /careers/admin/applications/:id/reply
+// @access  Private/Admin
+// Body: { key, subject, message } — `key` is one per draft (idempotency).
+// 200 { outcome: 'sent' | 'duplicate' }, 502 { outcome: 'failed' } so the UI can
+// never mistake a failed send for a success.
+export const replyToApplication = async (req, res) => {
+  try {
+    const { outcome, reply, replies } = await sendCareersReply({
+      applicationId: req.params.id,
+      draft: req.body || {},
+      user: req.user,
+    });
+    if (outcome === 'failed') {
+      return res.status(502).json({ success: false, outcome, message: reply?.error || 'The email could not be sent.', reply, replies });
+    }
+    if (outcome === 'duplicate' && reply?.status === 'failed') {
+      return res.status(502).json({ success: false, outcome, message: reply.error || 'The email could not be sent.', reply, replies });
+    }
+    return res.json({ success: true, outcome, reply, replies });
+  } catch (err) {
+    if (err instanceof ReplyError) return res.status(err.status).json({ success: false, message: err.message });
+    if (err?.name === 'CastError') return res.status(404).json({ success: false, message: 'Application not found' });
+    throw err;
+  }
 };

@@ -607,6 +607,31 @@ class EmailHandler {
   }
 
   /**
+   * Careers: a free-text reply HR sends an applicant from the admin inbox.
+   * Same sender treatment as the other candidate emails, so the applicant's
+   * answer lands in the careers mailbox.
+   * @param {Object} params
+   * @param {string} params.to - Applicant email
+   * @param {string} params.subject
+   * @param {string} params.message - Plain text typed by HR
+   * @returns {Promise<Object>} - Result with success status
+   */
+  async sendCareersReply({ to, subject, message }) {
+    const { careersReplyEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const email = careersReplyEmail({ subject, message, company: companyInfo });
+    const careersFrom = process.env.CAREERS_FROM_EMAIL || undefined;
+
+    return this.sendEmail({
+      to, ...email,
+      fromEmail: careersFrom,
+      fromName: 'ROAVION Automotive',
+      replyTo: careersFrom,
+      purpose: MAIL_PURPOSE.CAREERS,
+    });
+  }
+
+  /**
    * Send the "back in stock" email for an item a customer asked to be notified about.
    * The request/product/variant are pre-resolved by restockNotificationService, so
    * this stays provider-only (no DB access).
