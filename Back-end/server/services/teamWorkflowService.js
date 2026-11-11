@@ -196,7 +196,7 @@ function lineActions(u, order, line) {
   return out;
 }
 
-const HISTORY_LABELS = {
+export const HISTORY_LABELS = {
   entered: 'Paid — waiting for a stock check',
   stock_in_stock: 'Marked in stock',
   stock_own_stock: 'From our warehouse',

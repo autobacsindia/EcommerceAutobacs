@@ -1,4 +1,5 @@
 import express from "express";
+import { getOrderOverview } from "../services/orderOverviewService.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { 
   validateOrder, 
@@ -98,6 +99,11 @@ router.get("/:id", protect, validateIdParam, asyncHandler(getOrderById));
 // @desc    Download the invoice PDF (owner or admin)
 // @access  Private
 router.get("/:id/invoice", protect, validateIdParam, asyncHandler(downloadInvoice));
+
+// Admin: the whole order in one read-only answer (money, timeline, linked records).
+router.get("/:id/overview", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
+  res.json({ success: true, overview: await getOrderOverview(req.user, req.params.id) });
+}));
 // @route   GET /orders/:id/extra-charges/:extraId/receipt — the customer's own
 router.get("/:id/extra-charges/:extraId/receipt", protect, validateIdParam, asyncHandler(downloadExtraChargeReceipt));
 

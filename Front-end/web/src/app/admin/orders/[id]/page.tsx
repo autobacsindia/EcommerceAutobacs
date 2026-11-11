@@ -30,6 +30,7 @@ import { usePanel } from '@/lib/usePanel';
 import { displayEmail } from '@/lib/internalEmail';
 import AdminOrderJourney from '@/components/orders/AdminOrderJourney';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
+import OrderOverview from '@/components/admin/OrderOverview';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 
 /** What the gateway holds — and so the most a refund can send back. */
@@ -388,6 +389,8 @@ function AdminOrderDetailPageInner() {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-100 text-yellow-800',
+      awaiting_payment: 'bg-yellow-100 text-yellow-800',
+      returned: 'bg-orange-100 text-orange-800',
       confirmed: 'bg-sky-100 text-sky-800',
       processing: 'bg-indigo-100 text-indigo-800',
       shipped: 'bg-purple-100 text-purple-800',
@@ -401,6 +404,8 @@ function AdminOrderDetailPageInner() {
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       pending: 'Pending',
+      awaiting_payment: 'Waiting for payment',
+      returned: 'Returned',
       confirmed: 'Confirmed',
       processing: 'Processing',
       shipped: 'Shipped',
@@ -518,6 +523,9 @@ function AdminOrderDetailPageInner() {
           </a>
         )}
       </div>
+
+      {/* Money and every event, before anything else. Read-only. */}
+      <OrderOverview orderId={orderId} />
 
       {/* The whole journey at a glance, above the detail: every stage, who moved
           it and when, refunds as a side branch. Read-only. */}
@@ -815,13 +823,10 @@ function AdminOrderDetailPageInner() {
                   )}
                 </p>
                 <p className="text-gray-600">
-                  Governing clause:{' '}
+                  Disputes go to:{' '}
                   {order.legalAcceptance.track === 'enterprise'
-                    ? '§17B — arbitration, seated in Ernakulam'
-                    : '§17A — consumer courts; CDRC route preserved'}
-                </p>
-                <p className="text-xs text-gray-400 pt-1">
-                  The exact text is archived at docs/legal/terms-{order.legalAcceptance.termsVersion}.md
+                    ? 'arbitration in Ernakulam (clause 17B)'
+                    : 'consumer courts (clause 17A)'}
                 </p>
               </div>
             </div>
@@ -870,8 +875,9 @@ function AdminOrderDetailPageInner() {
               
               <div>
                 <p className="text-sm text-gray-500">Customer</p>
-                <p className="font-medium">{order.user.name}</p>
-                <p className="text-gray-600 text-sm">{displayEmail(order.user.email)}</p>
+                {/* A deleted account or an old-website order can have no user. */}
+                <p className="font-medium">{order.user?.name || order.shippingAddress?.fullName || 'Customer account removed'}</p>
+                {order.user?.email && <p className="text-gray-600 text-sm">{displayEmail(order.user.email)}</p>}
               </div>
               
               {order.trackingNumber && (
@@ -1153,7 +1159,7 @@ function AdminOrderDetailPageInner() {
               
               <div className="flex justify-between">
                 <span>Shipping</span>
-                <span>{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Extra — paid on delivery'}</span>
+                <span>{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : '₹0 (any courier charge is paid on delivery)'}</span>
               </div>
               
               <div className="flex justify-between">

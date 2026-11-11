@@ -19,6 +19,8 @@ export default function AdminOrderJourney({ orderId }: { orderId: string }) {
     queryFn: () => apiClient.get<{ order: WorkOrder }>(`/staff/work/orders/${orderId}`),
     retry: false,
   });
+  if (q.isError) return <p className="text-sm text-gray-500">The team journey is not available for this order.</p>;
   if (!q.data?.order) return null;
-  return <OrderJourney order={q.data.order} />;
+  // The summary above already shows the customer, money and paid date.
+  return <OrderJourney order={q.data.order} showFacts={false} />;
 }

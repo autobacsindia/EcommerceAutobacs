@@ -43,6 +43,12 @@ class ReturnRequestRepository {
    * @returns {Promise<Map<string, number>>} productId → units already claimed
    */
   /** Is a return for this order still being handled (not finished or rejected)? */
+  /** One order's returns for the Admin's order overview: bounded, by the order index. */
+  async findForOverview(orderId, limit = 50) {
+    return ReturnRequest.find({ order: orderId }).sort({ createdAt: 1 }).limit(limit)
+      .select('status refund.status refund.finalAmount timeline createdAt').lean();
+  }
+
   async hasInFlightForOrder(orderId, statuses) {
     return !!(await ReturnRequest.exists({ order: orderId, status: { $in: statuses } }));
   }
