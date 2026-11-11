@@ -132,7 +132,8 @@ function Field({ label, icon: Icon, wide = false, hidden = false, children }: { 
       <dt className="flex w-[104px] shrink-0 items-center gap-2 text-[13px] text-gray-500">
         <Icon aria-hidden className="h-4 w-4 shrink-0 text-gray-400" />{label}
       </dt>
-      <dd className="min-w-0 flex-1 text-sm text-gray-900">{children}</dd>
+      {/* `[&>*]:max-w-full`: whatever the value is, it stays inside its own cell — a long one is cut short, never spills over the next field. */}
+      <dd className="min-w-0 flex-1 text-sm text-gray-900 [&>*]:max-w-full">{children}</dd>
     </div>
   );
 }
@@ -244,11 +245,16 @@ const firstNames = (people: Person[]) => {
 };
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
-/** Faces and first names: "(A)(S) Arun, Sam". */
-function PeopleLine({ people, empty }: { people: Person[]; empty: string }) {
+/**
+ * Faces and first names: "(A)(S) Arun, Sam". `max-w-full` keeps it to its
+ * cell even where it is not inside the picker button (someone who cannot
+ * change who does it): the names are cut with "…", the faces keep their size,
+ * and hovering the names shows everyone.
+ */
+export function PeopleLine({ people, empty }: { people: Person[]; empty: string }) {
   if (!people.length) return <span className="text-gray-400">{empty}</span>;
   return (
-    <span className="inline-flex min-w-0 items-center gap-2">
+    <span data-testid="people-line" className="inline-flex min-w-0 max-w-full items-center gap-2 align-middle">
       <span className="shrink-0"><AvatarStack people={people} max={5} size="sm" /></span>
       <span className="min-w-0 truncate" title={people.map((p) => p.name).join(', ')}>{firstNames(people)}</span>
     </span>
@@ -324,7 +330,7 @@ function FollowersField({ task, choices, onGone }: { task: Task; choices: Assign
   const byId = new Map([...task.followers.map((p) => [p.id, p] as const), ...choices.map((p) => [p.id, p] as const)]);
   const shown = (draft ?? ids).map((id) => byId.get(id)).filter((p): p is Person => !!p);
   return (
-    <span className="flex flex-wrap items-center gap-2">
+    <span className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
       {task.can.followers && choices.length ? (
         <AssigneePicker
           people={choices.filter((p) => !doing.includes(p.id))}
@@ -705,14 +711,14 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
           </Field>
           <Field label="Order" icon={Package} hidden={blank(emptyFields.order)}>
             {task.can.edit && task.order ? (
-              <span className="flex items-center gap-1">
-                <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
-                <button onClick={() => save.mutate({ orderId: null })} aria-label="Unlink the order" title="Unlink" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X className="h-3.5 w-3.5" /></button>
+              <span className="flex min-w-0 items-center gap-1">
+                <Link href={orderHrefFor(base, task.order.id)} title={task.order.code} className="min-w-0 truncate font-medium text-blue-700 hover:underline">{task.order.code}</Link>
+                <button onClick={() => save.mutate({ orderId: null })} aria-label="Unlink the order" title="Unlink" className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X className="h-3.5 w-3.5" /></button>
               </span>
             ) : task.can.edit ? (
               <OrderPicker value={null} onChange={(o) => { if (o) save.mutate({ orderId: o.id }); }} quiet />
             ) : task.order
-              ? <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
+              ? <Link href={orderHrefFor(base, task.order.id)} title={task.order.code} className="block truncate font-medium text-blue-700 hover:underline">{task.order.code}</Link>
               : <span className="text-gray-400">Empty</span>}
           </Field>
           {task.team && (
@@ -729,7 +735,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
           <Field label="Given by" icon={UserPlus}>
             <span className="flex min-w-0 items-center gap-2 text-gray-700">
               <Avatar name={task.createdBy.name} id={task.createdBy.id} size="xs" />
-              <span className="truncate">{task.createdBy.name}</span>
+              <span className="min-w-0 truncate" title={task.createdBy.name}>{task.createdBy.name}</span>
               <span className="shrink-0 text-xs text-gray-400" title={formatDateTimeIST(task.createdAt)}>· {formatDueDay(formatIsoDateIST(task.createdAt))}</span>
             </span>
           </Field>
