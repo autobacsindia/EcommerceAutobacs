@@ -81,32 +81,72 @@ const linkOf = (a) => {
   return null;
 };
 
-export async function companyOverview(actor, now = Date.now()) {
+/** Earliest day the overview can be asked for — before the team panel existed. */
+const FIRST_DAY = '2024-01-01';
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const addDays = (ymd, n) => {
+  const t = Date.parse(`${ymd}T00:00:00Z`);
+  return Number.isNaN(t) ? null : new Date(t + n * DAY).toISOString().slice(0, 10);
+};
+
+/**
+ * The India calendar day the overview is for. No date (or today's) → the live
+ * view, exactly as before. A past day → that day's window, 00:00–23:59:59.999 IST.
+ * Unreal (2026-02-30), malformed, too early or future dates are a 400, never a
+ * quiet fallback to today: the page would show today's numbers under the wrong date.
+ *
+ * `until` is the end of what the view may count — `now` for today, the next
+ * midnight IST for a past day — so "the 7 days to X" and "1st of the month to X"
+ * mean the same thing for both.
+ */
+export function overviewDay(date, now = Date.now()) {
+  const today = istToday(now);
+  if (date == null || date === '' || date === today) {
+    return { date: today, isToday: true, dayStart: istStartOfDay(today), until: new Date(now) };
+  }
+  // `?date=a&date=b` arrives as an array: one day per request, never "the first one".
+  if (typeof date !== 'string') throw fail('Pick one date (YYYY-MM-DD).', 400);
+  const ymd = date;
+  if (!YMD.test(ymd) || addDays(ymd, 0) !== ymd) throw fail('Pick a real date (YYYY-MM-DD).', 400);
+  if (ymd > today) throw fail('That date is in the future.', 400);
+  if (ymd < FIRST_DAY) throw fail(`Pick a date from ${FIRST_DAY} on.`, 400);
+  return { date: ymd, isToday: false, dayStart: istStartOfDay(ymd), until: istStartOfDay(addDays(ymd, 1)) };
+}
+
+export async function companyOverview(actor, now = Date.now(), { date } = {}) {
   if (actor?.role !== 'admin') throw fail('Not authorized.', 403);
-  const todayStart = istStartOfDay(istToday(now));
-  const monthStart = istStartOfDay(`${istToday(now).slice(0, 7)}-01`);
-  const weekAgo = new Date(now - 7 * DAY);
+  const day = overviewDay(date, now);
+  const { isToday, dayStart: todayStart, until } = day;
+  const monthStart = istStartOfDay(`${day.date.slice(0, 7)}-01`);
+  const weekAgo = new Date(until.getTime() - 7 * DAY);
+  // A past day's upper bound; today's reads stay open-ended, exactly as before.
+  const upTo = isToday ? null : until;
 
   const staff = await userRepository.findActiveStaff();
   const staffIds = staff.map((u) => u._id);
 
+  // Current-state reads (queues, open tickets, who is online, overdue) have no
+  // history to rebuild from; for a past day they are still read and returned
+  // as "now", and `day.isToday: false` tells the page to label them so.
   const [
     paidToday, unpaidSales, pendingRefunds, requestsByStatus, paidThisMonth, paidAbroadThisMonth,
-    newConsultations, openTickets, board, recentActions, actionsByUser, online, extrasToday,
+    newConsultations, consultationsReceived, openTickets, board, recentActions, actionsByUser, online, extrasToday,
   ] = await Promise.all([
-    orderRepository.findPaidWorkflowOrdersSince(todayStart, 1000),
+    orderRepository.findPaidWorkflowOrdersSince(todayStart, 1000, upTo),
     orderRepository.findUnpaidSalesOrders(500),
     orderRepository.countPendingCancellationRefunds(),
     paymentRequestRepository.countByStatus(),
-    paymentRequestRepository.paidSinceByTeam(monthStart),
-    paymentRequestRepository.paidNoRupeesSince(monthStart),
+    paymentRequestRepository.paidSinceByTeam(monthStart, upTo),
+    paymentRequestRepository.paidNoRupeesSince(monthStart, upTo),
     consultationRepository.count({ status: 'new' }),
+    consultationRepository.count({ createdAt: { $gte: todayStart, $lt: until } }),
     supportTicketRepository.count({ status: { $in: ['new', 'open', 'pending_customer', 'on_hold'] } }),
     waitingBoard(actor, now),
-    staffIds.length ? auditLogRepository.recentByUsers(staffIds, 60) : [],
-    staffIds.length ? auditLogRepository.countByUserSince(staffIds, weekAgo) : [],
-    onlineAmong(staffIds.map(idOf)).catch(() => new Set()),
-    orderExtraChargeRepository.sumKept(todayStart, null),
+    // Today: the newest actions, as before. A past day: that day's only.
+    staffIds.length ? auditLogRepository.recentByUsers(staffIds, 60, isToday ? {} : { from: todayStart, until }) : [],
+    staffIds.length ? auditLogRepository.countByUserSince(staffIds, weekAgo, { until: upTo, dayStart: todayStart }) : [],
+    isToday ? onlineAmong(staffIds.map(idOf)).catch(() => new Set()) : new Set(),
+    orderExtraChargeRepository.sumKept(todayStart, upTo),
   ]);
 
   // ── Today ──
@@ -117,6 +157,7 @@ export async function companyOverview(actor, now = Date.now()) {
     gtmOrders: gtmToday.length,
     websiteOrders: paidToday.length - gtmToday.length,
     newConsultations,
+    consultationsReceived,
     openSupportTickets: openTickets,
     // Parked "On hold — customer thinking" until a follow-up date: not waiting on anyone yet.
     salesLinksWaiting: unpaidSales.filter((o) => o.status === 'awaiting_payment'
@@ -159,8 +200,9 @@ export async function companyOverview(actor, now = Date.now()) {
     team: u.staff.team,
     teamLabel: STAFF_TEAM_LABELS[u.staff.team],
     role: staffRoleLabel(u),
-    online: online.has(idOf(u)),
+    online: isToday ? online.has(idOf(u)) : null,
     actionsThisWeek: activity.get(idOf(u))?.n || 0,
+    actionsOnDay: activity.get(idOf(u))?.nDay || 0,
     lastAction: activity.get(idOf(u))?.last || null,
   }));
   const waiting = Object.fromEntries((board.teams || []).map((t) => [t.team, t]));
@@ -170,10 +212,12 @@ export async function companyOverview(actor, now = Date.now()) {
       team,
       label: STAFF_TEAM_LABELS[team],
       members: members.length,
-      online: members.filter((p) => p.online).length,
+      // Presence is live only: there is no record of who was online on a past day.
+      online: isToday ? members.filter((p) => p.online).length : null,
       waiting: waiting[team]?.waiting || 0,
       overdue: waiting[team]?.overdue || 0,
       actionsThisWeek: members.reduce((s, p) => s + p.actionsThisWeek, 0),
+      actionsOnDay: members.reduce((s, p) => s + p.actionsOnDay, 0),
     };
   });
 
@@ -187,11 +231,14 @@ export async function companyOverview(actor, now = Date.now()) {
 
   return {
     generatedAt: new Date(now),
+    // `isToday: false` → the queue/ticket/waiting figures are as of NOW, not this date.
+    day: { date: day.date, isToday, monthFrom: istToday(monthStart.getTime()), weekFrom: weekAgo },
     today,
     money,
     teams,
     people: people.sort((a, b) => Number(b.online) - Number(a.online) || (b.lastAction ? new Date(b.lastAction) : 0) - (a.lastAction ? new Date(a.lastAction) : 0)),
-    overdue: (board.rows || []).filter((r) => r.overdue).slice(0, 10),
+    // "Overdue now" is live by definition; a past day would show today's list under its date.
+    overdue: isToday ? (board.rows || []).filter((r) => r.overdue).slice(0, 10) : [],
     feed,
   };
 }

@@ -154,9 +154,9 @@ const paymentRequestRepository = {
 
   countByStatus: () => PaymentRequest.aggregate([{ $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' }, pending: PENDING_RUPEES } }]),
 
-  /** Paid since a date, by team (index payment_request_status). */
-  paidSinceByTeam: (since) => PaymentRequest.aggregate([
-    { $match: { status: 'paid', 'payment.paidAt': { $gte: since } } },
+  /** Paid in [since, until), by team (index payment_request_status_paid). `until` optional. */
+  paidSinceByTeam: (since, until = null) => PaymentRequest.aggregate([
+    { $match: { status: 'paid', 'payment.paidAt': { $gte: since, ...(until ? { $lt: until } : {}) } } },
     { $group: { _id: '$team', n: { $sum: 1 }, amount: { $sum: '$amount' } } },
   ]),
 
@@ -170,9 +170,9 @@ const paymentRequestRepository = {
    * and read every payment of the month — measured on 100,000 requests: 41,675 rows,
    * 43 ms; hinted: only the no-rupee rows.
    */
-  paidNoRupeesSince: async (since) => {
+  paidNoRupeesSince: async (since, until = null) => {
     const pipeline = [
-      { $match: { status: 'paid', amount: { $lte: 0 }, 'payment.paidAt': { $gte: since } } },
+      { $match: { status: 'paid', amount: { $lte: 0 }, 'payment.paidAt': { $gte: since, ...(until ? { $lt: until } : {}) } } },
       { $group: { _id: '$currency', p: { $sum: { $round: [{ $multiply: [{ $ifNull: ['$foreignAmount', 0] }, 100] }, 0] } } } },
     ];
     let rows;

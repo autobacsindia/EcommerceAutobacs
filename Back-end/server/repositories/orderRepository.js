@@ -1569,11 +1569,11 @@ class OrderRepository extends BaseRepository {
    * Paid orders since `since` (today, for the admin overview): source and value.
    * Served by team_workflow_paid; bounded.
    */
-  async findPaidWorkflowOrdersSince(since, limit) {
+  async findPaidWorkflowOrdersSince(since, limit, until = null) {
     return Order.find({
       paymentStatus: { $in: ['paid', 'refunded'] },
       'workflow.enteredAt': { $type: 'date' },
-      createdAt: { $gte: since },
+      createdAt: { $gte: since, ...(until ? { $lt: until } : {}) },
     }).select('totalAmount salesUser createdAt').limit(limit).lean();
   }
 

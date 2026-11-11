@@ -20,19 +20,27 @@ class AuditLogRepository {
   countDocuments(...args) { return AuditLog.countDocuments(...args); }
 
   /** Newest actions by these people (index { user, createdAt }). For the admin activity feed. */
-  recentByUsers(userIds, limit) {
-    return AuditLog.find({ user: { $in: userIds } })
+  /** Newest actions by these people; `from`/`until` bound the window (index { user, createdAt }). */
+  recentByUsers(userIds, limit, { from = null, until = null } = {}) {
+    const createdAt = { ...(from ? { $gte: from } : {}), ...(until ? { $lt: until } : {}) };
+    return AuditLog.find({ user: { $in: userIds }, ...(from || until ? { createdAt } : {}) })
       .sort({ createdAt: -1 })
       .limit(limit)
       .select('user action resource resourceId details createdAt')
       .lean();
   }
 
-  /** Actions per person since a date (index { user, createdAt }). */
-  countByUserSince(userIds, since) {
+  /**
+   * Actions per person in [since, until) (index { user, createdAt }). `nDay` counts
+   * the ones from `dayStart` on — the chosen day inside the same window, one read.
+   */
+  countByUserSince(userIds, since, { until = null, dayStart = null } = {}) {
     return AuditLog.aggregate([
-      { $match: { user: { $in: userIds }, createdAt: { $gte: since } } },
-      { $group: { _id: '$user', n: { $sum: 1 }, last: { $max: '$createdAt' } } },
+      { $match: { user: { $in: userIds }, createdAt: { $gte: since, ...(until ? { $lt: until } : {}) } } },
+      { $group: {
+        _id: '$user', n: { $sum: 1 }, last: { $max: '$createdAt' },
+        nDay: { $sum: dayStart ? { $cond: [{ $gte: ['$createdAt', dayStart] }, 1, 0] } : 0 },
+      } },
     ]);
   }
 }
