@@ -234,6 +234,7 @@ class ReturnRequestRepository {
     shippingDeduction, restockingDeduction, finalAmount, initiatedBy,
     method = 'original_payment', offlineMethod = null, reference = null, paidAt = null,
     shippingShare = 0, serviceLines = [], pickupDeductionReason = null, creditNoteNo = null,
+    expectStoredPickupDeduction,
   }) {
     const isOffline = method === 'offline';
     const $set = {
@@ -290,6 +291,11 @@ class ReturnRequestRepository {
         status: 'received',
         'inspection.passed': true,
         'refund.status': { $nin: ['processing', 'completed'] },
+        // Optional: only when the stored pickup cost is still the one the amount was
+        // computed from (a missing field reads as 0 on returns that never had one).
+        ...(expectStoredPickupDeduction != null && {
+          'refund.pickupDeduction': expectStoredPickupDeduction === 0 ? { $in: [0, null] } : expectStoredPickupDeduction,
+        }),
       },
       update,
       { new: true }

@@ -63,6 +63,8 @@ const { default: ReturnRequest } = await import('../models/ReturnRequest.js');
 const { default: razorpayService } = await import('../services/razorpayService.js');
 const { default: orderRepository } = await import('../repositories/orderRepository.js');
 const svc = await import('../services/returnService.js');
+const { default: auditLogger } = await import('../services/auditLogger.js');
+const { default: returnRequestRepository } = await import('../repositories/returnRequestRepository.js');
 const { postBusinessUpdate, RETURN_CHAT_JOB } = await import('../services/chatBusinessUpdates.js');
 const { default: ChatChannel } = await import('../models/ChatChannel.js');
 const { default: ChatMessage } = await import('../models/ChatMessage.js');
@@ -906,3 +908,152 @@ describe('editing a raised return', () => {
     expect((await edits(r.id))[0].note).toMatch(/1 photo added; 1 photo removed; unboxing video replaced/);
   });
 });
+
+describe('correcting the pickup cost after inspection (owner, 2026-11-11)', () => {
+
+  /** A customer's-reason return of 2 floor mats (₹2,000), ₹500 pickup cost entered at inspection. */
+  async function withPickupCost(pickupCostRupees = 500) {
+    const o = await deliveredOrder();
+    const ops = await person('operations');
+    const raised = await svc.raiseReturn(ops, {
+      orderId: String(o.order._id), items: [{ itemId: o.mat, quantity: 2, reason: 'changed_mind' }],
+      description: 'Customer changed mind', images: PHOTOS, video: VIDEO, unusedDeclared: true,
+    }, req(ops));
+    await svc.reviewReturn(ops, raised.id, { decision: 'approve', destination: { kind: 'warehouse' } }, req(ops));
+    await svc.bookPickup(ops, raised.id, { provider: 'Delhivery', trackingNumber: 'DL9' }, req(ops));
+    await svc.markReceived(ops, raised.id, {}, req(ops));
+    await svc.recordInspection(ops, raised.id, {
+      passed: true, notes: 'Unused, in box', disposition: 'resell', pickupCostRupees, pickupCostReason: 'Delhivery DL9',
+    }, [photo()], req(ops));
+    return { o, id: raised.id, ops, accounts: await person('accounts') };
+  }
+  const refundNow = async (accounts, id) => (await svc.refundPreviewFor(accounts, id)).preview.refundNow;
+  const paid = () => razorpayService.refundPayment.mock.calls.map((c) => c[1]);
+
+  it('operations removes a mistaken pickup cost before the refund: Accounts sees the change and sends the full amount', async () => {
+    const { id, ops, accounts } = await withPickupCost(500);
+    const audit = jest.spyOn(auditLogger, 'logAction');
+    expect((await svc.getReturn(ops, id)).can.editPickupCost).toBe(true);
+    const before = await refundNow(accounts, id);
+
+    await svc.editReturn(ops, id, { pickupCost: { rupees: 0, reason: 'Added by mistake; company pays shipping' } }, req(ops));
+
+    const saved = await ReturnRequest.findById(id).lean();
+    expect(saved.refund.pickupDeduction).toBe(0);
+    expect(saved.refund.shippingDeduction).toBe(0);
+    expect(saved.refund.pickupDeductionReason).toBeNull();
+    expect(saved.refund.deductionChanges).toEqual([expect.objectContaining({
+      from: 500, to: 0, reason: 'Added by mistake; company pays shipping', by: ops._id, byName: ops.name,
+    })]);
+    expect(saved.timeline.at(-1).note).toMatch(/pickup cost ₹500 → ₹0 \(refund up by ₹500\) — reason: Added by mistake/);
+    expect(audit).toHaveBeenCalledWith(expect.anything(), 'RETURN_EDIT', 'ReturnRequest', expect.anything(),
+      expect.objectContaining({ pickupCost: { from: 500, to: 0, reason: 'Added by mistake; company pays shipping' } }));
+
+    // Accounts' screen shows the change and the new figure, and that is what is sent.
+    const view = await svc.getReturn(accounts, id);
+    expect(view.refundDetail.deductionChanges).toHaveLength(1);
+    expect(await refundNow(accounts, id)).toBe(before + 500);
+    await svc.sendRefund(accounts, id, req(accounts, { expectedAmount: before + 500 }, { id }));
+    expect(paid()).toEqual([toPaiseT(before + 500)]);
+  });
+
+  it('can lower or raise it, needs a reason, stays within the line value, and only operations/admin may change it', async () => {
+    const { id, ops, accounts } = await withPickupCost(500);
+    await expect(svc.editReturn(ops, id, { pickupCost: { rupees: 200 } }, req(ops))).rejects.toMatchObject({ statusCode: 400 });
+    await expect(svc.editReturn(ops, id, { pickupCost: { rupees: 999999, reason: 'typo' } }, req(ops))).rejects.toMatchObject({ statusCode: expect.any(Number) });
+    await forbidden(svc.editReturn(accounts, id, { pickupCost: { rupees: 0, reason: 'mine' } }, req(accounts)));
+    await forbidden(svc.editReturn(await person('sales', { isHead: true }), id, { pickupCost: { rupees: 0, reason: 'mine' } }, req()));
+    expect((await ReturnRequest.findById(id).lean()).refund.pickupDeduction).toBe(500);
+
+    await svc.editReturn(ops, id, { pickupCost: { rupees: 200, reason: 'Real courier bill is ₹200' } }, req(ops));
+    const boss = await admin();
+    await svc.editReturn(boss, id, { pickupCost: { rupees: 250, reason: 'Plus packing' } }, req(boss));
+    const saved = await ReturnRequest.findById(id).lean();
+    expect(saved.refund.pickupDeduction).toBe(250);
+    expect(saved.refund.pickupDeductionReason).toBe('Plus packing');
+    expect(saved.refund.deductionChanges.map((c) => [c.from, c.to])).toEqual([[500, 200], [200, 250]]);
+  });
+
+  it('ignores any amount the client sends — only the deduction is taken', async () => {
+    const { id, ops, accounts } = await withPickupCost(500);
+    const before = await refundNow(accounts, id);
+    await svc.editReturn(ops, id, {
+      pickupCost: { rupees: 0, reason: 'mistake' }, finalAmount: 1, refund: { finalAmount: 1 }, amount: 99999,
+    }, req(ops));
+    expect(await refundNow(accounts, id)).toBe(before + 500);
+    await svc.sendRefund(accounts, id, req(accounts, { amount: 1, finalAmount: 1, refundAmount: 1 }, { id }));
+    expect(paid()).toEqual([toPaiseT(before + 500)]);
+  });
+
+  it('a change after Accounts opened the refund sends it back to them: the old figure is refused, nothing is paid', async () => {
+    const { id, ops, accounts } = await withPickupCost(500);
+    const seen = await refundNow(accounts, id);
+    await svc.editReturn(ops, id, { pickupCost: { rupees: 0, reason: 'mistake' } }, req(ops));
+    await expect(svc.sendRefund(accounts, id, req(accounts, { expectedAmount: seen }, { id })))
+      .rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/changed to ₹/) });
+    expect(razorpayService.refundPayment).not.toHaveBeenCalled();
+    expect((await ReturnRequest.findById(id).lean()).refund.status).toBe('pending');
+    // Approving the new figure goes through.
+    await svc.sendRefund(accounts, id, req(accounts, { expectedAmount: seen + 500 }, { id }));
+    expect(paid()).toEqual([toPaiseT(seen + 500)]);
+  });
+
+  it('an edit that lands between the send reading the return and claiming it makes the claim miss', async () => {
+    const { id, ops } = await withPickupCost(500);
+    await svc.editReturn(ops, id, { pickupCost: { rupees: 0, reason: 'mistake' } }, req(ops));
+    // The send computed its amount with the OLD stored figure.
+    const claim = await returnRequestRepository.claimForRefund(id, {
+      productValue: 2000, listValue: 2000, discountShare: 0, shippingDeduction: 500, restockingDeduction: 0,
+      finalAmount: 1500, initiatedBy: ops._id, expectStoredPickupDeduction: 500,
+    });
+    expect(claim).toBeNull();
+    expect((await ReturnRequest.findById(id).lean()).refund.status).toBe('pending');
+  });
+
+  it('a double-click on save writes one change; a double-click on send pays once', async () => {
+    const { id, ops, accounts } = await withPickupCost(500);
+    const body = { pickupCost: { rupees: 0, reason: 'mistake' } };
+    await Promise.allSettled([svc.editReturn(ops, id, body, req(ops)), svc.editReturn(ops, id, body, req(ops))]);
+    expect((await ReturnRequest.findById(id).lean()).refund.deductionChanges).toHaveLength(1);
+    await svc.editReturn(ops, id, body, req(ops)); // same value again: no-op
+    expect((await ReturnRequest.findById(id).lean()).refund.deductionChanges).toHaveLength(1);
+
+    const head = await person('accounts', { isHead: true });
+    await Promise.allSettled([
+      svc.sendRefund(accounts, id, req(accounts, {}, { id })),
+      svc.sendRefund(head, id, req(head, {}, { id })),
+    ]);
+    expect(razorpayService.refundPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it('is locked once the refund is sent; open again after a FAILED refund, which Accounts must send again', async () => {
+    const { id, ops, accounts } = await withPickupCost(500);
+    await svc.sendRefund(accounts, id, req(accounts, {}, { id }));
+    expect((await svc.getReturn(ops, id)).can.editPickupCost).toBe(false);
+    await expect(svc.editReturn(ops, id, { pickupCost: { rupees: 0, reason: 'too late' } }, req(ops)))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect((await ReturnRequest.findById(id).lean()).refund.pickupDeduction).toBe(500);
+
+    const failed = await withPickupCost(500);
+    await ReturnRequest.updateOne({ _id: failed.id }, { $set: { 'refund.status': 'failed', 'refund.failureReason': 'gateway' } });
+    expect((await svc.getReturn(failed.ops, failed.id)).can.editPickupCost).toBe(true);
+    await svc.editReturn(failed.ops, failed.id, { pickupCost: { rupees: 0, reason: 'mistake' } }, req(failed.ops));
+    const saved = await ReturnRequest.findById(failed.id).lean();
+    expect(saved.refund.status).toBe('failed');
+    expect(saved.refund.pickupDeduction).toBe(0);
+  });
+
+  it('cannot be changed before the inspection passes', async () => {
+    const o = await deliveredOrder();
+    const ops = await person('operations');
+    const raised = await svc.raiseReturn(ops, {
+      orderId: String(o.order._id), items: [{ itemId: o.mat, quantity: 1, reason: 'changed_mind' }],
+      description: 'x y', images: PHOTOS, video: VIDEO, unusedDeclared: true,
+    }, req(ops));
+    expect((await svc.getReturn(ops, raised.id)).can.editPickupCost).toBe(false);
+    await expect(svc.editReturn(ops, raised.id, { pickupCost: { rupees: 100, reason: 'early' } }, req(ops)))
+      .rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+function toPaiseT(rupees) { return Math.round(rupees * 100); }

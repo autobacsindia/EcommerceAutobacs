@@ -141,8 +141,31 @@ describe('the refund box (accounts)', () => {
     expect(screen.getByText(/Send ₹10,200 to the customer's original payment\? This cannot be undone/)).toBeInTheDocument();
     expect(post).not.toHaveBeenCalledWith('/staff/returns/r1/refund', expect.anything());
     fireEvent.click(screen.getByRole('button', { name: 'Yes, send ₹10,200' }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/returns/r1/refund', { serviceLines: [{ orderItemId: 'fit' }], creditNoteNo: undefined }));
+    // expectedAmount is the figure on screen — a guard the server checks, never the amount it sends.
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/returns/r1/refund', { serviceLines: [{ orderItemId: 'fit' }], creditNoteNo: undefined, expectedAmount: 10200 }));
     expect(post.mock.calls.filter(([url]) => url === '/staff/returns/r1/refund')).toHaveLength(1);
+  });
+
+  it('shows Accounts when operations changed the pickup cost, and why', async () => {
+    get.mockResolvedValue({ success: true, return: { ...ready, refundDetail: { status: 'pending', pickupDeduction: 0, deductionChanges: [
+      { from: 500, to: 0, reason: 'Added by mistake', byName: 'Ops One', at: '2026-11-11T05:00:00Z' },
+    ] } } });
+    post.mockResolvedValue(preview());
+    wrap(<ReturnPanel id="r1" showRefund />);
+    expect(await screen.findByText(/The pickup cost was changed after inspection/)).toBeInTheDocument();
+    expect(screen.getByText(/₹500 → ₹0 by Ops One.*Reason: Added by mistake/)).toBeInTheDocument();
+  });
+
+  it('a refused send (the amount moved) goes back to the first step', async () => {
+    get.mockResolvedValue({ success: true, return: ready });
+    post.mockImplementation((url: string) => (url.endsWith('/refund-preview')
+      ? Promise.resolve(preview())
+      : Promise.reject(Object.assign(new Error('The refund amount changed to ₹9,700 since you opened it'), { status: 409 }))));
+    wrap(<ReturnPanel id="r1" showRefund />);
+    fireEvent.click(await screen.findByRole('button', { name: /Send refund of ₹9,200/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, send ₹9,200' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Yes, send/ })).toBeNull();
   });
 
   it('changing what is ticked drops back to the first step, so the confirmed amount is the one on screen', async () => {
@@ -283,6 +306,35 @@ describe('editing a raised return', () => {
     fireEvent.click(screen.getByLabelText(/unused, not installed/));
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Remove customer photo 1' })).toBeDisabled();
+  });
+
+  it('operations corrects the pickup cost after inspection: a reason is required, only the deduction is sent', async () => {
+    const inspected: ReturnDetail = {
+      ...editable, status: 'received', inspection: { passed: true },
+      refundDetail: { status: 'pending', pickupDeduction: 500, pickupDeductionReason: 'Delhivery DL9' },
+      can: { ...editable.can, editReason: false, editRemoveLine: false, editPickupCost: true },
+    };
+    get.mockResolvedValue({ success: true, return: inspected });
+    patch.mockResolvedValue({ success: true, return: inspected });
+    wrap(<ReturnPanel id="r1" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Edit return/ }));
+    const cost = screen.getByLabelText('Pickup cost in rupees');
+    expect(cost).toHaveValue(500);
+    fireEvent.change(cost, { target: { value: '0' } });
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled(); // no reason yet
+    fireEvent.change(screen.getByLabelText('Why the pickup cost is changing'), { target: { value: 'Added by mistake' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/returns/r1', {
+      updatedAt: '2026-11-06T05:00:00.000Z',
+      pickupCost: { rupees: 0, reason: 'Added by mistake' },
+    }));
+  });
+
+  it('hides the pickup cost from anyone who may not change it', async () => {
+    get.mockResolvedValue({ success: true, return: editable });
+    wrap(<ReturnPanel id="r1" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Edit return/ }));
+    expect(screen.queryByLabelText('Pickup cost in rupees')).toBeNull();
   });
 
   it('shows why it is locked once the refund is with Accounts', async () => {

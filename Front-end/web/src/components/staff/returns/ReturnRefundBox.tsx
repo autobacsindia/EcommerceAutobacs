@@ -21,6 +21,22 @@ import { input, primary, secondary } from './ui';
 
 type PreviewRes = { success: boolean; preview: RefundPreview };
 
+type DeductionChange = NonNullable<NonNullable<ReturnDetail['refundDetail']>['deductionChanges']>[number];
+
+/** What operations changed on the pickup cost after inspection — so Accounts approves the new figure knowingly. */
+const PickupChanges = ({ changes }: { changes?: DeductionChange[] }) => (changes?.length ? (
+  <div role="note" className="space-y-1 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+    <p className="font-semibold">The pickup cost was changed after inspection</p>
+    <ul className="space-y-0.5">
+      {changes.map((c, i) => (
+        <li key={i}>
+          {rupees(c.from)} → {rupees(c.to)}{c.byName ? ` by ${c.byName}` : ''}, {new Date(c.at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}. Reason: {c.reason}
+        </li>
+      ))}
+    </ul>
+  </div>
+) : null);
+
 const Line = ({ k, v, strong }: { k: string; v: string; strong?: boolean }) => (
   <div className={`flex justify-between gap-4 ${strong ? 'font-semibold text-gray-900' : 'text-gray-700'}`}><span>{k}</span><span>{v}</span></div>
 );
@@ -44,8 +60,16 @@ export default function ReturnRefundBox({ r }: { r: ReturnDetail }) {
   });
 
   const send = useMutation({
-    mutationFn: () => apiClient.post(`/staff/returns/${r.id}/refund`, { ...choices, creditNoteNo: creditNoteNo.trim() || undefined }),
+    // expectedAmount: the figure on screen. The server sends its OWN figure, and refuses
+    // (409) when that moved since this preview — Accounts then sees and approves the new one.
+    mutationFn: () => apiClient.post(`/staff/returns/${r.id}/refund`, {
+      ...choices, creditNoteNo: creditNoteNo.trim() || undefined, expectedAmount: preview.data?.preview.refundNow,
+    }),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: staffKeys.returns() });
+    },
+    onError: () => {
+      setConfirming(false);
       qc.invalidateQueries({ queryKey: staffKeys.returns() });
     },
   });
@@ -60,6 +84,7 @@ export default function ReturnRefundBox({ r }: { r: ReturnDetail }) {
         {(d.serviceLines || []).map((l) => <Line key={l.orderItemId} k={l.name} v={`+ ${rupees(l.amountPaise / 100)}`} />)}
         {!!d.pickupDeduction && <Line k={`Pickup cost${d.pickupDeductionReason ? ` (${d.pickupDeductionReason})` : ''}`} v={`− ${rupees(d.pickupDeduction)}`} />}
         {d.creditNoteNo && <Line k="GST credit note" v={d.creditNoteNo} />}
+        <PickupChanges changes={d.deductionChanges} />
       </section>
     );
   }
@@ -81,6 +106,7 @@ export default function ReturnRefundBox({ r }: { r: ReturnDetail }) {
       {preview.isError && <p role="alert" className="text-xs text-red-700">{errorMessage(preview.error, 'Could not work out the refund.')}</p>}
       {p && (
         <>
+          <PickupChanges changes={r.refundDetail?.deductionChanges} />
           <div className="space-y-1 rounded bg-white p-2">
             <Line k="Item(s) — what the customer paid" v={rupees(p.breakdown.goodsNet)} />
             {p.breakdown.shippingShare > 0 && <Line k="Delivery charge share (our fault)" v={`+ ${rupees(p.breakdown.shippingShare)}`} />}

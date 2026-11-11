@@ -7,6 +7,10 @@
  * refund from the order, so an edit can only lower it. The server re-checks every rule
  * and refuses once the refund is with Accounts; `updatedAt` makes a stale form fail
  * instead of overwriting someone else's change.
+ *
+ * The one money-shaped field is the PICKUP COST (operations, after inspection, before
+ * the refund is sent — owner, 2026-11-11): a deduction with a mandatory reason. The
+ * refund itself is still never typed; Accounts' screen recomputes it and shows the change.
  */
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -41,6 +45,9 @@ export default function EditReturnForm({ r, onDone }: { r: ReturnDetail; onDone:
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState('');
   const sigRef = useRef<ReturnCredentials | null>(null);
+  const currentPickup = r.refundDetail?.pickupDeduction || 0;
+  const [pickup, setPickup] = useState(String(currentPickup));
+  const [pickupReason, setPickupReason] = useState('');
 
   const photoCount = keep.length + added.length;
   const link = videoLink.trim();
@@ -63,7 +70,11 @@ export default function EditReturnForm({ r, onDone }: { r: ReturnDetail; onDone:
   const photosChanged = added.length > 0 || keep.length !== r.evidence.images.length;
   const evidenceChanged = photosChanged || !!video || (!!link && link !== (r.evidence.videoLink || ''));
   const textChanged = description.trim() !== r.problemDescription;
-  const anyChange = textChanged || lineChanges.length > 0 || evidenceChanged;
+  const pickupNum = Number(pickup);
+  const pickupValid = pickup.trim() !== '' && Number.isFinite(pickupNum) && pickupNum >= 0;
+  const pickupChanged = !!r.can.editPickupCost && pickupValid && Math.round(pickupNum * 100) !== Math.round(currentPickup * 100);
+  const pickupReasonOk = !pickupChanged || pickupReason.trim().length >= 3;
+  const anyChange = textChanged || lineChanges.length > 0 || evidenceChanged || pickupChanged;
 
   const save = useMutation({
     mutationFn: () => apiClient.patch<Res>(`/staff/returns/${r.id}`, {
@@ -78,6 +89,7 @@ export default function EditReturnForm({ r, onDone }: { r: ReturnDetail; onDone:
           ...(!video && link && { videoLink: link }),
         },
       }),
+      ...(pickupChanged && { pickupCost: { rupees: pickupNum, reason: pickupReason.trim() } }),
     }),
     onSuccess: (res) => {
       if (res?.return) qc.setQueryData(staffKeys.returnOne(r.id), res);
@@ -114,7 +126,8 @@ export default function EditReturnForm({ r, onDone }: { r: ReturnDetail; onDone:
   };
 
   const ready = anyChange && description.trim().length > 0 && staying.length > 0
-    && (r.evidence.images.length === 0 || photoCount > 0) && linkOk && (!newCustomerReason || unused) && !uploading;
+    && (r.evidence.images.length === 0 || photoCount > 0) && linkOk && (!newCustomerReason || unused) && !uploading
+    && (!r.can.editPickupCost || pickupValid) && pickupReasonOk;
 
   return (
     <section aria-label="Edit return" className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
@@ -160,6 +173,23 @@ export default function EditReturnForm({ r, onDone }: { r: ReturnDetail; onDone:
           <input type="checkbox" className="mt-0.5" checked={unused} onChange={(ev) => setUnused(ev.target.checked)} />
           The customer confirms it is unused, not installed, and in its original box.
         </label>
+      )}
+
+      {r.can.editPickupCost && (
+        <fieldset className="space-y-2 rounded border border-gray-200 bg-white p-2">
+          <legend className="px-1 text-xs font-semibold text-gray-700">Pickup cost taken off the refund</legend>
+          <p className="text-[11px] text-gray-500">
+            Now {rupees(currentPickup)}. Put 0 to refund the customer in full. Accounts sees the change before sending.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-[9rem_1fr]">
+            <input type="number" min="0" step="0.01" inputMode="decimal" className={input} aria-label="Pickup cost in rupees"
+              value={pickup} onChange={(ev) => setPickup(ev.target.value)} />
+            <input type="text" className={input} maxLength={500} aria-label="Why the pickup cost is changing"
+              placeholder="Why it is changing (required)" value={pickupReason} onChange={(ev) => setPickupReason(ev.target.value)} />
+          </div>
+          {!pickupValid && <p className="text-xs text-red-700">Enter the pickup cost in rupees (0 for none).</p>}
+          {pickupChanged && !pickupReasonOk && <p className="text-xs text-amber-800">Say why the pickup cost is changing.</p>}
+        </fieldset>
       )}
 
       <textarea className={input} rows={2} aria-label="Problem" value={description} onChange={(ev) => setDescription(ev.target.value)} />

@@ -95,6 +95,10 @@ export const validateEdit = [
   ...assetRef('evidence.video'),
   body('evidence.videoLink').optional({ nullable: true }).isString().isLength({ max: 500 }).withMessage('Invalid video link'),
   ...assetRef('evidence.proofOfPurchase'),
+  // The pickup cost (operations, after inspection). Only the deduction; never the refund.
+  body('pickupCost').optional().isObject().withMessage('Invalid pickup cost'),
+  body('pickupCost.rupees').if(body('pickupCost').exists()).isFloat({ min: 0, max: 10000000 }).withMessage('Enter the pickup cost in rupees (0 for none)'),
+  body('pickupCost.reason').optional().isString().isLength({ max: 500 }).withMessage('Reason up to 500 characters'),
 ];
 
 export const validateUploadTargets = [

@@ -166,6 +166,8 @@ export const validateReturnRefundBody = [
   body('paidAt').optional({ values: 'falsy' }).isISO8601().withMessage('The payout date is not a valid date'),
   body('shippingDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Shipping deduction cannot be negative'),
   body('restockingDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Restocking deduction cannot be negative'),
+  // The figure the sender looked at — a guard only, never the amount sent.
+  body('expectedAmount').optional({ values: 'null' }).isFloat({ min: 0 }).withMessage('Invalid expected amount'),
   // The real pickup cost, for a customer-reason return. `shippingDeduction` above is
   // its older name and is still accepted; the controller treats the two as one figure.
   body('pickupDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Pickup cost cannot be negative'),
