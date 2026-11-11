@@ -14,6 +14,23 @@ const IST_OFFSET = '+05:30';
 const TEST_MARK = '<test lead';
 const FOLLOW_UP_CORE = ['followUp1', 'followUp2'];
 
+/*
+  Columns the panel writes (services/metaLeadSheetWriter.js), appended on the
+  right of each tab. Reading skips them entirely: they are the panel's own
+  output, so they can never come back as a "sheet edit" and fight the panel,
+  and they do not shift the positional sales columns.
+*/
+export const PANEL_COLUMNS = Object.freeze({
+  leadId: 'Panel lead ID',
+  followingUp: 'Panel: following up',
+  status: 'Panel: follow-up status',
+  note: 'Panel: last note',
+  nextBy: 'Panel: next follow-up by',
+  lateReason: 'Panel: late reason',
+  updatedAt: 'Panel: updated at',
+});
+export const isPanelHeader = (h) => /^panel(\s+lead\s+id\s*$|\s*:)/i.test(String(h ?? '').trim());
+
 const key = (h) => String(h ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 /*
@@ -107,8 +124,9 @@ const META_ID = /^l:\d+$/i;
  * The column holding Meta's lead ids, found by its values: on the live sheet
  * someone typed over the "id" heading, and a staff column elsewhere is headed "id".
  */
-function metaIdColumn(body, width) {
+function metaIdColumn(body, width, skip = () => false) {
   for (let i = 0; i < width; i += 1) {
+    if (skip(i)) continue;
     const filled = body.map((r) => String(r[i] ?? '').trim()).filter(Boolean);
     if (filled.length && filled.filter((v) => META_ID.test(v)).length / filled.length >= 0.9) return i;
   }
@@ -124,12 +142,13 @@ function metaIdColumn(body, width) {
 */
 function labelsFor(headerRow, width, body) {
   const heads = Array.from({ length: width }, (_, i) => String(headerRow[i] ?? '').trim());
-  const idCol = metaIdColumn(body, width);
+  const idCol = metaIdColumn(body, width, (i) => isPanelHeader(heads[i]));
   const statusAt = heads.findIndex((h) => key(h) === 'lead_status');
   const staffFrom = statusAt >= 0 ? statusAt + 1 : width;
   let blank = 0;
   let followUp = 0;
   const raw = heads.map((h, i) => {
+    if (isPanelHeader(h)) return { label: h, column: null, panel: true };
     if (i === idCol) return { label: 'id', column: 'metaId' };
     if (i >= staffFrom) {
       if (key(h) === 'status') return { label: 'status', column: 'status' };
@@ -145,13 +164,34 @@ function labelsFor(headerRow, width, body) {
   // One label per column, and one column per core field: the first one wins.
   const seen = new Map();
   const taken = new Set();
-  return raw.map(({ label, column }) => {
+  return raw.map(({ label, column, panel }) => {
+    if (panel) return { label, column: null, panel: true };
     const n = (seen.get(label) ?? 0) + 1;
     seen.set(label, n);
     const own = column && !taken.has(column) ? column : null;
     if (own) taken.add(own);
     return { label: n > 1 ? `${label} (${n})` : label, column: own };
   });
+}
+
+/**
+ * Where things are on one tab, for writing: the header row (1-based sheet row),
+ * each team column's label/core column by index, and the panel's own columns.
+ * Null when the tab has no header row.
+ */
+export function tabLayout(values) {
+  const start = headerRowIndex(values ?? []);
+  if (start < 0) return null;
+  const body = values.slice(start + 1);
+  const width = Math.max(values[start].length, ...body.map((r) => r.length));
+  const labels = labelsFor(values[start], width, body);
+  const panel = {};
+  labels.forEach((l, i) => {
+    if (!l.panel) return;
+    const name = Object.entries(PANEL_COLUMNS).find(([, h]) => h.toLowerCase() === l.label.trim().toLowerCase())?.[0];
+    if (name && !(name in panel)) panel[name] = i;
+  });
+  return { headerRow: start + 1, width, labels, panel };
 }
 
 /**
@@ -167,7 +207,7 @@ export function parseTab({ name, gid, values }, seenMetaIds = new Set()) {
   const body = values.slice(start + 1);
   const width = Math.max(values[start].length, ...body.map((r) => r.length));
   const labels = labelsFor(values[start], width, body);
-  report.columns = labels.map((l) => l.label);
+  report.columns = labels.filter((l) => !l.panel).map((l) => l.label);
   const present = new Set(labels.map((l) => l.column));
   if (!['phone', 'metaId', 'name'].some((c) => present.has(c))) {
     report.unrecognised = true;
@@ -177,7 +217,8 @@ export function parseTab({ name, gid, values }, seenMetaIds = new Set()) {
 
   const occurrences = new Map();
   body.forEach((cells, offset) => {
-    const text = labels.map((_, i) => String(cells[i] ?? '').trim());
+    // Panel columns read as empty: the panel's own output is never sheet data.
+    const text = labels.map((l, i) => (l.panel ? '' : String(cells[i] ?? '').trim()));
     if (!text.some(Boolean)) return;
     report.rowsWithData += 1;
     if (text.some((c) => c.toLowerCase().includes(TEST_MARK))) { report.testLeads += 1; return; }
@@ -222,7 +263,7 @@ export function parseTab({ name, gid, values }, seenMetaIds = new Set()) {
       status: core.status ?? '',
       followUp1: core.followUp1 ?? '',
       followUp2: core.followUp2 ?? '',
-      fields: labels.map((l, i) => ({ label: l.label, value: text[i] })),
+      fields: labels.flatMap((l, i) => (l.panel ? [] : [{ label: l.label, value: text[i] }])),
     });
     report.ready += 1;
   });

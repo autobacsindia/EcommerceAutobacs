@@ -19,6 +19,8 @@ const { readAllTabs, readServiceAccount, resetGoogleSheetsToken } = await import
 
 jest.setTimeout(120000);
 const BASE = '/api/v1/staff/meta-leads';
+// A next follow-up two days out: always in the future, always within the limit.
+const NEXT = new Date(Date.now() + 2 * 24 * 3600e3).toISOString();
 
 const META_HEAD = ['id', 'created_time', 'ad_name', 'campaign_name', 'form_name', 'is_organic', 'full_name', 'phone_number', 'your_car?'];
 const metaRow = (id, name, phone, at = '2026-11-07T22:51:17-05:00') => [id, at, 'ad', 'jimny camp', 'jimny form', 'false', name, phone, 'Jimny'];
@@ -463,10 +465,10 @@ describe('API', () => {
       const a = await login(...GTM);
       const { id } = await firstLead(a);
       await request(app).post(`${BASE}/${id}/follow-up`).set(a).send({}).expect(200);
-      const one = await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'no_response', note: 'Rang twice' }).expect(200);
+      const one = await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'no_response', nextAt: NEXT, note: 'Rang twice' }).expect(200);
       expect(one.body.lead.followUpStatus).toMatchObject({ status: 'no_response', label: 'No response' });
       await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'not_interested' }).expect(200);
-      const fixed = await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded' }).expect(200);
+      const fixed = await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded', nextAt: NEXT }).expect(200);
       expect(fixed.body.lead.followUpStatus.status).toBe('responded');
       const open = await request(app).get(`${BASE}/${id}`).set(a).expect(200);
       expect(open.body.lead.history.map((h) => h.label)).toEqual(['Responded', 'Not interested', 'No response', 'Started following up']);
@@ -478,7 +480,7 @@ describe('API', () => {
       const a = await login(...GTM);
       const { id } = await firstLead(a);
       await request(app).post(`${BASE}/${id}/follow-up`).set(a).send({}).expect(200);
-      const res = await Promise.all([1, 2].map(() => request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'whatsapp', note: 'sent' })));
+      const res = await Promise.all([1, 2].map(() => request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'whatsapp', nextAt: NEXT, note: 'sent' })));
       expect(res.map((r) => r.status)).toEqual([200, 200]);
       expect(res.map((r) => r.body.outcome).sort()).toEqual(['duplicate', 'saved']);
       expect((await MetaLead.findById(id).lean()).followUpLog.filter((e) => e.type === 'follow_up')).toHaveLength(1);
@@ -488,11 +490,11 @@ describe('API', () => {
       await seed();
       const a = await login(...GTM);
       const { id } = await firstLead(a);
-      expect((await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded' }).expect(409)).body.outcome).toBe('not_following');
+      expect((await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded', nextAt: NEXT }).expect(409)).body.outcome).toBe('not_following');
       await request(app).post(`${BASE}/${id}/follow-up`).set(a).send({}).expect(200);
       await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'nope' }).expect(400);
       await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'other', note: '  ' }).expect(400);
-      await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded', note: 'x'.repeat(501) }).expect(400);
+      await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded', nextAt: NEXT, note: 'x'.repeat(501) }).expect(400);
     });
 
     test('who may do what', async () => {
@@ -500,10 +502,10 @@ describe('API', () => {
       const [owner, other, head] = await Promise.all([login(...GTM), login(...OTHER), login(...HEAD)]);
       const { id } = await firstLead(owner);
       await request(app).post(`${BASE}/${id}/follow-up`).set(owner).send({}).expect(200);
-      await request(app).post(`${BASE}/${id}/follow-ups`).set(other).send({ status: 'responded' }).expect(403);
+      await request(app).post(`${BASE}/${id}/follow-ups`).set(other).send({ status: 'responded', nextAt: NEXT }).expect(403);
       await request(app).post(`${BASE}/${id}/release`).set(other).send({}).expect(403);
       await request(app).post(`${BASE}/${id}/reassign`).set(other).send({ userId: id }).expect(403);
-      await request(app).post(`${BASE}/${id}/follow-ups`).set(head).send({ status: 'responded' }).expect(200);
+      await request(app).post(`${BASE}/${id}/follow-ups`).set(head).send({ status: 'responded', nextAt: NEXT }).expect(200);
       const freed = await request(app).post(`${BASE}/${id}/release`).set(head).send({}).expect(200);
       expect(freed.body.lead.followingUp).toBeNull();
       expect(freed.body.lead.followUpStatus.status).toBe('responded');
@@ -549,7 +551,7 @@ describe('API', () => {
       const all = (await request(app).get(BASE).set(a)).body.leads;
       await request(app).post(`${BASE}/${all[0].id}/follow-up`).set(a).send({}).expect(200);
       await request(app).post(`${BASE}/${all[1].id}/follow-up`).set(a).send({}).expect(200);
-      await request(app).post(`${BASE}/${all[1].id}/follow-ups`).set(a).send({ status: 'whatsapp' }).expect(200);
+      await request(app).post(`${BASE}/${all[1].id}/follow-ups`).set(a).send({ status: 'whatsapp', nextAt: NEXT }).expect(200);
       const ids = async (qs) => (await request(app).get(`${BASE}?${qs}`).set(a).expect(200)).body.leads.map((l) => l.id);
       expect(await ids('view=mine')).toEqual([all[0].id, all[1].id].sort(() => 0));
       expect(await ids('followUp=whatsapp')).toEqual([all[1].id]);

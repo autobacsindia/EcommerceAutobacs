@@ -19,6 +19,9 @@ import { and, isObjectId, keysetPage, plainQuery, searchWords, searchClauses } f
 import { normalizePhone, phoneSearchPattern } from '../utils/identity.js';
 import { columnOfLabel } from '../utils/metaLeadSheet.js';
 import { META_LEADS_UNDATED, extraKey, phoneKeyOf } from './metaLeadSync.js';
+import { requestMetaLeadSheetWrite } from './metaLeadSheetWriter.js';
+import { deadlineOf } from './metaLeadDeadlineService.js';
+import { istEndOfDay, formatIsoDateIST } from '../utils/datetime.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -50,12 +53,27 @@ const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 const isMine = (d, actor) => !!d.followingUpBy && idOf(d.followingUpBy) === idOf(actor._id);
 const seesContact = (actor, d) => canEditMetaLeads(actor) || isMine(d, actor);
 
+// Admin, Marketing head, GTM head: see the team's activity, ask for explanations.
+export const canReviewMetaLeads = canEditMetaLeads;
+
 export const youOf = (actor) => ({
   userId: idOf(actor._id),
   canEdit: canEditMetaLeads(actor),
   canFollowUp: canFollowUpMetaLeads(actor),
   canManage: canManageMetaLeads(actor),
+  canReview: canReviewMetaLeads(actor),
 });
+
+function explanationOf(d, actor) {
+  const e = d.explanation;
+  if (!e?.askedAt) return null;
+  return {
+    question: e.question ?? '', askedBy: e.askedByName || 'Someone', askedAt: e.askedAt,
+    answer: e.answer ?? '', answeredAt: e.answeredAt ?? null,
+    open: !e.answeredAt,
+    canAnswer: !e.answeredAt && isMine(d, actor),
+  };
+}
 
 /** The newest thing the team did on a lead that someone holds; 0 until it has gone quiet. */
 function quietDaysOf(d, now) {
@@ -96,6 +114,12 @@ export function rowOf(d, actor, related = NO_RELATED, now = new Date()) {
       ? { status: d.followUpStatus, label: FOLLOW_UP_STATUSES[d.followUpStatus], at: d.followUpStatusAt ?? null }
       : null,
     quietDays: quietDaysOf(d, now),
+    nextFollowUp: deadlineOf(d, now),
+    lateReason: d.lateReason ? { text: d.lateReason, forDeadline: d.lateReasonFor ?? null } : null,
+    reschedules: d.reschedules ?? 0,
+    explanation: explanationOf(d, actor),
+    // Panel → sheet: waiting to be written, or the row could not be found.
+    sheet: { waiting: !!d.sheetDirty, problem: d.sheetWriteError || null },
     others: related.others,
     inWebsiteLeads: related.inWebsiteLeads,
   };
@@ -107,13 +131,20 @@ const CONTACT_VALUE = /^\+?[\d\s()-]{10,15}$|^[^@\s]+@[^@\s]+$/;
 const isContactExtra = ({ label, value }) => CONTACT_LABEL.test(label) || CONTACT_VALUE.test(String(value ?? '').trim());
 const CONTACT_EDITS = new Set([META_LEAD_EDITABLE.phone, META_LEAD_EDITABLE.email]);
 
+const HISTORY_LABELS = {
+  claim: 'Started following up', release: 'Stopped following up', reassign: 'Moved',
+  reschedule: 'Moved the next follow-up', late_reason: 'Reason for being late',
+  explain_ask: 'Asked for an explanation', explain_answer: 'Explained',
+};
 const historyOf = (d) => [...(d.followUpLog ?? [])].reverse().map((e) => ({
   type: e.type,
-  label: e.type === 'follow_up' ? (FOLLOW_UP_STATUSES[e.status] ?? 'Follow-up') : { claim: 'Started following up', release: 'Stopped following up', reassign: 'Moved' }[e.type],
+  label: e.type === 'follow_up' ? (FOLLOW_UP_STATUSES[e.status] ?? 'Follow-up') : (HISTORY_LABELS[e.type] ?? 'Update'),
   followUpStatus: e.type === 'follow_up' ? (e.status ?? null) : null,
   at: e.at,
   who: e.byName || null,
   notes: e.notes ?? '',
+  nextAt: e.nextAt ?? null,
+  late: e.late === true,
 }));
 
 export const detailOf = (d, actor, related = NO_RELATED) => {
@@ -187,10 +218,23 @@ function searchClause(q) {
   return and(searchClauses(words, ['name', 'email', 'product', 'salesPerson', 'status']));
 }
 
+function writeBackInfo(w = {}) {
+  return {
+    pending: w.pending ?? 0,
+    notInSheet: w.notInSheet ?? 0,
+    lastSuccessAt: w.lastSuccessAt ?? null,
+    error: w.error || null,
+    errorKind: w.errorKind || null,
+    // Not a secret: the address the owner shares the sheet with.
+    robotEmail: w.errorKind === 'permission' ? (w.robotEmail || null) : null,
+  };
+}
+
 function syncInfo(state) {
   const lastSuccessAt = state?.lastSuccessAt ?? null;
   const since = Date.now() - COLUMN_NOTICE_MS;
   return {
+    writeBack: writeBackInfo(state?.writeBack),
     lastSuccessAt,
     connected: !!lastSuccessAt,
     stale: !lastSuccessAt || Date.now() - new Date(lastSuccessAt).getTime() > STALE_AFTER_MS,
@@ -208,6 +252,13 @@ function ownerClause(f, actor) {
   return null;
 }
 
+/** due=overdue|today: deadlines that have passed, or fall before tonight (India time). */
+function dueClause(v, now = new Date()) {
+  if (v === 'overdue') return { nextFollowUpAt: { $lt: now }, followingUpBy: { $ne: null } };
+  if (v === 'today') return { nextFollowUpAt: { $lt: istEndOfDay(formatIsoDateIST(now)) }, followingUpBy: { $ne: null } };
+  return null;
+}
+
 function followUpClause(v) {
   if (v === 'none') return { followUpStatus: null };
   return FOLLOW_UP_STATUS_KEYS.includes(v) ? { followUpStatus: v } : null;
@@ -222,6 +273,7 @@ export async function listMetaLeads(actor, params = {}) {
     f.tab ? { tab: String(f.tab) } : null,
     ownerClause({ ...f, view }, actor),
     followUpClause(f.followUp),
+    dueClause(f.due),
     searchClause(f.q),
   );
   const [{ items, ...page }, state] = await Promise.all([
@@ -323,5 +375,74 @@ export async function updateMetaLead(actor, id, body = {}) {
     $push: { edits: { $each: [{ at: new Date(), by: actor._id, byName: actor.name ?? '', changes: log }], $slice: -100 } },
   }, arrayFilters.length ? arrayFilters : undefined);
   if (!saved) return { outcome: 'changed', lead: detailOf(await metaLeadRepository.findDetail(id), actor) };
+  requestMetaLeadSheetWrite();
   return { outcome: 'saved', lead: detailOf(saved, actor) };
+}
+
+const ACTIVITY_DAYS = [1, 7, 30];
+const REASONS_SHOWN = 100;
+
+/**
+ * GET /staff/meta-leads/activity?days=1|7|30 — what each person did, and what
+ * is late right now. Admin, Marketing head, GTM head. Customer names only on the
+ * overdue list (the managers may see contacts anyway); counts everywhere else.
+ */
+export async function metaLeadActivity(actor, params = {}) {
+  assertViewMetaLeads(actor);
+  if (!canReviewMetaLeads(actor)) throw fail('Only the admin, the Marketing head and the GTM head can see team activity.', 403);
+  const days = ACTIVITY_DAYS.includes(Number(params.days)) ? Number(params.days) : 7;
+  const now = new Date();
+  const from = new Date(now.getTime() - days * DAY_MS);
+  const tonight = istEndOfDay(formatIsoDateIST(now));
+  const [entries, holdings, overdue] = await Promise.all([
+    metaLeadRepository.activity(from, now),
+    metaLeadRepository.holdings(now, tonight),
+    metaLeadRepository.overdueList(now),
+  ]);
+
+  const people = new Map();
+  const person = (userId, name) => {
+    const key = idOf(userId) || name || 'unknown';
+    if (!people.has(key)) {
+      people.set(key, {
+        userId: idOf(userId) || null, name: name || 'Someone', holding: 0, overdue: 0, dueToday: 0, openExplanations: 0,
+        taken: 0, followUps: 0, onTime: 0, late: 0, rescheduled: 0, firstMinutes: [],
+      });
+    }
+    const p = people.get(key);
+    if (name && p.name === 'Someone') p.name = name;
+    return p;
+  };
+  holdings.forEach((h) => Object.assign(person(h._id, h.name), { holding: h.holding, overdue: h.overdue, dueToday: h.dueToday, openExplanations: h.openExplanations }));
+
+  const reasons = [];
+  entries.forEach(({ leadId, tab, product, e }) => {
+    const p = person(e.by, e.byName);
+    if (e.type === 'claim') p.taken += 1;
+    if (e.type === 'follow_up') {
+      p.followUps += 1;
+      if (e.late) p.late += 1; else if (e.dueAt) p.onTime += 1;
+      if (typeof e.minutesSinceClaim === 'number') p.firstMinutes.push(e.minutesSinceClaim);
+    }
+    if (e.type === 'reschedule') p.rescheduled += 1;
+    if (['late_reason', 'reschedule', 'explain_ask', 'explain_answer'].includes(e.type) && reasons.length < REASONS_SHOWN) {
+      reasons.push({ leadId: String(leadId), tab, product: product ?? '', type: e.type, label: HISTORY_LABELS[e.type], who: e.byName || 'Someone', at: e.at, text: e.notes ?? '' });
+    }
+  });
+
+  const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+  return {
+    days,
+    from,
+    people: [...people.values()]
+      .map(({ firstMinutes, ...p }) => ({ ...p, avgMinutesToFirst: avg(firstMinutes), onTimeRate: p.onTime + p.late ? Math.round((100 * p.onTime) / (p.onTime + p.late)) : null }))
+      .sort((a, b) => b.overdue - a.overdue || a.name.localeCompare(b.name)),
+    overdue: overdue.map((d) => ({
+      id: String(d._id), name: d.name ?? '', product: d.product ?? '', tab: d.tab, followingUp: d.followingUpName || 'Someone',
+      dueAt: d.nextFollowUpAt, overdueMinutes: Math.floor((now - new Date(d.nextFollowUpAt)) / 60000),
+      lateReason: d.lateReason && d.lateReasonFor && new Date(d.lateReasonFor).getTime() === new Date(d.nextFollowUpAt).getTime() ? d.lateReason : '',
+      explanationOpen: !!d.explanation?.askedAt && !d.explanation?.answeredAt,
+    })),
+    reasons,
+  };
 }

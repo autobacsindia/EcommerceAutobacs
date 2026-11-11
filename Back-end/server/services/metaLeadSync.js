@@ -56,11 +56,12 @@ export function diffRow(existing, row) {
 
 const lower = (v) => String(v ?? '').trim().toLowerCase();
 const partsOf = (r) => [phoneKeyOf(r.phone), lower(r.name), lower(r.dateRaw), lower(r.product)];
-const agreeing = (a, b) => partsOf(a).filter((v, i) => v && v === partsOf(b)[i]).length;
+// How many of phone / name / date / product two rows share (also used to find a typed row to write to).
+export const agreeing = (a, b) => partsOf(a).filter((v, i) => v && v === partsOf(b)[i]).length;
 const tabScope = (key) => key.split('|')[0];
 const contentKey = (r) => `${tabScope(r.sheetKey)}|${partsOf(r).join('|')}`;
 // Two of phone / name / date / product agreeing is a corrected row, not a new enquiry.
-const SAME_ENQUIRY = 2;
+export const SAME_ENQUIRY = 2;
 
 /**
  * Typed rows have no id from Meta, and their first key depends on position. Point

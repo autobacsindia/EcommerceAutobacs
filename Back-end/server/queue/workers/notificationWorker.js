@@ -37,6 +37,7 @@
  */
 
 import { Worker } from 'bullmq';
+import { META_LEAD_SHEET_JOB, flushMetaLeadSheetWrites } from '../../services/metaLeadSheetWriter.js';
 import { hasChatUpdate, postBusinessUpdate, WORKFLOW_CHAT_JOB, RETURN_CHAT_JOB } from '../../services/chatBusinessUpdates.js';
 import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
@@ -271,6 +272,9 @@ const handlers = {
    * if the support side is briefly unavailable. Idempotent on
    * (sourceModel, sourceId), so a retry never doubles up.
    */
+  // Panel → Google Sheet. Idempotent: it writes whatever is still waiting, so a
+  // retry or a duplicate job writes nothing twice.
+  [META_LEAD_SHEET_JOB]: async () => flushMetaLeadSheetWrites(),
   'create-support-ticket': async (job) => {
     const { sourceModel, sourceId } = job.data;
 

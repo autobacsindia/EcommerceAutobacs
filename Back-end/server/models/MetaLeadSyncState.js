@@ -17,6 +17,8 @@ const MetaLeadSyncStateSchema = new mongoose.Schema(
     layouts: { type: [{ _id: false, tab: String, columns: [String], changedAt: Date }], default: [] },
     // Tabs whose columns could not be understood, so their rows were not read.
     skippedTabs: { type: [String], default: [] },
+    // Panel -> sheet writes (services/metaLeadSheetWriter.js): last outcome, what is waiting.
+    writeBack: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },
 );

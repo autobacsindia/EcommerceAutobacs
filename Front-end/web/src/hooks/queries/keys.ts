@@ -242,6 +242,7 @@ export const staffKeys = {
   metaLeadList: (params: Record<string, string> = {}) => [...staffKeys.metaLeads(), 'list', params] as const,
   metaLeadOne: (id: string) => [...staffKeys.metaLeads(), 'one', id] as const,
   metaLeadPeople: () => [...staffKeys.metaLeads(), 'people'] as const,
+  metaLeadActivity: (days: number) => [...staffKeys.metaLeads(), 'activity', days] as const,
   customerBanks: () => [...staffKeys.all, 'customer-bank'] as const,
   customerBank: (kind: string, id: string) => [...staffKeys.customerBanks(), kind, id] as const,
 };

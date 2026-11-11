@@ -11,8 +11,9 @@ import { errorMessage } from '@/components/staff/sales/types';
 import { listField } from '@/components/panel/ListControls';
 import RichText from '@/components/ui/RichText';
 import FollowUpRecorder, { type FollowUpWrite } from './FollowUpRecorder';
+import { DeadlineChip, ExplanationBox, MoveDeadline, MoveIcon } from './MetaLeadDeadline';
 import { followUpOption } from './followUpStatus';
-import { metaLeadDate, type MetaLead, type MetaLeadDetail, type MetaLeadPage, type MetaLeadPeople, type MetaLeadYou } from './metaLeadTypes';
+import { CLOSING_STATUSES, metaLeadDate, type MetaLead, type MetaLeadDetail, type MetaLeadPage, type MetaLeadPeople, type MetaLeadYou } from './metaLeadTypes';
 
 type Write = FollowUpWrite<MetaLead>;
 
@@ -61,6 +62,7 @@ export default function MetaLeadCard({ lead, you, members, onDetails }: {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [moveTo, setMoveTo] = useState('');
+  const [moving, setMoving] = useState(false);
   const path = `/staff/meta-leads/${encodeURIComponent(lead.id)}`;
 
   const history = useQuery({
@@ -120,6 +122,12 @@ export default function MetaLeadCard({ lead, you, members, onDetails }: {
               </span>
             )}
             {lead.removedFromSheet && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">No longer in the sheet</span>}
+            {!lead.removedFromSheet && lead.sheet?.problem && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
+                title="Changes here could not be written to the Google Sheet: the row was not found there (or two rows looked like it).">
+                Not found in the sheet
+              </span>
+            )}
           </div>
           {lead.product && <p className="mt-1 break-words text-sm font-medium text-gray-900">{lead.product}</p>}
           <p className="mt-0.5 text-xs text-gray-500">{metaLeadDate(lead)} · {lead.tab}</p>
@@ -132,6 +140,8 @@ export default function MetaLeadCard({ lead, you, members, onDetails }: {
                 <Hand className="h-4 w-4" aria-hidden /> Following up: {f.mine ? 'You' : f.name}
               </p>
               {f.at && <p className="mt-0.5 text-xs text-gray-500">since {formatDateTimeIST(f.at)}</p>}
+              <div><DeadlineChip lead={lead} /></div>
+              {lead.reschedules > 0 && <p className="mt-0.5 text-xs text-gray-500">Moved {lead.reschedules} time{lead.reschedules === 1 ? '' : 's'}</p>}
               {lead.quietDays > 0 && (
                 <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                   <Clock className="h-3 w-3" aria-hidden /> No update for {lead.quietDays} days
@@ -151,6 +161,15 @@ export default function MetaLeadCard({ lead, you, members, onDetails }: {
 
       {notice && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900">{notice}</p>}
       {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2.5 text-sm text-red-700">{error}</p>}
+
+      {lead.nextFollowUp?.lateReasonNeeded && f?.mine && (
+        <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2.5 text-sm text-red-800">
+          This follow-up was due {formatDateTimeIST(lead.nextFollowUp.at)}. Update it and type why it is late.
+        </p>
+      )}
+      {lead.lateReason && lead.lateReason.forDeadline === lead.nextFollowUp?.at && (
+        <p className="mt-2 text-sm text-gray-700"><span className="font-medium">Late because:</span> {lead.lateReason.text}</p>
+      )}
 
       {(lead.phone || lead.email) && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -186,6 +205,11 @@ export default function MetaLeadCard({ lead, you, members, onDetails }: {
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-blue-700 hover:bg-blue-50">
           {open ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />} History
         </button>
+        {mayRecord && lead.nextFollowUp && !moving && (
+          <button type="button" onClick={() => setMoving(true)} className={secondaryButton}>
+            <MoveIcon className="h-4 w-4" aria-hidden /> Move follow-up
+          </button>
+        )}
         {mayRecord && !recording && (
           <button type="button" onClick={() => setRecording(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50">
             <MessageSquarePlus className="h-4 w-4" aria-hidden /> Update follow-up
@@ -213,7 +237,12 @@ export default function MetaLeadCard({ lead, you, members, onDetails }: {
         )}
       </div>
 
-      {recording && mayRecord && <FollowUpRecorder<MetaLead> path={path} hints={HINTS} onSaved={onRecorded} onClose={() => setRecording(false)} />}
+      {recording && mayRecord && (
+        <FollowUpRecorder<MetaLead> path={path} hints={HINTS} onSaved={onRecorded} onClose={() => setRecording(false)}
+          deadline={{ closing: CLOSING_STATUSES, lateReasonNeeded: !!lead.nextFollowUp?.lateReasonNeeded, dueAt: lead.nextFollowUp?.at ?? null }} />
+      )}
+      {moving && mayRecord && <MoveDeadline lead={lead} path={path} onSaved={done} onError={settle('Could not move the follow-up.')} onClose={() => setMoving(false)} />}
+      <ExplanationBox lead={lead} path={path} canAsk={you.canReview} onSaved={done} onError={settle('Could not save that.')} />
 
       {open && (
         <div className="mt-3 rounded-lg bg-gray-50 p-3">
@@ -228,6 +257,8 @@ export default function MetaLeadCard({ lead, you, members, onDetails }: {
                     <span className={h.followUpStatus ? `rounded-full border px-2 py-0.5 text-xs font-semibold ${followUpOption(h.followUpStatus)?.tone ?? ''}` : 'font-medium text-gray-900'}>{h.label}</span>
                     {h.who && <span className="text-gray-700"> · {h.who}</span>}
                     <span className="text-gray-500"> · {formatDateTimeIST(h.at)}</span>
+                    {h.late && <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-800">late</span>}
+                    {h.nextAt && <span className="text-gray-500"> · next by {formatDateTimeIST(h.nextAt)}</span>}
                     {h.notes && <RichText value={h.notes} className="text-gray-600" />}
                   </li>
                 ))}

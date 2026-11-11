@@ -32,6 +32,7 @@ import { countTrainingForBell } from './staffTrainingService.js';
 import { countLastDaysForBell } from './staffDepartureService.js';
 import { countsFor as countReturnsFor } from './returnService.js';
 import { countUnread as countInboxUnread } from './staffTaskInboxService.js';
+import { bellItemsFor as metaLeadBellItems } from './metaLeadDeadlineService.js';
 
 const isAdmin = (u) => u?.role === 'admin';
 const isActiveStaff = (u) => u?.role === 'staff' && u?.staff?.active === true;
@@ -160,6 +161,9 @@ export async function summaryFor(user) {
   }
 
   items.push(...returnItems);
+
+  // Meta lead follow-ups due / late, and explanations asked. Only when there are some.
+  items.push(...await metaLeadBellItems(user));
 
   // What happened on this person's tasks that they have not read (the Inbox).
   if (inboxUnread > 0) {
