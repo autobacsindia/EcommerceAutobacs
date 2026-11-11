@@ -3,8 +3,8 @@
  * "Change password" link; staff on their own email do. No one is ever locked
  * out of the panel to change a password.
  */
-import { render, screen } from '@testing-library/react';
-import TeamLayoutClient from './TeamLayoutClient';
+import { fireEvent, render, screen } from '@testing-library/react';
+import TeamLayoutClient, { TEAM_MORE_HREFS } from './TeamLayoutClient';
 
 let pathname = '/team';
 jest.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () => ({ replace: jest.fn(), push: jest.fn() }) }));
@@ -108,13 +108,15 @@ it('every team gets a "View website" link that opens the store in a new tab', ()
   }
 });
 
-it('every team gets the Help page in its menu', () => {
+it('every team gets the Help page in its menu, under "More"', () => {
   for (const team of ['sales', 'procurement', 'accounts', 'operations', 'marketing']) {
     const { unmount } = render(
       <TeamLayoutClient userName="Kim" team={team} teamLabel={team} isHead={false}>
         <p>panel content</p>
       </TeamLayoutClient>,
     );
+    expect(screen.queryByRole('link', { name: /^Help$/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.getByRole('link', { name: /^Help$/ })).toHaveAttribute('href', '/team/help');
     unmount();
   }
@@ -134,18 +136,28 @@ it('every team page gets the hover menu (icon strip), not just Tasks', () => {
 
 /* ── Refunds: one Accounts menu item, two tabs (owner-approved 2026-11-05) ─── */
 
-const menuLabels = (team: string, isHead = false, canSell = false) => {
+const linksIn = (root: ParentNode) => Array.from(root.querySelectorAll('a'))
+  .map((a) => ({ href: a.getAttribute('href'), label: a.textContent?.trim() }))
+  // The panel title and Dashboard both point at /team; profile carries the name.
+  .filter((l) => !['/team', '/team/profile', '/team/password'].includes(l.href || ''));
+
+/** The menu as it first shows (`visible`) and what opening "More" reveals (`more`). */
+const menuParts = (team: string, isHead = false, canSell = false) => {
   const { unmount } = render(
     <TeamLayoutClient userName="Kim" team={team} teamLabel={team} isHead={isHead} canSell={canSell}>
       <p>panel content</p>
     </TeamLayoutClient>,
   );
-  const links = Array.from(document.querySelectorAll('#panel-menu a'))
-    .map((a) => ({ href: a.getAttribute('href'), label: a.textContent?.trim() }))
-    // The panel title and Dashboard both point at /team; profile carries the name.
-    .filter((l) => !['/team', '/team/profile', '/team/password'].includes(l.href || ''));
+  const visible = linksIn(document.getElementById('panel-menu')!);
+  const button = screen.getByRole('button', { name: 'More' });
+  fireEvent.click(button);
+  const more = linksIn(document.getElementById(button.getAttribute('aria-controls')!)!);
   unmount();
-  return links;
+  return { visible, more };
+};
+const menuLabels = (team: string, isHead = false, canSell = false) => {
+  const { visible, more } = menuParts(team, isHead, canSell);
+  return [...visible, ...more];
 };
 
 it('accounts gets one "Refunds" item plus "Returns", and no "Return refunds" or "Refund approvals"', () => {
@@ -159,13 +171,47 @@ it('accounts gets one "Refunds" item plus "Returns", and no "Return refunds" or 
   expect(links.filter((l) => l.href === '/team/refunds')).toHaveLength(1);
 });
 
-it('the other teams\' menus are exactly as before the Refunds change', () => {
+it('the other teams\' menus are exactly as before the Refunds change, with the less-used pages under "More"', () => {
   pathname = '/team';
-  const labels = (team: string, isHead = false, canSell = false) => menuLabels(team, isHead, canSell).map((l) => l.label);
-  expect(labels('sales', false, true)).toEqual(['Team chat', 'Tasks', 'Lessons', 'Training', 'Handover', 'Past members', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'My orders', 'Customer decisions', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments', 'My team', 'Help']);
-  expect(labels('sales', true, true)).toEqual(['Team chat', 'Tasks', 'Lessons', 'Training', 'Handover', 'Past members', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'Team orders', 'Customer decisions', 'Order processing', 'Delivered', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments', 'My team', 'Help']);
-  expect(labels('sales', false, false)).toEqual(['Team chat', 'Tasks', 'Lessons', 'Training', 'Handover', 'Past members', 'Website leads', 'Meta leads', 'Payments', 'My team', 'Help']);
-  expect(labels('procurement')).toEqual(['Team chat', 'Tasks', 'Lessons', 'Training', 'Handover', 'Past members', 'Orders', 'Delivered', 'Returns', 'Payments', 'Suppliers', 'My team', 'Help']);
-  expect(labels('operations')).toEqual(['Team chat', 'Tasks', 'Lessons', 'Training', 'Handover', 'Past members', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments', 'My team', 'Help']);
-  expect(labels('marketing')).toEqual(['Team chat', 'Tasks', 'Lessons', 'Training', 'Handover', 'Past members', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments', 'My team', 'Help']);
+  const MORE = ['Lessons', 'Training', 'Handover', 'Past members', 'My team', 'Help'];
+  const parts = (team: string, isHead = false, canSell = false) => {
+    const { visible, more } = menuParts(team, isHead, canSell);
+    // Same "More" for every team, in the same order.
+    expect(more.map((l) => l.label)).toEqual(MORE);
+    return visible.map((l) => l.label);
+  };
+  expect(parts('sales', false, true)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'My orders', 'Customer decisions', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments']);
+  expect(parts('sales', true, true)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'Team orders', 'Customer decisions', 'Order processing', 'Delivered', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments']);
+  expect(parts('sales', false, false)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'Payments']);
+  expect(parts('procurement')).toEqual(['Team chat', 'Tasks', 'Orders', 'Delivered', 'Returns', 'Payments', 'Suppliers']);
+  expect(parts('operations')).toEqual(['Team chat', 'Tasks', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments']);
+  expect(parts('developer')).toEqual(['Team chat', 'Tasks', 'Payments']);
+  expect(parts('marketing')).toEqual(['Team chat', 'Tasks', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments']);
+});
+
+/* ── "More": the less-used pages, folded (owner-approved 2026-11-11) ─────── */
+
+it('moving pages under "More" loses none: every team keeps every link it had', () => {
+  pathname = '/team';
+  for (const team of ['sales', 'procurement', 'accounts', 'operations', 'marketing', 'developer']) {
+    const { visible, more } = menuParts(team, true, true);
+    const hrefs = [...visible, ...more].map((l) => l.href);
+    for (const href of TEAM_MORE_HREFS) expect(hrefs).toContain(href);
+    // Nothing shows twice.
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+  }
+});
+
+it('on a page that lives under "More", it opens by itself and marks that page', () => {
+  pathname = '/team/training';
+  render(
+    <TeamLayoutClient userName="Dev" team="developer" teamLabel="Developer" isHead={false}>
+      <p>panel content</p>
+    </TeamLayoutClient>,
+  );
+  expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('link', { name: /^Training$/ })).toHaveAttribute('aria-current', 'page');
+  // The top bar still names the page.
+  expect(screen.getByRole('heading', { name: 'Training' })).toBeInTheDocument();
+  pathname = '/team';
 });

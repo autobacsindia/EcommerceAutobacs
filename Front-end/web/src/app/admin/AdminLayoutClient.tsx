@@ -16,6 +16,7 @@ import { formatCurrency } from '@/lib/utils';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
+import { splitMore } from '@/components/panel/navMore';
 
 interface NavItem {
   href: string;
@@ -128,6 +129,14 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   },
 ];
 
+/** Less-used "Main" pages, folded under "More" — the same pages the team panels fold. */
+export const ADMIN_MORE_HREFS = [
+  '/admin/lessons',
+  '/admin/training',
+  '/admin/handover',
+  '/admin/past-members',
+] as const;
+
 interface AdminLayoutClientProps {
   children: React.ReactNode;
   userName: string;
@@ -209,19 +218,23 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
     }
   };
 
-  const sections = navSections.map((section) => ({
-    // "Main" is always open: it holds the dashboard, chat and tasks.
-    title: section.title === 'Main' ? undefined : section.title,
-    expanded: !!expandedSections[section.title],
-    onToggle: () => toggleSection(section.title),
-    items: section.items.map((item) => ({
+  const sections = navSections.map((section) => {
+    const { items, more } = splitMore(section.items.map((item) => ({
       href: item.href,
       label: item.label,
       icon: item.icon,
       active: isLinkActive(item.href),
       count: item.href === '/admin/chat' ? chatUnread : undefined,
-    })),
-  }));
+    })), ADMIN_MORE_HREFS);
+    return {
+      // "Main" is always open: it holds the dashboard, chat and tasks.
+      title: section.title === 'Main' ? undefined : section.title,
+      expanded: !!expandedSections[section.title],
+      onToggle: () => toggleSection(section.title),
+      items,
+      more,
+    };
+  });
 
   const pageLabel = navSections.flatMap((s) => s.items).find((link) => link.href === activeHref)?.label;
 

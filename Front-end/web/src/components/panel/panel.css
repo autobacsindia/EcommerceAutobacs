@@ -315,3 +315,11 @@
   background: #fff;
   color: #000;
 }
+/* "More": the folded-away links. Holding the current page while closed, it
+   wears a quieter version of the active look so the page is never lost. */
+.pn-more[data-active='true'] { background: var(--pn-side-hover); color: #fff; font-weight: 600; }
+.pn-more[data-active='true'] svg { color: #fff; }
+.pn-more-list { border-left: 1px solid var(--pn-side-line); }
+@media (min-width: 768px) {
+  [data-rail='rail'] .pn-more-list { border-left: 0; }
+}
