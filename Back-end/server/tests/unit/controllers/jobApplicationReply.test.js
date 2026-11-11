@@ -191,4 +191,13 @@ describe('replyToApplication', () => {
     expect(res.body.application.replies[0].status).toBe('sent');
   });
 
+  test('the inbox list leaves the reply history out (detail view only)', async () => {
+    const app = await seed();
+    await reply(app._id, draft());
+    const res = mockRes();
+    await controller.listApplications({ query: {} }, res);
+    expect(res.body.applications).toHaveLength(1);
+    expect(res.body.applications[0].replies).toBeUndefined();
+    expect(res.body.applications[0].email).toBe('applicant@example.com');
+  });
 });

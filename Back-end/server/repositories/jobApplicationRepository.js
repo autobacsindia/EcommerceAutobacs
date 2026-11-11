@@ -15,6 +15,9 @@ class JobApplicationRepository {
     const skip = (Math.max(1, page) - 1) * limit;
     const [items, total] = await Promise.all([
       JobApplication.find(filter)
+        // The inbox list never shows the reply history; it is up to REPLY_LIMIT
+        // emails per row, so it is fetched only with the detail view.
+        .select('-replies')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
