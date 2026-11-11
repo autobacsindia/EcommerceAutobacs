@@ -37,7 +37,7 @@ export const TEAM_HELP: TeamHelpSection[] = [
     items: [
       {
         question: 'What is on my menu?',
-        answer: 'Each team sees its own tools. Everyone has the Dashboard, Team chat, Tasks, Payments (for expenses), My team and this Help page. GTM sees the selling tools, procurement sees Orders and Suppliers, accounts sees Refunds and Bank transfers, and operations sees Deliveries.',
+        answer: 'Each team sees its own tools. Everyone has the Dashboard, Team chat, Tasks and Payments (for expenses). Lessons, Training, Handover, Past members, My team and this Help page are under "More" — tap it to open them. GTM sees the selling tools, procurement sees Orders and Suppliers, accounts sees Refunds and Bank transfers, and operations sees Deliveries.',
       },
       {
         question: 'How do I check something on the website?',

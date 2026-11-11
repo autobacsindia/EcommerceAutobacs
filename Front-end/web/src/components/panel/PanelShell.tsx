@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Pin, PinOff, X } from 'lucide-react';
+import { ChevronRight, Ellipsis, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Pin, PinOff, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PushPrompt from '@/components/notifications/PushPrompt';
 import PanelThemeSwitch from './PanelThemeSwitch';
 import PersonFace from '@/components/profile/PersonFace';
+import { moreCount } from './navMore';
 import './panel.css';
 
 export type PanelNavItem = {
@@ -25,6 +26,12 @@ export type PanelNavSection = {
   items: PanelNavItem[];
   expanded?: boolean;
   onToggle?: () => void;
+  /**
+   * Links folded under one "More" button at the end of the section (see
+   * `splitMore`). Opens by itself when the current page is one of them; an
+   * empty list shows no button.
+   */
+  more?: PanelNavItem[];
 };
 
 /** This device remembers whether the hover rail is pinned open. */
@@ -95,6 +102,9 @@ export default function PanelShell({
     </>
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  // "More" open/closed per section, as the person left it on this page. Cleared
+  // on navigation so the next page opens it only if it lives inside "More".
+  const [moreOpen, setMoreOpen] = useState<Record<string, boolean>>({});
   const [pinned, setPinned] = useState(false);
   const [peek, setPeek] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -118,7 +128,7 @@ export default function PanelShell({
   const rail = isRail && !menuOpen && !overlay;
 
   // A tap on a link navigates; the drawer must not stay over the new page.
-  useEffect(() => { setMenuOpen(false); setPeek(false); }, [pathname]);
+  useEffect(() => { setMenuOpen(false); setPeek(false); setMoreOpen({}); }, [pathname]);
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
@@ -136,6 +146,24 @@ export default function PanelShell({
     onBlur: (e: FocusEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) peekLater(false); },
     onKeyDown: (e: ReactKeyboardEvent) => { if (e.key === 'Escape' && peek) { e.stopPropagation(); setPeek(false); } },
   } : {};
+
+  const navLink = ({ href, label, icon: Icon, active, count }: PanelNavItem) => (
+    <Link
+      key={href}
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      title={rail ? label : undefined}
+      className={`pn-nav flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${rail ? 'md:justify-center md:px-0' : ''}`}
+    >
+      <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+      <span className={`min-w-0 flex-1 truncate ${rail ? 'md:sr-only' : ''}`}>{label}</span>
+      {!!count && count > 0 && (
+        <span className={`pn-count rounded-full px-1.5 text-[11px] font-bold leading-[18px] ${rail ? 'md:hidden' : ''}`} aria-label={`${count} unread`}>
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </Link>
+  );
 
   return (
     <div className={`panel-theme admin-panel min-h-screen${hoverRail ? ' pn-rail-touch' : ''}`}>
@@ -205,23 +233,42 @@ export default function PanelShell({
                 )}
                 {open && (
                   <div className="mt-0.5 space-y-0.5">
-                    {section.items.map(({ href, label, icon: Icon, active, count }) => (
-                      <Link
-                        key={href}
-                        href={href}
-                        aria-current={active ? 'page' : undefined}
-                        title={rail ? label : undefined}
-                        className={`pn-nav flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${rail ? 'md:justify-center md:px-0' : ''}`}
-                      >
-                        <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-                        <span className={`min-w-0 flex-1 truncate ${rail ? 'md:sr-only' : ''}`}>{label}</span>
-                        {!!count && count > 0 && (
-                          <span className={`pn-count rounded-full px-1.5 text-[11px] font-bold leading-[18px] ${rail ? 'md:hidden' : ''}`} aria-label={`${count} unread`}>
-                            {count > 99 ? '99+' : count}
-                          </span>
-                        )}
-                      </Link>
-                    ))}
+                    {section.items.map(navLink)}
+                    {!!section.more?.length && (() => {
+                      const key = section.title || String(i);
+                      const hasActive = section.more.some((m) => m.active);
+                      const isOpen = moreOpen[key] ?? hasActive;
+                      const hidden = isOpen ? 0 : moreCount(section.more);
+                      const listId = `panel-more-${i}`;
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setMoreOpen((prev) => ({ ...prev, [key]: !isOpen }))}
+                            aria-expanded={isOpen}
+                            aria-controls={listId}
+                            aria-label={hidden > 0 ? `More, ${hidden} unread` : undefined}
+                            data-active={hasActive && !isOpen}
+                            title={rail ? 'More' : undefined}
+                            className={`pn-nav pn-more flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm ${rail ? 'md:justify-center md:px-0' : ''}`}
+                          >
+                            <Ellipsis className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                            <span className={`min-w-0 flex-1 truncate ${rail ? 'md:sr-only' : ''}`}>More</span>
+                            {hidden > 0 && (
+                              <span className={`pn-count rounded-full px-1.5 text-[11px] font-bold leading-[18px] ${rail ? 'md:hidden' : ''}`} aria-hidden="true">
+                                {hidden > 99 ? '99+' : hidden}
+                              </span>
+                            )}
+                            <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''} ${rail ? 'md:hidden' : ''}`} aria-hidden="true" />
+                          </button>
+                          {isOpen && (
+                            <div id={listId} className={`pn-more-list space-y-0.5 ${rail ? '' : 'ml-4 pl-2'}`}>
+                              {section.more.map(navLink)}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

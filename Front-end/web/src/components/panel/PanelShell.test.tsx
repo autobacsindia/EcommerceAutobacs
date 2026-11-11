@@ -5,7 +5,7 @@
  * every link, and Log out logs out.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { Package, Tag } from 'lucide-react';
+import { GraduationCap, LifeBuoy, Package, Tag } from 'lucide-react';
 import PanelShell, { type PanelNavSection } from './PanelShell';
 
 let pathname = '/admin/orders';
@@ -223,5 +223,87 @@ describe('hover rail (every panel page)', () => {
     unmount();
     shell({ hoverRail: true, tightPage: true });
     expect(screen.getByRole('main').className).toContain('md:p-5');
+  });
+});
+
+/* ── "More": one shared group for the less-used links ───────────────────── */
+
+describe('"More" group', () => {
+  const withMore = (more: PanelNavSection['more']): PanelNavSection[] => [
+    { items: [{ href: '/team', label: 'Dashboard', icon: Package, active: false }], more },
+  ];
+  const lessons = (active = false, count?: number) => ({ href: '/team/lessons', label: 'Lessons', icon: GraduationCap, active, count });
+  const help = { href: '/team/help', label: 'Help', icon: LifeBuoy, active: false };
+
+  it('starts closed, opens and closes on click, with aria-expanded and aria-controls', () => {
+    shell({ sections: withMore([lessons(), help]) });
+    const more = screen.getByRole('button', { name: 'More' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: /Lessons/ })).toBeNull();
+    fireEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    const list = document.getElementById(more.getAttribute('aria-controls')!)!;
+    expect(list).toContainElement(screen.getByRole('link', { name: /Lessons/ }));
+    expect(list).toContainElement(screen.getByRole('link', { name: /Help/ }));
+    fireEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: /Lessons/ })).toBeNull();
+  });
+
+  it('is a real button, so Enter and Space work from the keyboard', () => {
+    shell({ sections: withMore([lessons()]) });
+    const more = screen.getByRole('button', { name: 'More' });
+    expect(more.tagName).toBe('BUTTON');
+    expect(more).toHaveAttribute('type', 'button');
+  });
+
+  it('opens by itself and marks itself when the current page is inside it; the person can still close it', () => {
+    shell({ sections: withMore([lessons(true), help]) });
+    const more = screen.getByRole('button', { name: 'More' });
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('link', { name: /Lessons/ })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    // Closed over the current page: "More" itself still shows where you are.
+    expect(more).toHaveAttribute('data-active', 'true');
+  });
+
+  it('opens again for the next page if that page lives inside it', () => {
+    const { rerender } = shell({ sections: withMore([lessons(), help]) });
+    expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-expanded', 'false');
+    pathname = '/team/lessons';
+    rerender(
+      <PanelShell homeHref="/team" subtitle="Team" sections={withMore([lessons(true), help])} heading={<h2>Lessons</h2>} user={{ name: 'Kim' }} onLogout={jest.fn()}>
+        <p>page content</p>
+      </PanelShell>,
+    );
+    expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('rolls hidden unread counts up onto "More" while it is closed', () => {
+    shell({ sections: withMore([lessons(false, 4), help]) });
+    const more = screen.getByRole('button', { name: 'More, 4 unread' });
+    expect(more).toHaveTextContent('4');
+    fireEvent.click(more);
+    // Open: the count sits on the item itself, not twice.
+    expect(more).toHaveAccessibleName('More');
+    expect(screen.getByLabelText('4 unread')).toBeInTheDocument();
+  });
+
+  it('is hidden when nothing is left in it after permissions', () => {
+    shell({ sections: withMore([]) });
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+    shell({ sections: withMore(undefined) });
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+  });
+
+  it('on the icon rail it stays named for screen readers and hovers', () => {
+    localStorage.clear();
+    shell({ hoverRail: true, sections: withMore([lessons()]) });
+    expect(document.getElementById('panel-menu')).toHaveAttribute('data-rail', 'rail');
+    const more = screen.getByRole('button', { name: 'More' });
+    expect(more).toHaveAttribute('title', 'More');
+    fireEvent.click(more);
+    expect(screen.getByRole('link', { name: /Lessons/ })).toHaveAttribute('title', 'Lessons');
   });
 });

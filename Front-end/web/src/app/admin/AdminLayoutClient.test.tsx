@@ -75,3 +75,29 @@ it('the header counters still open the orders behind them', () => {
   expect(screen.getByRole('link', { name: /^Chat/ })).toHaveAttribute('href', '/admin/chat');
   expect(screen.getAllByLabelText('2 unread').length).toBeGreaterThan(0);
 });
+
+/* ── "More": the less-used Main pages, folded like the team panels ─────── */
+
+it('Lessons, Training, Handover and Past members sit under "More"; the rest of Main stays visible', () => {
+  pathname = '/admin';
+  shell();
+  for (const name of [/^Dashboard$/, /^Company overview$/, /^Team Chat/, /^Tasks$/, /^Analytics$/]) {
+    expect(screen.getByRole('link', { name })).toBeInTheDocument();
+  }
+  const more = screen.getByRole('button', { name: 'More' });
+  expect(more).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('link', { name: /^Lessons$/ })).toBeNull();
+  fireEvent.click(more);
+  for (const [name, href] of [['Lessons', '/admin/lessons'], ['Training', '/admin/training'], ['Handover', '/admin/handover'], ['Past members', '/admin/past-members']]) {
+    expect(screen.getByRole('link', { name: new RegExp(`^${name}$`) })).toHaveAttribute('href', href);
+  }
+});
+
+it('a Handover detail page opens "More" and lights Handover', () => {
+  pathname = '/admin/handover/abc';
+  shell();
+  expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('link', { name: /^Handover$/ })).toHaveAttribute('aria-current', 'page');
+  // Only Main has a "More"; the other groups are unchanged.
+  expect(screen.getAllByRole('button', { name: 'More' })).toHaveLength(1);
+});

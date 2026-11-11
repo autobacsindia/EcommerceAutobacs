@@ -10,6 +10,7 @@ import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import PanelShell from '@/components/panel/PanelShell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
+import { splitMore } from '@/components/panel/navMore';
 import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
 
@@ -17,6 +18,19 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 
 /** Links per team. The API enforces the same split; this only hides what would 403. */
 const PASSWORD_PATH = '/team/password';
+
+/**
+ * Same for every team: the less-used pages fold under "More". Only moves links
+ * `navFor` already allowed — who sees what is decided there, not here.
+ */
+export const TEAM_MORE_HREFS = [
+  '/team/lessons',
+  '/team/training',
+  '/team/handover',
+  '/team/past-members',
+  '/team/members',
+  '/team/help',
+] as const;
 
 function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   const nav: NavItem[] = [
@@ -131,12 +145,13 @@ export default function TeamLayoutClient({
     count: href === '/team/chat' ? unread : undefined,
   }));
   const current = items.find((i) => i.active);
+  const { items: visible, more } = splitMore(items, TEAM_MORE_HREFS);
 
   return (
     <PanelShell
       homeHref="/team"
       subtitle={`${teamLabel} Team`}
-      sections={[{ items }]}
+      sections={[{ items: visible, more }]}
       // The live auth user once loaded, so a name or photo change shows without a reload.
       user={{ name: user?.name || userName, photoUrl: user?.avatarUrl, profileHref: '/team/profile', role: roleLabel || (isHead ? 'Team head' : 'Team member') }}
       footer={canChangePassword && (
