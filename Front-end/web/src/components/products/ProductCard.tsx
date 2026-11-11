@@ -63,7 +63,11 @@ export default function ProductCard({
         )}
         {product.originalPrice && product.originalPrice > product.price && (
           <FestivalDealBadge
-            price={product.productType === 'variable' ? product.priceMin ?? product.price : product.price}
+            // A product whose models have their own Diwali choices gets no card-level
+            // label: which model earns the offer is decided per model on the PDP.
+            price={product.productType === 'variable'
+              ? (product.festivalOfferVariantSettings?.length ? null : product.priceMin ?? product.price)
+              : product.price}
             setting={product.festivalOfferSetting}
           />
         )}
@@ -143,6 +147,8 @@ export default function ProductCard({
           priceMax={product.priceMax}
           href={url}
           festivalOfferSetting={product.festivalOfferSetting}
+          festivalOfferVariantSettings={product.festivalOfferVariantSettings}
+          variants={product.variants}
         />
       </div>
     </div>

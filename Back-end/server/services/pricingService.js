@@ -34,7 +34,7 @@ import { toPaise, fromPaise, subtotalBeforeTax } from '../utils/money.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { CAMPAIGN_REASON } from '../config/campaign.js';
 import { resolveLinePercent, lineDiscountPaise, apportionCap } from '../utils/productTiers.js';
-import { applyFestivalOffer } from '../utils/festivalOffer.js';
+import { applyFestivalOffer, resolveFestivalSetting } from '../utils/festivalOffer.js';
 import { isOfferLiveForPricing } from './festivalOfferService.js';
 
 // Buyer-facing rejection reasons (all whitelisted in errorMiddleware so they survive).
@@ -205,7 +205,7 @@ class PricingService {
         snapshotted on the line (`festivalOffer`) because orders are immutable records.
       */
       const offer = offerLive
-        ? applyFestivalOffer({ unitPrice: preOfferPrice, setting: product.festivalOfferSetting })
+        ? applyFestivalOffer({ unitPrice: preOfferPrice, setting: resolveFestivalSetting(product, variantId) })
         : null;
       const unitPrice = offer ? offer.finalPrice : preOfferPrice;
 

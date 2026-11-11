@@ -23,6 +23,7 @@
  * against Commerce Manager if the plugin's format is ever re-checked.
  */
 
+import { resolveFestivalSetting } from '../utils/festivalOffer.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
 import { productContentId, variantContentId, itemGroupId } from '../utils/metaCatalogId.js';
 import { resolveVariantImage } from '../utils/variantImage.js';
@@ -136,7 +137,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, festivalO
       customLabel0: variant.label,
       sku: variant.sku || product.sku || null,
       availability: availability(variant.stock),
-      ...priceFields(variant, festivalOffer, product.festivalOfferSetting),
+      ...priceFields(variant, festivalOffer, resolveFestivalSetting(product, variant._id)),
     }));
   }
 
@@ -149,7 +150,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, festivalO
       customLabel0: null,
       sku: product.sku || null,
       availability: availability(product.stock),
-      ...priceFields(product, festivalOffer, product.festivalOfferSetting),
+      ...priceFields(product, festivalOffer, resolveFestivalSetting(product)),
     },
   ];
 }

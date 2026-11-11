@@ -216,6 +216,8 @@ export const API_ENDPOINTS = {
   FESTIVAL_THEME_ADMIN: '/festival-theme/admin',          // admin read/update
   FESTIVAL_OFFER_ACTIVE: '/festival-offer/active',        // public: Diwali price-offer switch (display only)
   PRODUCT_FESTIVAL_OFFER_SETTING: '/products/festival-offer-setting',
+  /** PUT /products/:id/festival-offer — product + per-model Diwali choices together. */
+  PRODUCT_FESTIVAL_OFFER: (id: string) => `/products/${id}/festival-offer`,
   PRODUCT_FESTIVAL_OFFER_EXCEPTIONS: '/products/admin/festival-offer-exceptions',
   FESTIVAL_OFFER_ADMIN: '/festival-offer/admin',          // admin read/update
   PROMO_BANNER_ACTIVE: '/promo-banners/active',           // public: the live banner

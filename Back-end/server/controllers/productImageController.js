@@ -14,6 +14,7 @@
  *   - Per-product Cloudinary folder: autobacs/products/{productId}
  *   - Structured logging on every upload/delete for production debugging
  */
+import { pruneVariantSettings } from '../utils/festivalOffer.js';
 import Product, { isHostedImageUrl } from '../models/Product.js';
 import CentralAppError from '../utils/AppError.js';
 import {
@@ -197,6 +198,7 @@ const parseProductFields = (body) => {
   // Likewise: only PATCH /products/festival-offer-setting may change it, so every
   // change gets the same validation, cache purge and audit row.
   delete fields.festivalOfferSetting;
+  delete fields.festivalOfferVariantSettings;
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
    'specifications', 'compatibleVehicles', 'seo', 'variants', 'uploadedImages',
@@ -630,6 +632,19 @@ export const updateProductWithImages = async (req, res, next) => {
     : (product.variants || []).map((v) => (typeof v?.toObject === 'function' ? v.toObject() : v));
   const prunedVariants = pruneDanglingPointers(composed, effectiveVariants);
   if (Array.isArray(fields.variants)) fields.variants = prunedVariants;
+
+  /*
+    Per-model Diwali offers belong to model ids. A model deleted in this save (or every
+    model, when the product stops being variable) takes its offer with it, so no
+    orphaned entry is left behind. Only PRUNES — the entries themselves are written
+    solely by productFestivalOfferService. New models have no entry: "same as product".
+  */
+  if (Array.isArray(fields.variants) && Array.isArray(product.festivalOfferVariantSettings)
+      && product.festivalOfferVariantSettings.length > 0) {
+    const current = product.festivalOfferVariantSettings.map((e) => (typeof e?.toObject === 'function' ? e.toObject() : e));
+    const kept = pruneVariantSettings(current, fields.variants);
+    if (kept.length !== current.length) fields.festivalOfferVariantSettings = kept;
+  }
 
   const { survivors } = planVariantOwnedCleanup(composed, prunedVariants);
   fields.images = survivors;

@@ -6,12 +6,14 @@ import { ShoppingCart, SlidersHorizontal } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { toast } from 'react-hot-toast';
-import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
-import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
+import { useFestivalOfferPrice, useFestivalPriceRange } from '@/components/festival/FestivalOfferContext';
+import type { FestivalOfferSetting, FestivalVariantSetting } from '@/lib/festival/festivalOffer';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 
 interface Props {
   festivalOfferSetting?: FestivalOfferSetting | null;
+  festivalOfferVariantSettings?: FestivalVariantSetting[] | null;
+  variants?: { _id: string; price: number }[] | null;
   productId: string;
   price: number;
   originalPrice?: number;
@@ -34,6 +36,8 @@ export default function ProductCardPriceActions({
   priceMax,
   href,
   festivalOfferSetting,
+  festivalOfferVariantSettings,
+  variants,
 }: Props) {
   const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
@@ -42,9 +46,13 @@ export default function ProductCardPriceActions({
   // Range spans two different prices → advertise the starting ("From") price.
   const showsRange = isVariable && priceMin != null && priceMax != null && priceMax > priceMin;
   const displayPrice = isVariable ? priceMin ?? price : price;
-  // Diwali offer — an extra % on top of the price shown. For a variable product the
-  // offer is monotonic in price, so the cheapest model's Diwali price is the true "From".
-  const offer = useFestivalOfferPrice(displayPrice, festivalOfferSetting);
+  // Diwali offer — an extra % on top of the price shown. For a variable product each
+  // model is priced with its own Diwali choice; the cheapest result is the true "From".
+  const simpleOffer = useFestivalOfferPrice(isVariable ? null : displayPrice, festivalOfferSetting);
+  const range = useFestivalPriceRange(isVariable
+    ? { price, priceMin, priceMax, variants, festivalOfferSetting, festivalOfferVariantSettings }
+    : null);
+  const offer = isVariable ? range?.minOffer ?? null : simpleOffer;
   const exact = (n: number) => formatPrice(n, { exact: true });
 
   const handleAddToCart = async (e: React.MouseEvent) => {

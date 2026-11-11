@@ -23,6 +23,7 @@
  * purpose. See that file for the reasoning.
  */
 
+import { resolveFestivalSetting } from '../utils/festivalOffer.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
 import { escapeXml, stripHtml, priceFields } from '../utils/feedFormat.js';
 import {
@@ -140,7 +141,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
   const rows =
     product.productType === 'variable' && variants.length > 0
       ? variants.map((variant) => {
-          const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(variant, festivalOffer, product.festivalOfferSetting);
+          const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(variant, festivalOffer, resolveFestivalSetting(product, variant._id));
           return {
             ...base,
             id: googleVariantOfferId(product, variant),
@@ -165,7 +166,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
         })
       : [
           (() => {
-            const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(product, festivalOffer, product.festivalOfferSetting);
+            const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(product, festivalOffer, resolveFestivalSetting(product));
             return {
               ...base,
               id: googleOfferId(product),

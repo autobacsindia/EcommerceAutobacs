@@ -89,7 +89,7 @@ class ProductRepository {
       .select(
         'name shortDescription description slug price originalPrice salePrice ' +
         'saleEndsAt stock brand images wpId productType variants updatedAt ' +
-        'sku categories festivalOfferSetting'
+        'sku categories festivalOfferSetting festivalOfferVariantSettings'
       )
       .populate({ path: 'categories', select: 'name' })
       .sort({ updatedAt: -1 })
@@ -139,6 +139,32 @@ class ProductRepository {
       { timestamps: false, runValidators: true },
     );
     return res.modifiedCount;
+  }
+
+  /** One live product with what the per-model Diwali offer save needs. */
+  async findForFestivalOfferEdit(id) {
+    return Product.findOne({ _id: id, deletedAt: null })
+      .select('name slug productType festivalOfferSetting festivalOfferVariantSettings variants._id variants.label')
+      .lean();
+  }
+
+  /**
+   * Write the product-level setting and the per-model list in ONE update, so the box
+   * can never be half-saved. The filter requires every referenced model to still
+   * exist: a model deleted by a concurrent product save makes this match nothing
+   * (the caller answers 409) instead of storing an orphaned entry.
+   * @returns {Promise<boolean>} whether the product matched
+   */
+  async setFestivalOfferFull(id, stored, entries) {
+    const variantIds = entries.map((e) => e.variantId);
+    const filter = { _id: id, deletedAt: null, ...(variantIds.length && { 'variants._id': { $all: variantIds } }) };
+    const update = {
+      ...(stored ? { $set: { festivalOfferSetting: stored } } : { $unset: { festivalOfferSetting: 1 } }),
+    };
+    if (entries.length) update.$set = { ...(update.$set || {}), festivalOfferVariantSettings: entries };
+    else update.$unset = { ...(update.$unset || {}), festivalOfferVariantSettings: 1 };
+    const res = await Product.updateOne(filter, update, { timestamps: false, runValidators: true });
+    return res.matchedCount > 0;
   }
 
   /**

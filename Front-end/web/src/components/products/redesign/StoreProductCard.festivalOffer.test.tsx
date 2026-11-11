@@ -124,6 +124,25 @@ describe('StoreProductCard — Diwali offer (display mirror)', () => {
     expect(screen.getByText('From')).toBeInTheDocument();
   });
 
+  it('variable product with per-model offers: "From" is the cheapest price after each model\'s own offer', () => {
+    // ₹500 model on No offer stays ₹500; ₹600 model at 30% → ₹420 is the real "From".
+    renderWithOffer(<StoreProductCard product={makeProduct({
+      productType: 'variable', price: 500, priceMin: 500, priceMax: 2000,
+      variants: [{ _id: 'a', price: 500 }, { _id: 'b', price: 600 }, { _id: 'c', price: 2000 }],
+      festivalOfferVariantSettings: [{ variantId: 'a', mode: 'none' }, { variantId: 'b', mode: 'custom', percent: 30 }],
+    })} />);
+    expect(screen.getByText('₹420')).toBeInTheDocument();
+  });
+
+  it('variable product where every model is excluded: normal "From" price, no Diwali tag', () => {
+    renderWithOffer(<StoreProductCard product={makeProduct({
+      productType: 'variable', price: 500, priceMin: 500, priceMax: 2000, festivalOfferSetting: { mode: 'none' },
+      variants: [{ _id: 'a', price: 500 }, { _id: 'c', price: 2000 }],
+    })} />);
+    expect(screen.getByText('₹500')).toBeInTheDocument();
+    expect(screen.queryByTestId('festival-offer-tag')).not.toBeInTheDocument();
+  });
+
   it('prices a campaign saving off the Diwali price the cart will charge', () => {
     renderWithOffer(
       <StoreProductCard product={makeProduct({ price: 1000 })} campaignRate={{ percent: 8, onSaleCapped: false }} />,

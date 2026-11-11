@@ -7,8 +7,8 @@ import { ShoppingCart, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
-import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
-import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
+import { useFestivalOfferPrice, useFestivalPriceRange } from '@/components/festival/FestivalOfferContext';
+import { resolveFestivalSetting, type FestivalOfferSetting, type FestivalVariantSetting } from '@/lib/festival/festivalOffer';
 import { toast } from 'react-hot-toast';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
@@ -29,6 +29,8 @@ interface StickyCartBarProps {
     originalPrice?: number;
     stock: StockStatus;
     festivalOfferSetting?: FestivalOfferSetting | null;
+    festivalOfferVariantSettings?: FestivalVariantSetting[] | null;
+    variants?: { _id: string; price: number }[] | null;
   };
   // Variable-product context (mirrors the BuyBox selection, lifted to the page).
   isVariable?: boolean;
@@ -63,7 +65,14 @@ export default function StickyCartBar({
   const activeStock: StockStatus = variant ? variant.stock : product.stock;
   // Diwali offer for the exact unit — an extra % on top of its selling price
   // (display mirror; the cart charges the server's figure).
-  const festivalOffer = useFestivalOfferPrice(needsSelection ? null : activePrice, product.festivalOfferSetting);
+  const festivalOffer = useFestivalOfferPrice(
+    needsSelection ? null : activePrice,
+    resolveFestivalSetting(product, variant?._id ?? null),
+  );
+  // Before a model is picked: the same per-model Diwali range the buy box shows.
+  const festivalRange = useFestivalPriceRange(needsSelection ? { ...product, priceMin, priceMax } : null);
+  const rangeMin = festivalRange?.min ?? priceMin;
+  const rangeMax = festivalRange?.max ?? priceMax;
   /*
     Through CurrencyContext, like every other price.
 
@@ -154,9 +163,9 @@ export default function StickyCartBar({
             </p>
             <p className="text-2xl font-black text-orange-500">
               {needsSelection
-                ? (priceMin != null && priceMax != null && priceMin !== priceMax
-                    ? `${fmt(priceMin)} – ${fmt(priceMax)}`
-                    : fmt(priceMin ?? activePrice))
+                ? (rangeMin != null && rangeMax != null && rangeMin !== rangeMax
+                    ? `${fmt(rangeMin)} – ${fmt(rangeMax)}`
+                    : fmt(rangeMin ?? activePrice))
                 : fmt(festivalOffer ? festivalOffer.finalPrice : activePrice)}
               {festivalOffer && (
                 <span className="ml-2 align-middle text-xs font-semibold text-ink-muted">

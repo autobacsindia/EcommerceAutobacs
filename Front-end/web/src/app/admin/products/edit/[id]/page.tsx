@@ -20,7 +20,7 @@ import SeoScorePanel from '@/components/ui/SeoScorePanel';
 import SeoReviewControl from '@/components/admin/SeoReviewControl';
 import type { SeoReview } from '@/lib/seoReview';
 import FestivalOfferSettingPanel from '@/components/admin/FestivalOfferSettingPanel';
-import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
+import type { FestivalOfferSetting, FestivalVariantSetting } from '@/lib/festival/festivalOffer';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
@@ -95,6 +95,7 @@ export default function EditProductPage() {
   const returnTo = safeProductsReturn(useSearchParams().get('returnTo'), panelBase);
   const productId = params.id as string;
   const [festivalOfferSetting, setFestivalOfferSetting] = useState<FestivalOfferSetting | null>(null);
+  const [festivalOfferVariantSettings, setFestivalOfferVariantSettings] = useState<FestivalVariantSetting[] | null>(null);
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -354,6 +355,7 @@ export default function EditProductPage() {
       // Hydrate SEO overrides (blank fields fall back to computed defaults)
       setSeo(toSeoFormValue(productData.seo));
       setFestivalOfferSetting(productData.festivalOfferSetting ?? null);
+      setFestivalOfferVariantSettings(productData.festivalOfferVariantSettings ?? null);
       setShippingSize(shippingSizeToForm(productData.shippingSize));
 
       // Hydrate variable-product models (if any) so edits preserve variant _ids
@@ -1499,7 +1501,16 @@ export default function EditProductPage() {
             }}
           />
 
-          <FestivalOfferSettingPanel productId={productId} setting={festivalOfferSetting} />
+          <FestivalOfferSettingPanel
+            productId={productId}
+            setting={festivalOfferSetting}
+            variantSettings={festivalOfferVariantSettings}
+            // Only SAVED models (they have an id) can carry their own offer.
+            models={productType === 'variable'
+              ? variants.filter((v) => v._id && v.label.trim()).map((v) => ({ _id: v._id!, label: v.label.trim(), price: Number(v.price) || 0 }))
+              : []}
+            hasUnsavedModels={productType === 'variable' && variants.some((v) => !v._id && v.label.trim())}
+          />
         </div>
         
         <div className="mt-8 flex justify-end gap-4">

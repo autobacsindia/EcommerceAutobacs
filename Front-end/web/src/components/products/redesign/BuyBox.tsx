@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import { useFestivalOfferPrice, useFestivalPriceRange } from '@/components/festival/FestivalOfferContext';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
-import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
+import { resolveFestivalSetting, type FestivalOfferSetting, type FestivalVariantSetting } from '@/lib/festival/festivalOffer';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -46,8 +46,9 @@ export interface ProductVariant {
   metaContentId?: string;
 }
 
-interface BuyBoxProduct {
+export interface BuyBoxProduct {
   festivalOfferSetting?: FestivalOfferSetting | null;
+  festivalOfferVariantSettings?: FestivalVariantSetting[] | null;
   _id: string;
   name: string;
   price: number;
@@ -136,18 +137,20 @@ export default function BuyBox({
     bought; M.R.P. strike-through and the sale badge stay as they are. A simple product
     whose sale window has closed is charged its M.R.P. by the server (effectivePrice),
     so the offer is taken from that price there too. Display mirror; the cart and
-    checkout show the server's figure. Before a model is picked the RANGE is shown in
-    Diwali prices (the offer is monotonic in price, so the ends map to the ends).
+    checkout show the server's figure. Each model can have its own Diwali choice, so the
+    setting is resolved for the SELECTED model (same rule as the server). Before a model
+    is picked the RANGE is shown in Diwali prices, every model priced with its own
+    choice — with mixed choices the cheapest model is not always the cheapest price.
   */
+  const unitFestivalSetting = resolveFestivalSetting(product, selectedVariant?._id ?? null);
   const saleExpired = !isVariable && !!product.saleEndsAt && !saleLive && !!activeOriginal && activeOriginal > activePrice;
   const festivalOffer = useFestivalOfferPrice(
     needsSelection ? null : saleExpired ? activeOriginal : activePrice,
-    product.festivalOfferSetting,
+    unitFestivalSetting,
   );
-  const rangeMinOffer = useFestivalOfferPrice(needsSelection ? priceMin : null, product.festivalOfferSetting);
-  const rangeMaxOffer = useFestivalOfferPrice(needsSelection ? priceMax : null, product.festivalOfferSetting);
-  const rangeMin = rangeMinOffer?.finalPrice ?? priceMin;
-  const rangeMax = rangeMaxOffer?.finalPrice ?? priceMax;
+  const festivalRange = useFestivalPriceRange(needsSelection ? product : null);
+  const rangeMin = festivalRange?.min ?? priceMin;
+  const rangeMax = festivalRange?.max ?? priceMax;
   const outOfStock = activeStock === 'out';
   const backorder = activeStock === 'backorder';
   const wished = isInWishlist(product._id);
@@ -259,7 +262,7 @@ export default function BuyBox({
             {/* Festival label on an existing sale only — visual, no price logic. */}
             <FestivalDealBadge
               price={needsSelection ? null : saleExpired ? activeOriginal : activePrice}
-              setting={product.festivalOfferSetting}
+              setting={unitFestivalSetting}
             />
           </>
         )}
@@ -270,7 +273,7 @@ export default function BuyBox({
           className="w-full text-[13px]"
           mrp={onSale ? activeOriginal : null}
         />
-        {needsSelection && rangeMinOffer && (
+        {needsSelection && festivalRange?.anyOffer && (
           <span className="w-full text-[13px] font-semibold text-[#b4231a] dark:text-[#ff8a7a]">
             🪔 Diwali offer prices — pick a model to see its saving
           </span>

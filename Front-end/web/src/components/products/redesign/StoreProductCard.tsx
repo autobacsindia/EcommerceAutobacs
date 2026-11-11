@@ -12,7 +12,7 @@ import { useCurrency } from '@/context/CurrencyContext';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
-import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import { useFestivalOfferPrice, useFestivalPriceRange } from '@/components/festival/FestivalOfferContext';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import {
   campaignSavingLabel,
@@ -87,9 +87,11 @@ export default function StoreProductCard({
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
   // Diwali offer — an EXTRA % on top of the price shown; the sale badge and M.R.P.
-  // strike-through stay exactly as they are. For a variable product the offer is
-  // monotonic in price, so the cheapest model's Diwali price is the true "From" price.
-  const festivalOffer = useFestivalOfferPrice(isVariable ? priceMin : product.price, product.festivalOfferSetting);
+  // strike-through stay exactly as they are. For a variable product every model is
+  // priced with its own Diwali choice and the cheapest result is the true "From" price.
+  const simpleOffer = useFestivalOfferPrice(isVariable ? null : product.price, product.festivalOfferSetting);
+  const festivalRange = useFestivalPriceRange(isVariable ? product : null);
+  const festivalOffer = isVariable ? festivalRange?.minOffer ?? null : simpleOffer;
   const outOfStock = product.stock === 'out';
   const backorder = product.stock === 'backorder';
   const wished = isInWishlist(product._id);

@@ -36,6 +36,10 @@ export interface Product {
   _id: string;
   /** Diwali offer override; absent = Automatic. Display only — the server prices. */
   festivalOfferSetting?: import('@/lib/festival/festivalOffer').FestivalOfferSetting | null;
+  /** Per-model Diwali choices; a model with no entry follows festivalOfferSetting. */
+  festivalOfferVariantSettings?: import('@/lib/festival/festivalOffer').FestivalVariantSetting[] | null;
+  /** Models of a variable product, as public list/detail payloads ship them (subset used by price display). */
+  variants?: { _id: string; label?: string; price: number; originalPrice?: number | null; stock?: string }[];
   name: string;
   slug?: string;
   description: string;

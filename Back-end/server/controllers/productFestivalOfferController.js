@@ -1,5 +1,6 @@
 import {
   setProductsFestivalOffer,
+  setProductFestivalOfferFull,
   listFestivalOfferExceptions as listExceptions,
 } from '../services/productFestivalOfferService.js';
 
@@ -19,4 +20,12 @@ export const listFestivalOfferExceptions = async (req, res) => {
     limit: limit ? Number(limit) : undefined,
   });
   res.json({ success: true, ...page });
+};
+
+// @route PUT /products/:id/festival-offer  (admin, marketing)
+// { mode, percent?, variants?: [{ variantId, mode: inherit|auto|none|custom, percent? }] }
+export const setProductFestivalOffer = async (req, res) => {
+  const { mode, percent, variants } = req.body;
+  const result = await setProductFestivalOfferFull(req, req.params.id, { mode, percent, variants: variants || [] });
+  res.json({ success: true, ...result });
 };

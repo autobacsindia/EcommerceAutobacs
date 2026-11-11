@@ -34,7 +34,7 @@ export interface FestivalOfferResult {
   discount: number;
 }
 
-/** A product's override; absent = Automatic (the tier ladder). Set in the admin. */
+/** A product's override; absent = Automatic (the tier ladder). Set in the admin. Models may override it (FestivalVariantSetting). */
 export interface FestivalOfferSetting { mode: 'none' | 'custom'; percent?: number }
 
 export const FESTIVAL_CUSTOM_PERCENT_MIN = 1;
@@ -75,8 +75,8 @@ function offerPercentForSetting(
 /**
  * Mirror of the server's applyFestivalOffer: an EXTRA % on top of the current selling
  * price, tiered by that selling price, rounded down to whole rupees. The M.R.P. plays
- * no part. Monotonic in price (a higher price never yields a lower Diwali price), so
- * applying it to a variable product's cheapest price gives its true "From" price.
+ * no part. For a variable product's range use festivalPriceRange, which prices each
+ * model with its own setting.
  */
 export function applyFestivalOffer(
   { unitPrice, setting = null }: { unitPrice: number; setting?: FestivalOfferSetting | null },
@@ -100,6 +100,93 @@ export function applyFestivalOffer(
     finalPrice: fromPaise(finalPaise),
     discount: fromPaise(basePaise - finalPaise),
   };
+}
+
+/**
+ * A per-MODEL choice (variable products). No entry = the model follows the product's
+ * setting; 'auto' is explicit here because absent already means "same as product".
+ */
+export interface FestivalVariantSetting { variantId: string; mode: 'auto' | 'none' | 'custom'; percent?: number }
+
+export interface FestivalSettingSource {
+  festivalOfferSetting?: FestivalOfferSetting | null;
+  festivalOfferVariantSettings?: FestivalVariantSetting[] | null;
+}
+
+/**
+ * Mirror of the server's resolveFestivalSetting (utils/festivalOffer.js) — which
+ * setting prices this unit. Both run tests/fixtures/festivalVariantSettingCases.json.
+ * null = Automatic. An invalid model entry → no offer; an entry for a deleted model
+ * never matches.
+ */
+export function resolveFestivalSetting(
+  product: FestivalSettingSource | null | undefined,
+  variantId?: string | null,
+): FestivalOfferSetting | null {
+  const productSetting = product?.festivalOfferSetting ?? null;
+  if (variantId == null) return productSetting;
+  const entries = Array.isArray(product?.festivalOfferVariantSettings) ? product!.festivalOfferVariantSettings! : [];
+  const entry = entries.find((e) => e && String(e.variantId) === String(variantId));
+  if (!entry) return productSetting;
+  if (entry.mode === 'auto') return null;
+  if (entry.mode === 'none') return { mode: 'none' };
+  if (entry.mode === 'custom' && isValidCustomPercent(entry.percent)) return { mode: 'custom', percent: entry.percent };
+  return { mode: 'none' };
+}
+
+export interface FestivalRangeProduct extends FestivalSettingSource {
+  price?: number;
+  priceMin?: number;
+  priceMax?: number;
+  variants?: { _id: string; price: number }[] | null;
+}
+
+export interface FestivalRange {
+  /** Cheapest price a customer can pay right now (Diwali price where it applies). */
+  min: number;
+  max: number;
+  /** The offer on the model that gives `min`, or null if that model has none. */
+  minOffer: FestivalOfferResult | null;
+  /** Whether ANY model has a Diwali price. */
+  anyOffer: boolean;
+}
+
+/**
+ * The "₹X – ₹Y" / "From ₹X" of a variable product in Diwali prices. With per-model
+ * choices the offer is no longer monotonic across models (a ₹3,060 model on "No offer"
+ * can cost more than a ₹3,300 one at 10%), so every model is priced and the real
+ * min/max taken. Without the model list (some list payloads) it falls back to the
+ * product-level ladder on priceMin/priceMax — unless models have their own choices,
+ * in which case it shows the normal range rather than risk advertising a saving a
+ * model does not get.
+ */
+export function festivalPriceRange(
+  product: FestivalRangeProduct,
+  tiers: FestivalOfferTier[],
+  code = 'diwali',
+): FestivalRange {
+  const priceMin = product.priceMin ?? product.price ?? 0;
+  const priceMax = product.priceMax ?? product.price ?? 0;
+  const variants = (product.variants ?? []).filter((v) => v && typeof v.price === 'number' && v.price > 0);
+  if (variants.length === 0) {
+    if ((product.festivalOfferVariantSettings?.length ?? 0) > 0) {
+      return { min: priceMin, max: priceMax, minOffer: null, anyOffer: false };
+    }
+    const lo = applyFestivalOffer({ unitPrice: priceMin, setting: product.festivalOfferSetting }, tiers, code);
+    const hi = applyFestivalOffer({ unitPrice: priceMax, setting: product.festivalOfferSetting }, tiers, code);
+    return { min: lo?.finalPrice ?? priceMin, max: hi?.finalPrice ?? priceMax, minOffer: lo, anyOffer: !!(lo || hi) };
+  }
+  let best: { price: number; offer: FestivalOfferResult | null } | null = null;
+  let max = 0;
+  let anyOffer = false;
+  for (const v of variants) {
+    const offer = applyFestivalOffer({ unitPrice: v.price, setting: resolveFestivalSetting(product, v._id) }, tiers, code);
+    const price = offer ? offer.finalPrice : v.price;
+    if (offer) anyOffer = true;
+    if (!best || price < best.price) best = { price, offer };
+    if (price > max) max = price;
+  }
+  return { min: best!.price, max, minOffer: best!.offer, anyOffer };
 }
 
 /**
