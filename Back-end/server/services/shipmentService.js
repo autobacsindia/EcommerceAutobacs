@@ -445,6 +445,7 @@ class ShipmentService {
       userId,
       isAdmin: true,
       reason: 'admin_update',
+      rollUp: true,
       notes: `Rolled up from parcels (${fulfilmentSummary(order).label})`,
       suppressStatusEmail: true,
     });

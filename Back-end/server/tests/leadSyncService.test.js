@@ -266,10 +266,12 @@ describe('order status hook — CRM side-effects', () => {
     const pending = await seedOrder({ user: user._id, paymentStatus: 'pending', guestEmail: 'hook@x.com' });
     await leadSyncService.upsertFromOrder(pending);
 
+    // Accounts confirming a bank transfer is what pays it (a bare status change cannot).
     const result = await orderStatusService.updateOrderStatus(pending._id.toString(), 'processing', {
       userId: user._id,
       isAdmin: true,
       reason: 'manual_confirmation',
+      paymentVerification: { source: 'bank_transfer', reference: 'UTR-HOOK' },
     });
     expect(result.success).toBe(true);
 
@@ -296,10 +298,14 @@ describe('order status hook — CRM side-effects', () => {
     await leadSyncService.upsertFromOrder(pending);
     const opts = { userId: user._id, isAdmin: true, reason: 'admin_update' };
 
-    await orderStatusService.updateOrderStatus(pending._id.toString(), 'processing', { ...opts, reason: 'manual_confirmation' });
+    await orderStatusService.updateOrderStatus(pending._id.toString(), 'processing', {
+      ...opts, reason: 'manual_confirmation',
+      paymentVerification: { source: 'bank_transfer', reference: 'UTR-DBL' },
+    });
     await orderStatusService.updateOrderStatus(pending._id.toString(), 'shipped', opts);
-    // Admin moves it BACK to processing (allowed via admin bypass) — must not recount.
-    await orderStatusService.updateOrderStatus(pending._id.toString(), 'processing', opts);
+    // The parcel roll-up walks it BACK to processing (its only parcel was lost) —
+    // the one way an order re-enters processing now. Must not recount.
+    await orderStatusService.updateOrderStatus(pending._id.toString(), 'processing', { ...opts, rollUp: true });
 
     const u = await User.findById(user._id);
     expect(u.paidOrderCount).toBe(1);      // once, not twice

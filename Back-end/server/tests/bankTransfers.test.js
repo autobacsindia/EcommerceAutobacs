@@ -267,6 +267,10 @@ describe('confirming', () => {
     expect(fresh.bankTransferPendingAt).toBeUndefined();
     expect(fresh.offlinePayment).toMatchObject({ method: 'bank_transfer', reference: 'HDFCR52024102112345', amount: 52000, confirmedByName: 'Anu' });
     expect(fresh.statusHistory.at(-1)).toMatchObject({ status: 'processing', reason: 'manual_confirmation' });
+    // The "paid by a verified payment" marker the incentive engine counts.
+    expect(fresh.paymentVerification).toMatchObject({ source: 'bank_transfer', reference: 'HDFCR52024102112345' });
+    expect(fresh.paymentVerification.verifiedAt).toBeInstanceOf(Date);
+    expect(String(fresh.paymentVerification.verifiedBy)).toBe(String(accounts._id));
     expect(rz.afterPaid).toEqual([String(order._id)]);
     expect(await ChatMessage.countDocuments({ text: /confirmed by Anu/ })).toBe(2);
     expect((await sales.getSalesOrder(lead, order._id)).offlinePayment).toEqual({ method: 'bank_transfer', reference: 'HDFCR52024102112345', confirmedBy: 'Anu' });

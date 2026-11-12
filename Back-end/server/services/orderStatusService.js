@@ -28,18 +28,23 @@ const LOYALTY_JOB_BY_STATUS = {
 // "Return completed" email only repeated it (owner decision, 2026-11).
 const CUSTOMER_NOTIFIED_STATUSES = new Set(['shipped', 'delivered', 'cancelled']);
 
-// Denormalized payment axis inferred from a fulfillment transition (mainly for the
-// offline-order path, which sets fulfillment directly). Reaching any post-payment
-// stage implies `paid`; a completed `returned` implies a refund. `cancelled` is
-// deliberately absent — a cancel can precede OR follow payment, so we leave
-// paymentStatus untouched. Online orders set paymentStatus straight from the
-// Razorpay webhook, independent of this map.
-const PAYMENT_STATUS_BY_ORDER_STATUS = {
-  processing: 'paid',
-  shipped: 'paid',
-  delivered: 'paid',
-  returned: 'refunded',
-};
+/*
+  A status change NEVER writes the payment axis by itself.
+
+  It used to: reaching processing/shipped/delivered set paymentStatus `paid`, and
+  reaching `returned` set it `refunded`. Combined with the admin override that let any
+  status go anywhere, an admin could revive a cancelled order to `processing` (now
+  "paid", with no money), bulk-"Process" unpaid orders (paid, and the team packed them),
+  or pick "Returned" (refunded, with no refund sent).
+
+  Now `paid` is written only by the code that has the money in hand — the Razorpay
+  capture routine (webhook, callback and reconciliation all converge there), the
+  payment-link part routine, an accounts-confirmed bank transfer — or, for an offline
+  sale an admin records as already paid, by offlineOrderService passing
+  `recordedPayment`. `refunded` is written only by the refund paths (Razorpay refund
+  webhook, offline refund records). See `paymentVerification` on the order.
+*/
+export const PAYMENT_VERIFICATION_SOURCES = Object.freeze(['razorpay', 'bank_transfer']);
 
 // Delay before the post-delivery review-request email fires. Env-configurable so
 // prod can tune it (and tests/QA can shrink it). Defaults to 24 hours.
@@ -56,6 +61,34 @@ const STATUS_TRANSITIONS = {
   'delivered': ['returned'],
   'returned': [],   // Terminal state
   'cancelled': []   // Terminal state
+};
+
+/*
+  The ONLY moves beyond the table above. Each is a real-world correction that touches
+  no money. There used to be a blanket "admins can bypass transition rules" — gone:
+  nothing leaves `cancelled` or `returned`, nothing goes backwards from `delivered`, and
+  an unpaid order moves only to `processing` (once paid) or `cancelled`.
+
+  ADMIN_CORRECTIONS — an admin (status menu) or an admin-run service may make:
+    processing → delivered  handed over in store (offline sale / walk-in pickup)
+
+  ROLL_UP_CORRECTIONS — only the parcel / per-line roll-ups (`rollUp: true`), which
+  derive the status from what physically happened; never offered in the status menu:
+    processing → delivered  a parcel delivered straight from packed
+    shipped → processing    the only parcel in transit was written off as lost
+    shipped → cancelled     the last live lines were cancelled per line, each with its
+                            own refund record
+    delivered → shipped     operations undid a delivery marked by mistake (the parcel is
+                            back in transit)
+    delivered → processing  …and that parcel was then the only one, and was written off
+*/
+const ADMIN_CORRECTIONS = {
+  'processing': ['delivered'],
+};
+const ROLL_UP_CORRECTIONS = {
+  'processing': ['delivered'],
+  'shipped': ['processing', 'cancelled'],
+  'delivered': ['shipped', 'processing'],
 };
 
 /**
@@ -96,7 +129,7 @@ class OrderStatusService {
    * @param {boolean} isAdmin - Whether the user is an admin
    * @returns {Object} - { valid: boolean, message: string }
    */
-  validateTransition(currentStatus, newStatus, isAdmin = false) {
+  validateTransition(currentStatus, newStatus, isAdmin = false, { rollUp = false } = {}) {
     // Check if current status exists
     if (!STATUS_TRANSITIONS[currentStatus]) {
       return {
@@ -115,10 +148,10 @@ class OrderStatusService {
       };
     }
 
-    // Check if new status is in allowed transitions
-    const allowedStatuses = STATUS_TRANSITIONS[currentStatus];
-    // Admins can bypass transition rules
-    if (!allowedStatuses.includes(newStatus) && !isAdmin) {
+    // Check if new status is in allowed transitions. Admins get the named corrections
+    // above and nothing more — there is no blanket override.
+    const allowedStatuses = this._allowedNext(currentStatus, isAdmin, rollUp);
+    if (!allowedStatuses.includes(newStatus)) {
       return {
         valid: false,
         message: `Cannot transition from '${currentStatus}' to '${newStatus}'. Allowed transitions: ${allowedStatuses.join(', ') || 'none'}`
@@ -147,8 +180,16 @@ class OrderStatusService {
    * @param {boolean} isAdmin - Whether the user is an admin
    * @returns {Array} - Array of valid next statuses
    */
+  /** The table's moves, plus the named admin corrections for an admin. @private */
+  _allowedNext(currentStatus, isAdmin, rollUp = false) {
+    const next = new Set(STATUS_TRANSITIONS[currentStatus] || []);
+    if (isAdmin) (ADMIN_CORRECTIONS[currentStatus] || []).forEach((s) => next.add(s));
+    if (rollUp) (ROLL_UP_CORRECTIONS[currentStatus] || []).forEach((s) => next.add(s));
+    return [...next];
+  }
+
   getValidNextStatuses(currentStatus, isAdmin = false) {
-    const allNextStatuses = STATUS_TRANSITIONS[currentStatus] || [];
+    const allNextStatuses = this._allowedNext(currentStatus, isAdmin);
     
     if (!isAdmin) {
       // Filter out admin-only transitions
@@ -207,7 +248,18 @@ class OrderStatusService {
       // With `session`: the caller voids any Spin-to-Win reward itself once its
       // transaction commits (spinService.voidForOrder), so the in-transaction skip
       // below is expected, not a forgotten clawback.
-      deferSpinVoid = false
+      deferSpinVoid = false,
+      // Accounts confirmed a bank transfer: { source: 'bank_transfer', reference, by }.
+      // Marks the order paid AND verified in this same save. Only bankTransferService
+      // passes it; the Razorpay routines stamp the order themselves before calling.
+      paymentVerification = null,
+      // An offline sale the admin records as already paid (cash / UPI at the counter).
+      // Marks it paid but NOT verified — no gateway or accounts check stands behind it.
+      // Only offlineOrderService passes it, at creation; the status menu never can.
+      recordedPayment = false,
+      // Set ONLY by the parcel / per-line roll-ups (shipmentService, cancellationService):
+      // they may make the ROLL_UP_CORRECTIONS moves the status menu never offers.
+      rollUp = false
     } = options;
 
     try {
@@ -219,7 +271,7 @@ class OrderStatusService {
       const currentStatus = order.status;
 
       // Validate transition
-      const validation = this.validateTransition(currentStatus, newStatus, isAdmin);
+      const validation = this.validateTransition(currentStatus, newStatus, isAdmin, { rollUp });
       if (!validation.valid) {
         throw new Error(validation.message);
       }
@@ -246,12 +298,33 @@ class OrderStatusService {
         }
       }
 
+      // The payment, when THIS call carries it (bank transfer / offline sale).
+      if (paymentVerification) {
+        if (!PAYMENT_VERIFICATION_SOURCES.includes(paymentVerification.source)) {
+          throw new Error(`Unknown payment verification source '${paymentVerification.source}'`);
+        }
+        order.paymentStatus = 'paid';
+        if (!order.paymentVerification?.verifiedAt) {
+          order.paymentVerification = {
+            source: paymentVerification.source,
+            reference: paymentVerification.reference || undefined,
+            verifiedBy: paymentVerification.by || undefined,
+            verifiedAt: new Date(),
+          };
+        }
+      } else if (recordedPayment) {
+        order.paymentStatus = 'paid';
+      }
+
+      // An unpaid order starts being worked on only once the money is real. The admin
+      // menu, the bulk "Process" button and any other caller without a payment in hand
+      // stop here — this is what used to turn unpaid orders "paid".
+      if (currentStatus === 'awaiting_payment' && newStatus !== 'cancelled' && order.paymentStatus !== 'paid') {
+        throw new Error('This order has not been paid. It moves on by itself when the payment is confirmed (Razorpay, or a bank transfer confirmed by accounts).');
+      }
+
       // Update status
       order.status = newStatus;
-
-      // Keep the denormalized payment axis in step (Phase 1 of the two-axis split).
-      const mappedPayment = PAYMENT_STATUS_BY_ORDER_STATUS[newStatus];
-      if (mappedPayment) order.paymentStatus = mappedPayment;
 
       // Add to status history (will be handled by pre-save middleware, but we add details here)
       const historyEntry = {

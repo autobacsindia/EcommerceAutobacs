@@ -572,6 +572,8 @@ export async function confirmBankTransfer(actor, id, req) {
         reason: 'manual_confirmation',
         notes: `Bank transfer ${t.reference} (${inr(t.amount)}) found in the bank by ${actor.name}`,
         metadata: { transactionId: t.reference },
+        // Accounts found the money: paid AND verified, in this same save.
+        paymentVerification: { source: 'bank_transfer', reference: t.reference, by: actor._id },
         session,
       });
       if (!result?.success) throw new Error(`Failed to update order status: ${result?.message}`);

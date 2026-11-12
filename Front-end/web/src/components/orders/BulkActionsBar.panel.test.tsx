@@ -45,11 +45,20 @@ describe('reason picker', () => {
 
     pickStatus('cancelled');
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'quality_issue' } });
-    pickStatus('processing');
+    pickStatus('shipped');
     expect(screen.queryByLabelText('Reason')).toBeNull();
 
     fireEvent.submit(screen.getAllByRole('combobox')[0].closest('form')!);
-    await waitFor(() => expect(onBulkStatusUpdate).toHaveBeenCalledWith('processing', '', ''));
+    await waitFor(() => expect(onBulkStatusUpdate).toHaveBeenCalledWith('shipped', '', ''));
+  });
+
+  // Regression: bulk "Process" on unpaid orders recorded them as paid with no money.
+  // Moving an order to processing is what its payment does; the bar must not offer it.
+  it('does not offer "Process" — only a payment moves an order to processing', () => {
+    openForm();
+    const values = Array.from((screen.getAllByRole('combobox')[0] as HTMLSelectElement).options).map((o) => o.value);
+    expect(values).not.toContain('processing');
+    expect(values).toContain('shipped');
   });
 
   it('sends the picked reason with a cancel', async () => {

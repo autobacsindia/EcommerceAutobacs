@@ -393,35 +393,87 @@ describe('Orders Integration API', () => {
   });
 
   describe('PUT /orders/:id/status', () => {
+    const routeOrder = (over = {}) => Order.create({
+      user: userId,
+      items: [{ product: productId, quantity: 1, price: 500, name: 'Test Product' }],
+      shippingAddress: {
+        fullName: 'Test User',
+        phone: '9876543210',
+        addressLine1: '123 Test St',
+        city: 'Test City',
+        state: 'Test State',
+        postalCode: '12345',
+        country: 'India'
+      },
+      subtotal: 500,
+      totalAmount: 500,
+      status: 'awaiting_payment',
+      ...over,
+    });
+
     it('should allow admin to update status', async () => {
-      const order = await Order.create({
-        user: userId,
-        items: [{ product: productId, quantity: 1, price: 500, name: 'Test Product' }],
-        shippingAddress: {
-          fullName: 'Test User',
-          phone: '9876543210',
-          addressLine1: '123 Test St',
-          city: 'Test City',
-          state: 'Test State',
-          postalCode: '12345',
-          country: 'India'
-        },
-        subtotal: 500,
-        totalAmount: 500,
-        status: 'awaiting_payment'
-      });
+      const order = await routeOrder({ status: 'processing', paymentStatus: 'paid' });
 
       const res = await request(app)
         .put(`${API}/orders/${order._id}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ 
-          status: 'processing',
+          status: 'delivered',
           reason: 'admin_update'
         })
         .expect(200);
 
       expect(res.body.success).toBe(true);
-      expect(res.body.order.status).toBe('processing');
+      expect(res.body.order.status).toBe('delivered');
+    });
+
+    // Regression (2026-11-11 review): this exact request used to SUCCEED and record an
+    // unpaid order as paid — the admin menu could put any order into processing.
+    it('refuses to move an UNPAID order to processing, and records nothing as paid', async () => {
+      const order = await routeOrder();
+
+      const res = await request(app)
+        .put(`${API}/orders/${order._id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'processing', reason: 'admin_update' })
+        .expect(400);
+
+      expect(res.body.success).toBe(false);
+      const fresh = await Order.findById(order._id).lean();
+      expect(fresh.status).toBe('awaiting_payment');
+      expect(fresh.paymentStatus).toBe('pending');
+      expect(fresh.paymentVerification).toBeUndefined();
+    });
+
+    it('refuses to revive a cancelled order', async () => {
+      const order = await routeOrder({ status: 'cancelled' });
+
+      await request(app)
+        .put(`${API}/orders/${order._id}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'processing', reason: 'admin_update' })
+        .expect(400);
+
+      const fresh = await Order.findById(order._id).lean();
+      expect(fresh.status).toBe('cancelled');
+      expect(fresh.paymentStatus).toBe('pending');
+    });
+
+    it('bulk "Process" on unpaid orders changes none of them', async () => {
+      const a = await routeOrder();
+      const b = await routeOrder();
+
+      const res = await request(app)
+        .post(`${API}/orders/bulk/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ orderIds: [String(a._id), String(b._id)], status: 'processing' });
+
+      expect(res.body.results.successful).toHaveLength(0);
+      expect(res.body.results.failed).toHaveLength(2);
+      const fresh = await Order.find({ _id: { $in: [a._id, b._id] } }).lean();
+      expect(fresh.map((o) => [o.status, o.paymentStatus])).toEqual([
+        ['awaiting_payment', 'pending'], ['awaiting_payment', 'pending'],
+      ]);
     });
 
     it('should forbid non-admin from updating status', async () => {

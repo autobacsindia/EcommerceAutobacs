@@ -69,7 +69,7 @@ async function unpaidOrder({ salesUser = null, daysAgo = 0, total = 7000 } = {})
 }
 /** Pays an order the way the webhook / accounts do: through the status machine. */
 async function pay(id) {
-  const res = await orderStatusService.updateOrderStatus(String(id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  const res = await orderStatusService.updateOrderStatus(String(id), 'processing', { isAdmin: true, reason: 'payment_verified', paymentVerification: { source: 'razorpay', reference: 'pay_test' } });
   if (!res?.success) throw new Error(`could not pay test order: ${res?.message}`);
   return Order.findById(id).lean();
 }
