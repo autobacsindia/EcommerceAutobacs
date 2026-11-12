@@ -32,6 +32,8 @@ import {
   validateOrderIdParam,
   validateSalesOrder,
   validateQuotationIdParam,
+  validateApprovalRequest,
+  validateApprovalDecision,
   validateQuotationHold,
   validateOrderHold,
   validateSalesOrderList,
@@ -127,6 +129,8 @@ import {
   createQuotation, updateQuotation, cancelQuotation, acceptQuotation, holdQuotation, resumeQuotation,
   getQuotation, listQuotations, getQuotationDocument,
 } from '../services/salesQuotationService.js';
+import { requestApproval, decideApproval, canDecide } from '../services/quotationApprovalService.js';
+import { loadReadable } from '../services/salesQuotationService.js';
 import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/salesPaymentService.js';
 import { setPayDetails, readPayDetailsQr } from '../services/salesPayDetailsService.js';
 import { canSell } from '../config/staff.js';
@@ -306,7 +310,12 @@ router.get('/sales/quotations', validateQuotationList, validateRequest, asyncHan
 }));
 
 router.get('/sales/quotations/:id', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, quotation: await getQuotation(req.user, req.params.id) });
+  const quotation = await getQuotation(req.user, req.params.id);
+  // Whether this viewer may approve / reject the waiting discount request.
+  if (quotation.approval?.state === 'pending') {
+    quotation.approval.canDecide = await canDecide(req.user, await loadReadable(req.user, req.params.id));
+  }
+  res.json({ success: true, quotation });
 }));
 
 // @route  PUT /staff/sales/quotations/:id — edit a quotation (new version); an accepted, unpaid one re-opens
@@ -327,6 +336,16 @@ router.post('/sales/quotations/:id/hold', validateQuotationHold, validateRequest
 // @route  POST /staff/sales/quotations/:id/resume — back to the active list
 router.post('/sales/quotations/:id/resume', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, quotation: await resumeQuotation(req.user, req.params.id, req) });
+}));
+
+// @route  POST /staff/sales/quotations/:id/approval/request { reason } — discount above 10%: ask the GTM head / an admin
+router.post('/sales/quotations/:id/approval/request', validateApprovalRequest, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, quotation: await requestApproval(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/sales/quotations/:id/approval/decide { decision: approve|reject, note?, priceKey? } — GTM head (own team) / admin
+router.post('/sales/quotations/:id/approval/decide', validateApprovalDecision, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, quotation: await decideApproval(req.user, req.params.id, req.body, req) });
 }));
 
 // @route  POST /staff/sales/quotations/:id/accept — customer agreed → the order (no link yet)

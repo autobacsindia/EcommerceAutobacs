@@ -11,9 +11,10 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import CustomerBankCard from './CustomerBankCard';
 import HoldControl from './HoldControl';
 import QuoteDiscountSummary from './QuoteDiscountSummary';
+import DiscountApprovalPanel from './DiscountApprovalPanel';
 import ProductLink from '@/components/staff/ProductLink';
 import { whatsappNumber } from './PaymentLinkCard';
-import { errorMessage, percentText, quotationPdfHref, rupees, type Quotation } from './types';
+import { approvalBlocks, errorMessage, percentText, quotationPdfHref, rupees, type Quotation } from './types';
 
 export const QUOTATION_STATUS: Record<Quotation['status'], { text: string; cls: string }> = {
   open: { text: 'Shared — waiting for the client', cls: 'bg-sky-100 text-sky-800' },
@@ -73,6 +74,9 @@ export default function QuotationDetail({ id }: { id: string }) {
   const editAfter = quote.status === 'accepted' ? quote.editAfterAccept : undefined;
   const a = quote.shippingAddress;
   const busy = accept.isPending || cancel.isPending;
+  // Above 10% and not approved for these prices: no PDF, no WhatsApp, no accept (the server refuses too).
+  const needsApproval = open && approvalBlocks(quote.approval);
+  const refreshOne = () => queryClient.invalidateQueries({ queryKey: staffKeys.quotation(id) });
 
   return (
     <div className="space-y-5">
@@ -91,12 +95,15 @@ export default function QuotationDetail({ id }: { id: string }) {
       {/* What to do next */}
       {quote.status !== 'cancelled' && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
+          {open && quote.approval && quote.approval.state !== 'not_needed' && (
+            <div className="mb-4"><DiscountApprovalPanel quote={quote} onChanged={refreshOne} /></div>
+          )}
           <div className="flex flex-wrap gap-2">
-            <a href={quotationPdfHref(quote.id)} target="_blank" rel="noopener noreferrer"
+            {!needsApproval && <a href={quotationPdfHref(quote.id)} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">
               <FileText className="h-4 w-4" /> Quotation PDF
-            </a>
-            {quote.customer.phone && (
+            </a>}
+            {quote.customer.phone && !needsApproval && (
               <a href={`https://wa.me/${whatsappNumber(quote.customer.phone)}?text=${encodeURIComponent(quotationMessage(quote))}`}
                 target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
@@ -124,7 +131,7 @@ export default function QuotationDetail({ id }: { id: string }) {
             </div>
           )}
 
-          {open && (
+          {open && !needsApproval && (
             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
               <p className="text-sm font-semibold text-green-900">Has the client agreed?</p>
               <p className="mb-3 text-sm text-green-800">
