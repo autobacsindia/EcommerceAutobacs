@@ -15,8 +15,9 @@ const { default: MetaLead } = await import('../models/MetaLead.js');
 const { default: repo } = await import('../repositories/metaLeadRepository.js');
 const { syncMetaLeadsFromSheet } = await import('../services/metaLeadSync.js');
 const { flushMetaLeadSheetWrites, planSheetWrites, requestMetaLeadSheetWrite } = await import('../services/metaLeadSheetWriter.js');
-const { writeCells, resetGoogleSheetsToken, a1Column } = await import('../services/googleSheetsClient.js');
+const { writeCells, updateLayout, resetGoogleSheetsToken, a1Column } = await import('../services/googleSheetsClient.js');
 const { PANEL_COLUMNS, parseTab } = await import('../utils/metaLeadSheet.js');
+const { planPanelLayout, PANEL_PROTECTION } = await import('../services/metaLeadSheetLayout.js');
 
 jest.setTimeout(120000);
 const BASE = '/api/v1/staff/meta-leads';
@@ -29,9 +30,47 @@ const webRow = (name, phone, product) => ['10-11-2026', name, phone, product, ''
 
 /** A sheet in memory, written the way Google writes it. */
 function fakeSheet(tabs) {
-  const sheet = { tabs: structuredClone(tabs), writes: [], fail: [] };
+  const sheet = { tabs: structuredClone(tabs), writes: [], layouts: [], fail: [], layoutFail: [] };
   const colIndex = (letters) => [...letters].reduce((n, c) => n * 26 + (c.charCodeAt(0) - 64), 0) - 1;
-  sheet.readTabs = async () => structuredClone(sheet.tabs);
+  // Google drops trailing empty cells from what it returns.
+  const trim = (r) => { const out = [...r]; while (out.length && String(out.at(-1) ?? '') === '') out.pop(); return out; };
+  sheet.readTabs = async () => structuredClone(sheet.tabs).map((t) => ({ ...t, values: t.values.map(trim) }));
+  const byGid = (gid) => sheet.tabs.find((t) => t.gid === gid);
+  sheet.layout = async (_id, requests) => {
+    const f = sheet.layoutFail.shift();
+    if (f) { const err = new Error(`Google sheet layout failed (HTTP ${f})`); err.status = f; throw err; }
+    sheet.layouts.push(requests);
+    requests.forEach((r) => {
+      if (r.appendDimension) byGid(r.appendDimension.sheetId).columnCount += r.appendDimension.length;
+      if (r.updateCells) {
+        const { start, rows } = r.updateCells;
+        const t = byGid(start.sheetId);
+        rows[0].values.forEach((v, k) => {
+          const col = start.columnIndex + k;
+          if (t.columnCount && col >= t.columnCount) throw new Error('Range exceeds grid limits');
+          const cells = t.values[start.rowIndex];
+          while (cells.length <= col) cells.push('');
+          cells[col] = v.userEnteredValue.stringValue;
+        });
+      }
+      if (r.moveDimension) {
+        // Google's rule: destinationIndex is counted before the column is taken out.
+        const { source, destinationIndex: d } = r.moveDimension;
+        const t = byGid(source.sheetId);
+        const s = source.startIndex;
+        t.values.forEach((cells) => {
+          while (cells.length < Math.max(s + 1, d)) cells.push('');
+          const [moved] = cells.splice(s, 1);
+          cells.splice(d > s ? d - 1 : d, 0, moved);
+        });
+      }
+      if (r.updateSheetProperties) byGid(r.updateSheetProperties.properties.sheetId).frozenRows = r.updateSheetProperties.properties.gridProperties.frozenRowCount;
+      if (r.addProtectedRange) {
+        const t = byGid(r.addProtectedRange.protectedRange.range.sheetId);
+        t.protections = [...(t.protections ?? []), { id: 1, description: r.addProtectedRange.protectedRange.description }];
+      }
+    });
+  };
   sheet.write = async (_id, { grow = [], data = [] }) => {
     const f = sheet.fail.shift();
     if (f) { const err = new Error(`Google sheet write failed (HTTP ${f})`); err.status = f; throw err; }
@@ -49,7 +88,7 @@ function fakeSheet(tabs) {
       cells[col] = values[0][0];
     });
   };
-  sheet.flush = () => flushMetaLeadSheetWrites({ readTabs: sheet.readTabs, write: sheet.write });
+  sheet.flush = (o = {}) => flushMetaLeadSheetWrites({ readTabs: sheet.readTabs, write: sheet.write, layout: sheet.layout, ...o });
   sheet.sync = () => syncMetaLeadsFromSheet({ readTabs: sheet.readTabs });
   sheet.tab = (name) => sheet.tabs.find((t) => t.name === name);
   /** The cell under a heading, on the row whose `keyCol` holds `key`. */
@@ -331,7 +370,8 @@ describe('idempotent, safe under failure, no ping-pong', () => {
     const asha = await leadOf({ metaLeadId: 'l:1' });
     await request(app).post(`${BASE}/${asha._id}/follow-up`).set(exec).send({}).expect(200);
     await sheet.flush();
-    expect(sheet.writes[0].grow).toEqual([{ gid: 11, columns: Object.keys(PANEL_COLUMNS).length }]);
+    expect(sheet.layouts[0][0]).toEqual({ appendDimension: { sheetId: 11, dimension: 'COLUMNS', length: Object.keys(PANEL_COLUMNS).length } });
+    expect(sheet.tab('jimny').columnCount).toBe(9 + Object.keys(PANEL_COLUMNS).length);
     expect(sheet.cell('jimny', 'l:1', PANEL_COLUMNS.followingUp)).toBe('Nevin');
   });
 
@@ -345,6 +385,136 @@ describe('idempotent, safe under failure, no ping-pong', () => {
     expect(jobs[2].jobId).not.toBe(jobs[0].jobId);
     expect(jobs[0].jobId).not.toContain(':');
     expect(jobs[0].delay).toBe(9000);
+  });
+});
+
+describe('tidy panel columns on every tab', () => {
+  const ORDER = Object.values(PANEL_COLUMNS);
+  const head = (t) => t.values[0].map((h) => String(h ?? ''));
+  const panelBlock = (t) => head(t).slice(head(t).indexOf(ORDER[0]), head(t).indexOf(ORDER[0]) + ORDER.length);
+  const lastTeam = (t) => Math.max(...t.values.map((r) => r.reduce((m, c, i) => (String(c ?? '').trim() && !String(t.values[0][i] ?? '').startsWith('Panel') ? i : m), -1)));
+  const TABS = () => [
+    ...START(),
+    { name: 'Thar Ironman', gid: 33, columnCount: 12, values: [META_HEAD, metaRow('l:3', 'Kiran', 'p:+919876543213')] },
+    { name: 'targets', gid: 44, columnCount: 26, values: [['Week', 'Target'], ['1', '40']] },
+  ];
+
+  test('every lead tab gets all the columns, in one order, right after the team, before any lead is touched', async () => {
+    const sheet = fakeSheet(TABS());
+    await sheet.sync();
+    await sheet.flush({ ensureLayout: true });
+    ['jimny', 'website lead', 'Thar Ironman'].forEach((name) => {
+      const t = sheet.tab(name);
+      expect(panelBlock(t)).toEqual(ORDER);
+      expect(head(t).indexOf(ORDER[0])).toBe(lastTeam(t) + 1); // no gap
+      expect(t.frozenRows).toBe(1);
+      expect(t.protections).toEqual([{ id: 1, description: PANEL_PROTECTION }]);
+    });
+    expect(sheet.tab('targets').values).toEqual(TABS()[3].values);
+    expect(sheet.tab('website lead').values[1].slice(0, 6)).toEqual(webRow('Mohan', '9989928251', 'Grill').slice(0, 6));
+  });
+
+  test('the messy fortuner tab: reordered, gap closed, values kept, team cells and A1 untouched', async () => {
+    const team = ['27497', ...META_HEAD.slice(1)];
+    const row = (id, who) => [...metaRow(id, 'Asha', 'p:+919876543210').slice(0, 7), who, 'rang'];
+    const values = [
+      [...team, '', PANEL_COLUMNS.leadId, PANEL_COLUMNS.followingUp, PANEL_COLUMNS.updatedAt, PANEL_COLUMNS.status, PANEL_COLUMNS.note, PANEL_COLUMNS.nextBy, PANEL_COLUMNS.lateReason],
+      [...row('l:9', 'nevin'), '', '65a1b2c3d4e5f6a7b8c9d0e1', 'Nevin', '10-11-2026 11:00', 'WhatsApp', 'Sent price', '12-11-2026 12:00', ''],
+      row('l:8', 'arun'),
+    ];
+    const sheet = fakeSheet([{ name: 'fortuner ironman', gid: 55, columnCount: 26, values }]);
+    await sheet.flush({ ensureLayout: true });
+    const t = sheet.tab('fortuner ironman');
+    expect(head(t).slice(0, team.length)).toEqual(team);
+    expect(panelBlock(t)).toEqual(ORDER);
+    expect(head(t).indexOf(ORDER[0])).toBe(team.length);
+    const at = (r, h) => t.values[r][head(t).indexOf(h)];
+    expect(at(1, PANEL_COLUMNS.followingUp)).toBe('Nevin');
+    expect(at(1, PANEL_COLUMNS.leadId)).toBe('65a1b2c3d4e5f6a7b8c9d0e1');
+    expect(at(1, PANEL_COLUMNS.note)).toBe('Sent price');
+    expect(t.values[1].slice(0, team.length)).toEqual(row('l:9', 'nevin'));
+    expect(t.values[2].slice(0, team.length)).toEqual(row('l:8', 'arun'));
+    // Nothing deleted: the moves only.
+    expect(sheet.layouts[0].some((r) => r.deleteDimension || r.deleteRange)).toBe(false);
+  });
+
+  test('a panel column stuck among the team\'s columns moves out to the right; team order kept', () => {
+    const values = [
+      [...META_HEAD.slice(0, 6), PANEL_COLUMNS.note, ...META_HEAD.slice(6)],
+      [...metaRow('l:1', 'Asha', 'p:+91').slice(0, 6), 'old note', ...metaRow('l:1', 'Asha', 'p:+91').slice(6, 7), 'nevin', 'rang'],
+    ];
+    const tab = { name: 'jimny', gid: 11, columnCount: 26, values };
+    const { requests } = planPanelLayout([tab], []);
+    const sheet = fakeSheet([tab]);
+    return sheet.layout('x', requests).then(() => {
+      const t = sheet.tab('jimny');
+      expect(head(t).slice(0, META_HEAD.length)).toEqual(META_HEAD);
+      expect(panelBlock(t)).toEqual(ORDER);
+      expect(t.values[1][head(t).indexOf(PANEL_COLUMNS.note)]).toBe('old note');
+      expect(t.values[1][7]).toBe('nevin');
+    });
+  });
+
+  test('a tidy tab costs nothing; style, freeze and protection are set once and never doubled', async () => {
+    const sheet = fakeSheet(TABS());
+    await sheet.sync();
+    await sheet.flush({ ensureLayout: true });
+    const count = sheet.layouts.length;
+    await sheet.flush({ ensureLayout: true });
+    expect(sheet.layouts.length).toBe(count);
+    // A tab the team already froze deeper, and already protected: left as it is.
+    const plan = planPanelLayout([{ ...sheet.tab('jimny'), frozenRows: 3, protections: [{ id: 7, description: PANEL_PROTECTION }] }], []);
+    expect(plan.requests.some((r) => r.updateSheetProperties || r.addProtectedRange)).toBe(false);
+  });
+
+  test('regression (fortuner A1): nothing is ever written to a team cell the panel does not own', async () => {
+    const values = [['27497', ...META_HEAD.slice(1)], metaRow('l:1', 'Asha', 'p:+919876543210'), metaRow('l:2', 'Ravi', 'p:+919876543211')];
+    const sheet = fakeSheet([{ name: 'fortuner ironman', gid: 55, columnCount: 26, values }]);
+    await sheet.sync();
+    const { headers: exec } = await login(...GTM);
+    const { headers: hd } = await login(...HEAD);
+    const asha = await leadOf({ metaLeadId: 'l:1' });
+    await sheet.flush({ ensureLayout: true });
+    await request(app).post(`${BASE}/${asha._id}/follow-up`).set(exec).send({}).expect(200);
+    await request(app).post(`${BASE}/${asha._id}/follow-ups`).set(exec).send({ status: 'whatsapp', note: 'Sent price', nextAt: NEXT }).expect(200);
+    await request(app).patch(`${BASE}/${asha._id}`).set(hd).send({ revision: (await leadOf({ _id: asha._id })).revision, changes: { salesPerson: 'Nevin K' } }).expect(200);
+    await sheet.flush();
+    await sheet.flush({ ensureLayout: true });
+
+    const t = sheet.tab('fortuner ironman');
+    const first = head(t).indexOf(ORDER[0]);
+    expect(t.values[0][0]).toBe('27497');
+    expect(head(t).slice(0, first)).toEqual(['27497', ...META_HEAD.slice(1)]);
+    const salesCol = META_HEAD.indexOf('sales person');
+    const written = sheet.writes.flatMap((w) => w.data.map((d) => d.range));
+    written.forEach((range) => {
+      const m = /!([A-Z]+)(\d+)$/.exec(range);
+      const col = [...m[1]].reduce((n, c) => n * 26 + (c.charCodeAt(0) - 64), 0) - 1;
+      const row = Number(m[2]);
+      // A panel column, or the one team cell edited in the panel (Asha's sales person).
+      expect(col >= first || (col === salesCol && row === 2)).toBe(true);
+    });
+    sheet.layouts.flat().filter((r) => r.updateCells).forEach((r) => {
+      expect(r.updateCells.start.columnIndex).toBeGreaterThanOrEqual(META_HEAD.length);
+      r.updateCells.rows[0].values.forEach((v) => expect(v.userEnteredValue.stringValue).toMatch(/^Panel/));
+    });
+    expect(t.values[2].slice(0, first)).toEqual(metaRow('l:2', 'Ravi', 'p:+919876543211'));
+  });
+
+  test('a layout failure is reported but never stops the panel\'s cells from being written', async () => {
+    const sheet = fakeSheet(START());
+    await sheet.sync();
+    const { headers: exec } = await login(...GTM);
+    const asha = await leadOf({ metaLeadId: 'l:1' });
+    await request(app).post(`${BASE}/${asha._id}/follow-up`).set(exec).send({}).expect(200);
+    sheet.layoutFail.push(400);
+    await sheet.flush();
+    expect(sheet.cell('jimny', 'l:1', PANEL_COLUMNS.followingUp)).toBe('Nevin');
+    expect((await repo.getState()).writeBack.layout.error).toMatch(/HTTP 400/);
+    // Next run tidies, and clears the error.
+    await sheet.flush({ ensureLayout: true });
+    expect(panelBlock(sheet.tab('jimny'))).toEqual(ORDER);
+    expect((await repo.getState()).writeBack.layout.error).toBe('');
   });
 });
 
@@ -368,6 +538,12 @@ describe('google client writes', () => {
     expect(JSON.parse(Buffer.from(new URLSearchParams(calls[0].body).get('assertion').split('.')[1], 'base64url')).scope).toBe('https://www.googleapis.com/auth/spreadsheets');
     expect(a1Column(0)).toBe('A');
     expect(a1Column(26)).toBe('AA');
+
+    calls.length = 0;
+    await updateLayout('abc', [{ moveDimension: { source: { sheetId: 5, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 }, destinationIndex: 9 } }], { email: 'r@x', key });
+    expect(calls.at(-1).url).toMatch(/abc:batchUpdate$/);
+    expect(JSON.parse(calls.at(-1).body).requests[0].moveDimension.destinationIndex).toBe(9);
+    await expect(updateLayout('abc', [], { email: 'r@x', key })).resolves.toEqual({ replies: 0 });
   });
 
   test('a permission refusal carries its status for the page', async () => {
