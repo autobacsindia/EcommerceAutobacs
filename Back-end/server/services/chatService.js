@@ -517,7 +517,7 @@ async function loadQuote(channel, quoteId) {
   const q = await chatRepository.findMessageWithSender(quoteId);
   if (!q || idOf(q.channel) !== idOf(channel) || q.deletedAt) throw fail('Quoted message not found', 404);
   const preview = (q.text || ((q.attachments || []).length ? 'Shared a file' : '')).slice(0, 200);
-  return { message: q._id, seq: q.seq, by: q.kind === 'system' ? 'Roavion updates' : q.sender?.name || '', preview };
+  return { message: q._id, seq: q.seq, by: q.kind === 'system' ? 'Autobacs updates' : q.sender?.name || '', preview };
 }
 
 /** A reply needs a live top-level message in the same channel to hang from. */
@@ -866,7 +866,7 @@ async function insertMessage(channel, {
       seq,
       at,
       preview: (text || (attachments.length ? 'Shared a file' : '')).slice(0, 200),
-      by: kind === 'system' ? 'Roavion updates' : sender?.name || '',
+      by: kind === 'system' ? 'Autobacs updates' : sender?.name || '',
       mentions,
     });
     if (root) thread = shapeMessage(root);
@@ -988,7 +988,7 @@ async function pushForMessage(channel, {
         url: `${isAdmin(u) ? '/admin/chat' : '/team/chat'}?c=${idOf(channel)}${updates ? '&t=updates' : ''}${threadRoot ? `&th=${idOf(threadRoot)}` : ''}`,
       })),
       {
-        title: kind === 'system' ? `Roavion update${where ? ` · ${where}` : ''}` : `${sender?.name || 'Message'}${where ? ` · ${where}` : ''}`,
+        title: kind === 'system' ? `Autobacs update${where ? ` · ${where}` : ''}` : `${sender?.name || 'Message'}${where ? ` · ${where}` : ''}`,
         body,
         // Separate tags, so an order update never replaces a chat pop-up (or vice versa).
         tag: `chat-${idOf(channel)}${updates ? '-updates' : ''}`,
@@ -1089,7 +1089,7 @@ function homePreviewOf(m) {
   return {
     message: m._id,
     sender: m.kind === 'system' ? null : m.sender?._id ?? m.sender ?? null,
-    by: m.kind === 'system' ? 'Roavion updates' : (m.sender?.name || '').slice(0, 80),
+    by: m.kind === 'system' ? 'Autobacs updates' : (m.sender?.name || '').slice(0, 80),
     text: text.slice(0, HOME_PREVIEW_LENGTH),
   };
 }
@@ -1138,7 +1138,7 @@ async function refreshThreadSummaryFor(m) {
   const updated = await chatRepository.setThreadSummary(root._id, latest
     ? {
       preview: previewOf(latest),
-      by: latest.kind === 'system' ? 'Roavion updates' : latest.sender?.name || '',
+      by: latest.kind === 'system' ? 'Autobacs updates' : latest.sender?.name || '',
       mentions: latest.mentions || [],
     }
     : { preview: '', by: '', mentions: [] });
@@ -1672,7 +1672,7 @@ export async function forwardMessage(user, messageId, { channelId, clientId } = 
   }
 
   const attachments = await copyChatAttachments(source.attachments, { channelId: idOf(target) });
-  const by = source.kind === 'system' ? 'Roavion updates' : source.sender?.name || 'Former member';
+  const by = source.kind === 'system' ? 'Autobacs updates' : source.sender?.name || 'Former member';
   return insertMessage(target, {
     kind: 'user',
     sender: user,

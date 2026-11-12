@@ -36,7 +36,7 @@ test('sends and shows the confirmed reply', async () => {
 
   await screen.findByText(/Sent to applicant@example.com/);
   expect(post).toHaveBeenCalledWith('/careers/admin/applications/a1/reply', expect.objectContaining({
-    subject: 'Your application for Service Advisor — ROAVION Automotive', message: 'See you Monday', key: expect.any(String),
+    subject: 'Your application for Service Advisor — Autobacs India', message: 'See you Monday', key: expect.any(String),
   }));
   expect(screen.getByText('Replies sent (1)')).toBeInTheDocument();
   expect((screen.getByLabelText('Reply message') as HTMLTextAreaElement).value).toBe('');

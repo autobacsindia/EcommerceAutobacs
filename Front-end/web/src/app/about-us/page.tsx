@@ -494,7 +494,6 @@ export default function AboutUsPage() {
               >
                 +91 98955 02139
               </a>
-              <p className={`${body} text-sm`}>Monday to Saturday, 10:00 AM – 6:00 PM IST.</p>
             </div>
           </Reveal>
         </div>

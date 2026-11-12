@@ -169,7 +169,7 @@ export async function renderQuotationPdf(q) {
         } catch { /* text header below still identifies the seller */ }
       }
       if (logoRight === L) {
-        doc.font(FONT_BOLD).fontSize(20).fillColor('#fff').text('ROAVION', L, 40);
+        doc.font(FONT_BOLD).fontSize(20).fillColor('#fff').text('AUTOBACS', L, 40);
       }
       doc.font(FONT).fontSize(8.5).fillColor('#a9b8b0').text('Powered by AutoBacs India', L, 92);
 

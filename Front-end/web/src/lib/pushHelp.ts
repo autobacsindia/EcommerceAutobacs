@@ -62,7 +62,7 @@ export function osSteps(os: OsKind, browser: BrowserKind): string {
     case 'android':
       return `On the phone: Settings → Apps → ${app} → Notifications → allow them, and turn Do Not Disturb off.`;
     case 'ios':
-      return 'On the iPhone: Settings → Notifications → Roavion (the Home Screen icon) → Allow Notifications, and turn Focus off.';
+      return 'On the iPhone: Settings → Notifications → Autobacs (the Home Screen icon) → Allow Notifications, and turn Focus off.';
     default:
       return `Check that the computer allows notifications from ${app}, and that "Do not disturb" is off.`;
   }

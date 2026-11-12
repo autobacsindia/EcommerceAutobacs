@@ -756,7 +756,7 @@ Questions: info@autobacsindia.com
 Order tracking & product queries: support@autobacsindia.com
 Grievances: grievance@autobacsindia.com
 
-© ${year} Roavion Automotive Pvt. Ltd. All rights reserved.
+© ${year} Autobacs India. All rights reserved.
   `.trim();
 
   const feature = (icon, title, body, last = false) => `
@@ -819,7 +819,7 @@ Grievances: grievance@autobacsindia.com
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
                 <td valign="middle">
                   <a href="${site}" target="_blank" style="text-decoration:none;">
-                    <img src="${site}/images/roavion-logo.png" width="150" alt="ROAVION — Powered by Autobacs India" style="display:block;width:150px;max-width:150px;height:auto;border:0;outline:none;color:#FFFFFF;font-family:${font};font-size:20px;font-weight:800;">
+                    <img src="${site}/images/autobacs-logo-white.png" width="150" alt="Autobacs India" style="display:block;width:150px;max-width:150px;height:auto;border:0;outline:none;color:#FFFFFF;font-family:${font};font-size:20px;font-weight:800;">
                   </a>
                 </td>
                 <td align="right" valign="middle" style="font-family:${font};font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#7E8A83;">
@@ -942,11 +942,11 @@ ${trust('Secure payments', 'UPI, cards, net banking and EMI.')}
             <td align="center" class="px" style="padding:4px 40px 26px 40px;background:#F4F7F5;font-family:${font};font-size:11px;line-height:18px;color:#97A09A;">
               <a href="${site}" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">autobacsindia.com</a>
               &nbsp;&middot;&nbsp;
-              <a href="https://www.instagram.com/autobacsindia" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">Instagram</a>
+              <a href="https://www.instagram.com/autobacsindia/" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">Instagram</a>
               &nbsp;&middot;&nbsp;
-              <a href="https://www.youtube.com/@AutobacsIndia" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">YouTube</a><br>
+              <a href="https://www.youtube.com/channel/UCsaXH8a2Ci1P85hOZWGDQcw" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">YouTube</a><br>
               You&rsquo;re receiving this because you created an account at autobacsindia.com.<br>
-              &copy; ${year} Roavion Automotive Pvt. Ltd. All rights reserved.
+              &copy; ${year} Autobacs India. All rights reserved.
             </td>
           </tr>
 
@@ -1429,7 +1429,7 @@ const careersShell = (headerTitle, bodyHtml, supportEmail) => `
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.65;color:#333;background:#f5f5f5;margin:0;padding:0;">
   <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
     <div style="background:#111210;padding:24px 30px;">
-      <span style="color:#C93F1A;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;">ROAVION Automotive</span>
+      <span style="color:#C93F1A;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;">Autobacs India</span>
       <h1 style="color:#F7F5F0;margin:6px 0 0;font-size:20px;font-weight:600;">${escapeHtml(headerTitle)}</h1>
     </div>
     <div style="padding:30px;font-size:14px;color:#333;">

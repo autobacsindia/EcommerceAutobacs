@@ -20,7 +20,7 @@ interface PressCard {
 
 // ── Fixed page chrome (owner-supplied; edit here) ───────────────────────────
 const MASTHEAD = {
-  eyebrow: 'EST. 2015 · Roavion Automotive Pvt. Ltd.',
+  eyebrow: 'EST. 2015 · Autobacs India',
   title: 'Autobacs India,',
   titleEm: 'in the press',
   lede: 'From a $1M revenue milestone to a structured import model reshaping the premium aftermarket — here’s where the story has been told.',
@@ -35,7 +35,7 @@ const TICKER = [
   'Autobacs India', '$1M Revenue Milestone', 'Business Standard', 'ThePrint',
   'Dailyhunt', 'BrandValley Times', 'The Indian Post', 'MyNation',
   'USA News', 'News 18', 'ANI', 'Blunt Times',
-  'Roavion Automotive Pvt. Ltd.', '42 Installation Locations', 'Premium Aftermarket',
+  'Autobacs India', '42 Installation Locations', 'Premium Aftermarket',
 ];
 
 // Presentation fallbacks when a card leaves tilt/tape unset (matches design).

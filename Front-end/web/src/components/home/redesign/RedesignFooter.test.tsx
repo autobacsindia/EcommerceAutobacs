@@ -29,6 +29,7 @@ it('keeps the social profiles, newsletter box and copyright', () => {
   expect(screen.getByRole('textbox', { name: 'Email address' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Subscribe' })).toBeInTheDocument();
   expect(screen.getByText(footer.copyright)).toBeInTheDocument();
+  expect(screen.getByText(footer.ownership)).toBeInTheDocument();
 });
 
 it('adds the contact strip with the published numbers', () => {

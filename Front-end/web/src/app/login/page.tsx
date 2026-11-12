@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { navigateTo } from '@/lib/utils/navigation';
 import { safeInternalPath } from '@/lib/utils';
-import { LEGAL_LINKS, COMPANY_LEGAL_NAME } from '@/lib/constants';
+import { LEGAL_LINKS, BRAND_NAME } from '@/lib/constants';
 import Image from 'next/image';
 import { brand } from '@/components/home/redesign/homeContent';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -117,9 +117,9 @@ function LoginPageInner() {
         <Link href="/" className="block mx-auto rounded-2xl bg-[#121414] px-7 py-3 shadow-sm">
           <Image
             src={brand.logo}
-            alt="Roavion"
+            alt={brand.logoAlt}
             width={960}
-            height={255}
+            height={226}
             priority
             className="object-contain h-14 w-auto mx-auto"
           />
@@ -283,7 +283,7 @@ function LoginPageInner() {
               <Link href="/help" className="hover:text-ink transition-colors">Help</Link>
             </div>
             <p className="text-xs text-ink-muted font-display">
-              Copyright © {new Date().getFullYear()} {COMPANY_LEGAL_NAME}. All rights reserved
+              Copyright © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved
             </p>
           </div>
         </div>

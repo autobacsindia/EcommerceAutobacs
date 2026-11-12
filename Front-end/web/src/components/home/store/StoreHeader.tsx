@@ -21,7 +21,7 @@ import './store.css';
 export type HeaderCategory = { name: string; href: string; slug?: string };
 
 /**
- * Dark top bar (the white ROAVION logo needs it), Amazon-style: logo · vehicle ·
+ * Dark top bar (the white Autobacs logo needs it), Amazon-style: logo · vehicle ·
  * big search · account & orders · cart. Under it, the green category bar. On phones:
  * menu · logo · account · cart, then a full-width search, then the vehicle chip.
  */
@@ -66,7 +66,7 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
           <span /><span /><span />
         </button>
         <Link href="/" className="sh-logo" aria-label={brand.logoAlt}>
-          <Img src={brand.logo} alt={brand.logoAlt} className="sh-logo-img" sizes="(max-width: 768px) 140px, 190px" width={960} height={255} priority />
+          <Img src={brand.logo} alt={brand.logoAlt} className="sh-logo-img" sizes="(max-width: 768px) 140px, 190px" width={960} height={226} priority />
         </Link>
         <span className="sh-divider sh-only-desktop" aria-hidden="true" />
         <div className="sh-only-desktop"><VehiclePicker /></div>

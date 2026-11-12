@@ -58,7 +58,7 @@ function StaffInviteInner() {
     <div className="min-h-screen bg-obsidian-deep flex flex-col items-center px-4">
       <div className="py-8">
         <Link href="/" className="block">
-          <Image src={brand.logo} alt="Roavion" width={960} height={255} priority className="h-16 w-auto object-contain" />
+          <Image src={brand.logo} alt={brand.logoAlt} width={960} height={226} priority className="h-16 w-auto object-contain" />
         </Link>
       </div>
 

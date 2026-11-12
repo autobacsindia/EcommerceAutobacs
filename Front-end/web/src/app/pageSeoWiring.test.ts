@@ -4,7 +4,7 @@
  * `config/staticPages.js` lists the pages, `/admin/seo` stores overrides for
  * them, and `buildPageMetadata(path, fallback)` is the only thing that reads
  * either. A page that never calls it silently ignores both: it inherits the
- * root layout's title and ships as "ROAVION - Powered by AutoBacs India".
+ * root layout's title and ships as "Autobacs India | Premium Automotive Accessories".
  *
  * Six pages were in exactly that state in production — /faq, /help, /track,
  * /shipping, /returns, /warranty — all serving one identical title while the
@@ -27,7 +27,7 @@ const STATIC_PAGES_CONFIG = resolve(__dirname, '../../../../Back-end/server/conf
  * Paths intentionally NOT wired to buildPageMetadata. Each needs a reason.
  *
  * '/' — the home title is set deliberately in the root layout as
- * `title.default` ("ROAVION - Powered by AutoBacs India"). Routing it through
+ * `title.default` ("Autobacs India | Premium Automotive Accessories"). Routing it through
  * buildPageMetadata would return a plain-string title, which the layout's
  * "%s | Autobacs India" template then appends to — producing the doubled
  * "Autobacs India | Premium Automotive Accessories | Autobacs India". Wiring

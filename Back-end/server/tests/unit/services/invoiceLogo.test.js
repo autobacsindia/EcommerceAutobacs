@@ -22,8 +22,8 @@ jest.unstable_mockModule('../../../repositories/counterRepository.js', () => ({
 const { generateInvoicePdf, loadLogo } = await import('../../../services/invoiceService.js');
 
 const here = dirname(fileURLToPath(import.meta.url));
-const BUNDLED = join(here, '..', '..', '..', 'assets', 'brand', 'roavion-logo.png');
-const NAVBAR = join(here, '..', '..', '..', '..', '..', 'Front-end', 'web', 'public', 'images', 'roavion-logo.png');
+const BUNDLED = join(here, '..', '..', '..', 'assets', 'brand', 'autobacs-logo-white.png');
+const NAVBAR = join(here, '..', '..', '..', '..', '..', 'Front-end', 'web', 'public', 'images', 'autobacs-logo-white.png');
 
 const originalFetch = global.fetch;
 const fetchSpy = jest.fn().mockRejectedValue(new Error('network disabled in tests'));

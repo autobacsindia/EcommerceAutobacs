@@ -37,7 +37,7 @@ beforeEach(() => { pathname = '/admin/orders'; });
 it('renders the page inside the frame, with the logo linking home', () => {
   shell();
   expect(screen.getByText('page content')).toBeInTheDocument();
-  expect(screen.getByRole('img', { name: 'Roavion' }).closest('a')).toHaveAttribute('href', '/admin');
+  expect(screen.getByRole('img', { name: 'Autobacs India' }).closest('a')).toHaveAttribute('href', '/admin');
   expect(screen.getByText('Admin panel')).toBeInTheDocument();
 });
 

@@ -86,7 +86,7 @@ export default function RedesignNav() {
             className="logo-img"
             sizes="(max-width: 768px) 180px, 260px"
             width={960}
-            height={255}
+            height={226}
             priority
           />
         ) : (

@@ -13,11 +13,10 @@ interface BrandLogoProps {
 
 export default function BrandLogo({ variant = 'full', theme = 'dark', className = '' }: BrandLogoProps) {
   // Same asset as the site header (homeContent.ts `brand.logo`), so the two can't drift.
-  const logoSrc = brand.logo;
-  const logoAlt = 'Roavion';
-  
-  // Use inline style for filter to ensure it works regardless of Tailwind config
-  const imageStyle = theme === 'light' ? { filter: 'invert(1)' } : undefined;
+  // White wordmark on dark backgrounds, black wordmark on light ones. (No CSS
+  // invert: that would turn the green bar and tagline pink.)
+  const logoSrc = theme === 'light' ? brand.logoOnLight : brand.logo;
+  const logoAlt = brand.logoAlt;
   
   if (variant === 'compact') {
     return (
@@ -26,10 +25,9 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
           src={logoSrc}
           alt={logoAlt}
           width={960}
-          height={255}
+          height={226}
           priority
           className="object-contain h-16 w-auto"
-          style={imageStyle}
         />
       </Link>
     );
@@ -41,10 +39,9 @@ export default function BrandLogo({ variant = 'full', theme = 'dark', className 
         src={logoSrc}
         alt={logoAlt}
         width={960}
-        height={255}
+        height={226}
         priority
         className="object-contain h-20 w-auto"
-        style={imageStyle}
       />
     </Link>
   );

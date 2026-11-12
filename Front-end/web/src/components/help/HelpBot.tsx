@@ -201,7 +201,7 @@ export default function HelpBot() {
               <MessageCircle className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-display text-[15px] font-bold tracking-[-0.01em]">Roavion Help</p>
+              <p className="truncate font-display text-[15px] font-bold tracking-[-0.01em]">Autobacs Help</p>
               <p className="truncate text-[11.5px] text-[#fff]/70">Real answers, from our own pages</p>
             </div>
             <button

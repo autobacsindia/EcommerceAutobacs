@@ -266,7 +266,7 @@ export default function Composer({
           <Quote className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold text-blue-800">
-              Quoting {quote.kind === 'system' ? 'Roavion updates' : quote.sender?.name ?? 'Former member'}
+              Quoting {quote.kind === 'system' ? 'Autobacs updates' : quote.sender?.name ?? 'Former member'}
             </p>
             <p className="truncate text-sm text-gray-700">{quote.text || 'Shared a file'}</p>
           </div>

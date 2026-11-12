@@ -401,7 +401,7 @@ export default function Conversation({
       mentionTeams: vars.mentionTeams ?? [],
       refs: [],
       quote: quote && vars.quoteId === quote.id
-        ? { id: quote.id, seq: quote.seq, by: quote.kind === 'system' ? 'Roavion updates' : quote.sender?.name ?? '', preview: quote.text }
+        ? { id: quote.id, seq: quote.seq, by: quote.kind === 'system' ? 'Autobacs updates' : quote.sender?.name ?? '', preview: quote.text }
         : null,
       createdAt: new Date().toISOString(),
       pending: true,

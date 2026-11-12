@@ -30,7 +30,7 @@ export default function StoreFooter() {
       </div>
       <div className="sf-main">
         <div className="sf-brand">
-          <span className="sf-logo-chip"><Img src={brand.logo} alt={brand.logoAlt} className="sf-logo" sizes="160px" width={960} height={255} /></span>
+          <span className="sf-logo-chip"><Img src={brand.logo} alt={brand.logoAlt} className="sf-logo" sizes="160px" width={960} height={226} /></span>
           <p>{footer.blurb}</p>
           <div className="sf-social">
             {footer.social.map((s) => (
@@ -52,7 +52,7 @@ export default function StoreFooter() {
         ))}
       </div>
       <div className="sf-bottom">
-        <p>{footer.copyright}</p>
+        <p><span>{footer.copyright}</span> <span>{footer.ownership}</span></p>
         <p>Secure payments by Razorpay · UPI · Cards · Net Banking · EMI</p>
       </div>
     </footer>

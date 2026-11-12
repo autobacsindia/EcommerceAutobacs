@@ -7,7 +7,7 @@ import type { ChatMessage } from '@/hooks/queries/useTeamChat';
 import { timeOf, dayLabel } from './chatUi';
 
 const previewOf = (m: ChatMessage) => m.text || (m.attachments.length ? '📎 Shared a file' : '');
-const authorOf = (m: ChatMessage) => (m.kind === 'system' ? 'Roavion updates' : m.sender?.name ?? 'Former member');
+const authorOf = (m: ChatMessage) => (m.kind === 'system' ? 'Autobacs updates' : m.sender?.name ?? 'Former member');
 
 /**
  * The conversation's pinned messages, under its header — the newest pin on

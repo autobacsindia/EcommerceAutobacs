@@ -47,7 +47,7 @@ export function newReplyKey(): string {
 }
 
 export const defaultReplySubject = (roleTitle: string) =>
-  `Your application for ${roleTitle} — ROAVION Automotive`;
+  `Your application for ${roleTitle} — Autobacs India`;
 
 const fmtWhen = (iso?: string | null) =>
   iso

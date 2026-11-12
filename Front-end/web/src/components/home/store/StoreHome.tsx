@@ -145,7 +145,7 @@ export default function StoreHome({ data }: { data: StoreHomeData }) {
       <main className="sh-main">
         {/* The page's one H1, for search engines and screen readers; the banner
             titles below are the visible headlines. */}
-        <h1 className="sh-sr-only">Roavion by Autobacs India — car parts, accessories and upgrades online</h1>
+        <h1 className="sh-sr-only">Autobacs India — car parts, accessories and upgrades online</h1>
         {/* While the admin festival theme is live the banner carousel gives way to
             the festive hero; everything else stays where customers expect it. */}
         <FestiveSwitch

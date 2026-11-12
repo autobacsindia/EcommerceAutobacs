@@ -202,11 +202,11 @@ export default function ShippingPage() {
               <div>
                 <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Need Help?</h2>
                 <p className="text-ink/70 font-display leading-relaxed mb-2">
-                  AutoBacs India Customer Service — Email:{' '}
+                  Autobacs India Customer Service — Email:{' '}
                   <Link href="mailto:support@autobacsindia.com" className="text-gold hover:text-ink transition-colors">
                     support@autobacsindia.com
                   </Link>
-                  {' '}— Phone: +91 9895257905 — Hours: Monday – Saturday, 10:00 AM – 6:00 PM IST
+                  {' '}— Phone: +91 9895257905
                 </p>
               </div>
             </div>

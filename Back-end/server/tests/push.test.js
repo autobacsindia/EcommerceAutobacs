@@ -160,7 +160,7 @@ describe('Push notifications', () => {
     await settle();
     expect(sent.map((x) => x.endpoint).sort()).toEqual([SUB(2).endpoint, SUB(4).endpoint].sort());
     const toAdmin = sent.find((x) => x.endpoint === SUB(4).endpoint).payload;
-    expect(toAdmin.title).toBe('Roavion update · Procurement');
+    expect(toAdmin.title).toBe('Autobacs update · Procurement');
     // An order update opens the Order updates tab, with its own pop-up tag.
     expect(toAdmin.url).toMatch(/^\/admin\/chat\?c=[a-f0-9]{24}&t=updates$/);
     expect(toAdmin.tag).toMatch(/^chat-[a-f0-9]{24}-updates$/);
@@ -182,7 +182,7 @@ describe('Push notifications', () => {
     await a.s.post('/push/subscriptions', SUB(1));
     const res = await a.s.post('/push/test');
     expect(res.status).toBe(200);
-    expect(sent[0].payload).toMatchObject({ title: 'Roavion notifications are on', url: '/team/chat' });
+    expect(sent[0].payload).toMatchObject({ title: 'Autobacs notifications are on', url: '/team/chat' });
   });
 
   it('a test from this browser goes to this browser only, with its test id', async () => {

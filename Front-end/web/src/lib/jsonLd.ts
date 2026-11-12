@@ -21,21 +21,19 @@ export function serializeJsonLd(data: unknown): string {
     .replace(/&/g, '\\u0026');
 }
 
+import { SOCIAL_LINKS } from './constants';
+
 /** The company, as every page should describe it. One definition, no drift. */
 export const ORGANISATION = {
   '@type': 'Organization',
   name: 'Autobacs India',
   legalName: 'Roavion Automotive Pvt. Ltd.',
   url: 'https://www.autobacsindia.com/',
-  logo: 'https://img.autobacsindia.com/variants/autobacs/site/roavion-primary-trimmed/w640',
+  logo: 'https://www.autobacsindia.com/images/autobacs-logo.png',
   // Taken verbatim from the About page's own hero copy, so the structured data
   // and the page a visitor reads cannot say different things.
   description:
     'Premium automotive parts, custom builds, dealer supply and 42 fitment points across India, since 2015.',
   foundingDate: '2015',
-  sameAs: [
-    'https://www.instagram.com/autobacsindia/',
-    'https://www.linkedin.com/company/107129492',
-    'https://www.facebook.com/autobacsindia',
-  ],
+  sameAs: [SOCIAL_LINKS.instagram, SOCIAL_LINKS.youtube, SOCIAL_LINKS.facebook, SOCIAL_LINKS.linkedin],
 } as const;

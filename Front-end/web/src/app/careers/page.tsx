@@ -7,7 +7,7 @@ export const generateMetadata = (): Promise<Metadata> =>
   buildPageMetadata('/careers', {
     title: 'Careers',
     description:
-      'We don’t hire for titles — we hire for impact. Join Roavion Automotive (Autobacs India) and help build India’s premium automotive ecosystem.',
+      'We don’t hire for titles — we hire for impact. Join Autobacs India and help build India’s premium automotive ecosystem.',
   });
 
 // Open roles are now admin-managed (JobPosting) and fetched server-side. ISR: a
