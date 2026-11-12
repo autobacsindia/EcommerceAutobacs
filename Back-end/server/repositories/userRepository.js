@@ -181,6 +181,12 @@ class UserRepository extends BaseRepository {
    * Active staff, optionally for one team. Rides the existing `role` index: staff
    * are a handful of rows, so the team filter is applied to that small set.
    */
+  /** Ids of everyone ever on a team, departed staff included (their ratings still count). */
+  async findTeamMemberIds(team) {
+    const rows = await User.find({ role: 'staff', 'staff.team': team }).select('_id').limit(1000).lean();
+    return rows.map((u) => u._id);
+  }
+
   async findActiveStaff(team = null) {
     const query = { role: 'staff', 'staff.active': true };
     if (team) query['staff.team'] = team;

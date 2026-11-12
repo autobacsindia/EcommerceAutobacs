@@ -1,5 +1,6 @@
 'use client';
 
+import PanelOrderRating from '@/components/orderRating/PanelOrderRating';
 import ProductLink from '@/components/staff/ProductLink';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
@@ -857,6 +858,9 @@ function AdminOrderDetailPageInner() {
         
         {/* Order Information */}
         <div className="space-y-6">
+          {/* Customer's rating of our team (read only; nobody can edit it). */}
+          <PanelOrderRating orderId={order._id} />
+
           {/* Order Info */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b">

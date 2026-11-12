@@ -176,8 +176,10 @@ it('the other teams\' menus are exactly as before the Refunds change, with the l
   const MORE = ['Lessons', 'Training', 'Handover', 'Past members', 'My team', 'Help'];
   const parts = (team: string, isHead = false, canSell = false) => {
     const { visible, more } = menuParts(team, isHead, canSell);
-    // Same "More" for every team, in the same order.
-    expect(more.map((l) => l.label)).toEqual(MORE);
+    // Same "More" for every team, in the same order. Heads also get their
+    // team's customer service ratings there (read only).
+    const expected = isHead ? [...MORE.slice(0, 4), 'Service ratings', ...MORE.slice(4)] : MORE;
+    expect(more.map((l) => l.label)).toEqual(expected);
     return visible.map((l) => l.label);
   };
   expect(parts('sales', false, true)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'My orders', 'Customer decisions', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments']);

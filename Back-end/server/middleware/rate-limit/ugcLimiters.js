@@ -21,3 +21,13 @@ export const questionAnswerRateLimit = rateLimit({
   message: 'Too many answer submissions. Please slow down.',
   keyGenerator: (req) => `rate_limit:question_answer:${req.user?._id || getClientIp(req)}`
 });
+
+// Customer service ratings (routes/orderRatings.js). Keyed on the real client IP
+// (cf-connecting-ip), never the user id, so one person cannot spread guesses
+// across accounts; a customer needs one submit and maybe an edit or two.
+export const orderRatingRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: 'Too many rating attempts. Please wait a few minutes and try again.',
+  keyGenerator: (req) => `rate_limit:order_rating:${getClientIp(req)}`
+});
