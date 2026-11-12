@@ -260,11 +260,15 @@ export async function submitByAccount(orderId, input, user) {
 const isAdmin = (u) => u?.role === 'admin';
 const isActiveHead = (u) => u?.role === 'staff' && u.staff?.active === true && u.staff.isHead === true;
 
-/** Admins and team heads. Anyone else gets 403. */
-export const canViewRatings = (u) => isAdmin(u) || isActiveHead(u);
+/**
+ * Admins and the GTM (sales) head. Other teams' heads manage no salespeople,
+ * so the monthly page is theirs to neither see nor reach (owner's call, 2026-11-12).
+ * Anyone else gets 403.
+ */
+export const canViewRatings = (u) => isAdmin(u) || (isActiveHead(u) && u.staff.team === 'sales');
 
 const assertViewer = (actor) => {
-  if (!canViewRatings(actor)) throw fail('Only admins and team heads can see ratings.', 403, 'forbidden');
+  if (!canViewRatings(actor)) throw fail('Only admins and the GTM head can see ratings.', 403, 'forbidden');
 };
 
 /** A head sees ratings for salespeople in their own team; admin sees all. */

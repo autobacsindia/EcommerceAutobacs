@@ -286,6 +286,17 @@ describe('panel (read only)', () => {
     expect(own.body.rating).toBeNull();
   });
 
+  test('a head of another team (e.g. developer) cannot open the monthly ratings', async () => {
+    const devHead = await makeUser('staff', { team: 'developer', isHead: true });
+    const opsHead = await makeUser('staff', { team: 'operations', isHead: true });
+    await rate((await makeUser('staff', { team: 'sales' })).user._id, 5, new Date('2026-11-10T10:00:00Z'));
+    for (const h of [devHead, opsHead]) {
+      const res = await get(`${BASE}/order-ratings/panel/monthly?month=2026-11`, h.token);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('forbidden');
+    }
+  });
+
   test('customers and anonymous callers cannot read the panel', async () => {
     const c = await makeUser('customer');
     expect((await get(`${BASE}/order-ratings/panel/monthly?month=2026-11`, c.token)).status).toBe(403);

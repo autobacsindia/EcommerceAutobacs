@@ -177,9 +177,9 @@ it('the other teams\' menus are exactly as before the Refunds change, with the l
   const MORE = ['Lessons', 'Training', 'Handover', 'Past members', 'My team', 'Help'];
   const parts = (team: string, isHead = false, canSell = false) => {
     const { visible, more } = menuParts(team, isHead, canSell);
-    // Same "More" for every team, in the same order. Heads also get their
-    // team's customer service ratings there (read only).
-    const expected = isHead ? [...MORE.slice(0, 4), 'Service ratings', ...MORE.slice(4)] : MORE;
+    // Same "More" for every team, in the same order. Only the GTM head also
+    // gets the customer service ratings there (read only).
+    const expected = isHead && team === 'sales' ? [...MORE.slice(0, 4), 'Service ratings', ...MORE.slice(4)] : MORE;
     expect(more.map((l) => l.label)).toEqual(expected);
     return visible.map((l) => l.label);
   };
@@ -192,6 +192,17 @@ it('the other teams\' menus are exactly as before the Refunds change, with the l
   expect(parts('marketing')).toEqual(['Team chat', 'Tasks', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments']);
 });
 
+it('"Service ratings" shows only for the GTM head, not for other teams\' heads or GTM members', () => {
+  pathname = '/team';
+  const has = (team: string, isHead: boolean) =>
+    menuLabels(team, isHead, true).some((l) => l.href === '/team/sales-ratings');
+  expect(has('sales', true)).toBe(true);
+  expect(has('sales', false)).toBe(false);
+  for (const team of ['developer', 'operations', 'accounts', 'procurement', 'marketing']) {
+    expect(has(team, true)).toBe(false);
+  }
+});
+
 /* ── "More": the less-used pages, folded (owner-approved 2026-11-11) ─────── */
 
 it('moving pages under "More" loses none: every team keeps every link it had', () => {
@@ -199,7 +210,11 @@ it('moving pages under "More" loses none: every team keeps every link it had', (
   for (const team of ['sales', 'procurement', 'accounts', 'operations', 'marketing', 'developer']) {
     const { visible, more } = menuParts(team, true, true);
     const hrefs = [...visible, ...more].map((l) => l.href);
-    for (const href of TEAM_MORE_HREFS) expect(hrefs).toContain(href);
+    // "Service ratings" is the GTM head's only (owner's call, 2026-11-12).
+    for (const href of TEAM_MORE_HREFS) {
+      if (href === '/team/sales-ratings' && team !== 'sales') expect(hrefs).not.toContain(href);
+      else expect(hrefs).toContain(href);
+    }
     // Nothing shows twice.
     expect(new Set(hrefs).size).toBe(hrefs.length);
   }
