@@ -22,7 +22,10 @@ export default function ProductRow({
   subtitle?: string;
   href?: string;
   products: StoreProduct[];
-  /** Label the first N tiles "#1 Best seller", "#2 Best seller", … (serialisable for SSR). */
+  /**
+   * Badge the products whose best-seller rank is 1..N "#1 Best seller", … — by
+   * `salesRank`, not tile position: shelves are ordered premium-first.
+   */
   rankBadges?: number;
   id?: string;
 }) {
@@ -67,9 +70,9 @@ export default function ProductRow({
       <div className="st-row-wrap">
         <button type="button" className="st-arrow st-arrow-l" aria-label={`Previous ${title}`} onClick={() => nudge(-1)} disabled={atStart}>‹</button>
         <div className="st-track" ref={trackRef}>
-          {products.map((p, i) => (
+          {products.map((p) => (
             <div className="st-track-item" key={p.id}>
-              <ProductTile p={p} badge={i < rankBadges ? `#${i + 1} Best seller` : undefined} />
+              <ProductTile p={p} badge={p.salesRank && p.salesRank <= rankBadges ? `#${p.salesRank} Best seller` : undefined} />
             </div>
           ))}
         </div>

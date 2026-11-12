@@ -34,16 +34,18 @@ beforeAll(() => {
 beforeEach(() => push.mockReset());
 
 const prod = (id: string, over: Partial<StoreProduct> = {}): StoreProduct => ({
-  id, name: `Part ${id}`, href: `/products/p${id}`, image: `/i${id}.jpg`, brand: 'Brand', price: 1000, rating: 0, reviews: 0, ...over,
+  id, name: `Part ${id}`, href: `/products/p${id}`, image: `/i${id}.jpg`, brand: 'Brand', price: 1000, rating: 0, reviews: 0, stock: 'in', ...over,
 });
 
 const data: StoreHomeData = {
   categories: Array.from({ length: 8 }, (_, i) => ({ name: `Cat ${i}`, slug: `c${i}`, href: `/categories/c${i}`, image: `/c${i}.jpg` })),
   deals: [prod('d1', { price: 600, originalPrice: 1000 }), prod('d2', { price: 900, originalPrice: 1000 }), prod('d3', { price: 500, originalPrice: 2000 }), prod('d4', { price: 50, originalPrice: 100 })],
   dealsTotal: 75,
-  bestSellers: [prod('b1'), prod('b2'), prod('b3'), prod('b4')],
+  // Shown premium-first, so tile order != sales rank: the badge must follow salesRank.
+  bestSellers: [prod('b3', { salesRank: 3, price: 9000 }), prod('b1', { salesRank: 1, price: 5000 }), prod('b2', { salesRank: 2 }), prod('b4', { salesRank: 4 })],
   newArrivals: [prod('n1'), prod('n2'), prod('n3')],
   featured: [],
+  premiumPicks: [],
   categoryRows: [{ category: { name: 'Lighting', slug: 'lighting', href: '/categories/lighting', image: '' }, products: [prod('l1'), prod('l2'), prod('l3'), prod('l4')] }],
   brands: [],
   reviews: [{ quote: 'Great fit.', name: 'Asha', rating: 4, verified: true }],
@@ -72,6 +74,23 @@ it('shows MRP and % off only on products that are genuinely on sale', () => {
   const best = screen.getByRole('heading', { name: 'Best Sellers' }).closest('section') as HTMLElement;
   expect(best.querySelectorAll('.st-mrp')).toHaveLength(0);
   expect(within(best).getByText('#1 Best seller')).toBeInTheDocument();
+});
+
+it('badges best sellers by their sales rank, not by tile position', () => {
+  render(<StoreHome data={data} />);
+  const best = screen.getByRole('heading', { name: 'Best Sellers' }).closest('section') as HTMLElement;
+  const tiles = Array.from(best.querySelectorAll('.st-track-item'));
+  expect(within(tiles[0] as HTMLElement).getByText('#3 Best seller')).toBeInTheDocument();
+  expect(within(tiles[1] as HTMLElement).getByText('#1 Best seller')).toBeInTheDocument();
+  expect(within(best).queryByText('#4 Best seller')).toBeNull();
+});
+
+it('renders Premium Picks only when there are picks', () => {
+  const { unmount } = render(<StoreHome data={data} />);
+  expect(screen.queryByRole('heading', { name: 'Premium Picks' })).toBeNull();
+  unmount();
+  render(<StoreHome data={{ ...data, premiumPicks: [prod('p1', { price: 250000 }), prod('p2'), prod('p3'), prod('p4')] }} />);
+  expect(screen.getByRole('heading', { name: 'Premium Picks' })).toBeInTheDocument();
 });
 
 it('skips a shelf with no products', () => {

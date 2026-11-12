@@ -155,6 +155,13 @@ export default function StoreHome({ data }: { data: StoreHomeData }) {
         <div className="sh-content">
           <CategoryCards categories={data.categories} deals={data.deals} />
           <DealsShelf products={data.deals} />
+          <ProductRow
+            id="sh-premium"
+            title="Premium Picks"
+            subtitle="Our finest upgrades, hand-picked"
+            href="/products?sort=price_desc"
+            products={data.premiumPicks}
+          />
           <GiftSection tiers={giftTiers} />
           <ProductRow
             id="sh-best"
