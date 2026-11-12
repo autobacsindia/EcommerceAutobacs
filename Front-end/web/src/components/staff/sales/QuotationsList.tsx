@@ -17,6 +17,8 @@ import { errorMessage, percentText, rupees, type QuotationPage, type SalesFilter
 const FILTERS = [
   { key: 'open', label: 'Open' },
   { key: 'on_hold', label: 'On hold' },
+  // Discounts above 10% waiting for the GTM head / an admin.
+  { key: 'approval', label: 'Needs approval' },
   { key: 'accepted', label: 'Accepted' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: '', label: 'All' },
@@ -125,7 +127,7 @@ export default function QuotationsList() {
       {q.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load quotations.')}</p>}
       {!q.isPending && !q.isError && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-          {filtered ? 'No quotations match — try fewer words or clear the filters.' : status === 'on_hold' ? 'Nothing on hold. Use “On hold – customer thinking” on a quotation when a customer needs time.' : 'No quotations here. Create one from “New quotation”.'}
+          {filtered ? 'No quotations match — try fewer words or clear the filters.' : status === 'approval' ? 'No discount requests waiting.' : status === 'on_hold' ? 'Nothing on hold. Use “On hold – customer thinking” on a quotation when a customer needs time.' : 'No quotations here. Create one from “New quotation”.'}
         </p>
       )}
 
@@ -141,6 +143,11 @@ export default function QuotationsList() {
                 {rupees(r.totalAmount)}
                 {r.discount && <span className="ml-1.5 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800">{percentText(r.discount.percent)} off</span>}
               </span>
+              {r.status === 'open' && r.approval && r.approval.state !== 'not_needed' && r.approval.state !== 'approved' && (
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${r.approval.state === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {r.approval.state === 'pending' ? 'Waiting for approval' : r.approval.state === 'rejected' ? 'Discount rejected' : 'Needs approval'}
+                </span>
+              )}
               {r.hold && (r.status === 'open' || r.status === 'expired')
                 ? <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${r.hold.due ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>
                     {r.hold.due ? 'Follow up now' : `On hold · follow up ${formatDateIST(r.hold.until)}`}
