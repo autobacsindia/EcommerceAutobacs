@@ -99,8 +99,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/past-sales', label: 'Past sales', icon: History });
   nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
   if (team === 'procurement' || team === 'accounts') nav.push({ href: '/team/suppliers', label: 'Suppliers', icon: Factory });
-  // Heads of any team: customers' ratings of their salespeople (read only).
-  if (isHead) nav.push({ href: '/team/sales-ratings', label: 'Service ratings', icon: Star });
+  // GTM head only: customers' ratings of the salespeople (read only). The API refuses other heads.
+  if (isHead && team === 'sales') nav.push({ href: '/team/sales-ratings', label: 'Service ratings', icon: Star });
   nav.push({ href: '/team/members', label: 'My team', icon: Users });
   // Every team: how to use the panel (lib/help/teamFaq.ts).
   nav.push({ href: '/team/help', label: 'Help', icon: LifeBuoy });
