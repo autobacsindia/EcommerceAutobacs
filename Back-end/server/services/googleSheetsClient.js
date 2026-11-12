@@ -78,8 +78,10 @@ export async function readAllTabs(spreadsheetId, account = readServiceAccount())
   const headers = { Authorization: `Bearer ${token}` };
   const id = encodeURIComponent(spreadsheetId);
 
-  const meta = await call(`${API}/${id}?fields=sheets.properties(sheetId,title,hidden,sheetType,gridProperties.columnCount)`, { headers }, 'sheet list');
-  const tabs = (meta.sheets ?? []).map((s) => s.properties).filter((p) => (p.sheetType ?? 'GRID') === 'GRID');
+  const meta = await call(`${API}/${id}?fields=sheets(properties(sheetId,title,hidden,sheetType,gridProperties(columnCount,frozenRowCount)),protectedRanges(protectedRangeId,description))`, { headers }, 'sheet list');
+  const tabs = (meta.sheets ?? [])
+    .map((s) => ({ ...s.properties, protectedRanges: s.protectedRanges ?? [] }))
+    .filter((p) => (p.sheetType ?? 'GRID') === 'GRID');
 
   const out = [];
   for (let i = 0; i < tabs.length; i += RANGES_PER_CALL) {
@@ -91,6 +93,8 @@ export async function readAllTabs(spreadsheetId, account = readServiceAccount())
     group.forEach((t, n) => out.push({
       name: t.title, gid: t.sheetId, values: valueRanges[n].values ?? [],
       ...(t.gridProperties?.columnCount && { columnCount: t.gridProperties.columnCount }),
+      ...(t.gridProperties && { frozenRows: t.gridProperties.frozenRowCount ?? 0 }),
+      ...(t.protectedRanges.length && { protections: t.protectedRanges.map((r) => ({ id: r.protectedRangeId, description: r.description ?? '' })) }),
     }));
   }
   return out;
@@ -116,6 +120,19 @@ export async function writeCells(spreadsheetId, { grow = [], data = [] }, accoun
   if (!data.length) return { updatedCells: 0 };
   const res = await call(`${API}/${id}/values:batchUpdate`, json(token, { valueInputOption: 'RAW', data }), 'sheet write');
   return { updatedCells: res.totalUpdatedCells ?? 0 };
+}
+
+/**
+ * Sheet structure and formatting in one call (spreadsheets.batchUpdate): adding,
+ * moving and styling the panel's columns. Google applies the requests in order,
+ * all or nothing.
+ */
+export async function updateLayout(spreadsheetId, requests, account = readServiceAccount()) {
+  if (!account) throw new Error('GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON is not set');
+  if (!requests.length) return { replies: 0 };
+  const token = await accessToken(account);
+  const res = await call(`${API}/${encodeURIComponent(spreadsheetId)}:batchUpdate`, json(token, { requests }), 'sheet layout');
+  return { replies: (res.replies ?? []).length };
 }
 
 /** The robot's address (not secret): shown so the owner knows whom to share the sheet with. */

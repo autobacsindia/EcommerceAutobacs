@@ -20,13 +20,16 @@
  *   failure             the panel save never waits for Google. Leads stay marked
  *                       (sheetDirty) until a write lands: the queue job retries,
  *                       and the 5-minute sync retries whatever is still marked.
+ *   layout              services/metaLeadSheetLayout.js keeps the panel's block the
+ *                       same on every tab: one order, no gaps, after the team's.
  *   rate limit          one queue job per 10-second window flushes every waiting
  *                       lead in one read + at most two writes, far under Google's
  *                       60 writes a minute.
  */
 import * as Sentry from '@sentry/node';
 import metaLeadRepository from '../repositories/metaLeadRepository.js';
-import { readAllTabs, writeCells, a1Cell, serviceAccountEmail } from './googleSheetsClient.js';
+import { readAllTabs, writeCells, updateLayout, a1Cell, serviceAccountEmail } from './googleSheetsClient.js';
+import { planPanelLayout, LAYOUT_VERSION } from './metaLeadSheetLayout.js';
 import { PANEL_COLUMNS, parseTab, tabLayout } from '../utils/metaLeadSheet.js';
 import { richTextToPlain } from '../utils/richText.js';
 import { sheetDateTime } from '../utils/officeHours.js';
@@ -209,22 +212,55 @@ async function saveWriteState(patch) {
 }
 
 /**
- * Write every waiting lead to the sheet. Never touches a lead whose write did not
- * land. Throws only when Google was unavailable (so the queue retries); a
- * permission error is recorded and left for the next run, as retrying it now
- * cannot help.
+ * Keep the panel's columns tidy on every lead tab (services/metaLeadSheetLayout.js).
+ * Best-effort: a failure here is recorded and reported once, and never stops the
+ * cell writes. Returns the tabs to plan the writes on (re-read after any change).
  */
-export async function flushMetaLeadSheetWrites({ readTabs = readAllTabs, write = writeCells, now = () => new Date() } = {}) {
+async function tidyLayout(sheetId, tabs, readTabs, layout) {
+  const state = (await metaLeadRepository.getState())?.writeBack?.layout ?? {};
+  const done = state.version === LAYOUT_VERSION ? (state.gids ?? []) : [];
+  const plan = planPanelLayout(tabs, done);
+  if (!plan.requests.length) return tabs;
+  try {
+    await layout(sheetId, plan.requests);
+    const gids = [...new Set([...done, ...plan.dressed].map(String))];
+    await saveWriteState({ layout: { version: LAYOUT_VERSION, gids, error: '', at: new Date() } });
+    console.log(`[MetaLeadSheetWrite] tidied the panel columns on: ${plan.tabs.join(', ')}`);
+  } catch (err) {
+    console.error('[MetaLeadSheetWrite] layout failed:', err.message);
+    if (!state.error) Sentry.captureException(err, { tags: { metaLeadSheetWrite: 'layout' } });
+    await saveWriteState({ layout: { ...state, error: String(err.message ?? err).slice(0, 300) } }).catch(() => {});
+    return tabs;
+  }
+  // Columns moved: plan the cell writes on the sheet as it is now.
+  return readTabs(sheetId);
+}
+
+/**
+ * Write every waiting lead to the sheet, after tidying the panel's columns.
+ * Never touches a lead whose write did not land. Throws only when Google was
+ * unavailable (so the queue retries); a permission error is recorded and left for
+ * the next run, as retrying it now cannot help. `ensureLayout` (the scheduled
+ * run) reads the sheet even with nothing waiting, so every tab gets its columns.
+ */
+export async function flushMetaLeadSheetWrites({
+  readTabs = readAllTabs, write = writeCells, layout = updateLayout, now = () => new Date(), ensureLayout = false,
+} = {}) {
   if (!sheetWriteEnabled()) return null;
   const sheetId = process.env.META_LEADS_SHEET_ID;
   const leads = await metaLeadRepository.findSheetDirty();
   const attemptAt = now();
-  if (!leads.length) {
+  if (!leads.length && !ensureLayout) {
     await saveWriteState({ pending: 0 });
     return { leads: 0, cells: 0, notFound: 0 };
   }
   try {
-    const plan = planSheetWrites(await readTabs(sheetId), leads);
+    const tabs = await tidyLayout(sheetId, await readTabs(sheetId), readTabs, layout);
+    if (!leads.length) {
+      await saveWriteState({ pending: 0, lastAttemptAt: attemptAt, lastSuccessAt: attemptAt, error: '', errorKind: '', robotEmail: '' });
+      return { leads: 0, cells: 0, notFound: 0 };
+    }
+    const plan = planSheetWrites(tabs, leads);
     await write(sheetId, plan);
     await metaLeadRepository.settleSheetWrites(plan.results, attemptAt);
     const notFound = plan.results.filter((r) => r.error).length;
@@ -250,7 +286,7 @@ export async function flushMetaLeadSheetWrites({ readTabs = readAllTabs, write =
 
 /** The scheduled safety net (every sync run): retries whatever is still waiting. Never throws. */
 export async function runScheduledSheetWrite() {
-  try { return await flushMetaLeadSheetWrites(); } catch { return null; }
+  try { return await flushMetaLeadSheetWrites({ ensureLayout: true }); } catch { return null; }
 }
 
 /**

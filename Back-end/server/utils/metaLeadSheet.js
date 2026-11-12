@@ -20,14 +20,16 @@ const FOLLOW_UP_CORE = ['followUp1', 'followUp2'];
   output, so they can never come back as a "sheet edit" and fight the panel,
   and they do not shift the positional sales columns.
 */
+// In this order on every tab, readable ones first; the lead id (for matching
+// rows only) last. services/metaLeadSheetLayout.js keeps every tab this way.
 export const PANEL_COLUMNS = Object.freeze({
-  leadId: 'Panel lead ID',
   followingUp: 'Panel: following up',
   status: 'Panel: follow-up status',
-  note: 'Panel: last note',
   nextBy: 'Panel: next follow-up by',
+  note: 'Panel: last note',
   lateReason: 'Panel: late reason',
   updatedAt: 'Panel: updated at',
+  leadId: 'Panel lead ID',
 });
 export const isPanelHeader = (h) => /^panel(\s+lead\s+id\s*$|\s*:)/i.test(String(h ?? '').trim());
 
