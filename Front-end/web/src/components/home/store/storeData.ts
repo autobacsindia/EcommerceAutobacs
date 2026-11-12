@@ -12,6 +12,8 @@
  */
 import { serverFetch } from '@/lib/server-api';
 import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
+import { getStockStatus, type StockStatus } from '@/lib/stock';
+import { HOME_SHELF_ORDER, buildPremiumPicks, orderShelf } from './shelfOrder';
 
 const REVALIDATE = 300;
 /*
@@ -43,6 +45,14 @@ export interface StoreProduct {
    */
   variable?: boolean;
   festivalOfferSetting?: FestivalOfferSetting | null;
+  /** Coarse availability; 'out'/'backorder' tiles sort last on every shelf. */
+  stock: StockStatus;
+  /**
+   * 1-based position in the best-seller ranking. Shelves are shown premium-first, so
+   * a tile's position is no longer its sales rank — the "#1 Best seller" badge reads
+   * this instead, so it stays true.
+   */
+  salesRank?: number;
 }
 
 export interface StoreCategory {
@@ -80,6 +90,8 @@ export interface StoreHomeData {
   newArrivals: StoreProduct[];
   /** Admin-picked products. The hero banners prefer these for their photos. */
   featured: StoreProduct[];
+  /** Featured first, topped up with the dearest buyable products (see shelfOrder.ts). */
+  premiumPicks: StoreProduct[];
   categoryRows: StoreCategoryRow[];
   brands: StoreBrand[];
   reviews: StoreReview[];
@@ -96,6 +108,7 @@ interface ApiProduct {
   festivalOfferSetting?: FestivalOfferSetting | null;
   offerEndDate?: string | null;
   productType?: string;
+  stock?: string | number | null;
   averageRating?: number;
   totalReviews?: number;
   salesScore?: number;
@@ -123,6 +136,7 @@ export const toStoreProduct = (p: ApiProduct): StoreProduct => {
     reviews: p.totalReviews || 0,
     ...(p.productType === 'variable' && { variable: true }),
     ...(p.festivalOfferSetting && { festivalOfferSetting: p.festivalOfferSetting }),
+    stock: getStockStatus(p),
   };
 };
 
@@ -166,16 +180,38 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     const res = await serverFetch<{ products?: ApiProduct[]; total?: number }>(`/products/offers?limit=24`, {
       next: { revalidate: REVALIDATE, tags: [TAGS.products] },
     });
-    const list = (res.products ?? []).filter(usable).map(toStoreProduct).filter((p) => discountPct(p) > 0)
-      .sort((a, b) => discountPct(b) - discountPct(a)).slice(0, 16);
+    let list = (res.products ?? []).filter(usable).map(toStoreProduct).filter((p) => discountPct(p) > 0)
+      .sort((a, b) => discountPct(b) - discountPct(a));
+    // Biggest saving decides membership when there are more than 16; the shelf then
+    // shows them premium-first (see shelfOrder.ts).
+    list = orderShelf(list.slice(0, 16), HOME_SHELF_ORDER.deals);
     return { list, total: Math.max(res.total ?? 0, list.length) };
   }, { list: [] as StoreProduct[], total: 0 });
 
-  const bestP = safe(async () => (await productList('sortBy=salesScore&sortOrder=desc&limit=24'))
-    .filter((p) => usable(p) && (p.salesScore ?? 0) > 0).map(toStoreProduct).slice(0, 16), [] as StoreProduct[]);
+  // Membership = the top sellers (up to 24 fetched, 16 shown); order = premium-first.
+  const bestP = safe(async () => orderShelf(
+    (await productList('sortBy=salesScore&sortOrder=desc&limit=24'))
+      .filter((p) => usable(p) && (p.salesScore ?? 0) > 0)
+      .map((p, i) => ({ ...toStoreProduct(p), salesRank: i + 1 }))
+      .slice(0, 16),
+    HOME_SHELF_ORDER.bestSellers,
+  ), [] as StoreProduct[]);
 
-  const newP = safe(async () => (await productList('sortBy=createdAt&sortOrder=desc&limit=16'))
-    .filter(usable).map(toStoreProduct), [] as StoreProduct[]);
+  const newP = safe(async () => orderShelf(
+    (await productList('sortBy=createdAt&sortOrder=desc&limit=16')).filter(usable).map(toStoreProduct),
+    HOME_SHELF_ORDER.newArrivals,
+  ), [] as StoreProduct[]);
+
+  /*
+    The dearest BUYABLE products, for topping up "Premium Picks". Sorted by the
+    backend (Atlas `price` sort, led by stockRank) and bounded; `inStock=true`
+    excludes out AND backorder on both engines. Same `sortBy=price` the catalogue's
+    "Price: high to low" already uses — no new query shape.
+  */
+  const dearestP = safe(
+    async () => (await productList('sortBy=price&sortOrder=desc&order=desc&inStock=true&limit=24')).filter(usable).map(toStoreProduct),
+    [] as StoreProduct[],
+  );
 
   /*
     Products the admin has ticked "Featured".
@@ -228,12 +264,15 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
   const candidates = ROW_CANDIDATES.map((s) => bySlug.get(s)).filter(Boolean) as StoreCategory[];
   const rowsP = Promise.all(candidates.map((c) => safe(async () => ({
     category: c,
-    products: (await productList(`category=${encodeURIComponent(c.slug)}&sortBy=salesScore&sortOrder=desc&limit=12`))
-      .filter(usable).map(toStoreProduct),
+    products: orderShelf(
+      (await productList(`category=${encodeURIComponent(c.slug)}&sortBy=salesScore&sortOrder=desc&limit=12`))
+        .filter(usable).map(toStoreProduct),
+      HOME_SHELF_ORDER.categoryRows,
+    ),
   }), { category: c, products: [] as StoreProduct[] })));
 
-  const [deals, bestSellers, newArrivals, featured, brands, reviews, rows] = await Promise.all([
-    dealsP, bestP, newP, featuredP, brandsP, reviewsP, rowsP,
+  const [deals, bestSellers, newArrivals, featured, dearest, brands, reviews, rows] = await Promise.all([
+    dealsP, bestP, newP, featuredP, dearestP, brandsP, reviewsP, rowsP,
   ]);
   return {
     categories,
@@ -242,6 +281,7 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     bestSellers,
     newArrivals,
     featured,
+    premiumPicks: buildPremiumPicks(featured, dearest),
     categoryRows: rows.filter((r) => r.products.length >= 4).slice(0, MAX_CATEGORY_ROWS),
     brands,
     reviews,

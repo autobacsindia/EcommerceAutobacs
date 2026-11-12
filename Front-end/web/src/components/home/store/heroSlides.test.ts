@@ -3,7 +3,7 @@ import type { StoreHomeData, StoreProduct } from './storeData';
 
 const prod = (id: string, over: Partial<StoreProduct> = {}): StoreProduct => ({
   id, name: `Part ${id}`, href: `/products/p${id}`, image: `/i${id}.jpg`,
-  brand: 'Brand', price: 1000, rating: 0, reviews: 0, ...over,
+  brand: 'Brand', price: 1000, rating: 0, reviews: 0, stock: 'in', ...over,
 });
 
 const base: StoreHomeData = {
@@ -13,6 +13,7 @@ const base: StoreHomeData = {
   bestSellers: [prod('b1'), prod('b2'), prod('b3')],
   newArrivals: [prod('n1'), prod('n2'), prod('n3')],
   featured: [],
+  premiumPicks: [],
   categoryRows: [],
   brands: [],
   reviews: [],

@@ -29,7 +29,7 @@ const liveTheme = (): PublicFestivalTheme => ({
 
 const prod = (id: string, price: number, originalPrice?: number): StoreProduct => ({
   id, name: `Product ${id}`, href: `/products/${id}`, image: `https://img.example/${id}.jpg`,
-  brand: '', price, originalPrice, rating: 0, reviews: 0,
+  brand: '', price, originalPrice, rating: 0, reviews: 0, stock: 'in',
 });
 
 const deals = [prod('d1', 1620, 3840), prod('d2', 38250, 85000), prod('d3', 2176, 4352), prod('d4', 9000, 10000)];
@@ -40,6 +40,7 @@ const data: StoreHomeData = {
   bestSellers: [prod('b1', 4200), prod('b2', 5499), prod('b3', 19990)],
   newArrivals: [prod('n1', 14850), prod('n2', 59999)],
   featured: [],
+  premiumPicks: [],
   categoryRows: [],
   brands: [],
   reviews: [],
