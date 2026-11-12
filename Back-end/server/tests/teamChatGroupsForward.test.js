@@ -271,13 +271,13 @@ describe('Group conversations, @all, and Forward', () => {
       expect((await anu.s.raw(up.body.message.attachments[0].url)).status).toBe(404);
     });
 
-    it('works on an automatic order update, credited to Roavion updates', async () => {
+    it('works on an automatic order update, credited to Autobacs updates', async () => {
       await postSystemMessage('team:sales', 'Order #AB12 paid', { key: 'fwd-sys' });
       const sales = await space(sam, 'team:sales');
       const update = (await sam.s.get(`/chat/channels/${sales.id}/messages`)).body.messages.find((m) => m.kind === 'system');
       const { id: group } = (await open(sam, [anu, ravi])).body.channel;
       const res = await forward(sam, update.id, group);
-      expect(res.body.message).toMatchObject({ kind: 'user', text: 'Order #AB12 paid', forwarded: { by: 'Roavion updates' } });
+      expect(res.body.message).toMatchObject({ kind: 'user', text: 'Order #AB12 paid', forwarded: { by: 'Autobacs updates' } });
     });
   });
 });

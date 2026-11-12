@@ -44,7 +44,7 @@ const PEEK_CLOSE_MS = 220;
 
 /**
  * The frame shared by the admin and team panels: a deep emerald sidebar with
- * the white Roavion logo, a white top bar, and on phones a menu
+ * the white Autobacs logo, a white top bar, and on phones a menu
  * button that slides the sidebar in over the page. Visual only — every link,
  * section and button is the caller's, so behaviour stays where it was.
  */
@@ -186,7 +186,7 @@ export default function PanelShell({
         <div className={`pn-brand flex items-center gap-2 px-5 py-5 ${rail ? 'md:justify-center md:px-2' : ''}`}>
           <Link href={homeHref} className={`min-w-0 flex-1 ${rail ? 'md:hidden' : ''}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/roavion-logo.png" alt="Roavion" width={960} height={255} className="pn-logo h-7 w-auto" />
+            <img src="/images/autobacs-logo-white.png" alt="Autobacs India" width={960} height={226} className="pn-logo h-7 w-auto" />
             <span className="pn-brand-sub mt-2 block truncate">{subtitle}</span>
           </Link>
           {hoverRail ? (

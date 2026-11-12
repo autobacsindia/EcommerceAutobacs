@@ -35,7 +35,7 @@ export function drawChampionImage(c: Champion): HTMLCanvasElement {
   g.fillStyle = '#e5e7eb'; g.font = '46px system-ui, sans-serif';
   g.fillText(`${c.slab ? `${c.slab} slab · ` : ''}${rupees(c.payout)}`, 540, 870);
   g.font = '32px system-ui, sans-serif'; g.fillStyle = '#9ca3af';
-  g.fillText('Roavion · Autobacs India', 540, 1000);
+  g.fillText('Autobacs India', 540, 1000);
   return canvas;
 }
 

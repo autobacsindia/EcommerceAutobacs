@@ -59,7 +59,7 @@
 }
 
 /* ============================================================================
- * STOREFRONT DESIGN SYSTEM — light store in the Roavion brand colours.
+ * STOREFRONT DESIGN SYSTEM — light store in the Autobacs brand colours.
  *
  * Single source of truth for the storefront theme. Every page/component styles
  * itself with these Tailwind utilities — never hardcode hex. To re-skin the whole
@@ -72,7 +72,7 @@
  *   obsidian-deep   = a slightly deeper section background
  *   obsidian-raised = cards / raised surfaces (white)
  *   ink / ink-muted = text
- *   gold            = the brand accent — now Roavion green (#0A5C33, from the logo)
+ *   gold            = the brand accent — the brand green (#0A5C33, from the logo)
  *
  *   bg:  bg-obsidian / bg-obsidian-deep / bg-obsidian-raised
  *   text: text-ink / text-ink-muted / text-gold

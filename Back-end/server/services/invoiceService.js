@@ -267,10 +267,10 @@ const fmtDate = (d) => formatLongDateIST(d);
 // Read from disk like the fonts above: no network fetch per process, nothing to
 // time out, and no stale URL in an environment variable can resurrect an old
 // logo (the Onam-season artwork lingered on invoices that way). When the brand
-// logo changes, replace assets/brand/roavion-logo.png with the navbar's file
-// (Front-end/web/public/images/roavion-logo.png). It is white-on-transparent,
+// logo changes, replace assets/brand/autobacs-logo-white.png with the navbar's file
+// (Front-end/web/public/images/autobacs-logo-white.png). It is white-on-transparent,
 // which is why the header draws it on a dark chip.
-const LOGO_PATH = join(__dirname, '..', 'assets', 'brand', 'roavion-logo.png');
+const LOGO_PATH = join(__dirname, '..', 'assets', 'brand', 'autobacs-logo-white.png');
 let cachedLogo;
 
 export const loadLogo = async () => {
@@ -289,7 +289,7 @@ export const loadLogo = async () => {
 };
 
 /**
- * Build the invoice PDF for an order. Mirrors the ROAVION reference invoice:
+ * Build the invoice PDF for an order. Mirrors the reference invoice:
  * logo + seller block header, bill-to / meta columns, a dark items table, and a
  * totals summary. Shipping is rendered as "extra, paid on delivery" when the
  * order carries no shipping charge (the common case), otherwise the real amount.
@@ -322,7 +322,7 @@ export const generateInvoicePdf = async (order, user = null) => {
 
       // ── Header: logo (left) + seller identity (right) ────────────────────────
       const headerTop = 45;
-      // The Roavion primary logo is white-on-transparent (built for the dark
+      // The Autobacs logo is white-on-transparent (built for the dark
       // navbar), so it would be invisible on the white page. Render it the way
       // the brand intends — on a dark rounded chip — which also keeps it legible
       // regardless of the asset's internal colours. Height drives the header band.
@@ -352,7 +352,7 @@ export const generateInvoicePdf = async (order, user = null) => {
       const sellerX = 320;
       const sellerW = RIGHT - sellerX;
       doc.font(FONT_BOLD).fontSize(11).fillColor('#111')
-        .text('ROAVION – Powered by AutoBacs India', sellerX, headerTop, { width: sellerW });
+        .text('Autobacs India', sellerX, headerTop, { width: sellerW });
       doc.font(FONT).fontSize(9).fillColor('#444');
       [
         companyInfo.name,

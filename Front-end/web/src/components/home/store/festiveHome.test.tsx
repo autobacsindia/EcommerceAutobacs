@@ -89,7 +89,7 @@ describe('festive home page switch', () => {
     expect(screen.getByRole('heading', { name: 'Diwali Deals' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: "Today's Deals" })).not.toBeInTheDocument();
     expect(screen.getByTestId('festive-gifts')).toBeInTheDocument();
-    expect(screen.getByTestId('festive-wish')).toHaveTextContent('Happy Diwali from Team Roavion');
+    expect(screen.getByTestId('festive-wish')).toHaveTextContent('Happy Diwali from Team Autobacs');
   });
 
   it('hero numbers are the real ones: top discount and the deals count', () => {

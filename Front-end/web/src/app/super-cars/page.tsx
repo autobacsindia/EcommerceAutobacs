@@ -84,7 +84,7 @@ export default function SuperCarsPage() {
         <div className="relative container mx-auto px-4 py-20 text-center z-10">
           <div className="animate-slide-up-enter">
             <span className="inline-block px-4 py-1 mb-6 border border-[#6fdc9c]/50 rounded-full bg-[#0a5c33]/40 text-[#cfe9d9] text-sm font-tracking-wider uppercase">
-              ROAVION - Powered by AutoBacs India
+              Autobacs India
             </span>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-white via-[#bfe3cd] to-white bg-clip-text text-transparent">
               DISCOVER A NEW IMMERSIVE EXPERIENCE

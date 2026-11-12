@@ -625,7 +625,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                 <h3 className="font-semibold mb-3">Details</h3>
                 <div className="space-y-2 text-sm">
                   <p><span className="text-gray-500">Customer:</span> {userName(request.user)}</p>
-                  <p><span className="text-gray-500">Shipping borne by:</span> {request.shippingBorneBy || 'roavion'}</p>
+                  <p><span className="text-gray-500">Shipping borne by:</span> {request.shippingBorneBy === 'customer' ? 'Customer' : 'Autobacs'}</p>
                   <p><span className="text-gray-500">Problem:</span> {request.problemDescription || '—'}</p>
                   {/* Read the booked pickup back — this was captured and then never
                       displayed anywhere, which is how the step became a dead form. */}

@@ -104,7 +104,7 @@ describe('Home list: last-message preview', () => {
     expect(await previewIn(sam, company)).toMatchObject({ by: 'Anu', text: 'Approved' });
 
     await postSystemMessage('company', 'Order #A1B2 paid');
-    expect(await previewIn(sam, company)).toMatchObject({ by: 'Roavion updates', mine: false, text: 'Order #A1B2 paid' });
+    expect(await previewIn(sam, company)).toMatchObject({ by: 'Autobacs updates', mine: false, text: 'Order #A1B2 paid' });
   });
 
   describe('edit', () => {

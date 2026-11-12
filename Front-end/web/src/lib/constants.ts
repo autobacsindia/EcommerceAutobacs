@@ -403,9 +403,24 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 //
 // The storefront footer, the login page and the register page all read this.
 // Adding a policy page means adding it here, never inlining a label.
-/** Registered legal entity, shown in the site footer, the login/register copyright
- *  lines and the Terms page. The brand remains "Autobacs India" (URLs, emails, feeds). */
+/** Registered legal entity, shown on the Terms page (and in JSON-LD `legalName`).
+ *  Everything a shopper reads as the brand uses BRAND_NAME instead. */
 export const COMPANY_LEGAL_NAME = 'Roavion Automotive Pvt Ltd';
+
+/** The customer-facing brand: footer and login/register copyright lines. */
+export const BRAND_NAME = 'Autobacs India';
+
+/** Footer line naming the company behind the brand (owner's request). */
+export const BRAND_OWNERSHIP_LINE = `${BRAND_NAME} is a brand of Roavion Automotive Private Limited.`;
+
+/** Official social profiles — the footer and the Organization JSON-LD `sameAs`
+ *  both read this, so the visible links and what Google is told cannot drift. */
+export const SOCIAL_LINKS = {
+  instagram: 'https://www.instagram.com/autobacsindia/',
+  youtube: 'https://www.youtube.com/channel/UCsaXH8a2Ci1P85hOZWGDQcw',
+  facebook: 'https://www.facebook.com/autobacsindia/',
+  linkedin: 'https://www.linkedin.com/company/autobacs-india/',
+} as const;
 
 export const LEGAL_LINKS = {
   terms:    { href: '/terms',    label: 'Terms and Conditions' },

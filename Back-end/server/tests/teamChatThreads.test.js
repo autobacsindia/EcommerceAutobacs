@@ -232,7 +232,7 @@ describe('Team chat threads', () => {
       // The thread moved when its second update arrived, so it is now the newest.
       expect(messages.map((m) => m.text)).toEqual(['Another order', 'Out of stock']);
       const root = messages.find((m) => m.text === 'Out of stock');
-      expect(root).toMatchObject({ replyCount: 1, lastReply: { by: 'Roavion updates', preview: 'Ordered from supplier' } });
+      expect(root).toMatchObject({ replyCount: 1, lastReply: { by: 'Autobacs updates', preview: 'Ordered from supplier' } });
     });
 
     it('the same order in another space is its own thread', async () => {

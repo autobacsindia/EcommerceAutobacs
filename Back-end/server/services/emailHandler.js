@@ -580,7 +580,7 @@ class EmailHandler {
     return this.sendEmail({
       to, subject, text, html,
       fromEmail: process.env.CAREERS_FROM_EMAIL || undefined,
-      fromName: 'ROAVION Automotive',
+      fromName: 'Autobacs India',
       purpose: MAIL_PURPOSE.CAREERS,
     });
   }
@@ -601,7 +601,7 @@ class EmailHandler {
     return this.sendEmail({
       to, subject, text, html,
       fromEmail: process.env.CAREERS_FROM_EMAIL || undefined,
-      fromName: 'ROAVION Automotive',
+      fromName: 'Autobacs India',
       purpose: MAIL_PURPOSE.CAREERS,
     });
   }
@@ -625,7 +625,7 @@ class EmailHandler {
     return this.sendEmail({
       to, ...email,
       fromEmail: careersFrom,
-      fromName: 'ROAVION Automotive',
+      fromName: 'Autobacs India',
       replyTo: careersFrom,
       purpose: MAIL_PURPOSE.CAREERS,
     });

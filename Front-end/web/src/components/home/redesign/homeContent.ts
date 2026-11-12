@@ -15,7 +15,7 @@
  * at `/images/home/...` paths before the files exist.
  */
 
-import { LEGAL_LINK_LIST, COMPANY_LEGAL_NAME } from '@/lib/constants';
+import { LEGAL_LINK_LIST, BRAND_NAME, BRAND_OWNERSHIP_LINE, SOCIAL_LINKS } from '@/lib/constants';
 
 /** Neutral placeholder shown when an `image` is empty/missing. */
 export const FALLBACK_IMAGE = '';
@@ -91,12 +91,15 @@ export const brand = {
    * or use a CDN/Cloudinary URL. Leave it empty ('') to keep the text wordmark
    * (AUTO + BAACS) below. Used in both the nav and the footer.
    */
-  // The asset is pre-trimmed to the mark (960×255, no transparent padding), so the
+  // The asset is pre-trimmed to the mark (960×226, no transparent padding), so the
   // logo fills its height in the navbar instead of floating tiny and off-centre.
   // An untrimmed square canvas renders the wordmark a few pixels tall. Display size
   // is controlled in CSS via `.logo-img` (see home-redesign.css), NOT by inflating
   // the asset height.
-  logo: '/images/roavion-logo.png',
+  // White wordmark: every place that shows it sits on a dark plate/bar.
+  logo: '/images/autobacs-logo-white.png',
+  // Black wordmark for light backgrounds.
+  logoOnLight: '/images/autobacs-logo.png',
   logoAlt: 'Autobacs India',
   // Profile avatar in the nav (replace with the signed-in user's image later).
   avatar:
@@ -523,11 +526,12 @@ export const footer = {
       links: LEGAL_LINK_LIST.map((l) => ({ label: l.label, href: l.href })),
     },
   ],
-  copyright: `© ${new Date().getFullYear()} ${COMPANY_LEGAL_NAME}. All rights reserved.`,
+  copyright: `© ${new Date().getFullYear()} ${BRAND_NAME}. All rights reserved.`,
+  ownership: BRAND_OWNERSHIP_LINE,
   social: [
-    { label: 'Facebook', href: 'https://www.facebook.com/autobacsindia' },
-    { label: 'Instagram', href: 'https://www.instagram.com/autobacsindia' },
-    { label: 'YouTube', href: 'https://www.youtube.com/@AutobacsIndia' },
-    { label: 'LinkedIn', href: 'https://www.linkedin.com/company/roavion/' },
+    { label: 'Facebook', href: SOCIAL_LINKS.facebook },
+    { label: 'Instagram', href: SOCIAL_LINKS.instagram },
+    { label: 'YouTube', href: SOCIAL_LINKS.youtube },
+    { label: 'LinkedIn', href: SOCIAL_LINKS.linkedin },
   ],
 };

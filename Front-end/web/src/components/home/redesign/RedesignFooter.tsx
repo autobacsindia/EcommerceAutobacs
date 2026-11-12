@@ -50,7 +50,7 @@ export default function RedesignFooter() {
         <div className="footer-brand">
           <div className="logo-f">
             {brand.logo ? (
-              <Img src={brand.logo} alt={brand.logoAlt} className="logo-img footer-logo-img" sizes="200px" width={960} height={255} />
+              <Img src={brand.logo} alt={brand.logoAlt} className="logo-img footer-logo-img" sizes="200px" width={960} height={226} />
             ) : (
               <>
                 {brand.name}
@@ -98,7 +98,7 @@ export default function RedesignFooter() {
       </div>
 
       <div className="footer-bottom">
-        <p>{footer.copyright}</p>
+        <p><span>{footer.copyright}</span> <span>{footer.ownership}</span></p>
         <p className="footer-secure">
           <Lock aria-hidden="true" /> Secure payments by Razorpay · UPI · Cards · Net Banking · EMI
         </p>

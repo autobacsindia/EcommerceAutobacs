@@ -16,7 +16,7 @@ const tabs = () => self.clients.matchAll({ type: 'window', includeUncontrolled: 
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
-  const title = data.title || 'Roavion';
+  const title = data.title || 'Autobacs India';
   event.waitUntil((async () => {
     let shown = true;
     try {

@@ -89,7 +89,7 @@ export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
       giftTitle: 'Gift for your car this Diwali',
       giftSubtitle: 'Thoughtful upgrades at every budget, for your own car or someone special',
       giftTiers: ['Little sparkles', 'Festive upgrades', 'The grand gift'],
-      wishTitle: 'Happy Diwali from Team Roavion',
+      wishTitle: 'Happy Diwali from Team Autobacs',
       wishSubtitle: 'May your roads be bright and every drive be safe.',
     },
   },

@@ -105,7 +105,7 @@ export async function sendToUsers(recipients, message) {
 
 function payloadFor(message, url) {
   return JSON.stringify({
-    title: String(message.title || 'Roavion').slice(0, 120),
+    title: String(message.title || 'Autobacs India').slice(0, 120),
     body: String(message.body || '').slice(0, 240),
     tag: message.tag || undefined,
     url,
@@ -143,7 +143,7 @@ async function deliver(sub, payload) {
 }
 
 const TEST_MESSAGE = {
-  title: 'Roavion notifications are on', body: 'You will get a pop-up like this for new messages and new work.', tag: 'push-test',
+  title: 'Autobacs notifications are on', body: 'You will get a pop-up like this for new messages and new work.', tag: 'push-test',
 };
 const cleanTestId = (raw) => (typeof raw === 'string' && /^[\w-]{8,40}$/.test(raw) ? raw : undefined);
 

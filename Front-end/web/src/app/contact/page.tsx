@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin, Phone, Mail, Clock, ArrowRight, Headphones } from 'lucide-react';
+import { Phone, Mail, ArrowRight, Headphones } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
@@ -35,18 +35,6 @@ function ContactPageInner() {
 
   const contactInfo = [
     {
-      icon: <MapPin className="h-5 w-5 text-gold" />,
-      title: 'Headquarters',
-      // One entry per rendered line.
-      details: [
-        'Roavion Automotive Private Limited',
-        'C64, 9th Floor, Jomer Symphony',
-        'No. 48/1744, Ponnurunni North',
-        'Ponnurunni East, Chalikkavattom',
-        'Vyttila, Ernakulam, Kerala 682019',
-      ],
-    },
-    {
       icon: <Phone className="h-5 w-5 text-gold" />,
       title: 'Phone',
       details: [SUPPORT_PHONE_DISPLAY]
@@ -55,11 +43,6 @@ function ContactPageInner() {
       icon: <Mail className="h-5 w-5 text-gold" />,
       title: 'Email',
       details: [SUPPORT_EMAIL]
-    },
-    {
-      icon: <Clock className="h-5 w-5 text-gold" />,
-      title: 'Working Hours',
-      details: ['Monday - Saturday: 10:00 AM - 6:00 PM', 'Sunday: Closed']
     }
   ];
 
@@ -165,11 +148,6 @@ function ContactPageInner() {
                   </div>
                   <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-gold" />
                 </a>
-
-                <div className="flex items-center gap-2 pt-1 text-ink-muted font-display text-xs">
-                  <Clock className="h-4 w-4 shrink-0" />
-                  <span>Mon&ndash;Sat, 10:00 AM &ndash; 6:00 PM IST</span>
-                </div>
               </div>
             </div>
           </div>

@@ -78,7 +78,7 @@ export default function MentionsPanel({
                       <Avatar person={m.sender} system={m.kind === 'system'} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-medium text-gray-900">
-                          {m.kind === 'system' ? 'Roavion' : m.sender?.name ?? 'Someone'}
+                          {m.kind === 'system' ? 'Autobacs' : m.sender?.name ?? 'Someone'}
                         </span>
                         <span className="mt-0.5 line-clamp-4 block whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-700">
                           {m.text || (m.attachments.length ? '📎 Shared a file' : '')}

@@ -1,12 +1,12 @@
 /*
- * Careers ("Roavion") landing page styles.
+ * Careers (Autobacs India) landing page styles.
  *
  * Ported from the WordPress shortcode's inline <style> block, scoped under
  * `.rv-careers-page` so nothing leaks into the rest of the storefront (same
  * pattern as the home redesign's `.hr` scope). WordPress-only rules — theme
  * header/footer hiding and #primary/.entry-content resets — are intentionally
  * dropped: the page now sits inside the store's own header/footer (2026-10 restyle to
- * the light Roavion theme), and there is no theme wrapper to reset here.
+ * the light store theme), and there is no theme wrapper to reset here.
  *
  * Fonts: the store's own (site body font; Montserrat for headings) — do NOT
  * reintroduce the Google Fonts <link> (blocked by CSP font-src).
@@ -194,7 +194,7 @@
  * a #dfe3e2 hairline, so on most screens the fields and their titles simply
  * disappeared. Labels are now readable sentence case, every field is a white
  * box with a clearly visible border, and the form sits in a framed card split
- * into four numbered steps. Colours stay on the Roavion green/ink palette. */
+ * into four numbered steps. Colours stay on the brand green/ink palette. */
 .rv-careers-page {
   --rv-ink: #111816;
   --rv-body: #3d4642;

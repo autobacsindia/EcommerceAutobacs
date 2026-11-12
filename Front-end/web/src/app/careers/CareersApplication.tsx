@@ -1,10 +1,10 @@
 'use client';
 
 /*
- * Careers ("Roavion") standalone application page.
+ * Careers (Autobacs India) standalone application page.
  *
  * Ported from the WordPress `roavion_careers` shortcode. The static shell (its
- * own minimal top bar, the hero, the "Why Roavion" pillars and the application
+ * own minimal top bar, the hero, the "Why Autobacs" pillars and the application
  * form) is rendered verbatim
  * (dangerouslySetInnerHTML) — it is author-controlled static HTML — and the
  * original imperative behaviour is re-attached in a client-only effect.
@@ -16,7 +16,7 @@
  * Two placeholder tokens in the template mark where they go.
  *
  * Section order is deliberate: top bar → hero with its two CTAs → OPEN ROLES →
- * "Why Roavion" → the form. Someone on a careers page is looking for a job, so
+ * "Why Autobacs" → the form. Someone on a careers page is looking for a job, so
  * the jobs come before the culture essay; the pillars still sell the company,
  * just to a reader who has already found a role worth applying for.
  *
@@ -130,15 +130,15 @@ const MARKUP_TEMPLATE = `
 
 
 <header class="rv-topbar">
-  <a href="/" class="rv-topbar-logo" aria-label="Roavion home"><img src="/images/roavion-logo.png" alt="Roavion" width="960" height="255" /></a>
+  <a href="/" class="rv-topbar-logo" aria-label="Autobacs India home"><img src="/images/autobacs-logo-white.png" alt="Autobacs India" width="960" height="226" /></a>
   <a href="/" class="rv-topbar-home"><span aria-hidden="true">&larr;</span> Home</a>
 </header>
 
 <section class="rv-hero">
   <div style="position:relative;max-width:900px;">
-    <div style="display:inline-flex;align-items:center;gap:10px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0a5c33;margin-bottom:1.25rem;font-family:inherit;"><span style="display:block;width:28px;height:1px;background:#0a5c33;"></span>Careers at Roavion Automotive</div>
+    <div style="display:inline-flex;align-items:center;gap:10px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0a5c33;margin-bottom:1.25rem;font-family:inherit;"><span style="display:block;width:28px;height:1px;background:#0a5c33;"></span>Careers at Autobacs India</div>
     <h1 class="rv-hero-h1" style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(30px,5vw,58px);line-height:0.95;color:#0f1111;margin:0 0 1rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">WE DON'T HIRE<br>FOR TITLES.<br>WE HIRE FOR <span style="color:#0a5c33;">IMPACT.</span></h1>
-    <p style="font-size:16px;font-weight:400;line-height:1.7;color:#5f6363;max-width:540px;margin:0 0 1.75rem 0;font-family:inherit;">Roavion isn't a place to fill a seat. It's a place to <strong style="color:#0f1111;font-weight:500;">own something.</strong> Browse the open roles below and apply in about 15 minutes.</p>
+    <p style="font-size:16px;font-weight:400;line-height:1.7;color:#5f6363;max-width:540px;margin:0 0 1.75rem 0;font-family:inherit;">Autobacs isn't a place to fill a seat. It's a place to <strong style="color:#0f1111;font-weight:500;">own something.</strong> Browse the open roles below and apply in about 15 minutes.</p>
     <div class="rv-hero-cta">
       <a href="#rv-roles" class="rv-btn-primary">See open roles<!--ROLE_COUNT--></a>
       <a href="#rv-form" class="rv-btn-ghost rv-apply-btn" data-role="Other / Open Application">Apply now</a>
@@ -162,11 +162,11 @@ const MARKUP_TEMPLATE = `
 
 <section class="rv-section-pad rv-band" style="background:#eef1f0;color:#0f1111;margin:0;">
   <div style="max-width:860px;margin:0 auto;">
-    <div style="margin-bottom:3rem;"><span style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Why Roavion</span></div>
+    <div style="margin-bottom:3rem;"><span style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Why Autobacs</span></div>
     <div class="rv-pillars-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #dfe3e2;">
       <div class="rv-pillar" style="padding:2rem;border-right:1px solid #dfe3e2;border-bottom:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">01 — Ownership</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">YOU BUILD IT. YOU OWN IT.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">The people who treat this like it's theirs — who figure things out before anyone tells them to. We believe wealth should follow the people who create it.</p></div>
       <div class="rv-pillar" style="padding:2rem;border-bottom:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">02 — Mission</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">THIS IS A ONCE-IN-A-DECADE SHIFT.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">Premium automotive culture in India is at an inflection point. You won't walk into a neatly packaged roadmap. You'll walk into a fast-moving, high-standards environment where the best people define the role as much as they fill it.</p></div>
-      <div class="rv-pillar" style="padding:2rem;border-right:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">03 — Growth</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">NO CEILING. NO HAND-HOLDING.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">Your background is a starting point — what matters more is how fast you learn, how clearly you think, and how much you care about doing things right. Roavion is in aggressive scale mode. The people here grow because the work demands it.</p></div>
+      <div class="rv-pillar" style="padding:2rem;border-right:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">03 — Growth</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">NO CEILING. NO HAND-HOLDING.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">Your background is a starting point — what matters more is how fast you learn, how clearly you think, and how much you care about doing things right. Autobacs is in aggressive scale mode. The people here grow because the work demands it.</p></div>
       <div class="rv-pillar" style="padding:2rem;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">04 — Culture</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">IF THAT SOUNDS LIKE PRESSURE — GOOD.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">We move fast, say what we mean, and hold each other to a high bar. No politics. No ego. Just people who care deeply about the work and the team around them. If it sounds like opportunity — you're our kind of person.</p></div>
     </div>
   </div>

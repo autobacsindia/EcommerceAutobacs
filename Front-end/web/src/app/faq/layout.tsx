@@ -3,7 +3,7 @@ import { buildPageMetadata } from '@/lib/pageSeo';
 
 // The faq page's SEO metadata is provided here in a server layout
 // (admin-managed via /admin/seo). Without this the page
-// inherits the root layout's title and ships as "ROAVION - Powered by AutoBacs
+// inherits the root layout's title and ships as "Autobacs India | Premium
 // India" — which is what it did in production, sharing one title with every
 // other unwired page while /admin/seo happily stored overrides nothing read.
 export const generateMetadata = (): Promise<Metadata> =>

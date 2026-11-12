@@ -33,16 +33,16 @@ describe('threads on a message', () => {
     renderItem({
       ...base,
       replyCount: 2,
-      lastReply: { at: '2026-10-14T09:00:00Z', by: 'Roavion updates', preview: '🟡 ordered from ARB', mentions: [] },
+      lastReply: { at: '2026-10-14T09:00:00Z', by: 'Autobacs updates', preview: '🟡 ordered from ARB', mentions: [] },
     }, open);
     const summary = screen.getByRole('button', { name: /Open thread, 2 replies/ });
-    expect(summary).toHaveTextContent('Roavion updates: 🟡 ordered from ARB');
+    expect(summary).toHaveTextContent('Autobacs updates: 🟡 ordered from ARB');
     fireEvent.click(summary);
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'root' }));
   });
 
   it('highlights the summary when the newest reply mentions me', () => {
-    renderItem({ ...base, replyCount: 1, lastReply: { at: base.createdAt, by: 'Roavion updates', preview: '@Sam', mentions: ['me'] } }, () => {});
+    renderItem({ ...base, replyCount: 1, lastReply: { at: base.createdAt, by: 'Autobacs updates', preview: '@Sam', mentions: ['me'] } }, () => {});
     expect(screen.getByRole('button', { name: /Open thread/ }).className).toMatch(/amber/);
   });
 

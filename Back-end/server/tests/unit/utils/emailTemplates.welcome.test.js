@@ -30,7 +30,7 @@ describe('welcomeEmail', () => {
     expect(html).toContain('href="https://www.autobacsindia.com/account/garage"');
     expect(html).toContain('href="https://www.autobacsindia.com/products"');
     expect(html).toContain('href="https://www.autobacsindia.com/consultation"');
-    expect(html).toContain('src="https://www.autobacsindia.com/images/roavion-logo.png"');
+    expect(html).toContain('src="https://www.autobacsindia.com/images/autobacs-logo-white.png"');
     expect(text).toContain('https://www.autobacsindia.com/account/garage');
     expect(html).not.toMatch(/localhost|railway\.app/);
   });
@@ -41,7 +41,7 @@ describe('welcomeEmail', () => {
       expect(html).toContain(`mailto:${addr}`);
       expect(text).toContain(addr);
     }
-    expect(html).toContain('Roavion Automotive Pvt. Ltd.');
+    expect(html).toContain('Autobacs India. All rights reserved.');
   });
 
   test('a siteUrl override is used without a trailing slash', () => {

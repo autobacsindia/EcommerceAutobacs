@@ -651,7 +651,7 @@ export default function MessageItem({
           {!grouped && (
             <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${card ? 'justify-end' : ''}`}>
               <span className={card ? 'sr-only' : 'text-sm font-semibold text-gray-900'}>
-                {m.kind === 'system' ? 'Roavion updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
+                {m.kind === 'system' ? 'Autobacs updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
               </span>
               {m.kind === 'system' ? (
                 <span className="text-xs text-gray-500">Automatic</span>
