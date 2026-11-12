@@ -69,6 +69,7 @@ export default function ReturnsPage() {
                   'Custom-made or special-order items.',
                   'Imported items marked as non-returnable.',
                   'Anything installed, used, or damaged after delivery.',
+                  'Poor installation or lack of installation knowledge, by you or your own installer.',
                 ].map(item => (
                   <li key={item} className="flex items-start gap-2 text-ink/70 font-display leading-relaxed">
                     <span className="text-ink-muted mt-1 shrink-0">—</span><span>{item}</span>
