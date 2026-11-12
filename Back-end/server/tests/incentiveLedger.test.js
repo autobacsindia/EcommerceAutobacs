@@ -303,6 +303,19 @@ describe('month close', () => {
     expect(tie[0].name).toBe('Y');
   });
 
+  test('ratings flagged as sent from the salesperson\'s own connection do not count', async () => {
+    const a = await makeOrder({ salesUser: seller._id });
+    await run(a);
+    const at = new Date('2026-10-20T06:00:00Z');
+    await db().collection('orderratings').insertMany([
+      ...[5, 5, 5].map((stars) => ({ order: a, salesperson: seller._id, stars, createdAt: at, source: 'salesperson-link', sameNetworkAsSender: true })),
+      { order: a, salesperson: seller._id, stars: 2, createdAt: at, source: 'salesperson-link', sameNetworkAsSender: false },
+    ]);
+    const { statements } = await months.computeStatements('2026-10');
+    const asha = statements.find((s) => s.name === 'Asha Seller');
+    expect(asha).toMatchObject({ ratingCount: 1, ratingFactor: 1 });
+  });
+
   test('no OrderRating collection → no rating effect', async () => {
     await makeOrder().then(run);
     const { statements } = await months.computeStatements('2026-10');
