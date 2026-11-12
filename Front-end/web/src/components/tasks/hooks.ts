@@ -15,7 +15,8 @@ export function listParams(filters: TaskFilters, state: TaskBucket): Record<stri
   if (state === 'open' && filters.due) p.due = filters.due;
   if (filters.priority) p.priority = filters.priority;
   if (filters.q?.trim()) p.q = filters.q.trim();
-  if (filters.view === 'team' && filters.assignee) p.assignee = filters.assignee;
+  if ((filters.view === 'team' || filters.view === 'project') && filters.assignee) p.assignee = filters.assignee;
+  if (filters.view === 'project' && filters.project) p.project = filters.project;
   if (filters.view === 'team' && filters.team) p.team = filters.team;
   if (filters.view === 'team' && filters.list) p.list = filters.list;
   if (filters.tag) p.tag = filters.tag;
@@ -46,6 +47,8 @@ export function useRefreshTasks() {
     queryClient.invalidateQueries({ queryKey: taskKeys.lists() }),
     queryClient.invalidateQueries({ queryKey: taskKeys.summary() }),
     queryClient.invalidateQueries({ queryKey: taskKeys.spaces() }),
+    // Project cards count their tasks: any task change may move a progress bar.
+    queryClient.invalidateQueries({ queryKey: taskKeys.projects() }),
   ]);
 }
 
@@ -91,7 +94,7 @@ export function useQuickEdit() {
 }
 
 /** What "+ Add task" may set beside the title (the board's chips). */
-export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[]; listId?: string; personal?: boolean };
+export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[]; listId?: string; projectId?: string; personal?: boolean };
 
 /**
  * "+ Add task" inside a status group or board column: a title, Enter, done.
@@ -115,6 +118,7 @@ export function useQuickAdd() {
         ...(extras.priority && extras.priority !== 'normal' ? { priority: extras.priority } : {}),
         ...(extras.tags?.length ? { tags: extras.tags } : {}),
         ...(extras.listId ? { listId: extras.listId } : {}),
+        ...(extras.projectId ? { projectId: extras.projectId } : {}),
         ...(extras.personal ? { personal: true } : {}),
         clientId,
       });

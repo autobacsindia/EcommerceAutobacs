@@ -3,11 +3,12 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, CalendarRange, Flag, ListChecks, ListTree, Loader2, Lock, Tag, Timer, UserPlus, Users, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Flag, FolderKanban, ListChecks, ListTree, Loader2, Lock, Tag, Timer, UserPlus, Users, X } from 'lucide-react';
 import TagInput from './TagInput';
 import AssigneePicker from './AssigneePicker';
 import { AvatarStack, DueTimeSelect } from './ui';
 import { ListPicker } from './spaces';
+import { ProjectPicker } from './ProjectPicker';
 import apiClient from '@/lib/api-client';
 import RichTextBox from '@/components/ui/RichTextBox';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -152,8 +153,10 @@ export function PeopleField({ people, selected, onChange, copies, onCopies }: {
  * `listTeam` is the space whose lists the form offers (the team being shown, or
  * the person's own); `defaultListId` starts it in the list on screen.
  */
-export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, personal = false }: {
+export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, defaultProjectId, personal = false }: {
   onDone: (task: Task) => void; onCancel: () => void; listTeam?: string | null; defaultListId?: string;
+  /** Made inside a project: starts in it. */
+  defaultProjectId?: string;
   /** Made in the Personal list: private, so there is nobody to give it to and no team list. */
   personal?: boolean;
 }) {
@@ -172,6 +175,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, pe
   const many = copies && chosen.length > 1;
   const [order, setOrder] = useState<PickedOrder | null>(null);
   const [listId, setListId] = useState<string | null>(defaultListId ?? null);
+  const [projectId, setProjectId] = useState<string | null>(defaultProjectId ?? null);
   const [error, setError] = useState('');
   const [estimate, setEstimate] = useState('');
   const estimateMinutes = estimate.trim() ? parseDuration(estimate) : undefined;
@@ -193,6 +197,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, pe
       tags: form.tags,
       orderId: order?.id || null,
       ...(listId && !personal ? { listId } : {}),
+      ...(projectId && !personal ? { projectId } : {}),
       clientId: clientId.current,
     }),
     onSuccess: (res) => {
@@ -285,6 +290,12 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, pe
           <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
             <span className="flex shrink-0 items-center gap-1"><ListTree aria-hidden className="h-3.5 w-3.5" /> List</span>
             <ListPicker team={listTeam} value={listId} onChange={setListId} className="rounded-lg border border-gray-200 px-2 py-1" />
+          </div>
+        )}
+        {!personal && (
+          <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+            <span className="flex shrink-0 items-center gap-1"><FolderKanban aria-hidden className="h-3.5 w-3.5" /> Project</span>
+            <ProjectPicker value={projectId} onChange={setProjectId} className="rounded-lg border border-gray-200 px-2 py-1" />
           </div>
         )}
         {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

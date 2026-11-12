@@ -2,7 +2,7 @@ import StaffTask from '../models/StaffTask.js';
 import StaffTaskLink from '../models/StaffTaskLink.js';
 
 /** What the link screens show of a task, and what canSee needs to decide on it. */
-const LINK_FIELDS = 'number title status priority dueOn dueTime bucket assignee assigneeName team assignees teams followers createdBy personal';
+const LINK_FIELDS = 'number title status priority dueOn dueTime bucket assignee assigneeName team assignees teams followers createdBy personal project';
 
 /**
  * Links between staff tasks (models/StaffTaskLink.js). Data access only — who may

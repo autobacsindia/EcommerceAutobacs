@@ -17,7 +17,7 @@ const HISTORY_CAP = 100;
 export const LIST_PROJECTION = Object.freeze({
   number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, dueTime: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
-  order: 1, group: 1, groupSize: 1, list: 1, personal: 1, estimateMinutes: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
+  order: 1, group: 1, groupSize: 1, list: 1, project: 1, personal: 1, estimateMinutes: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
   checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
   checklistDone: { $size: { $filter: { input: { $ifNull: ['$checklist', []] }, cond: '$$this.done' } } },
@@ -262,7 +262,7 @@ const staffTaskRepository = {
   }).sort({ _id: -1 }).limit(limit).select('task by byName text assignedBy assignedAt resolvedAt resolvedBy').lean(),
   countOpenAssignedComments: async (user, cap) => StaffTaskComment.countDocuments(staffTaskRepository.assignedCommentQuery(user, false), { limit: cap }),
   /** Just enough of `ids` for the Assigned comments list and who may see it. */
-  tasksForComments: (ids) => StaffTask.find({ _id: { $in: ids } }).select('number title personal createdBy assignee assignees team teams followers').lean(),
+  tasksForComments: (ids) => StaffTask.find({ _id: { $in: ids } }).select('number title personal createdBy assignee assignees team teams followers project').lean(),
 
   /** A team's open tasks, soonest due first, at most `cap`: the Overview's raw numbers. */
   overviewScan: (query, cap) => StaffTask.find({ ...query, bucket: 'open' })

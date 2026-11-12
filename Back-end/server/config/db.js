@@ -703,6 +703,15 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasks').createIndex({ createdBy: 1, bucket: 1, rank: 1, _id: 1 }, { partialFilterExpression: { personal: true }, name: 'staff_task_personal', background: true });
     // One list of a space, or its "Other tasks" (list: null) — models/StaffTaskList.js.
     await db.collection('stafftasks').createIndex({ teams: 1, list: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team_list', background: true });
+    // One project's tasks (models/StaffProject.js). Not partial: see the schema for why.
+    await db.collection('stafftasks').createIndex({ project: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_project', background: true });
+    await db.collection('staffprojects').createIndex({ archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_all', background: true });
+    await db.collection('staffprojects').createIndex({ 'people.user': 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_people', background: true });
+    await db.collection('staffprojects').createIndex({ teams: 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_teams', background: true });
+    await db.collection('staffprojects').createIndex(
+      { createdBy: 1, clientId: 1 },
+      { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_project_client_id', background: true }
+    );
     await db.collection('stafftasklinks').createIndex({ pair: 1 }, { unique: true, name: 'staff_task_link_pair', background: true });
     await db.collection('stafftasklinks').createIndex({ from: 1, kind: 1 }, { name: 'staff_task_link_from', background: true });
     await db.collection('stafftasklinks').createIndex({ to: 1, kind: 1 }, { name: 'staff_task_link_to', background: true });

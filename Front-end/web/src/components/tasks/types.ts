@@ -10,7 +10,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
-export type TaskView = 'mine' | 'following' | 'created' | 'team' | 'personal';
+export type TaskView = 'mine' | 'following' | 'created' | 'team' | 'personal' | 'project';
 export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
 /** How a list is ordered (server-side, keyset-paged). Open tasks only; done and archived keep "most recently finished first". */
 export type TaskSort = 'due' | 'newest' | 'oldest' | 'updated';
@@ -32,10 +32,14 @@ export type TaskFilters = {
   sort?: TaskSort;
   /** The team list only: one list of the space (its id), or 'none' for "Other tasks". */
   list?: string;
+  /** The project view only: the project's id. */
+  project?: string;
 };
 
 /** The list a new task made in this view goes in: the one being shown, if any. */
 export const listOf = (filters: TaskFilters) => (filters.view === 'team' && filters.list && filters.list !== 'none' ? filters.list : undefined);
+/** The project a new task made in this view goes in: the one being shown, if any. */
+export const projectOf = (filters: TaskFilters) => (filters.view === 'project' && filters.project ? filters.project : undefined);
 
 export type Task = {
   id: string;
@@ -75,6 +79,8 @@ export type Task = {
   group: { id: string; size: number } | null;
   /** The list it is filed in (spaces.ts), or null: the space's "Other tasks". */
   list?: string | null;
+  /** The project it belongs to (Projects.tsx), or null. */
+  project?: string | null;
   /** The task this is a sub-task of (its number and title; the viewer may not be allowed to open it). */
   parent?: { id: string; code: string; title: string } | null;
   /** On a parent: its sub-tasks that are not archived, and how many of them are done. */
@@ -431,3 +437,32 @@ export const minutesText = (minutes: number) => {
   const m = minutes % 60;
   return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
 };
+
+/** How a project stands: from its tasks and deadline, or the owner's word. */
+export type ProjectStatus = 'on_track' | 'at_risk' | 'late' | 'done';
+
+/** A project (services/staffProjectService.js): tasks from any team, one owner, dates and progress. */
+export type Project = {
+  id: string;
+  name: string;
+  description: string;
+  colour: string;
+  owner: { id: string; name: string };
+  /** Everyone in it, the owner first. */
+  people: { id: string; name: string; team: string | null }[];
+  teams: { value: string; label: string }[];
+  startOn: string | null;
+  dueOn: string | null;
+  status: ProjectStatus;
+  statusLabel: string;
+  /** Set when the owner chose the status by hand; null lets the tasks decide. */
+  statusOverride: ProjectStatus | null;
+  /** Open and done tasks (never archived or personal ones); overdue = open, due before today. */
+  progress: { total: number; done: number; overdue: number; percent: number };
+  archivedAt: string | null;
+  createdBy: { id: string; name: string };
+  rev: number;
+  can: { edit: boolean; archive: boolean; restore: boolean };
+};
+export type ProjectPage = { projects: Project[]; nextCursor: string | null; canCreate: boolean };
+export type ProjectPick = { id: string; name: string; colour: string };

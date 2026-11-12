@@ -327,6 +327,11 @@ export const taskKeys = {
   /** A team's folders and lists (with open-task counts): `spaces()` is every team's. */
   spaces: () => [...taskKeys.all, 'space'] as const,
   space: (team: string) => [...taskKeys.spaces(), team] as const,
+  /** Projects: `projects()` is every project read (lists, one project, the picker). */
+  projects: () => [...taskKeys.all, 'projects'] as const,
+  projectList: (state: string) => [...taskKeys.projects(), 'list', state] as const,
+  project: (id: string) => [...taskKeys.projects(), 'one', id] as const,
+  projectPick: () => [...taskKeys.projects(), 'pick'] as const,
 };
 
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */
