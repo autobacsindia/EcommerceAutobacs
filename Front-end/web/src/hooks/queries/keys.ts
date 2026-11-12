@@ -368,6 +368,15 @@ export const paymentConfigKeys = {
   razorpay: () => [...paymentConfigKeys.all, 'razorpay'] as const,
 };
 
+/** Customer ratings of the sale/service on an order (`/order-ratings/*`). */
+export const orderRatingKeys = {
+  all: ['order-ratings'] as const,
+  link: (token: string) => [...orderRatingKeys.all, 'link', token] as const,
+  mine: (orderId: string) => [...orderRatingKeys.all, 'mine', orderId] as const,
+  panelOrder: (orderId: string) => [...orderRatingKeys.all, 'panel-order', orderId] as const,
+  monthly: (month: string) => [...orderRatingKeys.all, 'monthly', month] as const,
+};
+
 /** Roav Points (`/incentives/*`) — sales incentive months, rules and the champion banner. */
 export const incentiveKeys = {
   all: ['incentives'] as const,

@@ -101,6 +101,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/affiliates/payouts', label: 'Affiliate Payouts', icon: Wallet },
       { href: '/admin/users', label: 'Users', icon: Users },
       { href: '/admin/reviews', label: 'Reviews', icon: Star },
+      { href: '/admin/sales-ratings', label: 'Service ratings', icon: Star },
       { href: '/admin/consultation', label: 'Consultancy', icon: Target },
     ],
   },

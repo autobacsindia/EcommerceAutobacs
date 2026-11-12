@@ -11,6 +11,7 @@
 
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
+import { ratingLinkForOrder } from './orderRatingService.js';
 
 /**
  * Review-request emails are OFF unless REVIEW_REQUEST_EMAILS=on. The owner cut
@@ -78,7 +79,10 @@ export const emailReviewRequest = async (orderId) => {
     return { status: 'skipped' };
   }
 
-  const result = await emailHandler.sendReviewRequest({ to: user.email, order, user, products });
+  // "How was our team?" star links (OrderRating, for sales incentives). Null when
+  // no signing secret is set, and the email then reads exactly as before.
+  const ratingUrl = ratingLinkForOrder(order._id);
+  const result = await emailHandler.sendReviewRequest({ to: user.email, order, user, products, ratingUrl });
 
   // Only mark as requested when the provider actually accepted it, so a transient
   // failure lets BullMQ retry rather than silently dropping the notification.

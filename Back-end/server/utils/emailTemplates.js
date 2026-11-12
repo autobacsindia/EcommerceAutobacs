@@ -1327,13 +1327,27 @@ ${companyName}
  * @param {Object} [params.company] - Company info (name, email)
  * @returns {Object} - { subject, text, html }
  */
-export const reviewRequestEmail = ({ order, user = null, products = [], company = {} }) => {
+export const reviewRequestEmail = ({ order, user = null, products = [], company = {}, ratingUrl = null }) => {
   const ref = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
   const name = order.shippingAddress?.fullName || user?.name || 'there';
   const companyName = company.name || 'Autobacs India';
   const supportEmail = company.email || 'support@autobacsindia.com';
   const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
   const reviewUrl = (slug) => `${frontendUrl}/products/${slug}?review=1`;
+  // Optional "rate our team" block (services/orderRatingService.js). Absent
+  // ratingUrl = the email is byte-for-byte what it was before this existed.
+  const starUrl = (n) => `${ratingUrl}?stars=${n}`;
+  const ratingText = ratingUrl
+    ? `\n\nHow was your experience with our team? Tap to rate 1-5 stars: ${ratingUrl}`
+    : '';
+  const ratingHtml = ratingUrl
+    ? `
+      <div style="margin-top:28px;padding:20px;border:1px solid #eee;border-radius:8px;text-align:center;">
+        <p style="margin:0 0 12px;font-size:15px;font-weight:bold;color:#111;">How was your experience with our team?</p>
+        <p style="margin:0;">${[1, 2, 3, 4, 5].map((n) => `<a href="${starUrl(n)}" style="display:inline-block;margin:0 4px;font-size:30px;line-height:1;color:#c9a227;text-decoration:none;" aria-label="${n} star${n > 1 ? 's' : ''}">&#9733;</a>`).join('')}</p>
+        <p style="margin:10px 0 0;font-size:12px;color:#999;">Tap a star — it takes a few seconds.</p>
+      </div>`
+    : '';
 
   const subject = 'How did we do? Share your review 🌟';
 
@@ -1342,7 +1356,7 @@ Hi ${name},
 
 Thanks for shopping with ${companyName} (order ${ref}). We'd love to hear what you think — your review helps other drivers choose with confidence.
 
-${products.map((p) => `  • ${p.name}: ${reviewUrl(p.slug)}`).join('\n')}
+${products.map((p) => `  • ${p.name}: ${reviewUrl(p.slug)}`).join('\n')}${ratingText}
 
 It only takes a minute. Thank you!
 
@@ -1385,7 +1399,7 @@ ${companyName}
       <p>Thanks for shopping with <strong>${companyName}</strong> (order ${ref}). We'd love to hear what you think — your review helps other drivers choose with confidence.</p>
       <table style="width:100%;border-collapse:collapse;margin-top:16px;">
         <tbody>${productRows}</tbody>
-      </table>
+      </table>${ratingHtml}
       <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
     </div>
     <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">

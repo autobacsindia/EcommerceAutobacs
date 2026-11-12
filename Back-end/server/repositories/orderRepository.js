@@ -117,6 +117,11 @@ class OrderRepository extends BaseRepository {
    * from the ORDER, which is the record of what was charged. Measured on a realistic
    * 3-line order: 20,070 B → 1,917 B (−90%).
    */
+  /** Just what the customer service rating needs (services/orderRatingService.js). */
+  async findForRating(orderId) {
+    return this.model.findById(orderId).select('status user salesUser source shippingAddress.phone shippingAddress.fullName').lean();
+  }
+
   async findOwnedWithProducts(orderId, userId) {
     return Order.findOne({ _id: orderId, user: userId }).populate('items.product', 'name returnPolicy');
   }

@@ -33,6 +33,8 @@ const DISALLOW = [
   '/forgot-password',
   '/verify-email',
   '/claim-order',
+  // Signed "rate our team" links from the post-delivery email — private, one per order.
+  '/rate/',
   // Internal staff panel and its invite-redemption page.
   '/team',
   '/staff-invite',

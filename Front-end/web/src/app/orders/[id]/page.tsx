@@ -20,6 +20,7 @@ import OrderReturns, { returnedUnits, useOrderReturns } from '@/components/order
 import { useQueryClient } from '@tanstack/react-query';
 import { customerReturnKeys } from '@/hooks/queries/keys';
 import WriteReviewModal from '@/components/reviews/WriteReviewModal';
+import OrderServiceRatingCard from '@/components/orderRating/OrderServiceRatingCard';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
@@ -655,6 +656,9 @@ export default function OrderDetailPage() {
             {order.shipments?.[0]?.status === 'shipped' && <ParcelSteps steps={order.shipments[0].trackingSteps} />}
           </div>
         )}
+
+        {/* Rate the sale and service (sales incentives), once delivered. */}
+        <OrderServiceRatingCard orderId={order._id} status={order.status} />
 
         {/* Every return on this order, each with its own progress. */}
         <OrderReturns

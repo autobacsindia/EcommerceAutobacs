@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins } from 'lucide-react';
+import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -29,6 +29,7 @@ export const TEAM_MORE_HREFS = [
   '/team/training',
   '/team/handover',
   '/team/past-members',
+  '/team/sales-ratings',
   '/team/members',
   '/team/help',
 ] as const;
@@ -98,6 +99,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/past-sales', label: 'Past sales', icon: History });
   nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
   if (team === 'procurement' || team === 'accounts') nav.push({ href: '/team/suppliers', label: 'Suppliers', icon: Factory });
+  // Heads of any team: customers' ratings of their salespeople (read only).
+  if (isHead) nav.push({ href: '/team/sales-ratings', label: 'Service ratings', icon: Star });
   nav.push({ href: '/team/members', label: 'My team', icon: Users });
   // Every team: how to use the panel (lib/help/teamFaq.ts).
   nav.push({ href: '/team/help', label: 'Help', icon: LifeBuoy });

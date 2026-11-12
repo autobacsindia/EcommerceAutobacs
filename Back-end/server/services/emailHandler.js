@@ -555,10 +555,10 @@ class EmailHandler {
     return this.sendEmail({ to: email, subject, text, html });
   }
 
-  async sendReviewRequest({ to, order, user = null, products }) {
+  async sendReviewRequest({ to, order, user = null, products, ratingUrl = null }) {
     const { reviewRequestEmail } = await import('../utils/emailTemplates.js');
     const { companyInfo } = await import('../config/company.js');
-    const { subject, text, html } = reviewRequestEmail({ order, user, products, company: companyInfo });
+    const { subject, text, html } = reviewRequestEmail({ order, user, products, company: companyInfo, ratingUrl });
 
     return this.sendEmail({ to, subject, text, html });
   }
