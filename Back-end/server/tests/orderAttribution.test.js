@@ -73,7 +73,7 @@ async function websiteOrder({ paid = true, source = 'web', salesUser = null, cre
     ...(createdAt && { createdAt }),
   });
   if (paid) {
-    const res = await orderStatusService.updateOrderStatus(String(order._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+    const res = await orderStatusService.updateOrderStatus(String(order._id), 'processing', { isAdmin: true, reason: 'payment_verified', paymentVerification: { source: 'razorpay', reference: 'pay_test' } });
     if (!res?.success) throw new Error(res?.message);
   }
   return Order.findById(order._id).lean();

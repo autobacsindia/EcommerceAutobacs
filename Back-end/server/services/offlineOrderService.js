@@ -213,6 +213,8 @@ export async function createOfflineOrderRecord({
       isAdmin: true,
       reason: 'manual_confirmation',
       notes: 'Offline sale confirmed (paid)',
+      // The admin says it was paid at the counter: paid, but NOT a verified payment.
+      recordedPayment: true,
     });
     if (status === 'delivered') {
       await orderStatusService.updateOrderStatus(order._id.toString(), 'delivered', {

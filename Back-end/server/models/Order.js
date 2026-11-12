@@ -116,6 +116,26 @@ const OrderSchema = new mongoose.Schema({
   // createdAt while unpaid). Kept by the pre-save hook — utils/orderListDate.js.
   paidAt: { type: Date, default: undefined },
   listDate: { type: Date, default: undefined },
+  /*
+    "Paid by a VERIFIED payment" — the one field to read when only real money counts
+    (sales incentives, reports). Set once, never cleared, and only by:
+      • 'razorpay'      — razorpayService: a signature-verified capture (webhook, the
+                          checkout callback or the reconciliation sweep, which all run the
+                          same idempotent routine), or the last part of a payment-link order
+      • 'bank_transfer' — bankTransferService: accounts / the admin found it in the bank
+    Never set by a status change, the admin status menu, the bulk bar, or an offline sale
+    an admin merely records as paid. A later refund or cancellation does NOT clear it (the
+    money was real); read `paymentStatus` and `status` alongside it for "still kept".
+  */
+  paymentVerification: {
+    type: new mongoose.Schema({
+      source: { type: String, enum: ['razorpay', 'bank_transfer'], required: true },
+      reference: String,           // Razorpay payment id / bank UTR
+      verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // accounts (bank transfer only)
+      verifiedAt: { type: Date, required: true },
+    }, { _id: false }),
+    default: undefined,
+  },
   offlinePayment: {
     type: new mongoose.Schema({
       method: { type: String, enum: ["bank_transfer"], required: true },

@@ -89,7 +89,7 @@ async function paidOrder({ salesUser = null } = {}) {
     subtotal: 7000, totalAmount: 7000,
     status: 'awaiting_payment', paymentStatus: 'pending',
   });
-  const res = await orderStatusService.updateOrderStatus(String(order._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  const res = await orderStatusService.updateOrderStatus(String(order._id), 'processing', { isAdmin: true, reason: 'payment_verified', paymentVerification: { source: 'razorpay', reference: 'pay_test' } });
   if (!res?.success) throw new Error(`could not pay test order: ${res?.message}`);
   return Order.findById(order._id).lean();
 }
