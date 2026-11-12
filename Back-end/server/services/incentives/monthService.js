@@ -50,7 +50,9 @@ export async function ratingsByEarner(month) {
   const coll = mongoose.models.OrderRating?.collection || mongoose.connection.db?.collection('orderratings');
   if (!coll) return new Map();
   const rows = await coll.aggregate([
-    { $match: { createdAt: { $gte: start, $lt: end }, salesperson: { $type: 'objectId' }, stars: { $gte: 1, $lte: 5 } } },
+    // Ratings flagged as sent from the salesperson's own connection (possible
+    // self-rating, see services/orderRatingService.js) never count. Owner's call, 2026-11-12.
+    { $match: { createdAt: { $gte: start, $lt: end }, salesperson: { $type: 'objectId' }, stars: { $gte: 1, $lte: 5 }, sameNetworkAsSender: { $ne: true } } },
     { $group: { _id: '$salesperson', count: { $sum: 1 }, avg: { $avg: '$stars' } } },
   ]).toArray();
   return new Map(rows.map((r) => [`u:${r._id}`, { count: r.count, avg: Math.round(r.avg * 100) / 100 }]));
