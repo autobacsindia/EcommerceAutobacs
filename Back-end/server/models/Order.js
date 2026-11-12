@@ -71,6 +71,27 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false }),
     default: undefined,
   },
+  // The approval for a GTM discount above 10% (utils/discountApproval.js), copied
+  // from the quotation when the customer accepted it. Absent at 10% or less. Read by
+  // the sales incentive engine: who approved, when, and how deep the discount was.
+  discountApproval: {
+    type: new mongoose.Schema({
+      percent: { type: Number, required: true },
+      maxLinePercent: Number,
+      totalPercent: Number,
+      reason: String,
+      requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      requestedByName: String,
+      requestedAt: Date,
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      approvedByName: String,
+      approvedRole: { type: String, enum: ['admin', 'head'] },
+      approvedAt: { type: Date, required: true },
+      note: String,
+      quotationVersion: Number,
+    }, { _id: false }),
+    default: undefined,
+  },
   // A bank transfer has been recorded for this unpaid sales order and is waiting
   // for accounts to find it in the bank (models/BankTransfer.js). While set, no new
   // payment link can be issued and the order cannot be cancelled — the money may

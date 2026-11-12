@@ -31,6 +31,7 @@ import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { phoneOnlyEmailFor } from '../utils/customerContact.js';
 import { buildHold, shapeHold, heldFilter, notHeldFilter } from '../utils/salesHold.js';
 import { cleanDiscountInput, priceWithDiscount } from '../utils/quoteDiscount.js';
+import { approvalState, isBlocked, priceKeyOf, APPROVAL_THRESHOLD_PERCENT } from '../utils/discountApproval.js';
 import {
   and, amountOf, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
 } from '../utils/listQuery.js';
@@ -123,6 +124,56 @@ const shapeDiscount = (d) => (d?.percent
   ? { percent: d.percent, amount: d.amount, reason: d.reason || '', byName: d.byName || null, at: d.at || null }
   : null);
 
+/**
+ * Where the quotation stands on "above 10% needs approval" (utils/discountApproval.js).
+ * `priceKey` lets the approver's click say which prices they looked at.
+ */
+export function shapeApproval(q) {
+  const a = approvalState(q);
+  const c = a.current;
+  return {
+    state: a.state,
+    threshold: APPROVAL_THRESHOLD_PERCENT,
+    percent: a.percent,
+    maxLinePercent: a.maxLinePercent,
+    totalPercent: a.totalPercent,
+    priceKey: a.state === 'not_needed' ? null : priceKeyOf(q),
+    reason: c?.reason || null,
+    requestedByName: c?.requestedByName || null,
+    requestedAt: c?.requestedAt || null,
+    decidedByName: c?.decidedByName || null,
+    decidedAt: c?.decidedAt || null,
+    note: c?.note || null,
+  };
+}
+
+/** The stored approval is kept only while the prices it was given on are unchanged. */
+const approvalSurvives = (q, set) => !!q.discountApproval?.priceKey
+  && q.discountApproval.priceKey === priceKeyOf({ items: set.items, totalAmount: set.totalAmount, discount: set.discount });
+
+/** The order's copy of the approval (Order.discountApproval), or null when none was needed. */
+function approvalForOrder(q) {
+  const { state, current: a } = approvalState(q);
+  if (state !== 'approved') return null;
+  return {
+    percent: a.percent,
+    maxLinePercent: a.maxLinePercent,
+    totalPercent: a.totalPercent,
+    reason: a.reason,
+    requestedBy: a.requestedBy,
+    requestedByName: a.requestedByName || '',
+    requestedAt: a.requestedAt,
+    approvedBy: a.decidedBy,
+    approvedByName: a.decidedByName || '',
+    approvedRole: a.decidedRole,
+    approvedAt: a.decidedAt,
+    note: a.note || '',
+    quotationVersion: q.version,
+  };
+}
+
+const NEEDS_APPROVAL = (verb) => `This quotation's discount is above ${APPROVAL_THRESHOLD_PERCENT}% of the website price, so it needs approval from the GTM head or an admin before it can be ${verb}. Use "Request approval".`;
+
 /** A quotation's stored lines as priceSalesLines input — to re-check at accept. */
 const asPricingInput = (lines) => lines.map((l) => (l.custom
   ? { custom: true, name: l.name, quantity: l.quantity, price: l.price }
@@ -154,6 +205,7 @@ export function shapeQuotation(q, { now = Date.now() } = {}) {
     subtotal: q.subtotal ?? q.totalAmount,
     discount: shapeDiscount(q.discount),
     totalAmount: q.totalAmount,
+    approval: shapeApproval(q),
     notes: q.notes || '',
     validUntil: q.validUntil,
     salesPerson: q.salesUser?.name || null,
@@ -172,14 +224,14 @@ export function shapeQuotation(q, { now = Date.now() } = {}) {
   };
 }
 
-function mayRead(actor, q) {
+export function mayRead(actor, q) {
   return isAdmin(actor) || isSalesHead(actor) || (canSell(actor) && idOf(q.salesUser) === idOf(actor._id));
 }
-function mayAct(actor, q) {
+export function mayAct(actor, q) {
   return canSell(actor) && (isSalesHead(actor) || idOf(q.salesUser) === idOf(actor._id));
 }
 
-async function loadReadable(actor, id) {
+export async function loadReadable(actor, id) {
   if (!mongoose.isValidObjectId(id)) throw fail('Quotation not found.', 404);
   const q = await salesQuotationRepository.model.findById(id).populate('salesUser', 'name').lean();
   if (!q || !mayRead(actor, q)) throw fail('Quotation not found.', 404);
@@ -257,7 +309,13 @@ function editChanges(actor, q, priced, input) {
       validUntil: new Date(Date.now() + QUOTATION_VALID_DAYS * DAY),
       ...(priced.discount && { discount: priced.discount }),
     },
-    unset: priced.discount ? {} : { discount: '' },
+    unset: {
+      ...(priced.discount ? {} : { discount: '' }),
+      // A price change voids the approval: the new prices need their own.
+      ...(q.discountApproval && !approvalSurvives(q, {
+        items: storeLines(priced.lines), totalAmount: priced.totalAmount, discount: priced.discount,
+      }) && { discountApproval: '' }),
+    },
     revision: {
       version: q.version,
       items: q.items,
@@ -294,6 +352,7 @@ export async function updateQuotation(actor, id, input, req) {
   if (!updated) throw fail('Someone else changed this quotation just now — reload it and try again.', 409);
   auditLogger.logAction(req, 'UPDATE', 'SalesQuotation', q._id, {
     version: updated.version, totalAmount: priced.totalAmount, ...auditDiscount(priced.discount),
+    ...(unset.discountApproval !== undefined && { approvalCleared: q.discountApproval.status }),
   });
   return shapeQuotation(updated);
 }
@@ -386,6 +445,7 @@ async function reopenAccepted(actor, q, input, req) {
     previousTotal: q.totalAmount,
     totalAmount: priced.totalAmount,
     ...auditDiscount(priced.discount),
+    ...(unset.discountApproval !== undefined && { approvalCleared: q.discountApproval.status }),
     payDetailsShared: state.payDetailsShared,
   });
   auditLogger.logAction(req, 'UPDATE', 'Order', order._id, { change: 'cancelled_quotation_edited', quotation: idOf(q._id) });
@@ -454,11 +514,21 @@ export async function acceptQuotation(actor, id, req) {
     throw fail('The total no longer matches this quotation. Edit it and save it again, then accept it.', 409);
   }
   const salesDiscount = q.discount?.percent ? { ...q.discount, amount: priced.amount } : null;
+  // Above 10% off the website price: only with an approval for these exact prices.
+  // The lines were just re-priced and matched, so the stored quotation IS the price.
+  if (isBlocked(q)) throw fail(NEEDS_APPROVAL('accepted'), 409);
+  const discountApproval = approvalForOrder(q);
 
-  // Claim first, so two "accept" clicks can never create two orders.
-  const claimed = await salesQuotationRepository.updateIfOpen(q._id, {
-    $set: { status: 'accepted', acceptedAt: new Date(), acceptedBy: actor._id },
-  });
+  // Claim first, so two "accept" clicks can never create two orders. An approved
+  // quotation is claimed only at the version that was checked, so an edit landing
+  // meanwhile (new prices, approval voided) cannot ride on the old approval.
+  const claim = { $set: { status: 'accepted', acceptedAt: new Date(), acceptedBy: actor._id } };
+  const claimed = discountApproval
+    ? await salesQuotationRepository.model.findOneAndUpdate(
+      { _id: q._id, status: 'open', version: q.version, 'discountApproval.status': 'approved', 'discountApproval.priceKey': q.discountApproval.priceKey },
+      claim, { new: true },
+    ).lean()
+    : await salesQuotationRepository.updateIfOpen(q._id, claim);
   if (!claimed) throw fail('This quotation was changed just now — reload it.', 409);
 
   let order;
@@ -472,6 +542,7 @@ export async function acceptQuotation(actor, id, req) {
       shippingAddress: q.shippingAddress,
       discount: priced.amount,
       salesDiscount,
+      discountApproval,
       paymentMode: 'later',
       salesRepId: q.salesRep,
       // Credited to the person who made the quotation, even when the head accepts it.
@@ -487,7 +558,10 @@ export async function acceptQuotation(actor, id, req) {
   }
 
   await salesQuotationRepository.update(q._id, { $set: { order: order._id } });
-  auditLogger.logAction(req, 'UPDATE', 'SalesQuotation', q._id, { change: 'accepted', order: idOf(order._id), totalAmount: order.totalAmount });
+  auditLogger.logAction(req, 'UPDATE', 'SalesQuotation', q._id, {
+    change: 'accepted', order: idOf(order._id), totalAmount: order.totalAmount,
+    ...(discountApproval && { approvedDiscountPercent: discountApproval.percent, approvedBy: idOf(discountApproval.approvedBy) }),
+  });
   return { quotation: shapeQuotation({ ...claimed, order: order._id, salesUser: q.salesUser }), orderId: idOf(order._id) };
 }
 
@@ -544,6 +618,8 @@ export function quotationListQuery(actor, f = {}, now = new Date()) {
   return and(
     visible,
     ['open', 'accepted', 'cancelled'].includes(f.status) ? { status: f.status } : null,
+    // "Needs approval": open, a discount request waiting for the head / an admin.
+    f.status === 'approval' ? { status: 'open', 'discountApproval.status': 'pending' } : null,
     // "Open" is the active list: on-hold quotations leave it until their follow-up
     // date, then come back (marked due). "On hold" lists the parked ones.
     f.status === 'open' ? notHeldFilter('hold', now) : null,
@@ -586,6 +662,9 @@ export async function listQuotations(actor, params = {}) {
 export async function getQuotationDocument(actor, id) {
   const q = await loadReadable(actor, id);
   if (q.status === 'cancelled') throw fail('This quotation was cancelled.', 409);
+  // Not shared with the customer until a discount above 10% is approved. An accepted
+  // one already passed this at accept (and its order prints from here too).
+  if (q.status === 'open' && isBlocked(q)) throw fail(NEEDS_APPROVAL('shared'), 409);
   const doc = printableQuotation(q);
   const buffer = await renderQuotationPdf(doc);
   return { buffer, filename: `Quotation-${printedNumber(q)}.pdf` };

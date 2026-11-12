@@ -201,7 +201,38 @@ export type Quotation = {
   hold?: SalesHold | null;
   /** Only on a single accepted quotation (GET /staff/sales/quotations/:id). */
   editAfterAccept?: EditAfterAccept;
+  /** "Above 10%: prior approval mandatory" (server: utils/discountApproval.js). */
+  approval?: QuotationApproval;
 };
+
+/**
+ * Where a quotation stands on discount approval. Worked out on the server from
+ * the saved prices vs the website price; the panel only shows it.
+ *   not_needed — 10% or less: nothing changes
+ *   needed     — above 10%, not asked yet (or the prices changed since)
+ *   pending / approved / rejected — for these exact prices
+ */
+export type QuotationApproval = {
+  state: 'not_needed' | 'needed' | 'pending' | 'approved' | 'rejected';
+  threshold: number;
+  /** The deeper of the line and whole-quotation discount, vs the website price. */
+  percent: number;
+  maxLinePercent: number;
+  totalPercent: number;
+  /** Fingerprint of the prices — sent back with a decision so a stale screen is refused. */
+  priceKey: string | null;
+  reason: string | null;
+  requestedByName: string | null;
+  requestedAt: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  note: string | null;
+  /** Only on a single quotation: may this viewer approve / reject the waiting request? */
+  canDecide?: boolean;
+};
+
+/** Can't be shared or accepted yet: above 10% and not approved for these prices. */
+export const approvalBlocks = (a?: QuotationApproval | null) => !!a && a.state !== 'not_needed' && a.state !== 'approved';
 
 /**
  * The form's check of the discount boxes — the same rules the server enforces
