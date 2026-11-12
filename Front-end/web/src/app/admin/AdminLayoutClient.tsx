@@ -7,7 +7,7 @@ import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
-  Users, Wallet, Zap, Coins } from 'lucide-react';
+  Users, Wallet, Zap, Coins, ShieldCheck, Trophy } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
@@ -92,6 +92,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/leads', label: 'Leads', icon: Briefcase },
       { href: '/admin/meta-leads', label: 'Meta leads', icon: Briefcase },
       { href: '/admin/sales-reps', label: 'Sales Reps', icon: UserRoundCog },
+      { href: '/admin/incentives', label: 'Roav Points', icon: Trophy },
       { href: '/admin/past-sales', label: 'Past sales', icon: History },
       { href: '/admin/affiliates', label: 'Affiliates', icon: Handshake },
       // Listed BEFORE the batches screen: "who is due" is the question you start from,
@@ -125,6 +126,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/suppliers', label: 'Suppliers', icon: Factory },
       { href: '/admin/bank-transfers', label: 'Bank transfers', icon: Landmark },
       { href: '/admin/extra-charges', label: 'Extra charges', icon: Coins },
+      // GTM discounts above 10% waiting for approval (the GTM head approves them too).
+      { href: '/admin/discount-approvals', label: 'Discount approvals', icon: ShieldCheck },
       { href: '/admin/workflows', label: 'Workflows', icon: Zap },
     ],
   },

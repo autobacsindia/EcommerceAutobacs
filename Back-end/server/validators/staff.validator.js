@@ -212,6 +212,20 @@ export const validateQuotationIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid quotation id'),
 ];
 
+/** "Request approval" for a discount above 10%: a short reason. */
+export const validateApprovalRequest = [
+  param('id').custom(isObjectId).withMessage('Invalid quotation id'),
+  body('reason').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Write a short reason (3–300 characters)'),
+];
+
+/** Approve / reject: the decision, an optional note (required to reject — checked in the service), the prices seen. */
+export const validateApprovalDecision = [
+  param('id').custom(isObjectId).withMessage('Invalid quotation id'),
+  body('decision').isIn(['approve', 'reject']).withMessage('Choose approve or reject'),
+  body('note').optional().isString().isLength({ max: 300 }).withMessage('Keep the note under 300 characters'),
+  body('priceKey').optional().isString().isLength({ max: 64 }).withMessage('Invalid price key'),
+];
+
 /*
   Search / filter / sort on the sales lists (quotations, sales orders). An
   unknown sort or a malformed date is ignored by the service rather than
@@ -227,7 +241,7 @@ const salesListQueries = [
 ];
 
 export const validateQuotationList = [
-  query('status').optional().isIn(['open', 'on_hold', 'accepted', 'cancelled']).withMessage('Unknown status'),
+  query('status').optional().isIn(['open', 'on_hold', 'accepted', 'cancelled', 'approval']).withMessage('Unknown status'),
   ...salesListQueries,
 ];
 

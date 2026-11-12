@@ -50,6 +50,35 @@ const DiscountSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * "Above 10%: prior approval mandatory" (utils/discountApproval.js). Holds only for
+ * the prices it was given on: `priceKey` fingerprints the lines, discount and total
+ * at request time; a price change makes the key differ and a fresh approval due.
+ * `percent` is the deeper of the line / total discount vs the website price.
+ * Copied onto the order at accept (Order.discountApproval) for the incentive engine.
+ */
+const DiscountApprovalSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], required: true },
+    priceKey: { type: String, required: true },
+    version: { type: Number, required: true }, // the quotation version asked about
+    percent: { type: Number, required: true },
+    maxLinePercent: { type: Number, default: 0 },
+    totalPercent: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true },
+    reason: { type: String, required: true },
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    requestedByName: { type: String, default: '' },
+    requestedAt: { type: Date, required: true },
+    decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+    decidedByName: { type: String, default: undefined },
+    decidedRole: { type: String, enum: ['admin', 'head'], default: undefined },
+    decidedAt: { type: Date, default: undefined },
+    note: { type: String, default: undefined },
+  },
+  { _id: false }
+);
+
 const AddressSchema = new mongoose.Schema(
   {
     fullName: String,
@@ -80,6 +109,8 @@ const SalesQuotationSchema = new mongoose.Schema(
     subtotal: { type: Number, required: true }, // Σ lines, before the discount
     discount: { type: DiscountSchema, default: undefined },
     totalAmount: { type: Number, required: true }, // subtotal − discount.amount
+    // Absent when the discount is 10% or less (nothing to approve) or never asked.
+    discountApproval: { type: DiscountApprovalSchema, default: undefined },
     notes: { type: String, default: '' },
 
     salesUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

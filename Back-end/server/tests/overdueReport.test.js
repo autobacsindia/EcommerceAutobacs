@@ -59,7 +59,7 @@ async function paidOrder({ name = 'Ravi', item = 'Part 1' } = {}) {
     shippingAddress: { fullName: name, phone: '9876543210', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
     subtotal: 1000, totalAmount: 1000, status: 'awaiting_payment', paymentStatus: 'pending',
   });
-  const res = await orderStatusService.updateOrderStatus(String(order._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  const res = await orderStatusService.updateOrderStatus(String(order._id), 'processing', { isAdmin: true, reason: 'payment_verified', paymentVerification: { source: 'razorpay', reference: 'pay_test' } });
   if (!res?.success) throw new Error(res?.message);
   return Order.findById(order._id).lean();
 }

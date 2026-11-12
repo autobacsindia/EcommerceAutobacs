@@ -1,6 +1,7 @@
 'use client';
 
 import PanelOrderRating from '@/components/orderRating/PanelOrderRating';
+import { getAdminNextStatuses } from '@/lib/adminOrderStatus';
 import ProductLink from '@/components/staff/ProductLink';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
@@ -37,19 +38,6 @@ import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 /** What the gateway holds — and so the most a refund can send back. */
 const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
   o.gatewayOffer?.discount ? o.gatewayOffer.amountPaid : o.totalAmount;
-
-// Fulfillment stages an admin can move to (mirrors the list page + backend rules).
-const ALL_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
-const SYSTEM_OWNED = ['awaiting_payment']; // payment-driven, never picked manually
-const CANCEL_BLOCKED_FROM = ['delivered', 'returned', 'cancelled']; // cancel only before delivery
-
-function getAdminNextStatuses(currentStatus: string): string[] {
-  return ALL_STATUSES.filter(s => {
-    if (s === currentStatus || SYSTEM_OWNED.includes(s)) return false;
-    if (s === 'cancelled' && CANCEL_BLOCKED_FROM.includes(currentStatus)) return false;
-    return true;
-  });
-}
 
 // Fulfillment only starts once the gateway confirms payment. Until then the
 // order sits in awaiting_payment and the status control stays locked.

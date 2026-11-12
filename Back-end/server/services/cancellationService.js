@@ -611,6 +611,7 @@ class CancellationService {
       userId,
       isAdmin: true,
       cancelledBy: 'admin',
+      rollUp: true,
       reason: reason || 'customer_request',
       notes: notes || 'Every remaining line was cancelled individually',
     });

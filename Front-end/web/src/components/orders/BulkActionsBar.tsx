@@ -48,10 +48,11 @@ export default function BulkActionsBar({
     return null;
   }
 
-  // Payment-driven statuses (pending/confirmed/failed) are set only by checkout + the Razorpay
-  // webhook, never in bulk by an admin — the backend rejects them (see SYSTEM_OWNED_STATUSES).
+  // Payment-driven statuses are set only by the payment itself (Razorpay, or a bank
+  // transfer accounts confirmed), never in bulk by an admin. That includes "Process":
+  // moving an order to processing is what payment does, and a bulk "Process" on unpaid
+  // orders used to record them as paid with no money. The server refuses it too.
   const statusOptions = [
-    { value: 'processing', label: 'Process', icon: Package, color: 'text-blue-600' },
     { value: 'shipped', label: 'Ship', icon: Package, color: 'text-blue-600' },
     { value: 'delivered', label: 'Deliver', icon: CheckCircle, color: 'text-green-600' },
     { value: 'cancelled', label: 'Cancel', icon: XCircle, color: 'text-red-600' },

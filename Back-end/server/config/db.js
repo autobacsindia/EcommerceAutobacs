@@ -929,6 +929,18 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Affiliate indexes confirmed');
 
+    // Roav Points (services/incentives/). Same names and options as the schemas.
+    // MONEY-CRITICAL: `incentive_ledger_key` is what makes the ledger idempotent —
+    // a retried sweep inserts each earn/reversal row at most once.
+    await db.collection('incentiveledgerentries').createIndex({ key: 1 }, { unique: true, name: 'incentive_ledger_key', background: true });
+    await db.collection('incentiveledgerentries').createIndex({ month: 1, earnerKey: 1, _id: 1 }, { name: 'incentive_ledger_month_earner', background: true });
+    await db.collection('incentiveledgerentries').createIndex({ order: 1, type: 1 }, { name: 'incentive_ledger_order', background: true });
+    await db.collection('incentiverulesets').createIndex({ version: 1 }, { unique: true, name: 'incentive_rules_version', background: true });
+    await db.collection('incentiverulesets').createIndex({ effectiveFrom: -1, version: -1 }, { name: 'incentive_rules_effective', background: true });
+    await db.collection('incentivemonths').createIndex({ month: 1 }, { unique: true, name: 'incentive_month_unique', background: true });
+    await db.collection('incentiveorderflags').createIndex({ order: 1 }, { unique: true, name: 'incentive_flag_order', background: true });
+    console.log('✓ Roav Points indexes confirmed');
+
     return { ok: true, error: null };
   } catch (err) {
     // Log but never crash the server over index verification.

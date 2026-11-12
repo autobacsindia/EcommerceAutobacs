@@ -30,6 +30,16 @@ import { isOrderClosed } from '../utils/extraCharge.js';
  */
 const EMI_ENRICHMENT_TIMEOUT_MS = 2000;
 
+/**
+ * Mark an order "paid by a verified payment" (Order.paymentVerification). Called only
+ * where the capture has been verified with Razorpay — the money is real. Set once: a
+ * retry, a duplicate webhook or the reconciliation sweep never moves the first stamp.
+ */
+export function stampRazorpayVerified(order, gatewayPaymentId, now = new Date()) {
+  if (order.paymentVerification?.verifiedAt) return;
+  order.paymentVerification = { source: 'razorpay', reference: gatewayPaymentId, verifiedAt: now };
+}
+
 class RazorpayService {
   constructor() {
     // Load configuration from environment variables
@@ -361,9 +371,10 @@ class RazorpayService {
         if (existing) {
           paymentId = existing._id;
           // Self-heal the order axis if a prior partial run left it unlinked/unpaid.
-          if (String(order.payment) !== String(existing._id) || order.paymentStatus !== 'paid' || (gatewayOffer && !order.gatewayOffer)) {
+          if (String(order.payment) !== String(existing._id) || order.paymentStatus !== 'paid' || (gatewayOffer && !order.gatewayOffer) || !order.paymentVerification?.verifiedAt) {
             order.payment = existing._id;
             order.paymentStatus = 'paid';
+            stampRazorpayVerified(order, paymentData.id);
             if (gatewayOffer && !order.gatewayOffer) order.gatewayOffer = gatewayOffer;
             await orderRepository.save(order, session);
           }
@@ -394,6 +405,7 @@ class RazorpayService {
         order.payment = paymentRecord._id;
         // Payment axis is authoritative here — set it directly (idempotent on retry).
         order.paymentStatus = 'paid';
+        stampRazorpayVerified(order, paymentData.id);
         if (gatewayOffer) order.gatewayOffer = gatewayOffer;
         await orderRepository.save(order, session);
 
@@ -549,6 +561,7 @@ class RazorpayService {
 
         if (order.paymentStatus !== 'paid' && paidPaise >= totalPaise) {
           order.paymentStatus = 'paid';
+          stampRazorpayVerified(order, paymentEntity.id);
           // The first part paid stands as "the" payment for code that reads one.
           const firstPaid = [...order.paymentParts]
             .filter((p) => p.status === 'paid')

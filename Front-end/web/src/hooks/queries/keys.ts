@@ -376,3 +376,15 @@ export const orderRatingKeys = {
   panelOrder: (orderId: string) => [...orderRatingKeys.all, 'panel-order', orderId] as const,
   monthly: (month: string) => [...orderRatingKeys.all, 'monthly', month] as const,
 };
+
+/** Roav Points (`/incentives/*`) — sales incentive months, rules and the champion banner. */
+export const incentiveKeys = {
+  all: ['incentives'] as const,
+  me: (month: string) => ['incentives', 'me', month] as const,
+  team: (month: string) => ['incentives', 'team', month] as const,
+  month: (month: string) => ['incentives', 'month', month] as const,
+  months: () => ['incentives', 'months'] as const,
+  rows: (earnerKey: string, month: string) => ['incentives', 'rows', earnerKey, month] as const,
+  rules: () => ['incentives', 'rules'] as const,
+  champion: () => ['incentives', 'champion'] as const,
+};

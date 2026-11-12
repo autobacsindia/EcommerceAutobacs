@@ -56,7 +56,7 @@ async function paidOrder() {
     shippingAddress: { fullName: 'Ravi', phone: '9876543210', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
     subtotal: 30000, totalAmount: 30000, status: 'awaiting_payment', paymentStatus: 'pending',
   });
-  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified', paymentVerification: { source: 'razorpay', reference: 'pay_test' } });
   return Order.findById(o._id).lean();
 }
 
@@ -163,7 +163,7 @@ it('shows the supplier photo to admins on the admin order page — and never to 
     shippingAddress: { fullName: 'Ravi', phone: '9876543210', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
     subtotal: 30000, totalAmount: 30000, status: 'awaiting_payment', paymentStatus: 'pending',
   });
-  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified', paymentVerification: { source: 'razorpay', reference: 'pay_test' } });
   const itemId = String(o.items[0]._id);
   const procurement = await login('staff', { team: 'procurement' });
   await request(app).post(`${BASE}/staff/work/orders/${o._id}/lines/${itemId}/stock`).set(as(procurement)).send({ stock: 'in_stock' }).expect(200);
@@ -266,7 +266,7 @@ it('an opened order carries each line\'s SKU (the variant\'s, else the product\'
     shippingAddress: { fullName: 'Ravi', phone: '9876543210', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
     subtotal: 3500, totalAmount: 3500, status: 'awaiting_payment', paymentStatus: 'pending',
   });
-  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified', paymentVerification: { source: 'razorpay', reference: 'pay_test' } });
   const token = await login('staff', { team: 'procurement' });
   const res = await request(app).get(`${BASE}/staff/work/orders/${o._id}`).set(as(token)).expect(200);
   expect(res.body.order.lines.map((l) => [l.name, l.sku])).toEqual([['Mats', 'MAT-HLX'], ['Snorkel', 'SNK-01'], ['Gone', null]]);

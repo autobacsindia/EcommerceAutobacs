@@ -1,5 +1,6 @@
 'use client';
 
+import { getAdminNextStatuses } from '@/lib/adminOrderStatus';
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -25,37 +26,6 @@ import { usePanel } from '@/lib/usePanel';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import PinButton from '@/components/staff/PinButton';
 import CopyId from '@/components/ui/CopyId';
-
-// Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
-const STATUS_TRANSITIONS: Record<string, string[]> = {
-  awaiting_payment: ['processing', 'cancelled'],
-  processing:       ['shipped', 'cancelled'],
-  shipped:          ['delivered'],
-  delivered:        ['returned'],
-  returned:         [],
-  cancelled:        [],
-};
-
-const ALL_STATUSES = Object.keys(STATUS_TRANSITIONS) as string[];
-
-// Pre-payment state — the order isn't a real fulfillment stage yet and an admin
-// never picks it manually (payment moves it to processing).
-const SYSTEM_OWNED = ['awaiting_payment'];
-
-// A cancel is only valid BEFORE delivery — once delivered/returned it's a
-// return/refund, never a cancellation (mirrors the backend hard rule).
-const CANCEL_BLOCKED_FROM = ['delivered', 'returned', 'cancelled'];
-
-/** Statuses an admin can manually move an order to (fulfillment/exception states only). */
-function getAdminNextStatuses(currentStatus: string): string[] {
-  // Admins can force any fulfillment transition, but never a payment-driven status,
-  // and never a cancel once the order is delivered.
-  return ALL_STATUSES.filter(s => {
-    if (s === currentStatus || SYSTEM_OWNED.includes(s)) return false;
-    if (s === 'cancelled' && CANCEL_BLOCKED_FROM.includes(currentStatus)) return false;
-    return true;
-  });
-}
 
 interface Order {
   _id: string;
@@ -340,9 +310,9 @@ function AdminOrdersPageInner() {
     States in which a NEW parcel can exist at all — mirrors `SHIPPABLE_STATUSES` in
     Back-end/server/services/shipmentService.js, which rejects anything else outright.
 
-    The dropdown still offers "Shipped" from `delivered`, `returned` and `cancelled`
-    (getAdminNextStatuses only blocks a cancel after delivery), and those orders have
-    nothing left to put in a box. Handing one to the Parcels panel is a dead end: the
+    The dropdown no longer offers "Shipped" from `delivered`, `returned` or `cancelled`
+    (lib/adminOrderStatus mirrors the server's rules), but a stale row could still ask,
+    and those orders have nothing left to put in a box. Handing one to the Parcels panel is a dead end: the
     panel's open-effect requires something outstanding, so the form never appears and the
     admin gets no dialog, no toast and no error — the click silently does nothing. The
     modal, by contrast, sends the request and surfaces the server's rejection inline,

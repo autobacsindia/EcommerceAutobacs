@@ -71,6 +71,27 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false }),
     default: undefined,
   },
+  // The approval for a GTM discount above 10% (utils/discountApproval.js), copied
+  // from the quotation when the customer accepted it. Absent at 10% or less. Read by
+  // the sales incentive engine: who approved, when, and how deep the discount was.
+  discountApproval: {
+    type: new mongoose.Schema({
+      percent: { type: Number, required: true },
+      maxLinePercent: Number,
+      totalPercent: Number,
+      reason: String,
+      requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      requestedByName: String,
+      requestedAt: Date,
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      approvedByName: String,
+      approvedRole: { type: String, enum: ['admin', 'head'] },
+      approvedAt: { type: Date, required: true },
+      note: String,
+      quotationVersion: Number,
+    }, { _id: false }),
+    default: undefined,
+  },
   // A bank transfer has been recorded for this unpaid sales order and is waiting
   // for accounts to find it in the bank (models/BankTransfer.js). While set, no new
   // payment link can be issued and the order cannot be cancelled — the money may
@@ -116,6 +137,26 @@ const OrderSchema = new mongoose.Schema({
   // createdAt while unpaid). Kept by the pre-save hook — utils/orderListDate.js.
   paidAt: { type: Date, default: undefined },
   listDate: { type: Date, default: undefined },
+  /*
+    "Paid by a VERIFIED payment" — the one field to read when only real money counts
+    (sales incentives, reports). Set once, never cleared, and only by:
+      • 'razorpay'      — razorpayService: a signature-verified capture (webhook, the
+                          checkout callback or the reconciliation sweep, which all run the
+                          same idempotent routine), or the last part of a payment-link order
+      • 'bank_transfer' — bankTransferService: accounts / the admin found it in the bank
+    Never set by a status change, the admin status menu, the bulk bar, or an offline sale
+    an admin merely records as paid. A later refund or cancellation does NOT clear it (the
+    money was real); read `paymentStatus` and `status` alongside it for "still kept".
+  */
+  paymentVerification: {
+    type: new mongoose.Schema({
+      source: { type: String, enum: ['razorpay', 'bank_transfer'], required: true },
+      reference: String,           // Razorpay payment id / bank UTR
+      verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // accounts (bank transfer only)
+      verifiedAt: { type: Date, required: true },
+    }, { _id: false }),
+    default: undefined,
+  },
   offlinePayment: {
     type: new mongoose.Schema({
       method: { type: String, enum: ["bank_transfer"], required: true },

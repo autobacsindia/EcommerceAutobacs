@@ -127,10 +127,29 @@ describe('Razorpay payment.captured — concurrent delivery', () => {
     const payload = capturedPayload(order, paymentId);
 
     await razorpayService.handlePaymentCaptured(payload);
+    const first = (await Order.findById(order._id).lean()).paymentVerification;
     await razorpayService.handlePaymentCaptured(payload); // retry
 
     const total = await Payment.countDocuments({ gatewayPaymentId: paymentId });
     expect(total).toBe(1);
+    // Verified once, and a retry never moves the first stamp.
+    expect(first).toMatchObject({ source: 'razorpay', reference: paymentId });
+    const fresh = await Order.findById(order._id).lean();
+    expect(fresh.paymentVerification.verifiedAt).toEqual(first.verifiedAt);
+  });
+
+  it('self-heals the verified marker when a capture is recorded but the order missed it', async () => {
+    const { order } = await seedOrder();
+    const paymentId = `pay_${Date.now()}_heal`;
+    await razorpayService.handlePaymentCaptured(capturedPayload(order, paymentId));
+    await Order.updateOne({ _id: order._id }, { $unset: { paymentVerification: '' } });
+
+    // The reconciliation sweep / a late webhook re-runs the same routine.
+    await razorpayService.processPaymentSuccess(String(order._id), capturedPayload(order, paymentId).payment.entity, null);
+
+    const fresh = await Order.findById(order._id).lean();
+    expect(fresh.paymentVerification).toMatchObject({ source: 'razorpay', reference: paymentId });
+    expect(await Payment.countDocuments({ gatewayPaymentId: paymentId })).toBe(1);
   });
 
   // Regression: the `awaiting_payment → processing` transition inside the capture

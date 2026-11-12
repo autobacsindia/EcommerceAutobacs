@@ -60,7 +60,9 @@ describe('AdminOrderDetailPage', () => {
     _id: 'order123',
     orderNumber: 'ORD-001',
     createdAt: '2023-01-01T12:00:00Z',
-    status: 'pending',
+    // A paid order waiting to ship. (Was the legacy 'pending', which no longer
+    // exists — the status menu now offers only the server's real moves.)
+    status: 'processing',
     items: [
       {
         product: {

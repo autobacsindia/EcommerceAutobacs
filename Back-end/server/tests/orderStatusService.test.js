@@ -99,12 +99,12 @@ describe('validateTransition — terminal states allow no transitions', () => {
   test.each(TERMINAL_STATUSES)(
     '%s → any status is invalid for customers',
     (terminal) => {
-      // Customers cannot leave terminal states (no entries in STATUS_TRANSITIONS).
-      // Admin bypass is intentional — the service allows admins to force
-      // any transition (manual correction capability).
+      // Nobody leaves a terminal state — not a customer, not an admin, not a roll-up.
+      // (There used to be an admin bypass; it let a cancelled order be revived as "paid".)
       for (const target of ALL_STATUSES) {
-        const result = svc.validateTransition(terminal, target, false);
-        expect(result.valid).toBe(false);
+        expect(svc.validateTransition(terminal, target, false).valid).toBe(false);
+        expect(svc.validateTransition(terminal, target, true).valid).toBe(false);
+        expect(svc.validateTransition(terminal, target, true, { rollUp: true }).valid).toBe(false);
       }
     }
   );

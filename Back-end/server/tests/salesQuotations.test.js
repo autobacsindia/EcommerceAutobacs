@@ -152,16 +152,17 @@ describe('accepting', () => {
     const rep = await makeStaff('sales');
     const product = await makeProduct();
     const q = await quotes.createQuotation(rep, quoteInput([
-      { product: String(product._id), quantity: 1, offerPrice: 4000 },
+      // 10% under the website price: the most that needs no approval (utils/discountApproval.js).
+      { product: String(product._id), quantity: 1, offerPrice: 4500 },
       { custom: true, name: 'Installation', quantity: 1, price: 2500 },
     ]), req);
     const { orderId, quotation } = await quotes.acceptQuotation(rep, q.id, req);
     expect(quotation.status).toBe('accepted');
 
     const order = await Order.findById(orderId).lean();
-    expect(order).toMatchObject({ status: 'awaiting_payment', paymentStatus: 'pending', totalAmount: 6500 });
+    expect(order).toMatchObject({ status: 'awaiting_payment', paymentStatus: 'pending', totalAmount: 7000 });
     expect(order.paymentLinkId).toBeFalsy();
-    expect(order.items.map((i) => [i.name, i.price])).toEqual([[product.name, 4000], ['Installation', 2500]]);
+    expect(order.items.map((i) => [i.name, i.price])).toEqual([[product.name, 4500], ['Installation', 2500]]);
     expect(String(order.salesUser)).toBe(String(rep._id));
     expect(rz.created).toHaveLength(0);
     // Not a paid order yet: no invoice, no team alert.

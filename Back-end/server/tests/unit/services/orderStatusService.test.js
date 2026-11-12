@@ -70,13 +70,9 @@ describe('OrderStatusService Unit Tests', () => {
       expect(service.validateTransition('processing', 'cancelled', false).valid).toBe(true);
     });
 
-    it('should allow admins to bypass transition rules', () => {
-      // awaiting_payment -> delivered is normally invalid
-      const resultUser = service.validateTransition('awaiting_payment', 'delivered', false);
-      expect(resultUser.valid).toBe(false);
-
-      const resultAdmin = service.validateTransition('awaiting_payment', 'delivered', true);
-      expect(resultAdmin.valid).toBe(true);
+    it('gives admins NO blanket bypass (an unpaid order cannot be marked delivered)', () => {
+      expect(service.validateTransition('awaiting_payment', 'delivered', false).valid).toBe(false);
+      expect(service.validateTransition('awaiting_payment', 'delivered', true).valid).toBe(false);
     });
   });
 
@@ -165,6 +161,8 @@ describe('OrderStatusService Unit Tests', () => {
     it('should update status successfully for valid transition', async () => {
       mockOrderModel.findById.mockResolvedValue(mockOrderInstance);
       mockOrderInstance.status = 'awaiting_payment';
+      // Razorpay marks the order paid before it asks for `processing`.
+      mockOrderInstance.paymentStatus = 'paid';
 
       const result = await service.updateOrderStatus('order123', 'processing', {
         userId: 'user123',
@@ -203,6 +201,7 @@ describe('OrderStatusService Unit Tests', () => {
     it('should fail for invalid reason', async () => {
       mockOrderModel.findById.mockResolvedValue(mockOrderInstance);
       mockOrderInstance.status = 'awaiting_payment';
+      mockOrderInstance.paymentStatus = 'paid';
 
       const result = await service.updateOrderStatus('order123', 'processing', {
         reason: 'invalid_reason'
@@ -215,7 +214,10 @@ describe('OrderStatusService Unit Tests', () => {
 
     it('should allow admin_update reason for admins', async () => {
       mockOrderModel.findById.mockResolvedValue(mockOrderInstance);
-      mockOrderInstance.status = 'awaiting_payment';
+      // A paid order handed over in store. (This used to start from an UNPAID order and
+      // jump straight to delivered — the admin override this suite no longer allows.)
+      mockOrderInstance.status = 'processing';
+      mockOrderInstance.paymentStatus = 'paid';
 
       const result = await service.updateOrderStatus('order123', 'delivered', {
         isAdmin: true,
