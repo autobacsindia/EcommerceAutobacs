@@ -6,7 +6,7 @@ export const INBOX_UNREAD_CAP = 100;
 
 /** What canSee() reads on a task — enough to say whether an Inbox line still opens. */
 const SEE_PROJECTION = Object.freeze({
-  number: 1, title: 1, assignee: 1, assignees: 1, team: 1, teams: 1, followers: 1, createdBy: 1,
+  number: 1, title: 1, assignee: 1, assignees: 1, team: 1, teams: 1, followers: 1, createdBy: 1, project: 1,
 });
 
 /**

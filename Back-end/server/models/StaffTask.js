@@ -197,6 +197,11 @@ const StaffTaskSchema = new mongoose.Schema(
      */
     list: { type: mongoose.Schema.Types.ObjectId, default: null },
     /**
+     * The project it belongs to (models/StaffProject.js), or none. Everyone who
+     * sees the project may read and comment on it (services/staffTaskService.js canSee).
+     */
+    project: { type: mongoose.Schema.Types.ObjectId, default: undefined },
+    /**
      * A private task in its maker's Personal list: only they see it — not the
      * team, not a head, not the admin. It has no teams, followers or list, and
      * can never be given to anyone (services/staffTaskService.js).
@@ -249,6 +254,13 @@ StaffTaskSchema.index(
   { createdBy: 1, bucket: 1, rank: 1, _id: 1 },
   { partialFilterExpression: { personal: true }, name: 'staff_task_personal' },
 );
+/*
+  One project's tasks, in list order. NOT partial on purpose: with a partial
+  index the query must restate `$type`, and then the planner no longer sees the
+  project as an equality and sorts every row of the project in memory (measured
+  in tests/staffProjectIndexUsage.test.js). One small key per task is cheaper.
+*/
+StaffTaskSchema.index({ project: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_project' });
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
 // The sub-tasks of one task, in list order. Partial: most tasks are not sub-tasks.

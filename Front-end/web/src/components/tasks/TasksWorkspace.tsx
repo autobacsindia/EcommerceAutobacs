@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, BellDot, ChevronRight, CircleCheck, CircleHelp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, TriangleAlert, User, Users, X, Zap } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, BellDot, ChevronRight, CircleCheck, CircleHelp, Columns3, Eye, Flag, FolderKanban, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, TriangleAlert, User, Users, X, Zap } from 'lucide-react';
 import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -25,8 +25,9 @@ import { TimerChip, TimerNotice } from './Timer';
 import { teamColour } from '@/components/chat/chatUi';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import { SpaceTree, allLists, dotOf, useSpace } from './spaces';
+import { ProjectHeader, ProjectsView, useProject } from './Projects';
 import {
-  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, listOf, personLabel, unreadLabel,
+  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, listOf, personLabel, projectOf, unreadLabel,
   type InboxFilter, type Task, type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
 } from './types';
 
@@ -92,6 +93,7 @@ function EmptyState({ view, narrowed, onNew }: { view: TaskView; narrowed: boole
       : view === 'created' ? ['You haven’t given out any tasks', 'Give a job to someone in your team and follow it here.']
         : view === 'personal' ? ['Your private list is empty', 'Add reminders and to-dos only you can see. Nobody else can open them, not even the admin.']
         : view === 'following' ? ['You aren’t following any tasks', 'Open a task and press Follow to hear about it without doing it.']
+        : view === 'project' ? ['No open tasks in this project', 'Add one here, or open any task and pick this project in its Project field.']
         : ['No open tasks in the team', 'Everyone is up to date.'];
   return (
     <div className="flex flex-col items-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
@@ -139,7 +141,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const setGroupBy = (g: TaskGroupBy) => { setGroupByState(g); write(GROUP_KEY, g); };
 
   const { values: lp, set: setList, clear: clearList } = useListParams({
-    view: 'mine', team: '', list: '', due: '', priority: '', assignee: '', tag: '', q: '', sort: 'due',
+    view: 'mine', team: '', list: '', project: '', due: '', priority: '', assignee: '', tag: '', q: '', sort: 'due',
   });
   // The Inbox (?view=inbox) is not a list of tasks: it replaces the list, filters and board.
   const inInbox = lp.view === 'inbox';
@@ -148,10 +150,12 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   // Assigned comments (?view=comments) and a team's Overview (?view=overview) also replace the list.
   const inAssigned = lp.view === 'comments';
   const inOverview = lp.view === 'overview' && canSeeTeam;
-  const inOther = inInbox || inTrash || inAssigned || inOverview;
+  // Projects (?view=projects): the cards. One project (?view=project&project=<id>) is a task list like any other.
+  const inProjects = lp.view === 'projects';
+  const inOther = inInbox || inTrash || inAssigned || inOverview || inProjects;
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>('all');
   // A view this person cannot see (an old or shared link) falls back to "My tasks".
-  const view: TaskView = inTrash ? (isAdmin || isHead ? 'team' : 'created') : lp.view === 'created' || lp.view === 'following' || lp.view === 'personal' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
+  const view: TaskView = inTrash ? (isAdmin || isHead ? 'team' : 'created') : lp.view === 'project' && lp.project ? 'project' : lp.view === 'created' || lp.view === 'following' || lp.view === 'personal' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
   // The admin's team view: one team, or '' for all of them.
   const team = view === 'team' && isAdmin && SPACES.some((sp) => sp.value === lp.team) ? lp.team : '';
   // The space on screen (whose folders and lists apply), and one list of it: an id, or 'none' = Other tasks.
@@ -160,7 +164,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   // The bell's ?due=late means "late or due today".
   const due = asDue(lp.due);
   const priority = asPriority(lp.priority);
-  const assignee = view === 'team' ? lp.assignee : '';
+  const assignee = view === 'team' || view === 'project' ? lp.assignee : '';
+  const projectId = view === 'project' ? lp.project : '';
   const tag = lp.tag;
   const sort = asSort(lp.sort);
   const q = lp.q;
@@ -168,9 +173,11 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const dueNow = !inOther && view === 'mine' && due === 'late';
   // Leaving "Today & overdue" (My tasks + the Late filter) drops that filter too,
   // or "My tasks" would look dead: same list, same filter, nothing changes.
-  const setView = (v: TaskView, nextTeam = '') => setList({ view: v, team: v === 'team' ? nextTeam : '', list: '', ...(dueNow ? { due: '' } : {}) });
+  const setView = (v: TaskView, nextTeam = '') => setList({ view: v, team: v === 'team' ? nextTeam : '', list: '', project: '', ...(dueNow ? { due: '' } : {}) });
+  const openProject = (id: string) => setList({ view: 'project', project: id, team: '', list: '', assignee: '', ...(dueNow ? { due: '' } : {}) });
+  const showProjects = () => setList({ view: 'projects', project: '', team: '', list: '', assignee: '', due: '' });
   // A team's space in the side menu: the whole team, one list, or 'none' (Other tasks).
-  const pickList = (t: string, l: string) => setList({ view: 'team', team: isAdmin ? t : '', list: l, assignee: '', ...(dueNow ? { due: '' } : {}) });
+  const pickList = (t: string, l: string) => setList({ view: 'team', team: isAdmin ? t : '', list: l, project: '', assignee: '', ...(dueNow ? { due: '' } : {}) });
   const [unfolded, setUnfolded] = useState<Record<string, boolean>>({});
   const isUnfolded = (t: string) => unfolded[t] ?? (isAdmin ? spaceTeam === t : true);
   const setDue = (d: TaskDue | '') => setList({ due: d });
@@ -222,10 +229,13 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     { value: 'personal', label: 'Personal' },
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
-  const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team, list };
+  const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team, list, project: projectId };
+  const project = useProject(projectId || null);
+  // A project this person may not see (or one deleted since): nothing to list under it.
+  const projectGone = view === 'project' && project.isError;
   const narrowed = !!(due || priority || q || tag || assignee);
   // The same requests (and cache entries) as the list's or board's own: no extra call.
-  const openPages = useTaskPages(filters, 'open', !inOther);
+  const openPages = useTaskPages(filters, 'open', !inOther && !projectGone);
   const counted = openPages.data?.pages[0]?.summary;
   // The board's Complete column; the list folds done tasks away, so it is not read there.
   const donePages = useTaskPages(filters, 'done', !inOther && layout === 'board' && !filters.due);
@@ -253,9 +263,9 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     return [...new Set(rows.map((t) => t.id))];
   }, [inInbox, inAssigned, inOverview, inboxPages.data, inTrash, trashPages.data, openPages.data, donePages.data, layout, groupBy, filters.due]);
   // Quick add in the team list with one person picked gives it to them; otherwise to me.
-  const quickAddFor = view === 'team' && assignee ? assignee : undefined;
+  const quickAddFor = (view === 'team' || view === 'project') && assignee ? assignee : undefined;
   // Whose tasks (and which team), and the order, are where you are — not filters.
-  const clear = () => { clearList(['view', 'team', 'list', 'sort']); setSearch(''); };
+  const clear = () => { clearList(['view', 'team', 'list', 'project', 'sort']); setSearch(''); };
   const showDueNow = () => setList({ view: 'mine', team: '', list: '', due: dueNow ? '' : 'late' });
   const filterTag = (t: string) => setList({ tag: tag === t ? '' : t });
 
@@ -290,11 +300,11 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const listTitle = list === 'none' ? 'Other tasks' : shownList?.name ?? (list ? 'List' : '');
   const spaceLabel = space?.label || (spaceTeam === myTeam ? myTeamLabel : '') || spaceData?.teamLabel || '';
   const overviewLabel = space?.label || myTeamLabel || 'Team';
-  const title = inInbox ? 'Inbox' : inAssigned ? 'Assigned comments' : inOverview ? `${overviewLabel} overview` : inTrash ? 'Trash' : listTitle ? listTitle : view === 'team' && space ? `${space.label} tasks` : view === 'team' && !isAdmin && myTeamLabel ? `${myTeamLabel} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'My tasks' : (views.find((v) => v.value === view) ?? views[0]).label;
+  const title = inProjects ? 'Projects' : view === 'project' ? project.data?.name ?? 'Project' : inInbox ? 'Inbox' : inAssigned ? 'Assigned comments' : inOverview ? `${overviewLabel} overview` : inTrash ? 'Trash' : listTitle ? listTitle : view === 'team' && space ? `${space.label} tasks` : view === 'team' && !isAdmin && myTeamLabel ? `${myTeamLabel} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'My tasks' : (views.find((v) => v.value === view) ?? views[0]).label;
   const late = summary.data?.late ?? 0;
   const assignedCount = summary.data?.assignedComments ?? 0;
   const today = summary.data?.today ?? 0;
-  const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, following: Eye, created: Send, team: Users, personal: Lock };
+  const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, following: Eye, created: Send, team: Users, personal: Lock, project: FolderKanban };
   const shortcutGroups: ShortcutGroup[] = [
     { title: 'Tasks', items: [
       { keys: ['N'], label: 'New task' },
@@ -394,6 +404,10 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
             </div>
           </>
         )}
+        <p className={sectionLabel}>Projects</p>
+        <button aria-pressed={inProjects || view === 'project'} onClick={showProjects} className={navItem}>
+          <FolderKanban aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />Projects
+        </button>
         <p className={sectionLabel}>More</p>
         <button aria-pressed={inTrash} onClick={() => setList({ view: 'trash', team: '', list: '', due: '', priority: '', assignee: '', tag: '' })} className={navItem}>
           <Trash2 aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />Trash
@@ -469,6 +483,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
               : inAssigned ? 'Comments someone has asked you to act on. Resolve each one when it is done.'
               : inOverview ? 'How the team’s work stands right now.'
               : inTrash ? 'Deleted tasks. Restore any of them — nothing here is lost.'
+              : inProjects ? 'Work that spans teams: each project has an owner, a deadline and a progress bar.'
+              : view === 'project' ? 'Every task in this project, from every team in it.'
               : view === 'personal' ? 'Private to you: nobody else can see these tasks, not even the admin.'
               : view === 'created' ? 'Jobs you gave to others, and how far they have got.'
               : view === 'following' ? 'Tasks you watch without doing them: you hear about every change.'
@@ -483,11 +499,23 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
           <InboxView filter={inboxFilter} onFilter={setInboxFilter} openId={openId} onOpen={setOpenId} />
         ) : inAssigned ? (
           <AssignedComments onOpen={setOpenId} />
+        ) : inProjects ? (
+          <ProjectsView onOpen={openProject} isAdmin={isAdmin} />
         ) : inOverview ? (
           <TeamOverview team={isAdmin ? team : ''} spaceTeam={isAdmin ? team : myTeam || ''} onOpen={setOpenId} onPickList={(l) => pickList(isAdmin ? team : myTeam || '', l)} />
         ) : (<>
-        {!help.hidden && !inTrash && <HowItWorks onHide={help.hide} />}
+        {view === 'project' && (project.data
+          ? <ProjectHeader p={project.data} onBack={showProjects} isAdmin={isAdmin} />
+          : project.isError ? (
+            <div role="alert" className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center">
+              <p className="font-semibold text-gray-900">This project isn’t available</p>
+              <p className="mt-1 text-sm text-gray-500">It may have been deleted, or you are not in it.</p>
+              <button onClick={showProjects} className="mt-3 text-sm font-semibold text-blue-700 hover:underline">Back to Projects</button>
+            </div>
+          ) : <div className="h-28 animate-pulse rounded-xl border border-gray-200 bg-gray-50" aria-busy="true" />)}
+        {!help.hidden && !inTrash && view !== 'project' && <HowItWorks onHide={help.hide} />}
 
+        {!projectGone && <>
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative flex min-w-0 flex-1 basis-44 items-center sm:max-w-[15rem]">
             <Search aria-hidden className="pointer-events-none absolute left-2.5 h-4 w-4 text-gray-400" />
@@ -519,7 +547,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
               {TASK_SORTS.map((o) => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
             </select>
           </label>
-          {view === 'team' && (
+          {(view === 'team' || view === 'project') && (
             <label className="flex min-w-0 items-center gap-1 sm:inline-flex sm:shrink-0">
               <User aria-hidden className="h-4 w-4 text-gray-400" />
               <select value={assignee} onChange={(e) => setList({ assignee: e.target.value })} aria-label="Person" className={control}>
@@ -579,6 +607,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
             empty={<EmptyState view={view} narrowed={narrowed} onNew={() => setCreating(true)} />}
           />
         )}
+        </>}
         </>)}
       </div>
 
@@ -592,6 +621,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
           onCancel={() => setCreating(false)}
           listTeam={spaceTeam || (isAdmin ? null : myTeam)}
           defaultListId={listOf(filters)}
+          defaultProjectId={projectOf(filters)}
           personal={view === 'personal'}
         />
       </Dialog>

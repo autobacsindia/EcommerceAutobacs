@@ -360,4 +360,36 @@ describe('Staff task routes', () => {
     expect(gone.body).toMatchObject({ tasksMoved: 1 });
     expect((await member.session.get('/staff/tasks?view=team&list=none')).body.tasks).toHaveLength(1);
   });
+
+  it('projects: a head starts one, a member of another team reads its task over HTTP, an outsider gets 404', async () => {
+    const dev = await makeUser('Dev', 'staff', { team: 'developer', isHead: false, active: true });
+    const outsider = await makeUser('Sita', 'staff', { team: 'sales', isHead: false, active: true });
+    expect((await member.session.post('/staff/tasks/projects', { name: 'Nope' })).status).toBe(403);
+    const made = await head.session.post('/staff/tasks/projects', { name: 'Diwali launch', memberIds: [String(dev.user._id)], dueOn: '2030-10-25', clientId: 'route-proj-0001' });
+    expect(made.status).toBe(201);
+    const again = await head.session.post('/staff/tasks/projects', { name: 'Diwali launch', clientId: 'route-proj-0001' });
+    expect(again.status).toBe(200);
+    expect(again.body.project.id).toBe(made.body.project.id);
+    const pid = made.body.project.id;
+
+    const t = await head.session.post('/staff/tasks', { title: 'Order wiper sets', assigneeId: String(member.user._id), projectId: pid });
+    expect(t.status).toBe(201);
+    const tid = t.body.task.id;
+
+    const list = await dev.session.get('/staff/tasks/projects');
+    expect(list.body.projects).toEqual([expect.objectContaining({ id: pid, progress: expect.objectContaining({ total: 1, done: 0 }) })]);
+    expect((await dev.session.get(`/staff/tasks?view=project&project=${pid}`)).body.tasks.map((x) => x.id)).toEqual([tid]);
+    const seen = await dev.session.get(`/staff/tasks/${tid}`);
+    expect(seen.status).toBe(200);
+    expect(seen.body.task.can).toMatchObject({ comment: true, edit: false });
+    expect((await dev.session.post(`/staff/tasks/${tid}/comments`, { text: 'Need the photo' })).status).toBe(201);
+    expect((await dev.session.patch(`/staff/tasks/${tid}`, { rev: seen.body.task.rev, title: 'x' })).status).toBe(403);
+
+    expect((await outsider.session.get('/staff/tasks/projects')).body.projects).toEqual([]);
+    expect((await outsider.session.get(`/staff/tasks/projects/${pid}`)).status).toBe(404);
+    expect((await outsider.session.get(`/staff/tasks?view=project&project=${pid}`)).status).toBe(404);
+    expect((await outsider.session.get(`/staff/tasks/${tid}`)).status).toBe(404);
+    expect((await outsider.session.get('/staff/tasks/projects/pick')).body.projects).toEqual([]);
+    expect((await dev.session.get('/staff/tasks?view=project&project=nonsense')).status).toBe(400);
+  });
 });

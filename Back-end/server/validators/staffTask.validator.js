@@ -19,7 +19,8 @@ const optionalId = (field) => body(field).optional({ values: 'null' })
 export const validateTaskId = [param('id').custom(isObjectId).withMessage('Invalid task id')];
 
 export const validateTaskList = [
-  query('view').optional().isIn(['mine', 'following', 'created', 'team', 'personal']).withMessage('Invalid view'),
+  query('view').optional().isIn(['mine', 'following', 'created', 'team', 'personal', 'project']).withMessage('Invalid view'),
+  query('project').optional().custom(isObjectId).withMessage('Invalid project'),
   query('state').optional().isIn(['open', 'done', 'archived']).withMessage('Invalid state'),
   query('due').optional().isIn(['overdue', 'today', 'late', 'week']).withMessage('Invalid due filter'),
   query('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
@@ -53,6 +54,7 @@ export const validateTaskCreate = [
   body('checklist.*').isString().withMessage('Invalid step'),
   optionalId('orderId'),
   optionalId('listId'),
+  optionalId('projectId'),
   optionalId('parentId'),
   body('clientId').optional().isString().isLength({ max: 64 }),
 ];
@@ -76,6 +78,7 @@ export const validateTaskUpdate = [
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
   optionalId('orderId'),
   optionalId('listId'),
+  optionalId('projectId'),
 ];
 
 export const validateTaskFollowers = [
@@ -232,4 +235,33 @@ export const validateListItemUpdate = [
   body('name').optional().isString(),
   body('colour').optional().isString().isLength({ max: 20 }),
   optionalId('folderId'),
+];
+
+// Projects (services/staffProjectService.js cleans and checks every field itself).
+export const validateProjectList = [
+  query('state').optional().isIn(['active', 'archived']).withMessage('Invalid state'),
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+];
+export const validateProjectId = [param('projectId').custom(isObjectId).withMessage('Invalid project')];
+const projectFields = [
+  body('description').optional().isString().isLength({ max: 4000 }),
+  body('colour').optional().isString().isLength({ max: 20 }),
+  body('startOn').optional({ values: 'null' }).isString().isLength({ max: 10 }),
+  body('dueOn').optional({ values: 'null' }).isString().isLength({ max: 10 }),
+  optionalId('ownerId'),
+  body('memberIds').optional().isArray({ max: 60 }).withMessage('Members must be a list'),
+  body('memberIds.*').optional().custom(isObjectId).withMessage('Invalid member'),
+];
+export const validateProjectCreate = [
+  body('name').isString().withMessage('Give the project a name'),
+  body('clientId').optional().isString().isLength({ max: 64 }),
+  ...projectFields,
+];
+export const validateProjectUpdate = [
+  ...validateProjectId,
+  body('rev').isInt({ min: 1 }).withMessage('Reload and try again'),
+  body('name').optional().isString(),
+  body('statusOverride').optional({ values: 'null' }).isIn(['auto', 'on_track', 'at_risk', 'late', 'done']).withMessage('Invalid status'),
+  body('archived').optional().isBoolean().withMessage('Invalid value'),
+  ...projectFields,
 ];

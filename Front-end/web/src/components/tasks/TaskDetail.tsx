@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, Clock, CornerLeftUp, Eye, Flag, Hourglass, Link2,
+  AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, Clock, CornerLeftUp, Eye, Flag, FolderKanban, Hourglass, Link2,
   ListChecks, ListTree, Lock, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -25,6 +25,7 @@ import Links, { WaitingWarning } from './TaskLinks';
 import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import { ListPicker } from './spaces';
+import { ProjectPicker } from './ProjectPicker';
 import {
   FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
@@ -32,7 +33,7 @@ import {
 
 type Patch = Partial<{
   title: string; description: string; priority: TaskPriority; dueOn: string | null; dueTime: string | null; startOn: string | null; tags: string[];
-  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null; estimateMinutes: number | null;
+  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null; projectId: string | null; estimateMinutes: number | null;
 }>;
 
 const LINK_WORDS: Record<string, string> = { waiting_on: 'waiting on', blocking: 'blocking', related: 'related to' };
@@ -56,6 +57,7 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   estimate: (h) => `changed the time estimate from ${estimateWords(h.from)} to ${estimateWords(h.to)}`,
   tags: (h) => (h.to === 'none' ? 'removed the tags' : `set the tags to ${h.to}`),
   order: (h) => `changed the order from ${h.from} to ${h.to}`,
+  project: (h) => (h.from && h.to ? `moved it from the project ${h.from} to ${h.to}` : h.to ? `put it in the project ${h.to}` : `took it out of the project ${h.from || ''}`.trim()),
   list: (h) => (h.from && h.to ? `moved it from the list ${h.from} to ${h.to}` : h.to ? `put it in the list ${h.to}` : `took it out of the list ${h.from}`),
   edited: (h) => `edited the ${h.from}`,
   check_added: (h) => `added the step "${h.to}"`,
@@ -540,6 +542,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
       queryClient.invalidateQueries({ queryKey: taskKeys.summary() });
       queryClient.invalidateQueries({ queryKey: taskKeys.spaces() });
+      queryClient.invalidateQueries({ queryKey: taskKeys.projects() });
       // Archiving takes the sub-tasks along; a sub-task's change moves its parent's count.
       queryClient.invalidateQueries({ queryKey: taskKeys.subtasks(id) });
       if (res.task.parent) {
@@ -585,9 +588,9 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
   const archived = task.bucket === 'archived';
   const emptyFields = {
     estimate: task.estimateMinutes == null, due: !task.dueOn, start: !task.startOn, followers: !task.followers?.length,
-    tags: !task.tags.length, order: !task.order, list: !task.list,
+    tags: !task.tags.length, order: !task.order, list: !task.list, project: !task.project,
   };
-  const emptyCount = Object.values(emptyFields).filter(Boolean).length - (task.team ? 0 : Number(emptyFields.list)) - (task.personal ? Number(emptyFields.followers) : 0);
+  const emptyCount = Object.values(emptyFields).filter(Boolean).length - (task.team ? 0 : Number(emptyFields.list)) - (task.personal ? Number(emptyFields.followers) + Number(emptyFields.project) : 0);
   const blank = (empty: boolean) => hideEmpty && empty;
   const copyLink = async () => {
     try {
@@ -729,6 +732,15 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
                 value={task.list}
                 disabled={!task.can.edit || save.isPending}
                 onChange={(listId) => save.mutate({ listId })}
+              />
+            </Field>
+          )}
+          {!task.personal && (
+            <Field label="Project" icon={FolderKanban} hidden={blank(emptyFields.project)}>
+              <ProjectPicker
+                value={task.project}
+                disabled={!task.can.edit || save.isPending}
+                onChange={(projectId) => save.mutate({ projectId })}
               />
             </Field>
           )}

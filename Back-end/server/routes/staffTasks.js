@@ -36,7 +36,14 @@ import {
   validateListItemCreate,
   validateListItemId,
   validateListItemUpdate,
+  validateProjectList,
+  validateProjectId,
+  validateProjectCreate,
+  validateProjectUpdate,
 } from '../validators/staffTask.validator.js';
+import {
+  loadProjectAccess, listProjects, pickableProjects, getProject, createProject, updateProject,
+} from '../services/staffProjectService.js';
 import { listLinks, linkOptions, addLink, removeLink } from '../services/staffTaskLinkService.js';
 import { getSpace, createListItem, updateListItem, deleteListItem } from '../services/staffTaskListService.js';
 import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
@@ -84,6 +91,13 @@ const withFiles = [attachmentSizeGuard, uploadChatFiles, handleChatUploadError];
  * in services/staffTaskService.js.
  */
 const router = express.Router();
+
+// Which projects this person sees: read once per request, so every task rule
+// below (page, comments, files, timer, links) gives project members the same answer.
+router.use(asyncHandler(async (req, res, next) => {
+  await loadProjectAccess(req.user);
+  next();
+}));
 
 // @route  GET /staff/tasks?view=mine|following|created|team&state=open|done|archived&due=&priority=&tag=&q=&assignee=&team=&sort=due|newest|oldest|updated&cursor=
 router.get('/', validateTaskList, validateRequest, asyncHandler(async (req, res) => {
@@ -153,6 +167,32 @@ router.patch('/space/items/:itemId', validateListItemUpdate, validateRequest, as
 // @route  DELETE /staff/tasks/space/items/:itemId — its tasks go back to "Other tasks"
 router.delete('/space/items/:itemId', validateListItemId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await deleteListItem(req.user, req.params.itemId, req)) });
+}));
+
+// @route  GET /staff/tasks/projects?state=active|archived&cursor= — the projects you see, soonest deadline first
+router.get('/projects', validateProjectList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listProjects(req.user, req.query)) });
+}));
+
+// @route  GET /staff/tasks/projects/pick — names of the projects you see, for a task's picker
+router.get('/projects/pick', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await pickableProjects(req.user)) });
+}));
+
+// @route  POST /staff/tasks/projects { name, description?, colour?, startOn?, dueOn?, ownerId?, memberIds?, clientId? } — admin or a team head
+router.post('/projects', validateProjectCreate, validateRequest, asyncHandler(async (req, res) => {
+  const { project, duplicate } = await createProject(req.user, req.body, req);
+  res.status(duplicate ? 200 : 201).json({ success: true, project, duplicate });
+}));
+
+// @route  GET /staff/tasks/projects/:projectId
+router.get('/projects/:projectId', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, project: await getProject(req.user, req.params.projectId) });
+}));
+
+// @route  PATCH /staff/tasks/projects/:projectId { rev, ...changes, archived? } — its owner or the admin
+router.patch('/projects/:projectId', validateProjectUpdate, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, project: await updateProject(req.user, req.params.projectId, req.body, req) });
 }));
 
 // @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, orderId?, clientId? }

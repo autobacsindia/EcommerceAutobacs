@@ -12,7 +12,7 @@ import BulkBar from './BulkBar';
 import TaskMenu from './TaskMenu';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
-  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, listOf, newClientId, peopleOf,
+  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, listOf, newClientId, peopleOf, projectOf,
   type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -286,10 +286,11 @@ function QuickChips({ extras, ids, onChange, noPeople = false }: { extras: Quick
  * date, the priority and tags before it is saved. One id per draft: a double
  * Enter or a retried request makes one task.
  */
-export function QuickAdd({ status, assigneeId, listId, personal = false, label = 'Add task', variant = 'list' }: {
+export function QuickAdd({ status, assigneeId, listId, projectId, personal = false, label = 'Add task', variant = 'list' }: {
   status: TaskStatus; assigneeId?: string; label?: string; variant?: 'list' | 'board';
   /** Inside one list of a space: the new task goes in it. */
   listId?: string;
+  projectId?: string;
   /** In the Personal list: private, so nobody to give it to. */
   personal?: boolean;
 }) {
@@ -326,7 +327,7 @@ export function QuickAdd({ status, assigneeId, listId, personal = false, label =
         e.preventDefault();
         const text = title.trim();
         if (!text || nobody) return;
-        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(board && !personal && chosen.length ? { assigneeIds: chosen } : {}), ...(listId ? { listId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
+        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(board && !personal && chosen.length ? { assigneeIds: chosen } : {}), ...(listId ? { listId } : {}), ...(projectId ? { projectId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
           // Ready for the next one; the people and the chips stay, the name clears.
           onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
         });
@@ -379,9 +380,9 @@ function GroupHeading({ g }: { g: TaskGroup }) {
 }
 const PriorityFlagIcon = ({ priority }: { priority: keyof typeof PRIORITY_STYLE }) => <PriorityFlag priority={priority} />;
 
-function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, personal, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
+function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, projectId, personal, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
   g: TaskGroup; onOpen: (id: string) => void; collapsed: boolean; onToggle: () => void; base?: string;
-  quickAddFor?: string | null; listId?: string; personal?: boolean; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
+  quickAddFor?: string | null; listId?: string; projectId?: string; personal?: boolean; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
   onTag?: (tag: string) => void; activeTag?: string; countLabel?: string;
 }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown;
@@ -420,7 +421,7 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, personal, 
             ))}
           </ul>
           {footer}
-          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} assigneeId={quickAddFor} listId={listId} personal={personal} />}
+          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} assigneeId={quickAddFor} listId={listId} projectId={projectId} personal={personal} />}
         </div>
       )}
     </section>
@@ -475,6 +476,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
           onToggle={() => toggle(g.key)}
           quickAddFor={quickAddFor}
           listId={listOf(filters)}
+          projectId={projectOf(filters)}
           personal={filters.view === 'personal'}
           selected={selected}
           onSelect={onSelect}

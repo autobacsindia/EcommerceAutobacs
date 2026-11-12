@@ -16,6 +16,8 @@
  *   follow    anyone who sees it may follow or stop following it themselves;
  *             the editors may add or remove anyone in the panel
  *   comments  everyone who sees it
+ *   project   everyone who sees the task's project (services/staffProjectService.js)
+ *             also sees the task — reading and commenting, never editing
  * A task's teams are its people's teams when they were given it, so a head keeps
  * seeing the work they handed out even after the member moves on.
  *
@@ -67,6 +69,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import staffTaskTimeRepository from '../repositories/staffTaskTimeRepository.js';
 import { sendToUsers } from './pushService.js';
 import { listForTask, liveList } from './staffTaskListService.js';
+import { inProjectAccess, loadVisibleProject, projectForTask, projectName } from './staffProjectService.js';
 import { orderNumber } from './invoiceService.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
@@ -160,10 +163,12 @@ const headOnTask = (u, t) => teamsOf(t).some((team) => headOf(u, team));
 // Like a Google Chat space: everyone in a team sees the team's tasks (seeing,
 // commenting and following — changing one stays with canEdit).
 const teamOnTask = (u, t) => !!teamOf(u) && teamsOf(t).includes(teamOf(u));
+// Everyone who sees the task's project (read once per request: loadProjectAccess).
+const inTaskProject = (u, t) => !!t.project && inProjectAccess(u, t.project);
 
 /** A Personal-list task belongs to its maker alone: this comes before every other rule, the admin's included. */
 const ownPersonal = (u, t) => same(u?._id, t.createdBy);
-export const canSee = (u, t) => (t.personal ? ownPersonal(u, t) : isAdmin(u) || isDoing(u, t) || isFollowing(u, t) || same(u?._id, t.createdBy) || teamOnTask(u, t));
+export const canSee = (u, t) => (t.personal ? ownPersonal(u, t) : isAdmin(u) || isDoing(u, t) || isFollowing(u, t) || same(u?._id, t.createdBy) || teamOnTask(u, t) || inTaskProject(u, t));
 export const canEdit = (u, t) => (t.personal ? ownPersonal(u, t) : isAdmin(u) || same(u?._id, t.createdBy) || headOnTask(u, t));
 const canSetStatus = (u, t) => canEdit(u, t) || isDoing(u, t);
 const canReassign = (u, t) => !t.personal && canEdit(u, t);
@@ -372,6 +377,7 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
     list: idOf(t.list),
+    project: idOf(t.project),
     // The parent's number and title travel with the sub-task, so a row can say
     // "in T-20 …" even to someone who may not open T-20.
     parent: t.parent ? { id: idOf(t.parent.task), code: `T-${t.parent.number}`, title: t.parent.title || '' } : null,
@@ -647,7 +653,7 @@ async function withTime(rows) {
   return rows.map((r) => ({ ...r, timeSeconds: seconds.get(r.id) ?? 0, waitingOn: waiting.get(r.id) ?? 0 }));
 }
 
-export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, list, priority, tag, q, sort, cursor } = {}) {
+export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, list, project, priority, tag, q, sort, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
     query['assignees.user'] = actor._id;
@@ -678,6 +684,15 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
         query.list = new mongoose.Types.ObjectId(list);
       }
     }
+    if (assignee) {
+      if (!mongoose.isValidObjectId(assignee)) throw fail('Invalid person.', 400);
+      query['assignees.user'] = new mongoose.Types.ObjectId(assignee);
+    }
+  } else if (view === 'project') {
+    // Every task of one project — to whoever sees the project (and so may open each of them).
+    const p = await loadVisibleProject(actor, project);
+    query.project = p._id;
+    query.personal = { $ne: true };
     if (assignee) {
       if (!mongoose.isValidObjectId(assignee)) throw fail('Invalid person.', 400);
       query['assignees.user'] = new mongoose.Types.ObjectId(assignee);
@@ -883,6 +898,9 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   // The list must be in a space of every copy made (each copy has its person's team).
   let list = null;
   if (!personal) for (const who of rows) list = await listForTask(input.listId, peopleFields(who).teams);
+  // A project: one the giver sees. Never for a personal task — its project's people would see it.
+  if (personal && input.projectId) throw fail('A personal task can’t go in a project.', 400);
+  const project = personal ? null : await projectForTask(actor, input.projectId);
   const keyFor = (who) => (!clientId ? undefined : many ? `${clientId}.${idOf(who[0]._id)}` : clientId);
   const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, rows.map(keyFor)) : [];
   const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
@@ -925,6 +943,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         group,
         groupSize: many ? people.length : undefined,
         list: list?._id ?? null,
+        ...(project ? { project: project._id } : {}),
         ...placeOf({ status, dueOn, dueTime }),
         clientId: key,
         history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }],
@@ -1034,7 +1053,7 @@ async function applyUpdate(actor, t, input, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId', 'estimateMinutes'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId', 'projectId', 'estimateMinutes'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -1128,6 +1147,20 @@ async function applyUpdate(actor, t, input, req) {
   } else if (t.list && set.teams) {
     const was = await liveList(t.list);
     if (!was || !teamsNow.includes(was.team)) { set.list = null; if (was) note('list', was.name, ''); }
+  }
+
+  // The project: only someone who may edit the task, and only into a project they see.
+  if (has('projectId')) {
+    if (t.personal) {
+      if (input.projectId) throw fail('A personal task can’t go in a project.', 400);
+    } else if (idOf(input.projectId) !== idOf(t.project)) {
+      needEdit();
+      const want = await projectForTask(actor, input.projectId);
+      if (idOf(want?._id) !== idOf(t.project)) {
+        set.project = want?._id ?? null;
+        note('project', (await projectName(t.project)) || '', want?.name || '');
+      }
+    }
   }
 
   if (!entries.length) return shape(t, actor, { full: true });
