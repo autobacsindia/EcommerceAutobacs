@@ -19,6 +19,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
 // the bell's own data is stubbed — its behaviour is covered in
 // components/notifications/NotificationBell.test.tsx.
 jest.mock('@/hooks/queries/useNotifications', () => ({ useWaitingWork: () => ({ data: { items: [], total: 0 } }) }));
+jest.mock('@/components/incentives/ChampionBanner', () => ({ __esModule: true, default: () => null }));
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a> }));
 
 const shell = (canChangePassword: boolean, extra: { canSell?: boolean; roleLabel?: string } = { canSell: true }) => render(

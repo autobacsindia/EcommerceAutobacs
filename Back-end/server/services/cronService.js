@@ -16,6 +16,8 @@ import { storageProvider } from '../config/storage.js';
 import { postStuckDigests } from './chatStuckDigest.js';
 import { sendOverdueReport } from './overdueReportService.js';
 import { postEtaReminders } from './parcelEtaReminders.js';
+import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
+import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthService.js';
 
 class CronService {
   constructor() {
@@ -72,6 +74,7 @@ class CronService {
     this.scheduleOverdueReport();
     this.scheduleEtaReminders();
     this.schedulePushCleanup();
+    this.scheduleIncentives();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -428,6 +431,54 @@ class CronService {
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Overdue-orders email scheduled: "${schedule}"`);
     }
+  }
+
+  /**
+   * Roav Points (services/incentives/): the ledger sweep every 10 minutes, and the
+   * month close at 00:05 IST daily (it locks last month once, on the 1st, and is a
+   * no-op after). Both share one lock so a close never runs mid-sweep. Each is
+   * idempotent on its own, so a missed or doubled run is harmless.
+   * INCENTIVES_ENABLED=false turns both off.
+   */
+  scheduleIncentives() {
+    if (String(process.env.INCENTIVES_ENABLED).toLowerCase() === 'false') {
+      if (process.env.NODE_ENV !== 'test') console.log('[CronService] Roav Points DISABLED (INCENTIVES_ENABLED=false)');
+      return;
+    }
+    const tz = 'Asia/Kolkata';
+    const sweepSchedule = process.env.INCENTIVES_SWEEP_CRON || '*/10 * * * *';
+    const closeSchedule = process.env.INCENTIVES_CLOSE_CRON || '5 0 * * *';
+    if (!cron.validate(sweepSchedule) || !cron.validate(closeSchedule)) {
+      console.error('[CronService] Invalid INCENTIVES_*_CRON — Roav Points NOT scheduled');
+      return;
+    }
+    const sweep = cron.schedule(sweepSchedule, () =>
+      this.withDistributedLock('cron:lock:incentives', 15 * 60, async () => {
+        try {
+          const r = await runIncentiveSweep();
+          if (r.earned || r.reversed || r.failed) console.log(`[CronService] Roav Points sweep: ${JSON.stringify(r)}`);
+        } catch (err) {
+          console.error('[CronService] Roav Points sweep failed:', err.message);
+        }
+      }),
+      { scheduled: true, timezone: tz }
+    );
+    const close = cron.schedule(closeSchedule, () =>
+      this.withDistributedLock('cron:lock:incentives', 15 * 60, async () => {
+        try {
+          await runIncentiveSweep(); // last rows in before the snapshot
+          const m = await closeIncentiveMonth();
+          if (m) console.log(`[CronService] Roav Points month ${m.month} locked for review`);
+        } catch (err) {
+          console.error('[CronService] Roav Points month close failed:', err.message);
+        }
+      }),
+      { scheduled: true, timezone: tz }
+    );
+    this.scheduledTasks.push(
+      { name: 'incentiveSweep', task: sweep, schedule: sweepSchedule, description: 'Roav Points: ledger from verified payments and returns' },
+      { name: 'incentiveClose', task: close, schedule: closeSchedule, description: 'Roav Points: lock last month for review' },
+    );
   }
 
   /** One send per IST day (see scheduleOverdueReport). Never throws. */

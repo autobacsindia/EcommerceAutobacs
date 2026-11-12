@@ -11,6 +11,7 @@ import NotificationBell from '@/components/notifications/NotificationBell';
 import PanelShell from '@/components/panel/PanelShell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
 import { splitMore } from '@/components/panel/navMore';
+import ChampionBanner from '@/components/incentives/ChampionBanner';
 import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
 
@@ -176,6 +177,7 @@ export default function TeamLayoutClient({
         </>
       )}
     >
+      <ChampionBanner />
       {children}
     </PanelShell>
   );
