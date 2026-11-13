@@ -1413,9 +1413,8 @@ ${companyName}
   return { subject, text, html };
 };
 
-// Careers-facing emails are sent under the hiring legal entity, which differs
-// from the storefront brand (companyInfo.name = "Autobacs India").
-const CAREERS_ENTITY = 'ROAVION Automotive Private Limited';
+// Careers emails are signed with the brand, like every other email.
+const CAREERS_ENTITY = 'Autobacs India';
 
 /** Shared dark-header shell for the two candidate-facing careers emails. */
 const careersShell = (headerTitle, bodyHtml, supportEmail) => `

@@ -1,5 +1,5 @@
 /**
- * Seed / refresh the Roavion careers roles into the JobPosting collection so the
+ * Seed / refresh the Autobacs careers roles into the JobPosting collection so the
  * API-driven /careers page is populated. Content is authored here; the admin
  * (/admin/careers) is the day-to-day editor.
  *
@@ -232,7 +232,7 @@ const ROLES = [
       'Strong instinct for automotive, gearhead, or lifestyle culture — you get why people care about this category.',
       "You move fast. You don't wait for feedback to iterate. You see what's working and do more of it tomorrow.",
     ],
-    closer: 'Why this matters: The first impression someone has of Roavion often comes from your work. Building that first moment right changes everything.',
+    closer: 'Why this matters: The first impression someone has of Autobacs often comes from your work. Building that first moment right changes everything.',
   },
   {
     slug: 'ui-ux-designer',

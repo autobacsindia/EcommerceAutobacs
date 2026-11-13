@@ -405,13 +405,13 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 // Adding a policy page means adding it here, never inlining a label.
 /** Registered legal entity, shown on the Terms page (and in JSON-LD `legalName`).
  *  Everything a shopper reads as the brand uses BRAND_NAME instead. */
-export const COMPANY_LEGAL_NAME = 'Roavion Automotive Pvt Ltd';
+export const COMPANY_LEGAL_NAME = 'Roavion Automotive Private Limited';
 
 /** The customer-facing brand: footer and login/register copyright lines. */
 export const BRAND_NAME = 'Autobacs India';
 
 /** Footer line naming the company behind the brand (owner's request). */
-export const BRAND_OWNERSHIP_LINE = `${BRAND_NAME} is a brand of Roavion Automotive Private Limited.`;
+export const BRAND_OWNERSHIP_LINE = `${BRAND_NAME} is a brand of ${COMPANY_LEGAL_NAME}.`;
 
 /** Official social profiles — the footer and the Organization JSON-LD `sameAs`
  *  both read this, so the visible links and what Google is told cannot drift. */

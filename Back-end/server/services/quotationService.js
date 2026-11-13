@@ -169,9 +169,10 @@ export async function renderQuotationPdf(q) {
         } catch { /* text header below still identifies the seller */ }
       }
       if (logoRight === L) {
+        // Text fallback only: the logo artwork already carries the tagline.
         doc.font(FONT_BOLD).fontSize(20).fillColor('#fff').text('AUTOBACS', L, 40);
+        doc.font(FONT).fontSize(8.5).fillColor('#a9b8b0').text('Powered by Autobacs India', L, 92);
       }
-      doc.font(FONT).fontSize(8.5).fillColor('#a9b8b0').text('Powered by AutoBacs India', L, 92);
 
       doc.font(FONT_BOLD).fontSize(26).fillColor('#fff').text('QUOTATION', 300, 30, { width: R - 300, align: 'right', characterSpacing: 2 });
       doc.font(FONT).fontSize(9).fillColor('#cfd9d4');

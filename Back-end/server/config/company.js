@@ -10,7 +10,12 @@
  */
 
 export const companyInfo = {
+  // The BRAND every customer and staff member sees (emails, quotes, slips,
+  // feeds, the invoice heading). Set COMPANY_NAME=Autobacs India in Railway.
   name: process.env.COMPANY_NAME || 'Autobacs India',
+  // The REGISTERED seller, printed once beside the GSTIN on tax invoices only
+  // (GST rules require the legal name there). Nowhere else.
+  legalName: process.env.COMPANY_LEGAL_NAME || 'Roavion Automotive Private Limited',
   gstin: process.env.COMPANY_GSTIN || '',
   address: process.env.COMPANY_ADDRESS || '',
   city: process.env.COMPANY_CITY || '',

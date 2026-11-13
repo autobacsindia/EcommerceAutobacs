@@ -34,7 +34,7 @@ const MAX_BYTES = 512 * 1024;
 const MAX_REDIRECTS = 3;
 const CACHE_TTL_S = 24 * 60 * 60;
 const MISS_TTL_S = 60 * 60;
-const USER_AGENT = 'RoavionTeamChat/1.0 (+https://autobacsindia.com) link-preview';
+const USER_AGENT = 'AutobacsTeamChat/1.0 (+https://autobacsindia.com) link-preview';
 
 /** The first http(s) link in a message, as the message renders it (MessageItem). */
 export function firstUrl(text) {

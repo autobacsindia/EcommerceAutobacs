@@ -19,7 +19,7 @@ jest.unstable_mockModule('../../../repositories/counterRepository.js', () => ({
   default: { next: jest.fn().mockResolvedValue(60) },
 }));
 
-const { generateInvoicePdf, loadLogo } = await import('../../../services/invoiceService.js');
+const { generateInvoicePdf, loadLogo, sellerLegalLine } = await import('../../../services/invoiceService.js');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BUNDLED = join(here, '..', '..', '..', 'assets', 'brand', 'autobacs-logo-white.png');
@@ -64,5 +64,15 @@ describe('invoice logo', () => {
     expect(text).toContain(`/Width ${width}`);
     expect(text).toContain(`/Height ${height}`);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('seller legal line (GST)', () => {
+  test('puts the registered legal name beside the GSTIN', () => {
+    expect(sellerLegalLine({ legalName: 'Roavion Automotive Private Limited', gstin: '32ABCDE1234F1Z5' }))
+      .toBe('Roavion Automotive Private Limited · GSTIN: 32ABCDE1234F1Z5');
+  });
+  test('still names the legal entity when no GSTIN is configured', () => {
+    expect(sellerLegalLine({ legalName: 'Roavion Automotive Private Limited', gstin: '' })).toBe('Roavion Automotive Private Limited');
   });
 });
