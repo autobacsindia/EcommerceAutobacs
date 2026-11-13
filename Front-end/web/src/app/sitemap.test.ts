@@ -109,10 +109,34 @@ describe('sitemap contents', () => {
     expect(found.length).toBe(new Set(found).size)
   })
 
-  it('gives every entry a valid lastModified', async () => {
-    for (const entry of await sitemap()) {
-      expect(Number.isNaN(new Date(entry.lastModified as Date).getTime())).toBe(false)
-    }
+  it('gives every entity entry its real content date as lastModified', async () => {
+    const byUrl = new Map((await sitemap()).map((e) => [e.url, e]))
+    const iso = (u: string) => (byUrl.get(u)?.lastModified as Date).toISOString()
+    expect(iso(`${BASE}/products/led-bar`)).toBe('2026-08-01T00:00:00.000Z')
+    expect(iso(`${BASE}/categories/lighting`)).toBe('2026-08-02T00:00:00.000Z')
+    expect(iso(`${BASE}/brands/auxbeam`)).toBe('2026-08-03T00:00:00.000Z')
+    expect(iso(`${BASE}/thar-roxx-accessories`)).toBe('2026-08-04T00:00:00.000Z')
+    expect(iso(`${BASE}/model/mahindra-thar-roxx`)).toBe('2026-08-05T00:00:00.000Z')
+  })
+
+  // Static pages used to carry the generation time, so all ~24 "changed" every
+  // hour. A made-up lastmod makes Google distrust the real ones too.
+  it('omits lastModified on static pages instead of stamping "now"', async () => {
+    const entries = await sitemap()
+    const staticUrls = new Set(STATIC_ROUTES.map(([p]) => (p === '/' ? BASE : `${BASE}${p}`)))
+    const statics = entries.filter((e) => staticUrls.has(e.url))
+    expect(statics.length).toBe(STATIC_ROUTES.length)
+    for (const entry of statics) expect(entry.lastModified).toBeUndefined()
+  })
+
+  it('omits lastModified when the source has no valid date, never falls back to now', async () => {
+    mockApi({ products: { body: { products: [
+      { slug: 'no-date' },
+      { slug: 'bad-date', updatedAt: 'not-a-date' },
+    ] } }, count: { body: { total: 2 } } })
+    const byUrl = new Map((await sitemap()).map((e) => [e.url, e]))
+    expect(byUrl.get(`${BASE}/products/no-date`)?.lastModified).toBeUndefined()
+    expect(byUrl.get(`${BASE}/products/bad-date`)?.lastModified).toBeUndefined()
   })
 
   it('walks every product page, not just the first', async () => {

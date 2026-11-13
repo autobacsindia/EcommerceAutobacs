@@ -15,6 +15,7 @@ jest.mock('jose', () => ({ jwtVerify: jest.fn() }));
 
 import { NextRequest } from 'next/server';
 import { middleware } from './middleware';
+import { __resetSlugRedirectsForTest } from '@/lib/slugRedirects';
 
 const run = (url: string) => middleware(new NextRequest(new Request(url)));
 
@@ -66,5 +67,45 @@ describe('internal search results', () => {
   ])('%s carries no robots header (indexable)', async (u) => {
     const res = await run(u);
     expect(res.headers.get('x-robots-tag')).toBeNull();
+  });
+});
+
+describe('renamed slugs', () => {
+  const OLD_ENV = process.env.NEXT_PUBLIC_API_URL;
+  const realFetch = global.fetch;
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.test';
+    __resetSlugRedirectsForTest();
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ products: { 'old-name': 'new-name' }, articles: { '14710-2': 'real-title' } }),
+    })) as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_API_URL = OLD_ENV;
+    global.fetch = realFetch;
+  });
+
+  it('301s an old product URL to the new slug, keeping the query string', async () => {
+    const res = await run('https://shop.test/products/old-name?ref=RAHUL10');
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://shop.test/products/new-name?ref=RAHUL10');
+  });
+
+  it('301s an old blog URL at the root', async () => {
+    const res = await run('https://shop.test/14710-2');
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://shop.test/real-title');
+  });
+
+  it('lets the current URL through', async () => {
+    const res = await run('https://shop.test/products/new-name');
+    expect(res.status).toBe(200);
+  });
+
+  it('never redirects a POST', async () => {
+    const res = await middleware(new NextRequest(new Request('https://shop.test/products/old-name', { method: 'POST' })));
+    expect(res.status).not.toBe(301);
   });
 });

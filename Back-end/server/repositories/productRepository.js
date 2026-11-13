@@ -52,6 +52,20 @@ class ProductRepository {
    * countDocuments does NOT trigger the /^find/ soft-delete hook, so
    * deletedAt: null is set explicitly here.
    */
+  /**
+   * Current + previous slugs of every PUBLIC product, for the old-URL redirect map
+   * (services/slugRedirectService.js). All public slugs are returned, not just
+   * renamed ones, so the map can refuse an old slug another product now owns.
+   * Bounded by the catalogue (~1,400) and projected to two small fields.
+   */
+  async findSlugsForRedirects() {
+    return Product.find({ isActive: true, deletedAt: null, slug: { $exists: true, $nin: [null, ''] } })
+      .select('slug previousSlugs')
+      .limit(50000)
+      .lean()
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
   async countSitemap() {
     return Product.countDocuments({
       isActive: true,
@@ -626,15 +640,24 @@ class ProductRepository {
    * search index to enqueue, which is the usual reason bulkWrite drifts a
    * denormalized field.
    */
+  /*
+    `timestamps: false` on both sales-score writes: `salesScore` is a derived
+    ranking signal recomputed nightly, not a content change, and `updatedAt` is
+    what the sitemap publishes as <lastmod>. With the default, every product
+    that sold in the last 90 days was re-stamped 02:30 UTC every night — the
+    decay makes its score change daily — so Google saw ~75 products "edited"
+    every day with nothing on the page different.
+  */
   async bulkWriteSalesScores(operations) {
     if (!operations || operations.length === 0) return null;
-    return Product.bulkWrite(operations, { ordered: false });
+    return Product.bulkWrite(operations, { ordered: false, timestamps: false });
   }
 
   async clearSalesScoresExcept(ids) {
     return Product.updateMany(
       { _id: { $nin: ids }, salesScore: { $gt: 0 } },
-      { $set: { salesScore: 0 } }
+      { $set: { salesScore: 0 } },
+      { timestamps: false }
     );
   }
 

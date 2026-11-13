@@ -136,6 +136,40 @@ describe('recomputeSalesScores', () => {
     await expect(recomputeSalesScores()).resolves.toBeDefined();
   });
 
+  // Regression: the 02:30 UTC run re-stamped `updatedAt` on every product that
+  // sold in the last 90 days, so the sitemap told Google ~75 products were
+  // "edited" every night. A ranking signal is not a content change.
+  it('does NOT move updatedAt (sitemap lastmod) when scoring or clearing', async () => {
+    const sold = await makeProduct('Sold Winch');
+    const stale = await makeProduct('Stale Winch');
+    const past = new Date('2026-01-01T00:00:00.000Z');
+    await Product.collection.updateMany({}, { $set: { updatedAt: past } });
+    await Product.collection.updateOne({ _id: stale._id }, { $set: { salesScore: 5 } });
+    await makeOrder(sold._id, 2, 1);
+
+    const result = await recomputeSalesScores();
+    expect(result.scored).toBe(1);
+    expect(result.cleared).toBe(1);
+
+    const [a, b] = await Promise.all([
+      Product.findById(sold._id).lean(),
+      Product.findById(stale._id).lean(),
+    ]);
+    expect(a.salesScore).toBeGreaterThan(0);
+    expect(b.salesScore).toBe(0);
+    expect(a.updatedAt.toISOString()).toBe(past.toISOString());
+    expect(b.updatedAt.toISOString()).toBe(past.toISOString());
+  });
+
+  it('a real edit still moves updatedAt (control for the test above)', async () => {
+    const p = await makeProduct('Edited Winch');
+    const past = new Date('2026-01-01T00:00:00.000Z');
+    await Product.collection.updateOne({ _id: p._id }, { $set: { updatedAt: past } });
+    await Product.findByIdAndUpdate(p._id, { price: 1200 }, { new: true });
+    const after = await Product.findById(p._id).lean();
+    expect(after.updatedAt.getTime()).toBeGreaterThan(past.getTime());
+  });
+
   it('purges cached listings, because ranking changed', async () => {
     // Leaving them to TTL would serve yesterday's ordering for a full cache
     // lifetime after the score moved.

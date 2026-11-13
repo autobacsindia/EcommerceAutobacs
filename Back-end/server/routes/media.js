@@ -7,6 +7,7 @@ import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
+import { slugify } from "../utils/slug.js";
 import { cleanArticleHTML } from "../utils/htmlSanitizer.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 import { articleTags } from "../utils/nextTags.js";
@@ -207,6 +208,19 @@ router.get("/articles", asyncHandler(async (req, res) => {
   res.json(payload);
 }));
 
+/**
+ * Count a page view without touching `updatedAt`.
+ *
+ * `updatedAt` is what the sitemap publishes as <lastmod>, so it must move only
+ * when the post's CONTENT changes. A view is not a content change: with the
+ * default `timestamps: true`, every read re-stamped the post and Google saw all
+ * ~84 posts as "modified in the last 24h", which teaches it to ignore our
+ * lastmod entirely. `timestamps: false` keeps the counter off the clock.
+ */
+export function incrementArticleViews(filter) {
+  return articleRepository.updateOne(filter, { $inc: { views: 1 } }, { timestamps: false });
+}
+
 // GET /media/articles/sitemap  — lightweight slug list for sitemap generation
 // NOTE: must precede "/articles/:slug" so "sitemap" isn't captured as a slug.
 // Only published, indexable (non-noindex) BLOG articles — these are served at
@@ -230,7 +244,7 @@ router.get("/articles/:slug", asyncHandler(async (req, res) => {
 
   // Cache hit: still increment views in background
   if (hit) {
-    articleRepository.updateOne({ slug: req.params.slug }, { $inc: { views: 1 } }).catch(() => {});
+    incrementArticleViews({ slug: req.params.slug }).catch(() => {});
     return res.json(hit);
   }
 
@@ -239,9 +253,11 @@ router.get("/articles/:slug", asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Article not found" });
   }
 
-  // Increment view count
-  article.views += 1;
-  await article.save();
+  // Increment view count — WITHOUT `article.save()`, which bumped `updatedAt`
+  // on every read and made every blog post's sitemap <lastmod> "a few minutes
+  // ago". The response shows the incremented count; the write is not awaited.
+  incrementArticleViews({ _id: article._id }).catch(() => {});
+  article.views = (article.views || 0) + 1;
 
   // Related articles (same type + category, excluding current)
   const related = await articleRepository.find({
@@ -600,6 +616,19 @@ router.put("/admin/articles/:id", protect, adminOrMarketing, asyncHandler(async 
   // regeneration block below.
   const previousSlug = article.slug;
   const previousType = article.type;
+
+  // Explicit URL change. Deliberate, never derived from the title (see the dead
+  // block below for why). The old slug is kept by the slugHistory plugin, and
+  // the frontend middleware 301s the old URL to the new one.
+  if (typeof req.body.slug === "string") {
+    const slug = slugify(req.body.slug);
+    if (!slug) return res.status(400).json({ success: false, message: "The URL can't be empty." });
+    if (slug !== article.slug) {
+      const taken = await articleRepository.findOne({ slug, _id: { $ne: article._id } }).select("_id").lean();
+      if (taken) return res.status(409).json({ success: false, message: "Another post already uses this URL." });
+      article.slug = slug;
+    }
+  }
 
   const fields = ["title", "type", "coverImage", "excerpt", "content", "category", "tags", "author", "status", "featured"];
   fields.forEach((f) => { if (req.body[f] !== undefined) article[f] = req.body[f]; });

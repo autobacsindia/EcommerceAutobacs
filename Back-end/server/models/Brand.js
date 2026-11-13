@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import SeoSchema from "./shared/seoSchema.js";
+import slugHistoryPlugin from './plugins/slugHistory.js';
 
 const BrandSchema = new mongoose.Schema({
   name: { 
@@ -63,5 +64,8 @@ BrandSchema.set('toJSON', {
     delete ret.__v;
   }
 });
+
+// Old slugs are kept so a renamed URL 301s instead of 404ing — see the plugin.
+BrandSchema.plugin(slugHistoryPlugin);
 
 export default mongoose.model("Brand", BrandSchema);
