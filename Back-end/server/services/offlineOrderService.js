@@ -40,6 +40,8 @@ const saveBusinessProfile = (userId, buyer) =>
  * @param {Object} p.body          raw request body — buyer/GSTIN fields are read from it
  * @param {string} p.email
  * @param {string} p.phone
+ * @param {string} [p.alternatePhone]  optional second number to call (contact only,
+ *   never used to find or match the customer); ignored when equal to the main one
  * @param {string} [p.name]
  * @param {Array}  p.lineItems     priced order lines (rupees), already validated by the caller
  * @param {Object} p.shippingAddress  validated address (addressLine1/city/state/postalCode present)
@@ -63,6 +65,7 @@ export async function createOfflineOrderRecord({
   body,
   email,
   phone,
+  alternatePhone = '',
   name,
   lineItems,
   shippingAddress,
@@ -96,6 +99,10 @@ export async function createOfflineOrderRecord({
   });
 
   const postalCode = String(shippingAddress.postalCode).trim();
+  const deliveryPhone = String(shippingAddress.phone || phone).trim();
+  // Contact only. Dropped when it repeats the main number — nothing extra to call.
+  let altPhone = String(alternatePhone || '').trim();
+  if (altPhone === String(phone || '').trim() || altPhone === deliveryPhone) altPhone = '';
 
   // ── Find or create the customer ──────────────────────────────────────────
   const normEmail = email.toLowerCase();
@@ -109,16 +116,27 @@ export async function createOfflineOrderRecord({
       name: name || shippingAddress.fullName || 'Offline Customer',
       email: normEmail,
       phone,
+      ...(altPhone && { alternatePhone: altPhone }),
       passwordHash,
       isVerified: false,
       // First login forces a password set — exactly the guest/WP-claim flow.
       mustResetPassword: true,
     });
     isNewUser = true;
-  } else if (!user.phone && phone) {
-    // Existing customer with no phone on file → backfill (never overwrite).
-    user.phone = phone;
-    await userRepository.save(user);
+  } else {
+    let changed = false;
+    if (!user.phone && phone) {
+      // Existing customer with no phone on file → backfill (never overwrite).
+      user.phone = phone;
+      changed = true;
+    }
+    // The alternative number is just a number to call, so the latest one given
+    // replaces the old — unless it is the customer's own main number.
+    if (altPhone && altPhone !== user.phone && altPhone !== user.alternatePhone) {
+      user.alternatePhone = altPhone;
+      changed = true;
+    }
+    if (changed) await userRepository.save(user);
   }
 
   const subtotal = lineItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
@@ -126,7 +144,8 @@ export async function createOfflineOrderRecord({
 
   const address = {
     fullName: (shippingAddress.fullName || name || user.name || '').trim(),
-    phone: String(shippingAddress.phone || phone).trim(),
+    phone: deliveryPhone,
+    ...(altPhone && { alternatePhone: altPhone }),
     addressLine1: String(shippingAddress.addressLine1).trim(),
     addressLine2: String(shippingAddress.addressLine2 || '').trim(),
     city: String(shippingAddress.city).trim(),

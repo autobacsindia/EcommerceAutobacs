@@ -137,6 +137,7 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Customer</p>
               <p className="text-gray-900">{order.customer.name}</p>
               <p className="text-gray-700">{order.customer.phone}</p>
+              {order.customer.alternatePhone && <p className="text-gray-700">Alt: {order.customer.alternatePhone}</p>}
               <p className="break-all text-gray-700">{order.customer.email}</p>
             </div>
             {a && (

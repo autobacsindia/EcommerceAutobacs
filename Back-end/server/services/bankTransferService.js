@@ -740,6 +740,7 @@ function shapeOrderDetails(o) {
       name: o.shippingAddress?.fullName || o.user?.name || '',
       email: publicEmail(o.user?.email || o.guestEmail || ''),
       phone: o.shippingAddress?.phone || o.user?.phone || '',
+      alternatePhone: o.shippingAddress?.alternatePhone || '',
     },
     shippingAddress: addressOf(o.shippingAddress),
     billingAddress: addressOf(o.buyer?.billingAddress),

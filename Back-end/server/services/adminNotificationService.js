@@ -113,6 +113,8 @@ const orderCustomer = (order) => {
     name: user?.name || addr.fullName || 'Customer',
     email: user?.email || order.guestEmail || '',
     phone: addr.phone || '',
+    // Optional second number a salesperson recorded — shown, never messaged.
+    alternatePhone: addr.alternatePhone || '',
   };
 };
 
@@ -383,6 +385,7 @@ export const emailAdminOrderPlacedAlert = async (orderId) => {
     `Total   : ${inr(order.totalAmount)}`,
     `Customer: ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
     customer.phone ? `Phone   : ${customer.phone}` : null,
+    customer.alternatePhone ? `Alt. ph : ${customer.alternatePhone}` : null,
     shipTo ? `Ship to : ${shipTo}` : null,
     '',
     'Items:',
@@ -401,6 +404,7 @@ export const emailAdminOrderPlacedAlert = async (orderId) => {
       ['Total', `<strong>${escapeHtml(inr(order.totalAmount))}</strong>`],
       ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
       ['Phone', escapeHtml(customer.phone)],
+      ['Alt. phone', escapeHtml(customer.alternatePhone)],
       ['Ship to', escapeHtml(shipTo)],
       ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
     ],
@@ -464,6 +468,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
     `Order total: ${inr(order.totalAmount)}`,
     `Customer   : ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
     customer.phone ? `Phone      : ${customer.phone}` : null,
+    customer.alternatePhone ? `Alt. phone : ${customer.alternatePhone}` : null,
     `Cancelled by: ${actor}`,
     `Cancelled  : ${formatDateTimeIST(cancelledAt)}`,
     order.cancellationReason ? `Reason     : ${cancellationReasonLabel(order.cancellationReason)}` : null,
@@ -492,6 +497,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
       ['Refund due', refund ? `<strong style="color:#b91c1c;">${escapeHtml(inr(refund.amount))}</strong>` : 'None — order was unpaid'],
       ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
       ['Phone', escapeHtml(customer.phone)],
+      ['Alt. phone', escapeHtml(customer.alternatePhone)],
       ['Cancelled by', escapeHtml(actor)],
       ['Cancelled', escapeHtml(formatDateTimeIST(cancelledAt))],
       ['Reason', escapeHtml(cancellationReasonLabel(order.cancellationReason))],
@@ -554,6 +560,7 @@ export const emailAdminRefundFailedAlert = async (orderId) => {
     refundId ? `Refund id  : ${refundId}` : null,
     `Customer   : ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
     customer.phone ? `Phone      : ${customer.phone}` : null,
+    customer.alternatePhone ? `Alt. phone : ${customer.alternatePhone}` : null,
     '',
     `Retry refund: ${adminLink}`,
   ]
@@ -573,6 +580,7 @@ export const emailAdminRefundFailedAlert = async (orderId) => {
       ['Refund id', escapeHtml(refundId)],
       ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
       ['Phone', escapeHtml(customer.phone)],
+      ['Alt. phone', escapeHtml(customer.alternatePhone)],
     ],
     'Retry refund',
     adminLink,
@@ -789,6 +797,7 @@ const orderRows = (order, extra = []) => {
     ['Order', escapeHtml(orderRef(order))],
     ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
     ['Phone', escapeHtml(customer.phone)],
+    ['Alt. phone', escapeHtml(customer.alternatePhone)],
     ['Ship to', escapeHtml(shipTo)],
     ['Sold by', escapeHtml(soldBy(order))],
     ...extra,

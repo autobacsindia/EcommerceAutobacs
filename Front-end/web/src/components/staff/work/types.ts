@@ -36,7 +36,7 @@ export type WorkRow = {
   totalAmount: number;
   source: 'sales' | 'website';
   soldBy: string;
-  customer: { name: string; email: string; phone: string };
+  customer: { name: string; email: string; phone: string; alternatePhone?: string };
   city: string;
   summary: string | null;
   /** The stage behind `summary` — colours the order's pill like the stage itself. */

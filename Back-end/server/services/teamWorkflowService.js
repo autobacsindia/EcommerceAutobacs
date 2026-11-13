@@ -130,6 +130,8 @@ const customerOf = (o) => ({
   name: o.user?.name || o.shippingAddress?.fullName || '',
   email: o.user?.email || o.guestEmail || '',
   phone: o.shippingAddress?.phone || o.user?.phone || '',
+  // The order's own snapshot only: an old order never borrows today's number.
+  alternatePhone: o.shippingAddress?.alternatePhone || '',
 });
 
 /** A list row: enough to decide which order to open. */

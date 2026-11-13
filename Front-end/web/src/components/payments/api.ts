@@ -40,7 +40,7 @@ export type PaymentRequest = {
   };
   order: { id: string; number: string } | null;
   itemNames: string[];
-  customer: { name: string; phone: string; city: string } | null;
+  customer: { name: string; phone: string; alternatePhone?: string; city: string } | null;
   closedBy: string;
   /** Raised from the supplier directory. */
   supplier?: { id: string } | null;

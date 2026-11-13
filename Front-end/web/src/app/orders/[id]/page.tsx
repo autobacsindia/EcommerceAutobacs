@@ -70,6 +70,7 @@ interface OrderDetail {
   shippingAddress: {
     fullName: string;
     phone: string;
+    alternatePhone?: string;
     addressLine1: string;
     addressLine2?: string;
     city: string;
@@ -711,6 +712,9 @@ export default function OrderDetailPage() {
               <p className="text-ink/70">{order.shippingAddress.city}, {order.shippingAddress.state}</p>
               <p className="text-ink/70">{order.shippingAddress.postalCode}</p>
               <p className="text-ink-muted mt-2">{order.shippingAddress.phone}</p>
+              {order.shippingAddress.alternatePhone && (
+                <p className="text-ink-muted">Alt: {order.shippingAddress.alternatePhone}</p>
+              )}
             </div>
           </div>
 

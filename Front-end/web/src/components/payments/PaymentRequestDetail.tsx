@@ -197,7 +197,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 }} />
               ) : <Row k="Order" v={r.order?.number} copy="Order number" />}
               <Row k="Items" v={r.itemNames.join(', ')} />
-              <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : null} />
+              <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.alternatePhone && `Alt: ${r.customer.alternatePhone}`, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />
               {r.description && (
                 <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">

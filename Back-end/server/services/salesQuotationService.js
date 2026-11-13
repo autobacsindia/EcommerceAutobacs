@@ -64,6 +64,7 @@ function cleanCustomer(input = {}) {
     name: String(input.name ?? '').trim(),
     email: String(input.email ?? '').trim().toLowerCase(),
     phone: String(input.phone ?? '').trim(),
+    alternatePhone: String(input.alternatePhone ?? '').trim(),
   };
 }
 
@@ -537,6 +538,7 @@ export async function acceptQuotation(actor, id, req) {
       body: {}, // retail buyer: no GSTIN block from the panel
       email: q.customer.email || phoneOnlyEmailFor(q.customer.phone),
       phone: q.customer.phone,
+      alternatePhone: q.customer.alternatePhone || '',
       name: q.customer.name,
       lineItems,
       shippingAddress: q.shippingAddress,
@@ -676,7 +678,8 @@ function printableQuotation(q) {
     _id: q._id,
     createdAt: q.revisions?.length ? q.revisions[q.revisions.length - 1].savedAt : q.createdAt,
     items: q.items,
-    shippingAddress: q.shippingAddress,
+    // The quotation's own alternative number rides on the printed address.
+    shippingAddress: { ...q.shippingAddress, alternatePhone: q.customer.alternatePhone || '' },
     user: { name: q.customer.name, email: q.customer.email, phone: q.customer.phone },
     subtotal: q.subtotal ?? q.totalAmount,
     discount: q.discount?.amount || 0,
@@ -703,7 +706,7 @@ export async function quotationDetailsForOrder(actor, order) {
     number: b.number,
     date: b.date,
     validUntil: b.validUntil,
-    customer: { name: b.customer.name, phone: b.customer.phone, address: b.customer.address },
+    customer: { name: b.customer.name, phone: b.customer.phone, alternatePhone: b.customer.alternatePhone || '', address: b.customer.address },
     lines: b.lines.map(({ n, name, quantity, listPrice, offerPrice, amount }) => ({ n, name, quantity, listPrice, offerPrice, amount })),
     subtotal: b.subtotalAtList,
     discount: b.discount,

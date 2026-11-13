@@ -233,6 +233,9 @@ const UserSchema = new mongoose.Schema({
   
   // Phone number field (optional, for OTP/guest checkout)
   phone: String,
+  // Optional second number a salesperson recorded (team panel). Contact only:
+  // never used for login, OTP, lookup or de-duplication — and not indexed.
+  alternatePhone: String,
 
   // Purchase denormalization (drives the CRM "already a customer" tag + dormant
   // filtering). Updated when an order first reaches a paid status; source of

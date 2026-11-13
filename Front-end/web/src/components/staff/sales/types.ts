@@ -89,7 +89,7 @@ export type SalesOrder = {
   /** The quotation this order came from (single-order read only). */
   quotation?: { id: string; number: string } | null;
   items: SalesOrderItem[];
-  customer: { name: string; email: string; phone: string };
+  customer: { name: string; email: string; phone: string; alternatePhone?: string };
   shippingAddress: {
     fullName?: string;
     phone?: string;
@@ -174,7 +174,7 @@ export type Quotation = {
   number: string;
   version: number;
   status: 'open' | 'expired' | 'accepted' | 'cancelled';
-  customer: { name: string; email: string; phone: string };
+  customer: { name: string; email: string; phone: string; alternatePhone?: string };
   shippingAddress: SalesOrder['shippingAddress'];
   items: QuotationLine[];
   /** Σ lines, before the discount. */

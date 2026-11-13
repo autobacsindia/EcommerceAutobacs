@@ -339,7 +339,7 @@ export default function ReturnPanel({ id, showRefund = false }: { id: string; sh
     <div className="space-y-4 text-sm">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <p><span className="text-gray-500">Customer:</span> {r.customerContact.name}{r.customerContact.phone ? ` · ${r.customerContact.phone}` : ''}</p>
+          <p><span className="text-gray-500">Customer:</span> {r.customerContact.name}{r.customerContact.phone ? ` · ${r.customerContact.phone}` : ''}{r.customerContact.alternatePhone ? ` · Alt: ${r.customerContact.alternatePhone}` : ''}</p>
           <p><span className="text-gray-500">Sold by:</span> {r.seller}{r.raisedBy ? ` · raised by ${r.raisedBy}` : r.origin === 'customer' ? ' · raised on the website' : ''}</p>
           <p><span className="text-gray-500">Problem:</span> {r.problemDescription}</p>
           {r.repeatReturns > 1 && (

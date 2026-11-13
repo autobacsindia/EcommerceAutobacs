@@ -166,7 +166,10 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Order</p>
           <h1 className="text-2xl font-bold text-gray-900">{o.orderNumber}</h1>
-          <p className="text-sm text-gray-500">{o.customer.name} · {o.customer.phone}</p>
+          <p className="text-sm text-gray-500">
+            {o.customer.name} · {o.customer.phone}
+            {o.customer.alternatePhone && <> · Alt: {o.customer.alternatePhone}</>}
+          </p>
         </div>
         <Link href="/team/sales" className="text-sm font-medium text-blue-700 hover:text-blue-900">← All orders</Link>
       </div>
