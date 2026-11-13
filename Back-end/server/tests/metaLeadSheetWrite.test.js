@@ -467,6 +467,18 @@ describe('tidy panel columns on every tab', () => {
     expect(plan.requests.some((r) => r.updateSheetProperties || r.addProtectedRange)).toBe(false);
   });
 
+  test('a tab protected before the rebrand (old "Roavion panel" note) is not protected a second time', async () => {
+    const sheet = fakeSheet(TABS());
+    await sheet.sync();
+    await sheet.flush({ ensureLayout: true });
+    const old = 'Filled automatically by the Roavion panel. Type in the columns to the left.';
+    const tab = sheet.tab('jimny');
+    expect(planPanelLayout([{ ...tab, protections: [] }], []).requests.some((r) => r.addProtectedRange)).toBe(true);
+    const plan = planPanelLayout([{ ...tab, protections: [{ id: 3, description: old }] }], []);
+    expect(plan.requests.some((r) => r.addProtectedRange)).toBe(false);
+    expect(PANEL_PROTECTION).toMatch(/Autobacs panel/);
+  });
+
   test('regression (fortuner A1): nothing is ever written to a team cell the panel does not own', async () => {
     const values = [['27497', ...META_HEAD.slice(1)], metaRow('l:1', 'Asha', 'p:+919876543210'), metaRow('l:2', 'Ravi', 'p:+919876543211')];
     const sheet = fakeSheet([{ name: 'fortuner ironman', gid: 55, columnCount: 26, values }]);

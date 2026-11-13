@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { buildPageMetadata } from '@/lib/pageSeo';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
 import { formatLongDateIST } from '@/lib/datetime';
-import { LEGAL_LINKS, COMPANY_LEGAL_NAME } from '@/lib/constants';
+import { LEGAL_LINKS, COMPANY_LEGAL_NAME, BRAND_NAME } from '@/lib/constants';
 import StorePageHeader from '@/components/store/StorePageHeader';
 
 // Server component on purpose. This page has no hooks and no event handlers, so
@@ -30,7 +30,7 @@ export default function TermsPage() {
       heading: '1. Introduction',
       content: (
         <p>
-          Welcome to AutoBacs India (&quot;we,&quot; &quot;our,&quot; &quot;us&quot;). These Terms and Conditions govern your access to and use of our
+          Welcome to Autobacs India (&quot;we,&quot; &quot;our,&quot; &quot;us&quot;). These Terms and Conditions govern your access to and use of our
           website located at{' '}
           <Link href="/" className="text-gold hover:text-ink transition-colors">autobacsindia.com</Link>
           {' '}(the &quot;Website&quot;) and our services. By accessing or using our Website, you agree to be bound
@@ -43,7 +43,7 @@ export default function TermsPage() {
       heading: '2. Services',
       content: (
         <>
-          <p className="mb-3">AutoBacs India provides an online platform for the sale of automotive parts, accessories, and related products. Our services include:</p>
+          <p className="mb-3">Autobacs India provides an online platform for the sale of automotive parts, accessories, and related products. Our services include:</p>
           <ul className="space-y-1.5 pl-4">
             {['Online retail of automotive products', 'Product information and specifications', 'Order processing and fulfillment', 'Customer support services', 'Installation service coordination (where available)'].map(item => (
               <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
@@ -101,7 +101,7 @@ export default function TermsPage() {
     },
     {
       heading: '10. Intellectual Property',
-      content: <p>All content on our Website, including text, graphics, logos, images, and software, is the property of AutoBacs India or its licensors and is protected by intellectual property laws. You may not use any content from our Website without our prior written consent.</p>,
+      content: <p>All content on our Website, including text, graphics, logos, images, and software, is the property of Autobacs India or its licensors and is protected by intellectual property laws. You may not use any content from our Website without our prior written consent.</p>,
     },
     {
       heading: '11. User Conduct',
@@ -126,11 +126,11 @@ export default function TermsPage() {
     },
     {
       heading: '14. Limitation of Liability',
-      content: <p>To the fullest extent permitted by law, AutoBacs India shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses.</p>,
+      content: <p>To the fullest extent permitted by law, Autobacs India shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses.</p>,
     },
     {
       heading: '15. Indemnification',
-      content: <p>You agree to indemnify and hold harmless AutoBacs India and its affiliates, officers, agents, and employees from any claim or demand, including reasonable attorneys&apos; fees, arising out of your violation of these Terms or your use of our services.</p>,
+      content: <p>You agree to indemnify and hold harmless Autobacs India and its affiliates, officers, agents, and employees from any claim or demand, including reasonable attorneys&apos; fees, arising out of your violation of these Terms or your use of our services.</p>,
     },
     {
       heading: '16. Termination',
@@ -182,7 +182,7 @@ export default function TermsPage() {
       heading: '19. Contact Information',
       content: (
         <p>
-          If you have any questions about these Terms and Conditions, please contact us at {COMPANY_LEGAL_NAME} —
+          If you have any questions about these Terms and Conditions, please contact us at {BRAND_NAME} ({COMPANY_LEGAL_NAME}) —
           Email:{' '}<Link href="mailto:support@autobacsindia.com" className="text-gold hover:text-ink transition-colors">support@autobacsindia.com</Link>
           {' '}— Phone: +91 9895257905
         </p>
@@ -190,7 +190,7 @@ export default function TermsPage() {
     },
     {
       heading: '20. Entire Agreement',
-      content: <p>These Terms and Conditions, together with our Privacy Policy and any other legal notices published by us on our Website, constitute the entire agreement between you and AutoBacs India regarding your use of our Website and services.</p>,
+      content: <p>These Terms and Conditions, together with our Privacy Policy and any other legal notices published by us on our Website, constitute the entire agreement between you and Autobacs India regarding your use of our Website and services.</p>,
     },
     {
       heading: '21. Enterprise / Commercial Purchases',

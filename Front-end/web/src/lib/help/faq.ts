@@ -150,7 +150,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     faqs: [
       {
         question: 'How do I create an account?',
-        answer: 'Tap "Hello, sign in" at the top, then "Create your AutoBacs account". You can also sign in with Google or Facebook.',
+        answer: 'Tap "Hello, sign in" at the top, then "Create your Autobacs account". You can also sign in with Google or Facebook.',
         links: [{ label: 'Create an account', href: '/register' }],
       },
       {

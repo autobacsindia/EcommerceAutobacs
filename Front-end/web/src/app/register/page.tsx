@@ -228,7 +228,7 @@ function RegisterPageInner() {
           </form>
 
           <div className="mt-6 text-xs text-ink-muted font-display">
-            By creating an account, you agree to AutoBacs India&apos;s{' '}
+            By creating an account, you agree to Autobacs India&apos;s{' '}
             <Link href={LEGAL_LINKS.terms.href} className="text-gold hover:text-ink transition-colors">
               {LEGAL_LINKS.terms.label}
             </Link>{' '}

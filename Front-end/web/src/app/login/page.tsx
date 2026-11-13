@@ -210,7 +210,7 @@ function LoginPageInner() {
           </form>
 
           <div className="mt-6 text-xs text-ink-muted font-display">
-            By continuing, you agree to AutoBacs India&apos;s{' '}
+            By continuing, you agree to Autobacs India&apos;s{' '}
             <Link href={LEGAL_LINKS.terms.href} className="text-gold hover:text-ink transition-colors">
               {LEGAL_LINKS.terms.label}
             </Link>{' '}
@@ -253,21 +253,21 @@ function LoginPageInner() {
           </div>
         </div>
 
-        {/* New to AutoBacs */}
+        {/* New to Autobacs */}
         <div className="my-6 text-center">
           <div className="relative mb-4">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-hairline" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-obsidian-deep text-ink-muted font-display">New to AutoBacs?</span>
+              <span className="px-2 bg-obsidian-deep text-ink-muted font-display">New to Autobacs?</span>
             </div>
           </div>
           <Link
             href={registerHref}
             className="block w-full bg-obsidian hover:bg-obsidian-raised border border-hairline hover:border-gold text-ink font-display font-bold text-[15px] py-2.5 px-4 rounded-full transition-all text-center"
           >
-            Create your AutoBacs account
+            Create your Autobacs account
           </Link>
         </div>
       </div>

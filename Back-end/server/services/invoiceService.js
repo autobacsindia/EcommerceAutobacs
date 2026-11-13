@@ -273,6 +273,10 @@ const fmtDate = (d) => formatLongDateIST(d);
 const LOGO_PATH = join(__dirname, '..', 'assets', 'brand', 'autobacs-logo-white.png');
 let cachedLogo;
 
+/** "Roavion Automotive Private Limited · GSTIN: 32…" — the seller's legal line. */
+export const sellerLegalLine = (info) =>
+  [info.legalName, info.gstin ? `GSTIN: ${info.gstin}` : null].filter(Boolean).join(' · ');
+
 export const loadLogo = async () => {
   if (cachedLogo !== undefined) return cachedLogo;
   try {
@@ -355,14 +359,16 @@ export const generateInvoicePdf = async (order, user = null) => {
         .text('Autobacs India', sellerX, headerTop, { width: sellerW });
       doc.font(FONT).fontSize(9).fillColor('#444');
       [
-        companyInfo.name,
         companyInfo.address,
         [companyInfo.city, companyInfo.pincode].filter(Boolean).join(' '),
         [companyInfo.state, addr.country || 'India'].filter(Boolean).join(', '),
         companyInfo.phone,
         companyInfo.email,
-        companyInfo.gstin ? `GSTIN: ${companyInfo.gstin}` : null,
       ].filter(Boolean).forEach((line) => doc.text(line, sellerX, doc.y, { width: sellerW }));
+      // GST: the registered legal name sits with the GSTIN — the one place on
+      // the invoice the entity name appears; the heading above is the brand.
+      doc.font(FONT).fontSize(8).fillColor('#666')
+        .text(sellerLegalLine(companyInfo), sellerX, doc.y + 2, { width: sellerW });
 
       // ── Invoice title ────────────────────────────────────────────────────────
       let y = Math.max(doc.y, logoBottom) + 24;

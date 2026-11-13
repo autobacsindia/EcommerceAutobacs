@@ -19,7 +19,11 @@
 import { PANEL_COLUMNS, parseTab, tabLayout } from '../utils/metaLeadSheet.js';
 
 export const LAYOUT_VERSION = 1;
-export const PANEL_PROTECTION = 'Filled automatically by the Roavion panel. Type in the columns to the left.';
+export const PANEL_PROTECTION = 'Filled automatically by the Autobacs panel. Type in the columns to the left.';
+// Sheets protected before the rebrand carry the old note; still recognise it so
+// the layout pass does not stack a second protection on every existing tab.
+const LEGACY_PANEL_PROTECTIONS = ['Filled automatically by the Roavion panel. Type in the columns to the left.'];
+const isPanelProtection = (d) => d === PANEL_PROTECTION || LEGACY_PANEL_PROTECTIONS.includes(d);
 
 const PANEL_ORDER = Object.keys(PANEL_COLUMNS);
 const WIDTHS = { followingUp: 140, status: 140, nextBy: 150, note: 260, lateReason: 220, updatedAt: 140, leadId: 90 };
@@ -117,7 +121,7 @@ function dress(tab, layout, start) {
   if ((tab.frozenRows ?? 0) < layout.headerRow) {
     out.push({ updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: layout.headerRow } }, fields: 'gridProperties.frozenRowCount' } });
   }
-  if (!(tab.protections ?? []).some((p) => p.description === PANEL_PROTECTION)) {
+  if (!(tab.protections ?? []).some((p) => isPanelProtection(p.description))) {
     out.push({
       addProtectedRange: {
         protectedRange: { range: { sheetId, startColumnIndex: start, endColumnIndex: end }, description: PANEL_PROTECTION, warningOnly: true },

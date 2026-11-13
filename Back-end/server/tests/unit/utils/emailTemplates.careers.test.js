@@ -20,7 +20,7 @@ describe('careersAcknowledgementEmail', () => {
     expect(out.text).toMatch(/notified if your application is shortlisted/i);
     expect(out.html).toContain('Asha K');
     expect(out.html).toContain('Marketing Manager');
-    expect(out.html).toMatch(/ROAVION Automotive Private Limited/);
+    expect(out.html).toMatch(/© \d{4} Autobacs India/);
   });
 });
 
@@ -33,7 +33,8 @@ describe('careersRejectionEmail', () => {
     expect(out.text).toMatch(/^Dear Asha K,/);
     expect(out.text).toMatch(/not been selected to proceed to the interview stage for the Marketing Manager position/);
     expect(out.text).toMatch(/Human Resources Department/);
-    expect(out.text).toMatch(/ROAVION Automotive Private Limited/);
+    expect(out.text).toMatch(/Human Resources Department\nAutobacs India/);
+    expect(out.text + out.html).not.toMatch(/roavion/i);
     expect(out.html).toContain('Marketing Manager');
   });
 
