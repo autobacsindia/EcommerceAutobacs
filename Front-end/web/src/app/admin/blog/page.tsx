@@ -785,7 +785,7 @@ export default function AdminBlogPage() {
                       value={postSlug}
                       onChange={setPostSlug}
                       existing
-                      baseUrl="autobacsindia.com/"
+                      baseUrl="autobacsindia.com/blog/"
                       label="Post URL"
                     />
                   </div>

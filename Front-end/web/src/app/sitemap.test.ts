@@ -76,8 +76,9 @@ describe('sitemap contents', () => {
     expect(found).toContain(`${BASE}/categories/lighting`)
     expect(found).toContain(`${BASE}/brands/auxbeam`)
     expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
-    // Blog posts live at the site root for WordPress permalink parity (ADR-005).
-    expect(found).toContain(`${BASE}/thar-roxx-accessories`)
+    // Blog posts live under /blog (moved from the site root in 2026-11).
+    expect(found).toContain(`${BASE}/blog/thar-roxx-accessories`)
+    expect(found).not.toContain(`${BASE}/thar-roxx-accessories`)
   })
 
   it('submits /model/[slug] but NOT the /vehicles browse tree', async () => {
@@ -115,7 +116,7 @@ describe('sitemap contents', () => {
     expect(iso(`${BASE}/products/led-bar`)).toBe('2026-08-01T00:00:00.000Z')
     expect(iso(`${BASE}/categories/lighting`)).toBe('2026-08-02T00:00:00.000Z')
     expect(iso(`${BASE}/brands/auxbeam`)).toBe('2026-08-03T00:00:00.000Z')
-    expect(iso(`${BASE}/thar-roxx-accessories`)).toBe('2026-08-04T00:00:00.000Z')
+    expect(iso(`${BASE}/blog/thar-roxx-accessories`)).toBe('2026-08-04T00:00:00.000Z')
     expect(iso(`${BASE}/model/mahindra-thar-roxx`)).toBe('2026-08-05T00:00:00.000Z')
   })
 
@@ -159,7 +160,7 @@ describe('upstream failure', () => {
     expect(found).toContain(`${BASE}/categories/lighting`)
     expect(found).toContain(`${BASE}/brands/auxbeam`)
     expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
-    expect(found).not.toContain(`${BASE}/thar-roxx-accessories`)
+    expect(found).not.toContain(`${BASE}/blog/thar-roxx-accessories`)
   })
 
   it('still emits the static routes when every API is down', async () => {

@@ -1,5 +1,8 @@
+import { LEGACY_ROOT_BLOG_SLUGS } from '@/lib/legacyBlogSlugs';
+
 /**
- * 301 redirects for renamed slugs — old product/category/brand/blog URLs.
+ * 301 redirects for renamed slugs — old product/category/brand/blog URLs — and
+ * for blog posts' old ROOT URLs (`/<slug>` → `/blog/<slug>`, the 2026-11 move).
  *
  * Renaming a slug in admin used to 404 the old URL, throwing away its Google
  * ranking and every backlink. The backend now keeps each document's old slugs
@@ -27,10 +30,11 @@ const EMPTY: SlugRedirectMap = { products: {}, categories: {}, brands: {}, artic
 export const REFRESH_MS = 5 * 60 * 1000;
 export const FETCH_TIMEOUT_MS = 1500;
 
-const SECTIONS: Array<[prefix: string, key: Exclude<keyof SlugRedirectMap, 'articles'>]> = [
+const SECTIONS: Array<[prefix: string, key: keyof SlugRedirectMap]> = [
   ['/products/', 'products'],
   ['/categories/', 'categories'],
   ['/brands/', 'brands'],
+  ['/blog/', 'articles'],
 ];
 
 /** Both spellings of a path segment: as requested, and percent-decoded. */
@@ -45,6 +49,14 @@ function candidates(segment: string): string[] {
   return out;
 }
 
+/** The stored (lowercase) legacy slug this segment spells, or null. */
+function legacyBlogSlug(segment: string): string | null {
+  for (const key of candidates(segment)) {
+    if (LEGACY_ROOT_BLOG_SLUGS.has(key)) return key;
+  }
+  return null;
+}
+
 function lookup(map: SlugMap, segment: string): string | null {
   for (const key of candidates(segment)) {
     if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
@@ -56,8 +68,13 @@ function lookup(map: SlugMap, segment: string): string | null {
  * The path an old URL should 301 to, or null. Pure.
  *
  * Matches exactly one slug segment — `/products/<slug>`, `/categories/<slug>`,
- * `/brands/<slug>`, and blog posts at the site root `/<slug>`. Deeper paths
- * (`/model/x/page/2`, `/blog/gallery`) never match.
+ * `/brands/<slug>`, `/blog/<slug>` (a renamed post), and the site root `/<slug>`
+ * where blog posts lived until 2026-11. Deeper paths (`/model/x/page/2`) never
+ * match, and `/blog/gallery` / `/blog/videos` are never in the map.
+ *
+ * A root URL always lands on `/blog/<current slug>` in ONE hop: the rename map is
+ * asked first (so a post renamed after the move skips its old /blog URL), then the
+ * fixed list of the 64 posts that were ever at the root.
  */
 export function resolveSlugRedirect(pathname: string, map: SlugRedirectMap): string | null {
   const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
@@ -70,11 +87,13 @@ export function resolveSlugRedirect(pathname: string, map: SlugRedirectMap): str
     return next ? `${prefix}${next}` : null;
   }
 
-  // Blog posts live at the root, /<slug>.
+  // Blog posts' old home, the site root /<slug>.
   const segment = path.slice(1);
   if (!segment || segment.includes('/')) return null;
-  const next = lookup(map.articles, segment);
-  return next ? `/${next}` : null;
+  const renamed = lookup(map.articles, segment);
+  if (renamed) return `/blog/${renamed}`;
+  const legacy = legacyBlogSlug(segment);
+  return legacy ? `/blog/${legacy}` : null;
 }
 
 /**
@@ -85,7 +104,7 @@ export function isSlugRedirectCandidate(pathname: string): boolean {
   const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
   if (path === '/' || path.includes('.')) return false; // home; files like /robots.txt
   const segments = path.split('/').length - 1;
-  if (segments === 1) return true; // /<blog-slug>
+  if (segments === 1) return true; // /<old-root-blog-slug>
   return segments === 2 && SECTIONS.some(([prefix]) => path.startsWith(prefix));
 }
 

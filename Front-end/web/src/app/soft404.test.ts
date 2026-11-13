@@ -35,7 +35,9 @@ const APP_DIR = path.join(process.cwd(), 'src', 'app')
  * confirmed miss and keeps notFound() for a failed lookup.
  */
 const MUST_404: { route: string; file: string; redirects?: boolean }[] = [
+  // Root catch-all: a live post permanentRedirects to /blog, anything else 404s.
   { route: '/[slug]',                  file: '[slug]/page.tsx' },
+  { route: '/blog/[slug]',             file: 'blog/[slug]/page.tsx' },
   { route: '/products/[slug]',         file: 'products/[slug]/page.tsx', redirects: true },
   { route: '/categories/[slug]',       file: 'categories/[slug]/page.tsx' },
   { route: '/brands/[slug]',           file: 'brands/[slug]/page.tsx' },
