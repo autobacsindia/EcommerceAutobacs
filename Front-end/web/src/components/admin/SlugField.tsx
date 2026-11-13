@@ -46,12 +46,14 @@ export default function SlugField({
   /** True on the edit screen, where the URL is already live. */
   existing = false,
   baseUrl = 'autobacsindia.com/products/',
+  label = 'Product URL',
 }: {
   title: string;
   value: string;
   onChange: (next: string) => void;
   existing?: boolean;
   baseUrl?: string;
+  label?: string;
 }) {
   // Not state: flipping it must not re-render, and the effect reads it directly.
   const touched = useRef(existing);
@@ -67,7 +69,7 @@ export default function SlugField({
   return (
     <div className="mb-4">
       <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
-        Product URL
+        {label}
       </label>
       <div className="flex items-stretch rounded-md border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500">
         <span className="flex items-center px-3 text-sm text-gray-500 bg-gray-50 border-r border-gray-300 rounded-l-md whitespace-nowrap">
@@ -89,7 +91,7 @@ export default function SlugField({
       </div>
       <p id="slug-help" className="mt-1 text-xs text-gray-500">
         {existing
-          ? 'Changing this changes the live URL. The old address will stop working unless a redirect is added.'
+          ? 'Changing this changes the live URL. The old address keeps working: it redirects (301) to the new one within a few minutes.'
           : 'Filled in from the product name. Edit it to choose your own — it must be unique.'}
       </p>
     </div>

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import SeoSchema from "./shared/seoSchema.js";
+import slugHistoryPlugin from './plugins/slugHistory.js';
 
 const CategorySchema = new mongoose.Schema({
   name: {
@@ -67,5 +68,8 @@ const CategorySchema = new mongoose.Schema({
 
 // Index for hierarchical queries
 CategorySchema.index({ parent: 1 });
+
+// Old slugs are kept so a renamed URL 301s instead of 404ing — see the plugin.
+CategorySchema.plugin(slugHistoryPlugin);
 
 export default mongoose.model("Category", CategorySchema);

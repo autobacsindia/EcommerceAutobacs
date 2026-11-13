@@ -7,6 +7,7 @@ import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { articleHref } from '@/lib/articleRoutes';
+import SlugField from '@/components/admin/SlugField';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
@@ -88,6 +89,9 @@ export default function AdminBlogPage() {
   const [editingPost, setEditingPost] = useState<Article | null>(null);
   const [postForm, setPostForm] = useState({ ...EMPTY_POST });
   const [postSeo, setPostSeo] = useState<SeoFormValue>(EMPTY_SEO);
+  // The post's URL, editable on an existing post only (a new post's URL comes
+  // from its title on the server). Sent only when it actually changed.
+  const [postSlug, setPostSlug] = useState('');
   const [postSaving, setPostSaving] = useState(false);
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
@@ -207,7 +211,11 @@ export default function AdminBlogPage() {
         seo: postSeo,
       };
       if (editingPost) {
-        await apiClient.put(API_ENDPOINTS.ADMIN_MEDIA_ARTICLE(editingPost._id), payload);
+        const slugChanged = postSlug && postSlug !== editingPost.slug;
+        await apiClient.put(
+          API_ENDPOINTS.ADMIN_MEDIA_ARTICLE(editingPost._id),
+          slugChanged ? { ...payload, slug: postSlug } : payload,
+        );
       } else {
         await apiClient.post(API_ENDPOINTS.ADMIN_MEDIA_ARTICLES, payload);
       }
@@ -218,7 +226,10 @@ export default function AdminBlogPage() {
       fetchPosts();
       // Refresh the homepage's Journal shelf (blog posts).
       revalidateHome('home:journal');
-    } catch (_) {}
+    } catch (err) {
+      // e.g. 409 "Another post already uses this URL." — say why, don't fail silently.
+      alert((err as { message?: string })?.message || 'Could not save the post.');
+    }
     finally { setPostSaving(false); }
   }
 
@@ -256,6 +267,7 @@ export default function AdminBlogPage() {
             status: a.status, featured: a.featured,
           });
           setPostSeo(toSeoFormValue(a.seo));
+          setPostSlug(a.slug || '');
           setShowPostForm(true);
         }
       })
@@ -766,6 +778,18 @@ export default function AdminBlogPage() {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
+                {editingPost && (
+                  <div className="col-span-2">
+                    <SlugField
+                      title={postForm.title}
+                      value={postSlug}
+                      onChange={setPostSlug}
+                      existing
+                      baseUrl="autobacsindia.com/"
+                      label="Post URL"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Status</label>
                   <select

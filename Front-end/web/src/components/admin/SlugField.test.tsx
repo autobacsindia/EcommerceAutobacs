@@ -75,6 +75,6 @@ describe('SlugField on an existing product', () => {
     render(<Harness existing initialSlug="original-url" />);
     fireEvent.change(slugInput(), { target: { value: 'new-url' } });
     expect(slugInput().value).toBe('new-url');
-    expect(screen.getByText(/old address will stop working/i)).toBeInTheDocument();
+    expect(screen.getByText(/old address keeps working: it redirects/i)).toBeInTheDocument();
   });
 });

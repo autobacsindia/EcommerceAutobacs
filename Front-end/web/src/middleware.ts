@@ -3,6 +3,7 @@ import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatib
 import { isGonePath } from '@/lib/legacyPaths';
 import { isInternalSearch, SEARCH_ROBOTS_HEADER, stripLegacyParams } from '@/lib/legacyQuery';
 import { buildPublicCsp, buildStrictCsp } from '@/lib/csp';
+import { getSlugRedirectMap, isSlugRedirectCandidate, resolveSlugRedirect } from '@/lib/slugRedirects';
 import { isStrictCspPath } from '@/lib/cspRoutes';
 
 /**
@@ -237,6 +238,22 @@ export async function middleware(req: NextRequest) {
     const res = NextResponse.redirect(cleanUrl, 301);
     res.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=86400');
     return res;
+  }
+
+  // ── Renamed slugs (see lib/slugRedirects.ts) ────────────────────────────────
+  // An old product/category/brand/blog URL 301s to its current slug, so a rename
+  // in admin keeps the page's ranking and backlinks. Query string is kept (so a
+  // ?ref on an old link is still captured on the next hop). Short edge cache: a
+  // rename can be reverted, and a long-cached 301 would then loop.
+  if ((req.method === 'GET' || req.method === 'HEAD') && isSlugRedirectCandidate(pathname)) {
+    const target = resolveSlugRedirect(pathname, await getSlugRedirectMap());
+    if (target) {
+      const url = req.nextUrl.clone();
+      url.pathname = target;
+      const res = NextResponse.redirect(url, 301);
+      res.headers.set('Cache-Control', 'public, max-age=300, s-maxage=300');
+      return res;
+    }
   }
 
   // ── Affiliate referral link ─────────────────────────────────────────────────

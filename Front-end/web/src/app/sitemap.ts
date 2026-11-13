@@ -55,11 +55,16 @@ function readCache(source: Source): Entries | null {
   return hit.data;
 }
 
-/** Normalise any date-like value to a valid Date, falling back to now. */
-function safeDate(value: unknown): Date {
-  if (!value) return new Date();
+/**
+ * Normalise a date-like value to a valid Date, or `undefined` to omit <lastmod>.
+ *
+ * Never "now" as a fallback: a made-up date is worse than none, because Google
+ * stops trusting lastmod for the whole site once it sees inaccurate ones.
+ */
+function safeDate(value: unknown): Date | undefined {
+  if (!value) return undefined;
   const d = new Date(value as string);
-  return isNaN(d.getTime()) ? new Date() : d;
+  return isNaN(d.getTime()) ? undefined : d;
 }
 
 /** Deduplicate entries by URL — last writer wins. */
@@ -158,11 +163,18 @@ export const STATIC_ROUTES: Array<[string, ChangeFreq, number]> = [
   ...LISTING_ROOTS,
 ];
 
+/**
+ * No <lastmod> on static pages, deliberately.
+ *
+ * These pages have no "last edited" date we can read, and stamping them with the
+ * generation time told Google all 24 changed every hour. Google only trusts
+ * lastmod that is "consistently and verifiably accurate", so a fake one here
+ * also discounts the real dates on products and posts. Omitting it is valid
+ * sitemap XML and lets Google judge these pages by crawling them.
+ */
 function staticEntries(): Entries {
-  const now = new Date();
   return STATIC_ROUTES.map(([path, changeFrequency, priority]) => ({
     url: path === '/' ? BASE_URL : `${BASE_URL}${path}`,
-    lastModified: now,
     changeFrequency,
     priority,
   }));

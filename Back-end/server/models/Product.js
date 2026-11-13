@@ -6,6 +6,7 @@ import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
 import { SHIPPING_SIZE_LIMITS as SZ } from '../utils/shippingSize.js';
 import { FESTIVAL_SETTING_MODE, FESTIVAL_CUSTOM_PERCENT_MIN, FESTIVAL_CUSTOM_PERCENT_MAX, VARIANT_SETTING_MODES } from '../utils/festivalOffer.js';
+import slugHistoryPlugin from './plugins/slugHistory.js';
 
 // One selectable model of a `variable` product (e.g. the car model a filter fits).
 // Each variant carries its OWN price + stock status, independent of its siblings —
@@ -662,5 +663,8 @@ ProductSchema.pre('save', function () {
 ProductSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function () {
   applyStockRankToUpdate(this.getUpdate());
 });
+
+// Old slugs are kept so a renamed URL 301s instead of 404ing — see the plugin.
+ProductSchema.plugin(slugHistoryPlugin);
 
 export default mongoose.model("Product", ProductSchema);

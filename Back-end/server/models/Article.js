@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import SeoSchema from "./shared/seoSchema.js";
+import slugHistoryPlugin from './plugins/slugHistory.js';
 
 const ArticleSchema = new mongoose.Schema(
   {
@@ -49,5 +50,8 @@ ArticleSchema.pre("save", function (next) {
   }
   next();
 });
+
+// Old slugs are kept so a renamed URL 301s instead of 404ing — see the plugin.
+ArticleSchema.plugin(slugHistoryPlugin);
 
 export default mongoose.model("Article", ArticleSchema);

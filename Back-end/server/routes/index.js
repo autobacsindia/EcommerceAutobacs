@@ -93,6 +93,7 @@ import incentiveRoutes from './incentives.js';
 import supplierRoutes from './suppliers.js';
 import pushRoutes from './push.js';
 import notificationRoutes from './notifications.js';
+import redirectRoutes from './redirects.js';
 
 const apiRouter = express.Router();
 
@@ -121,6 +122,8 @@ apiRouter.use('/categories', publicBrowsingRateLimit, categoryRoutes);
 apiRouter.use('/brands', publicBrowsingRateLimit, brandRoutes);
 apiRouter.use('/vehicles', publicBrowsingRateLimit, vehicleRoutes);
 apiRouter.use('/product-questions', publicBrowsingRateLimit, productQuestionRoutes);
+// Old-slug → new-slug map for renamed pages (frontend middleware 301s old URLs).
+apiRouter.use('/redirects', publicBrowsingRateLimit, redirectRoutes);
 
 // ============================================================================
 // USER DOMAIN
