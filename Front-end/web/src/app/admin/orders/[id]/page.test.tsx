@@ -34,9 +34,9 @@ jest.mock('lucide-react', () => ({
 
 // The journey tracker fetches the team-workflow view itself and has its own
 // tests (components/orders/OrderJourney.test.tsx); here only its placement matters.
-jest.mock('@/components/admin/OrderOverview', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/components/admin/OrderOverview', () => ({ __esModule: true, default: () => <div data-testid="order-overview" /> }));
 jest.mock('@/components/orderRating/PanelOrderRating', () => ({ __esModule: true, default: () => null }));
-jest.mock('@/components/payments/extras/OrderExtraCharges', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/components/payments/extras/OrderExtraCharges', () => ({ __esModule: true, default: () => <div data-testid="order-extras" /> }));
 jest.mock('@/components/orders/AdminOrderJourney', () => ({
   __esModule: true,
   default: ({ orderId }: { orderId: string }) => <div data-testid="order-journey">{orderId}</div>,
@@ -228,6 +228,33 @@ describe('AdminOrderDetailPage', () => {
     } finally {
       mockPathname = '/admin/orders/order123';
     }
+  });
+
+  // Regression: the marketing panel mounted the admin-only summary, journey and
+  // extras sections; their endpoints refused this reader, so the page showed a red
+  // "Could not load the order summary" banner, "The team journey is not available"
+  // and an empty white card.
+  it('in the marketing panel it does not mount the admin-only sections, and says why', async () => {
+    mockPathname = '/team/marketing/orders/order123';
+    try {
+      render(<AdminOrderDetailPage />);
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+      expect(screen.queryByTestId('order-overview')).toBeNull();
+      expect(screen.queryByTestId('order-journey')).toBeNull();
+      expect(screen.queryByTestId('order-extras')).toBeNull();
+      expect(screen.getByText(/shown to admins only/)).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      mockPathname = '/admin/orders/order123';
+    }
+  });
+
+  it('for an admin it shows the summary, journey and extras, and hides an empty extras card', async () => {
+    render(<AdminOrderDetailPage />);
+    expect(await screen.findByTestId('order-overview')).toBeInTheDocument();
+    expect(screen.getByTestId('order-journey')).toBeInTheDocument();
+    expect(screen.getByTestId('order-extras').parentElement).toHaveClass('empty:hidden');
+    expect(screen.queryByText(/shown to admins only/)).toBeNull();
   });
 
   it('confirms via modal before updating status', async () => {

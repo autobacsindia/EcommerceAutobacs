@@ -513,18 +513,32 @@ function AdminOrderDetailPageInner() {
         )}
       </div>
 
-      {/* Money and every event, before anything else. Read-only. */}
-      <OrderOverview orderId={orderId} />
+      {canManage ? (
+        <>
+          {/* Money and every event, before anything else. Read-only. */}
+          <OrderOverview orderId={orderId} />
 
-      {/* The whole journey at a glance, above the detail: every stage, who moved
-          it and when, refunds as a side branch. Read-only. */}
-      <div className="mb-6">
-        <AdminOrderJourney orderId={orderId} />
-      </div>
+          {/* The whole journey at a glance, above the detail: every stage, who moved
+              it and when, refunds as a side branch. Read-only. */}
+          <div className="mb-6">
+            <AdminOrderJourney orderId={orderId} />
+          </div>
 
-      <div className="mb-6 rounded-lg bg-white p-4 shadow">
-        <OrderExtraCharges orderId={orderId} />
-      </div>
+          {/* `empty:hidden`: the extras section renders nothing when the order has no
+              extras and nothing can be added — no blank white card. */}
+          <div className="mb-6 rounded-lg bg-white p-4 shadow empty:hidden">
+            <OrderExtraCharges orderId={orderId} />
+          </div>
+        </>
+      ) : (
+        // View-only reader (marketing panel). The money summary, team journey and
+        // extra charges come from admin / team-workflow endpoints that refuse this
+        // reader by design (supplier costs, margins, internal steps) — so they are
+        // not requested at all, rather than shown as a red error or an empty card.
+        <p className="mb-6 rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+          The money summary, team journey and extra charges are shown to admins only. The order details below are complete.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Order Summary */}
