@@ -9,6 +9,18 @@ export function normalizeMobile(value: string): string {
   return m ? m[1] : value.trim();
 }
 
+/**
+ * The optional alternative number: '' when empty or fine, otherwise what to tell
+ * the salesperson. It must be a valid mobile and not the main number again.
+ */
+export function altMobileProblem(value: string, main: string): string {
+  if (!value.trim()) return '';
+  const problem = mobileProblem(value);
+  if (problem) return problem;
+  if (normalizeMobile(value) === normalizeMobile(main)) return 'Same as the main mobile — enter a different number or leave it empty';
+  return '';
+}
+
 /** '' when fine, otherwise what to tell the salesperson. */
 export function mobileProblem(value: string): string {
   const v = value.trim();

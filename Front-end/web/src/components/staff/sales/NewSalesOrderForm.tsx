@@ -8,7 +8,7 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
 import { discountRuleProblem, errorMessage, percentText, previewDiscount, rupees, type Quotation, type SalesOrder, type SalesProduct } from './types';
-import { mobileProblem, normalizeMobile } from './phone';
+import { altMobileProblem, mobileProblem, normalizeMobile } from './phone';
 import ProductLink from '@/components/staff/ProductLink';
 
 type Line = {
@@ -32,7 +32,7 @@ type Line = {
 const REOPEN_CONFIRM = 'The client already accepted this quotation. Saving cancels its unpaid order and the payment links already sent, '
   + 'and the quotation goes back to "waiting for the client". Continue?';
 
-const EMPTY_CUSTOMER = { name: '', email: '', phone: '' };
+const EMPTY_CUSTOMER = { name: '', email: '', phone: '', alternatePhone: '' };
 const EMPTY_ADDRESS = { addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '' };
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
@@ -83,7 +83,7 @@ export default function NewSalesOrderForm({
   const router = useRouter();
   const editing = !!quotation;
   const [customer, setCustomer] = useState(() => (quotation
-    ? { name: quotation.customer.name, email: quotation.customer.email || '', phone: quotation.customer.phone }
+    ? { name: quotation.customer.name, email: quotation.customer.email || '', phone: quotation.customer.phone, alternatePhone: quotation.customer.alternatePhone || '' }
     : EMPTY_CUSTOMER));
   const [address, setAddress] = useState(() => {
     const a = quotation?.shippingAddress;
@@ -105,7 +105,7 @@ export default function NewSalesOrderForm({
     const o = source.data?.order;
     if (!o || prefilled.current) return;
     prefilled.current = true;
-    setCustomer({ name: o.customer.name || '', email: o.customer.email || '', phone: o.customer.phone || '' });
+    setCustomer({ name: o.customer.name || '', email: o.customer.email || '', phone: o.customer.phone || '', alternatePhone: o.customer.alternatePhone || '' });
     const a = o.shippingAddress || {};
     setAddress({
       addressLine1: a.addressLine1 || '', addressLine2: a.addressLine2 || '',
@@ -221,6 +221,8 @@ export default function NewSalesOrderForm({
   const total = lines.reduce((s, l) => s + priceOf(l) * l.quantity, 0);
   const phoneProblem = mobileProblem(customer.phone);
   const [phoneTouched, setPhoneTouched] = useState(false);
+  const altPhoneProblem = altMobileProblem(customer.alternatePhone, customer.phone);
+  const [altPhoneTouched, setAltPhoneTouched] = useState(false);
   const saving = Math.max(0, fullTotal - total);
   const hasProblem = lines.some((l) => lineProblem(l));
   const percent = discountPercent.trim() === '' ? 0 : Number(discountPercent);
@@ -230,7 +232,10 @@ export default function NewSalesOrderForm({
   const create = useMutation({
     mutationFn: async (): Promise<{ quotation: Quotation; orderId?: string }> => {
       const body = {
-      customer: { name: customer.name.trim(), email: customer.email.trim(), phone: normalizeMobile(customer.phone) },
+      customer: {
+        name: customer.name.trim(), email: customer.email.trim(), phone: normalizeMobile(customer.phone),
+        alternatePhone: customer.alternatePhone.trim() ? normalizeMobile(customer.alternatePhone) : '',
+      },
       shippingAddress: { ...address, fullName: customer.name.trim(), phone: normalizeMobile(customer.phone) },
       items: lines.map((l) => (l.custom
         ? { custom: true, name: l.name.trim(), quantity: l.quantity, price: Number(l.offer) }
@@ -274,6 +279,7 @@ export default function NewSalesOrderForm({
     e.preventDefault();
     setError('');
     if (phoneProblem) { setPhoneTouched(true); setError(`Mobile number: ${phoneProblem}.`); return; }
+    if (altPhoneProblem) { setAltPhoneTouched(true); setError(`Alternative phone number: ${altPhoneProblem}.`); return; }
     if (lines.length === 0) { setError('Add at least one product.'); return; }
     if (hasProblem) { setError('Fix the items marked in red.'); return; }
     if (discountProblem) { setError(`Discount: ${discountProblem}`); return; }
@@ -342,6 +348,17 @@ export default function NewSalesOrderForm({
             {!customer.email.trim() && (
               <p className="mt-1 text-xs text-gray-500">No email: payment links will go by SMS — share them on WhatsApp too.</p>
             )}
+          </div>
+          <div>
+            <label className={label} htmlFor="c-alt-phone">Alternative phone number (optional)</label>
+            <input id="c-alt-phone" className={`${input} ${altPhoneTouched && altPhoneProblem ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : ''}`}
+              inputMode="tel" autoComplete="off" placeholder="Another number to call" maxLength={16} value={customer.alternatePhone}
+              aria-invalid={altPhoneTouched && !!altPhoneProblem} aria-describedby="c-alt-phone-hint"
+              onBlur={() => setAltPhoneTouched(true)}
+              onChange={(e) => setCustomer({ ...customer, alternatePhone: e.target.value.replace(/[^\d\s+\-]/g, '') })} />
+            <p id="c-alt-phone-hint" className={`mt-1 text-xs ${altPhoneTouched && altPhoneProblem ? 'text-red-600' : 'text-gray-500'}`}>
+              {altPhoneTouched && altPhoneProblem ? altPhoneProblem : 'For delivery to call if the main number doesn’t answer'}
+            </p>
           </div>
         </div>
       </section>

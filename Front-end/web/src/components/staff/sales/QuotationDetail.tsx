@@ -177,6 +177,7 @@ export default function QuotationDetail({ id }: { id: string }) {
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Customer</p>
           <p className="text-gray-900">{quote.customer.name}</p>
           <p className="text-gray-700">{quote.customer.phone}</p>
+          {quote.customer.alternatePhone && <p className="text-gray-700">Alt: {quote.customer.alternatePhone}</p>}
           {quote.customer.email && <p className="break-all text-gray-700">{quote.customer.email}</p>}
         </div>
         {a && (

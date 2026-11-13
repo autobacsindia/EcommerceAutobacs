@@ -39,7 +39,7 @@ interface SlipOrder {
   status: string;
   items: SlipItem[];
   shippingAddress: {
-    fullName: string; phone: string;
+    fullName: string; phone: string; alternatePhone?: string;
     addressLine1: string; addressLine2?: string;
     city: string; state: string; postalCode: string; country: string;
   };
@@ -187,6 +187,7 @@ function PackingSlipPageInner() {
           <div>{a.city}, {a.state} {a.postalCode}</div>
           <div>{a.country}</div>
           <div className="mt-1">📞 {a.phone}</div>
+          {a.alternatePhone && <div>📞 Alt: {a.alternatePhone}</div>}
           {/* Business buyer identity. Deliberately inside the ship-to block and
               styled plainly so it survives a black-and-white print — a trade
               customer's transporter reads this at gate entry. No money here:

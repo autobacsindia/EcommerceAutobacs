@@ -278,6 +278,12 @@ export const validateSalesOrder = [
   // Optional: a customer on the phone may have no email (utils/customerContact.js).
   body('customer.email').optional({ values: 'falsy' }).trim().isEmail().withMessage('Enter a valid customer email, or leave it empty').isLength({ max: 254 }),
   body('customer.phone').customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit Indian mobile number (starting 6, 7, 8 or 9)'),
+  // Optional second number for delivery / operations to call. Contact only: never
+  // used to find, match or log in a customer. Must differ from the main mobile
+  // (already normalised by the rule above — chains run in order).
+  body('customer.alternatePhone').optional({ values: 'falsy' }).customSanitizer(normalizeIndianMobile)
+    .matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit alternative mobile number, or leave it empty').bail()
+    .custom((v, { req }) => v !== req.body.customer?.phone).withMessage('The alternative number is the same as the main mobile — enter a different one or leave it empty'),
   body('shippingAddress.fullName').optional().trim().isLength({ max: 100 }),
   body('shippingAddress.phone').optional({ values: 'falsy' }).customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit delivery mobile number'),
   body('shippingAddress.addressLine1').trim().isLength({ min: 3, max: 200 }).withMessage('Enter the delivery address'),

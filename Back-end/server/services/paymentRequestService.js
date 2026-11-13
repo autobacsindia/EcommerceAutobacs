@@ -642,6 +642,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     customer: {
       name: order.shippingAddress?.fullName || order.user?.name || '',
       phone: order.shippingAddress?.phone || order.user?.phone || '',
+      alternatePhone: order.shippingAddress?.alternatePhone || '',
       city: [order.shippingAddress?.city, order.shippingAddress?.state].filter(Boolean).join(', '),
     },
     closedBy: order.salesUser ? `GTM lead: ${order.salesUser.name || 'GTM'}` : 'Website',

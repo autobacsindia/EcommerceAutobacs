@@ -433,6 +433,9 @@ const OrderSchema = new mongoose.Schema({
   shippingAddress: {
     fullName: { type: String, required: true },
     phone: { type: String, required: true },
+    // Optional second number for delivery / operations (sales panel). Snapshot,
+    // contact only — never searched, matched or used to log in.
+    alternatePhone: String,
     addressLine1: { type: String, required: true },
     addressLine2: String,
     city: { type: String, required: true },

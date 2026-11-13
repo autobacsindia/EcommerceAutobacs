@@ -47,7 +47,7 @@ type Details = {
     createdAt: string | null;
     status: string;
     paymentStatus: string;
-    customer: { name: string; email: string; phone: string };
+    customer: { name: string; email: string; phone: string; alternatePhone?: string };
     shippingAddress: Address;
     billingAddress: Address;
     buyer: { legalName: string; gstin: string };
@@ -59,7 +59,7 @@ type Details = {
     number: string;
     date: string;
     validUntil: string;
-    customer: { name: string; phone: string; address: string[] };
+    customer: { name: string; phone: string; alternatePhone?: string; address: string[] };
     lines: { n: number; name: string; quantity: number; listPrice: number; offerPrice: number; amount: number }[];
     subtotal: number;
     discount: number;
@@ -114,6 +114,7 @@ function QuotationBlock({ q }: { q: NonNullable<Details['quotation']> }) {
         <p className="font-medium text-gray-900">{q.customer.name || NA}</p>
         {q.customer.address.map((l) => <p key={l} className="break-words text-gray-900">{l}</p>)}
         {q.customer.phone && <p className="text-gray-900">Phone: {q.customer.phone}</p>}
+        {q.customer.alternatePhone && <p className="text-gray-900">Alt. phone: {q.customer.alternatePhone}</p>}
       </div>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[30rem] text-sm">
@@ -168,6 +169,7 @@ function Body({ d }: { d: Details }) {
         <dl>
           <Row label="Name">{o?.customer.name || d.customer.name}</Row>
           <Row label="Phone">{o?.customer.phone}</Row>
+          {o?.customer.alternatePhone && <Row label="Alt. phone">{o.customer.alternatePhone}</Row>}
           <Row label="Email">{o?.customer.email}</Row>
           {o?.buyer.legalName && <Row label="Company">{o.buyer.legalName}</Row>}
           {o?.buyer.gstin && <Row label="GSTIN">{o.buyer.gstin}</Row>}

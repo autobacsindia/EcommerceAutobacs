@@ -214,6 +214,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Customer</p>
           <p className="text-gray-900">{o.customer.name}</p>
           <p className="text-gray-700">{o.customer.phone}</p>
+          {o.customer.alternatePhone && <p className="text-gray-700">Alt: {o.customer.alternatePhone}</p>}
           {displayEmail(o.customer.email, { label: false }) && <p className="break-all text-gray-700">{o.customer.email}</p>}
         </div>
         {a && (

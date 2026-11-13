@@ -1549,6 +1549,7 @@ export async function getReturn(actor, id) {
     customerContact: {
       name: customerName(order),
       phone: order?.shippingAddress?.phone || rr.user?.phone || '',
+      alternatePhone: order?.shippingAddress?.alternatePhone || '',
       email: rr.user?.email || order?.guestEmail || '',
     },
     seller: order?.salesUser?.name || (order?.salesUser ? 'Sales team' : 'Website'),

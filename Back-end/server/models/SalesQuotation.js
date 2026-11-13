@@ -103,6 +103,8 @@ const SalesQuotationSchema = new mongoose.Schema(
       name: { type: String, required: true },
       email: { type: String, default: '' }, // optional — a phone-only customer has none
       phone: { type: String, required: true },
+      // Optional second number to call. Contact only — never a lookup key.
+      alternatePhone: { type: String, default: '' },
     },
     shippingAddress: { type: AddressSchema, required: true },
     items: { type: [LineSchema], default: [] },
