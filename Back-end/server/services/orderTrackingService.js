@@ -5,6 +5,7 @@
 
 import Order from '../models/Order.js';
 import crypto from 'crypto';
+import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
 
 /**
  * Code of the free-text "Other" carrier — the admin supplies the courier name.
@@ -245,6 +246,12 @@ class OrderTrackingService {
         throw new Error(`Invalid tracking number format for carrier ${carrier.name}`);
       }
 
+      // What the customer saw before, to tell them about a real correction below.
+      const before = {
+        trackingNumber: order.trackingNumber,
+        carrier: { name: order.carrier?.name, trackingUrl: order.carrier?.trackingUrl },
+      };
+
       // Update order with tracking info
       order.trackingNumber = trackingNumber;
       order.carrier = this.buildCarrierSubdoc(carrier, trackingNumber);
@@ -271,6 +278,16 @@ class OrderTrackingService {
       });
 
       await order.save();
+
+      /*
+        A legacy order shipped WITHOUT parcels shows the customer these order-level
+        fields, so correcting them after dispatch deserves a "delivery update" email.
+        With parcels, the customer sees each parcel's own details instead — those are
+        corrected (and emailed) through the parcel edit, not here.
+      */
+      if (order.status === 'shipped' && !(order.shipments || []).length && customerVisibleChange(before, order)) {
+        enqueueDeliveryUpdateEmail(String(order._id), null);
+      }
 
       return {
         success: true,

@@ -14,6 +14,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import emailHandler from './emailHandler.js';
 import { readPrivateAsset } from './storage/privateUploads.js';
+import { hashOf } from './deliveryUpdateEmailService.js';
 
 /**
  * Download a URL into a Buffer (used to fetch the Cloudinary-hosted shipping slip
@@ -134,6 +135,14 @@ export const emailOrderStatusUpdate = async (orderId, status, opts = {}) => {
   // failure lets BullMQ retry rather than silently dropping the notification.
   if (result?.success) {
     order.notifiedStatuses = [...(order.notifiedStatuses || []), key];
+    // Remember which tracking details the customer now has, so a later correction
+    // emails them once and a re-save of the same values emails nothing
+    // (services/deliveryUpdateEmailService.js). Only for a parcel email, or a legacy
+    // order with no parcels — those are the details the customer actually saw.
+    if (status === 'shipped' && (shipment || !(order.shipments || []).length)) {
+      const src = shipment || order;
+      src.deliveryNotice = { hash: hashOf(src), sentAt: new Date() };
+    }
     await orderRepository.save(order);
     return { status: 'sent' };
   }

@@ -690,6 +690,14 @@ const OrderSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Same as shipments[].deliveryNotice, for a legacy order shipped without parcels
+  // (its order-level trackingNumber/carrier are what the customer sees).
+  deliveryNotice: {
+    hash: String,
+    sentAt: Date,
+    claimHash: String,
+    claimedAt: Date
+  },
   // Set once the +1-day post-delivery review-request email is sent, so the delayed
   // send-review-request job is idempotent (see services/reviewRequestService.js).
   reviewRequestedAt: Date,
@@ -858,6 +866,19 @@ const OrderSchema = new mongoose.Schema({
         uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
       }],
       default: undefined,
+    },
+    /*
+      What the customer was last told about this parcel's delivery details
+      (tracking number, courier, courier link) — services/deliveryUpdateEmailService.js.
+      `hash` covers the details in the last shipped / "delivery update" email, so a
+      re-save of the same values sends nothing and a real correction sends once.
+      `claimHash`/`claimedAt` is a short lease so two workers cannot both send.
+    */
+    deliveryNotice: {
+      hash: String,
+      sentAt: Date,
+      claimHash: String,
+      claimedAt: Date
     },
     estimatedDelivery: Date,
     shippedAt: Date,

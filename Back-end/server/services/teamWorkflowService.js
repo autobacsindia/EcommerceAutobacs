@@ -52,6 +52,7 @@ import { storeAll } from './storage/storeAll.js';
 import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { parcelProofs, proofFilePath, LEGACY_PROOF_ID } from '../utils/shipmentView.js';
 import { getNotificationsQueue } from '../queue/queues.js';
+import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
 import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
@@ -707,13 +708,36 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
   const set = {};
   const unset = {};
   const changes = [];
+  let courierChanged = false;
+  let trackingChanged = false;
   if (courierName != null) {
     const c = String(courierName).trim().slice(0, 80);
-    if (c !== (parcel.carrier?.name || '')) { set['shipments.$.carrier.name'] = c; changes.push(`courier ${c || '—'}`); }
+    if (c !== (parcel.carrier?.name || '')) {
+      set['shipments.$.carrier.name'] = c; changes.push(`courier ${c || '—'}`); courierChanged = true;
+    }
   }
   if (trackingNumber != null) {
     const t = String(trackingNumber).trim().slice(0, 80);
-    if (t !== (parcel.trackingNumber || '')) { set['shipments.$.trackingNumber'] = t; changes.push(`tracking ${t || '—'}`); }
+    if (t !== (parcel.trackingNumber || '')) {
+      set['shipments.$.trackingNumber'] = t; changes.push(`tracking ${t || '—'}`); trackingChanged = true;
+    }
+  }
+  /*
+    The courier's tracking link was built for the OLD courier + AWB. Left alone it sends
+    the customer (website "track with the courier", and the delivery-update email) to
+    the wrong parcel. A different courier → the link and code describe someone else, so
+    drop them; same courier, new AWB → swap the number at the end of the link.
+  */
+  const oldUrl = parcel.carrier?.trackingUrl || '';
+  const sameCourier = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  if (courierChanged && !sameCourier(set['shipments.$.carrier.name'], parcel.carrier?.name)) {
+    if (oldUrl) unset['shipments.$.carrier.trackingUrl'] = '';
+    if (parcel.carrier?.code) unset['shipments.$.carrier.code'] = '';
+  } else if (trackingChanged && oldUrl) {
+    const oldT = parcel.trackingNumber || '';
+    const newT = set['shipments.$.trackingNumber'];
+    if (oldT && newT && oldUrl.endsWith(oldT)) set['shipments.$.carrier.trackingUrl'] = oldUrl.slice(0, -oldT.length) + newT;
+    else unset['shipments.$.carrier.trackingUrl'] = '';
   }
 
   let removeIds = removePhotoIds;
@@ -752,6 +776,12 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
     throw fail('This parcel changed just now — refresh and try again.', 409);
   }
   await removeProofs(removing.map((p) => p.ref));
+  // Tell the customer about a new tracking number / courier (photos are staff-only).
+  // The job re-reads the parcel and sends only if what the customer sees changed.
+  if (courierChanged || trackingChanged) {
+    const after = (updated.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
+    if (after && customerVisibleChange(parcel, after)) enqueueDeliveryUpdateEmail(orderId, shipmentId);
+  }
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_dispatch_edited', shipmentId: String(shipmentId), fields: changes });
   return getOrder(actor, orderId);
 }
