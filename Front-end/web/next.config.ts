@@ -138,9 +138,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     // SEO 301s for the WordPress → Next migration (ADR-005). Preserves Google rankings,
     // backlinks and ad landing pages when the domain points at the new site.
-    //   • Blog posts keep their old root path (/<slug>) — served by app/[slug], no redirect.
+    //   • Blog posts moved from the root (/<slug>) to /blog/<slug> in 2026-11. Those
+    //     301s live in middleware (lib/legacyBlogSlugs.ts), not here: they must check a
+    //     fixed slug list and the rename map so each old URL is exactly ONE hop.
     //   • Products & categories had different WooCommerce bases → permanent redirect.
-    //   • The new blog detail path forwards to the canonical root URL (no duplicate content).
+    //   • The old /media/blogs/<slug> detail path forwards straight to /blog/<slug> (one hop).
     return [
       // Every /product* path, not just a single-segment one. `:slug` alone
       // missed the bare `/product` (404) and anything nested such as
@@ -150,7 +152,7 @@ const nextConfig: NextConfig = {
       { source: '/product', destination: '/products', permanent: true },
       { source: '/product/:slug*', destination: '/products/:slug*', permanent: true },
       { source: '/product-category/:slug*', destination: '/categories/:slug*', permanent: true },
-      { source: '/media/blogs/:slug', destination: '/:slug', permanent: true },
+      { source: '/media/blogs/:slug', destination: '/blog/:slug', permanent: true },
       // Blog (+ gallery/videos) moved out of /media into its own /blog section.
       { source: '/media/blogs', destination: '/blog', permanent: true },
       { source: '/media/gallery', destination: '/blog/gallery', permanent: true },

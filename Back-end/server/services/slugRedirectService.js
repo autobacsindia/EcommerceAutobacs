@@ -48,7 +48,7 @@ export async function getSlugRedirectMap() {
     productRepository.findSlugsForRedirects(),
     categoryRepository.find({ isActive: true }).select(select).lean(),
     brandRepository.find({ isActive: true }).select(select).lean(),
-    // Only blog posts are served at /<slug>; other article types live elsewhere.
+    // Only blog posts are served at /blog/<slug>; other article types live elsewhere.
     articleRepository.find({ status: 'published', type: 'blog' }).select(select).lean(),
   ]);
   return {

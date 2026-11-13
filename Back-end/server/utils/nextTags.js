@@ -79,7 +79,7 @@ export const festivalOfferTags = () => ['promo:festival-offer'];
 
 /**
  * Tags for a media article write. Only blog-type articles have a cached public
- * page (the catch-all /[slug] route) and feed the home journal shelf; press,
+ * page (/blog/[slug] on the storefront) and feed the home journal shelf; press,
  * gallery and video items render client-side and need no Data Cache refresh.
  * @param {{slug?: string, type?: string}|null} article
  */

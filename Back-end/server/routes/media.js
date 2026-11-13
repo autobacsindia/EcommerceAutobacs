@@ -8,6 +8,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
 import { slugify } from "../utils/slug.js";
+import { unreservedBlogSlug } from "../utils/blogSlug.js";
 import { cleanArticleHTML } from "../utils/htmlSanitizer.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 import { articleTags } from "../utils/nextTags.js";
@@ -224,7 +225,7 @@ export function incrementArticleViews(filter) {
 // GET /media/articles/sitemap  — lightweight slug list for sitemap generation
 // NOTE: must precede "/articles/:slug" so "sitemap" isn't captured as a slug.
 // Only published, indexable (non-noindex) BLOG articles — these are served at
-// the site root (/<slug>), matching the public route.
+// /blog/<slug> on the storefront (at the site root until 2026-11).
 router.get("/articles/sitemap", asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 2000, 5000);
   const articles = await articleRepository
@@ -568,8 +569,9 @@ router.post("/admin/articles", protect, adminOrMarketing, asyncHandler(async (re
     return res.status(400).json({ success: false, message: "Title and content are required" });
   }
 
-  // Auto-generate unique slug
-  let baseSlug = generateSlug(title);
+  // Auto-generate unique slug. A title like "Gallery" must not become /blog/gallery,
+  // which is a real page (see utils/blogSlug.js): it starts at "gallery-2".
+  let baseSlug = unreservedBlogSlug(generateSlug(title));
   let slug = baseSlug;
   let counter = 1;
   while (await articleRepository.findOne({ slug })) {
@@ -596,7 +598,7 @@ router.post("/admin/articles", protect, adminOrMarketing, asyncHandler(async (re
   // cheap, correct choice.
   invalidateCache(MEDIA_TAGS.articles, MEDIA_TAGS.article, MEDIA_TAGS.trending);
   // Refresh the storefront's Next.js Data Cache: a published blog article shows
-  // on the home journal shelf and at /<slug>. Without this the article stayed
+  // on the home journal shelf and at /blog/<slug>. Without this the article stayed
   // invisible for the shelf's 300s / the page's 60s window.
   revalidateFrontendTags(articleTags(article));
   res.status(201).json({ success: true, data: article });
@@ -611,7 +613,7 @@ router.put("/admin/articles/:id", protect, adminOrMarketing, asyncHandler(async 
   // slug or type moves, the old public URL's Next.js Data Cache entry must be
   // purged too. (The backend response cache needs no equivalent — the write
   // clears the whole MEDIA_TAGS.article tag.) A type change blog→news is the
-  // live case: the article stops being served at /<slug>, and that page must
+  // live case: the article stops being served at /blog/<slug>, and that page must
   // stop rendering it. The slug itself does not currently move — see the dead
   // regeneration block below.
   const previousSlug = article.slug;
@@ -621,7 +623,8 @@ router.put("/admin/articles/:id", protect, adminOrMarketing, asyncHandler(async 
   // block below for why). The old slug is kept by the slugHistory plugin, and
   // the frontend middleware 301s the old URL to the new one.
   if (typeof req.body.slug === "string") {
-    const slug = slugify(req.body.slug);
+    // "gallery"/"videos" are real pages under /blog: append -2 rather than shadow them.
+    const slug = unreservedBlogSlug(slugify(req.body.slug));
     if (!slug) return res.status(400).json({ success: false, message: "The URL can't be empty." });
     if (slug !== article.slug) {
       const taken = await articleRepository.findOne({ slug, _id: { $ne: article._id } }).select("_id").lean();
@@ -641,13 +644,13 @@ router.put("/admin/articles/:id", protect, adminOrMarketing, asyncHandler(async 
   // assigned req.body.title onto the document, so `req.body.title !== article.title`
   // is never true and the slug is never regenerated. The upshot is that an
   // article's URL is STABLE across title edits, which is the behaviour we want:
-  // "fixing" this would move the public /<slug> of every renamed post, breaking
+  // "fixing" this would move the public /blog/<slug> of every renamed post, breaking
   // inbound links and churning the sitemap. Changing it is an SEO decision, not a
   // cleanup — capture the title before the loop only if that is the intent.
   // The invalidation below still handles a slug change so it stays correct if
   // this ever becomes live.
   if (req.body.title && req.body.title !== article.title) {
-    let baseSlug = generateSlug(req.body.title);
+    let baseSlug = unreservedBlogSlug(generateSlug(req.body.title));
     let slug = baseSlug;
     let counter = 1;
     while (await articleRepository.findOne({ slug, _id: { $ne: article._id } })) {

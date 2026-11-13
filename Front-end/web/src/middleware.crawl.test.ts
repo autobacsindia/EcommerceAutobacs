@@ -93,10 +93,10 @@ describe('renamed slugs', () => {
     expect(res.headers.get('location')).toBe('https://shop.test/products/new-name?ref=RAHUL10');
   });
 
-  it('301s an old blog URL at the root', async () => {
+  it('301s an old blog URL at the root straight to its current /blog URL', async () => {
     const res = await run('https://shop.test/14710-2');
     expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe('https://shop.test/real-title');
+    expect(res.headers.get('location')).toBe('https://shop.test/blog/real-title');
   });
 
   it('lets the current URL through', async () => {

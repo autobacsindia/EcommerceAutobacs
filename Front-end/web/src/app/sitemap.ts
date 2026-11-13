@@ -2,6 +2,7 @@ import { MetadataRoute } from 'next';
 import * as Sentry from '@sentry/nextjs';
 import { getServerApiBase } from '@/lib/server-api';
 import { SITE_URL as BASE_URL } from '@/lib/siteUrl';
+import { blogPostUrl } from '@/lib/articleRoutes';
 
 /**
  * The site's single sitemap, served at /sitemap.xml — the exact path robots.ts
@@ -270,12 +271,12 @@ async function articleEntries(): Promise<Entries> {
     data?: Array<{ slug: string; updatedAt?: string; publishedAt?: string }>;
   }>(`/media/articles/sitemap?limit=${MAX_ARTICLES}`, {});
 
-  // Blog posts are served at the site root (/<slug>) for WordPress permalink
-  // parity (ADR-005) — NOT under /media/<type>/.
+  // Blog posts live at /blog/<slug> (moved from the site root in 2026-11; the
+  // old root URLs 301 there). One helper builds the URL everywhere.
   return (data.data ?? [])
     .filter((a) => a.slug)
     .map((a) => ({
-      url: `${BASE_URL}/${a.slug}`,
+      url: blogPostUrl(a.slug, BASE_URL),
       lastModified: safeDate(a.updatedAt ?? a.publishedAt),
       changeFrequency: 'weekly' as ChangeFreq,
       priority: 0.7,

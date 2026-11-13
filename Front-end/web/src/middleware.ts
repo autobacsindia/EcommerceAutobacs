@@ -240,15 +240,19 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
-  // ── Renamed slugs (see lib/slugRedirects.ts) ────────────────────────────────
+  // ── Renamed slugs + blog posts' old root URLs (see lib/slugRedirects.ts) ────
   // An old product/category/brand/blog URL 301s to its current slug, so a rename
-  // in admin keeps the page's ranking and backlinks. Query string is kept (so a
+  // in admin keeps the page's ranking and backlinks. A blog post's old root URL
+  // (/<slug>, until 2026-11) 301s to /blog/<current slug> in ONE hop. Query string is kept (so a
   // ?ref on an old link is still captured on the next hop). Short edge cache: a
   // rename can be reverted, and a long-cached 301 would then loop.
   if ((req.method === 'GET' || req.method === 'HEAD') && isSlugRedirectCandidate(pathname)) {
     const target = resolveSlugRedirect(pathname, await getSlugRedirectMap());
     if (target) {
-      const url = req.nextUrl.clone();
+      // A plain URL, not req.nextUrl.clone(): NextURL re-applies the request's
+      // trailing slash, which turned /old/ into /blog/new/ — a non-canonical
+      // target that then needs a second hop.
+      const url = new URL(req.url);
       url.pathname = target;
       const res = NextResponse.redirect(url, 301);
       res.headers.set('Cache-Control', 'public, max-age=300, s-maxage=300');

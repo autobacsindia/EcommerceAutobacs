@@ -20,6 +20,7 @@
  */
 
 import { serverFetch } from '@/lib/server-api';
+import { articleHref } from '@/lib/articleRoutes';
 import { formatPriceINR } from '@/utils/priceFormatter';
 import { getCarHotspots, type ResolvedCarHotspot } from '@/lib/carHotspots';
 import {
@@ -199,7 +200,7 @@ const mapArticle = (a: ApiArticle): JournalItem => ({
   readTime: '', // not exposed by the articles list endpoint
   title: a.title,
   excerpt: a.excerpt || '',
-  href: `/${a.slug}`, // blog posts are served at the site root (ADR-005)
+  href: articleHref('blog', a.slug),
   image: a.coverImage || '',
 });
 

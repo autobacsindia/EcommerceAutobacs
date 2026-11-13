@@ -26,11 +26,14 @@ describe('resolveSlugRedirect', () => {
     ['/products/product/', '/products/dr-nano-rear-balance-arms-isuzu-v-cross'],
     ['/categories/tail-light', '/categories/tail-lamp'],
     ['/brands/lightforcew', '/brands/lightforce'],
-    ['/14710-2', '/thar-roxx-accessories'],
+    // Renamed post: the old ROOT url goes straight to the current /blog url (one hop).
+    ['/14710-2', '/blog/thar-roxx-accessories'],
+    ['/blog/14710-2', '/blog/thar-roxx-accessories'],
+    ['/blog/14710-2/', '/blog/thar-roxx-accessories'],
     ['/PRODUCTS-X', null],
     // The emoji post: stored percent-encoded, requested either way.
-    ['/%F0%9F%9A%97-how-to-render', '/how-to-render'],
-    ['/%f0%9f%9a%97-how-to-render', '/how-to-render'],
+    ['/%F0%9F%9A%97-how-to-render', '/blog/how-to-render'],
+    ['/%f0%9f%9a%97-how-to-render', '/blog/how-to-render'],
   ])('%s → %s', (path, expected) => {
     expect(resolveSlugRedirect(path, MAP)).toBe(expected);
   });
@@ -41,7 +44,10 @@ describe('resolveSlugRedirect', () => {
     '/products/product/reviews', // deeper path never matches
     '/categories/tail-lamp', // the live slug is never redirected
     '/',
-    '/blog/14710-2', // a blog slug only redirects at the root
+    '/blog/gallery', // real pages under /blog
+    '/blog/videos',
+    '/blog/thar-roxx-accessories', // the live slug is never redirected
+    '/blog/14710-2/comments', // deeper path never matches
   ])('%s is left alone', (path) => {
     expect(resolveSlugRedirect(path, MAP)).toBeNull();
   });
@@ -52,7 +58,7 @@ describe('resolveSlugRedirect', () => {
 });
 
 describe('isSlugRedirectCandidate', () => {
-  it.each(['/14710-2', '/products/x', '/categories/x/', '/brands/x'])('%s is a candidate', (p) => {
+  it.each(['/14710-2', '/products/x', '/categories/x/', '/brands/x', '/blog/x'])('%s is a candidate', (p) => {
     expect(isSlugRedirectCandidate(p)).toBe(true);
   });
   it.each(['/', '/robots.txt', '/admin/products', '/model/x/page/2', '/products/x/y'])(
