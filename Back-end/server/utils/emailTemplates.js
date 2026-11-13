@@ -3,7 +3,7 @@
  * HTML and text templates for password reset and email verification
  */
 import { formatInvoiceNumber } from './invoiceFormat.js';
-import { trackOrderUrl } from './storefrontUrl.js';
+import { trackOrderUrl, storefrontOrigin } from './storefrontUrl.js';
 import { describeEmiPlan } from './paymentMethodDetails.js';
 import { buildOrderLines, variantDisplayName } from './orderLines.js';
 import { discountLabel } from './quoteDiscount.js';
@@ -1309,6 +1309,96 @@ ${companyName}
     </div>
     <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
       <p style="margin:4px 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  return { subject, text, html };
+};
+
+/**
+ * "Delivery update" — staff corrected a parcel's tracking number or courier after it
+ * shipped (services/deliveryUpdateEmailService.js). Short on purpose: the new details,
+ * where to track, and a link to the order. No delivery date — like the shipped email,
+ * we do not promise the courier's estimate in writing.
+ * @param {Object} params
+ * @param {Object} params.order - Order document
+ * @param {Object} [params.user] - User document (name)
+ * @param {Object|null} [params.shipment] - the parcel, when the order has several
+ * @param {{trackingNumber: string, courier: string, courierUrl: string}} params.details
+ * @param {Object} [params.company] - Company info (name, email)
+ * @returns {{subject: string, text: string, html: string}}
+ */
+export const deliveryUpdateEmail = ({ order, user = null, shipment = null, details, company = {} }) => {
+  const esc = (s) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+  const ref = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
+  const name = order.shippingAddress?.fullName || user?.name || 'there';
+  const companyName = company.name || 'Autobacs India';
+  const supportEmail = company.email || 'support@autobacsindia.com';
+  const { trackingNumber, courier, courierUrl } = details;
+
+  // "Parcel 2 of 3" only when the order really is in several live boxes.
+  const live = (order.shipments || []).filter((sh) => sh.status !== 'lost');
+  const index = shipment ? live.findIndex((sh) => String(sh._id) === String(shipment._id)) + 1 : 0;
+  const parcelRef = live.length > 1 && index > 0 ? `parcel ${index} of ${live.length}` : null;
+
+  // A signed-in customer's own order page; a guest has no account, so the Track page.
+  const origin = storefrontOrigin();
+  const orderUrl = origin && order.user ? `${origin}/orders/${order._id}` : trackOrderUrl();
+
+  const subject = `Delivery update for your order #${ref}`;
+  const heading = 'Your delivery details were updated';
+  const blurb = `We've updated the delivery details for ${parcelRef ? `${parcelRef} of ` : ''}your order. Please use the details below to track it — the earlier ones may no longer work.`;
+
+  const text = `
+Hi ${name},
+
+${blurb}
+
+Order: ${ref}
+${trackingNumber ? `  • Tracking number: ${trackingNumber}\n` : ''}${courier ? `  • Courier: ${courier}\n` : ''}${courierUrl ? `  • Track with the courier: ${courierUrl}\n` : ''}${orderUrl ? `\nView your order: ${orderUrl}\n` : ''}
+Questions? Contact us at ${supportEmail}.
+
+Best regards,
+${companyName}
+  `.trim();
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${heading}</title>
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111;padding:24px 30px;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">${heading} 🚚</h1>
+    </div>
+    <div style="padding:30px;">
+      <p>Hi ${esc(name)},</p>
+      <p>${esc(blurb)}</p>
+      <p style="color:#555;">Order: <strong>${ref}</strong></p>
+      <div style="margin-top:20px;padding:16px 20px;background:#f7f7f7;border-radius:8px;border:1px solid #eee;">
+        <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#888;">New delivery details</p>
+        ${trackingNumber ? `<p style="margin:4px 0;font-size:14px;">Tracking number: <strong>${esc(trackingNumber)}</strong></p>` : ''}
+        ${courier ? `<p style="margin:4px 0;font-size:14px;">Courier: <strong>${esc(courier)}</strong></p>` : ''}
+        ${orderUrl ? `<p style="margin:16px 0 4px;"><a href="${esc(orderUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;">View your order</a></p>` : ''}
+        ${courierUrl ? `<p style="margin:8px 0 0;font-size:13px;"><a href="${esc(courierUrl)}" style="color:#555;">Track with the courier</a></p>` : ''}
+      </div>
+      <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${esc(supportEmail)}.</p>
+    </div>
+    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
+      <p style="margin:4px 0;">© ${new Date().getFullYear()} ${esc(companyName)}. All rights reserved.</p>
     </div>
   </div>
 </body>

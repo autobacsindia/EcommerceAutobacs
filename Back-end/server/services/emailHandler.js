@@ -530,6 +530,17 @@ class EmailHandler {
   }
 
   /**
+   * "Your delivery details were updated" — provider-only; the change detection,
+   * idempotency and rate guard live in deliveryUpdateEmailService.
+   */
+  async sendDeliveryUpdate({ to, order, user = null, shipment = null, details }) {
+    const { deliveryUpdateEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = deliveryUpdateEmail({ order, user, shipment, details, company: companyInfo });
+    return this.sendEmail({ to, subject, text, html });
+  }
+
+  /**
    * Send the post-delivery review-request email with a CTA per purchased product.
    * The order, user and reviewable product list are pre-built by reviewRequestService,
    * so this stays provider-only (no DB access).

@@ -1041,6 +1041,30 @@ class OrderRepository extends BaseRepository {
    * Change fields on one parcel (already-prefixed `shipments.$.…` keys) only if it
    * still matches `expect` (e.g. still in transit); with a workflow history event.
    */
+  /**
+   * Compare-and-set on a parcel's `deliveryNotice` (what the customer was last emailed
+   * about its tracking details — services/deliveryUpdateEmailService.js). The parcel
+   * must still be in transit. With no `shipmentId` it targets a legacy order shipped
+   * without parcels. `cond` and the `set`/`unset` keys are relative to deliveryNotice.
+   * @returns {Promise<boolean>} whether a document was changed
+   */
+  async updateDeliveryNoticeIf(orderId, shipmentId, cond, { set = {}, unset = {} } = {}) {
+    const rel = Object.fromEntries(Object.entries(cond).map(([k, v]) => (k === '$or'
+      ? [k, v.map((c) => Object.fromEntries(Object.entries(c).map(([ck, cv]) => [`deliveryNotice.${ck}`, cv])))]
+      : [`deliveryNotice.${k}`, v])));
+    const filter = shipmentId
+      ? { _id: orderId, shipments: { $elemMatch: { _id: new mongoose.Types.ObjectId(String(shipmentId)), status: 'shipped', ...rel } } }
+      : { _id: orderId, status: 'shipped', 'shipments.0': { $exists: false }, ...rel };
+    const prefix = shipmentId ? 'shipments.$.deliveryNotice' : 'deliveryNotice';
+    const path = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [`${prefix}.${k}`, v]));
+    const update = {
+      ...(Object.keys(set).length ? { $set: path(set) } : {}),
+      ...(Object.keys(unset).length ? { $unset: path(unset) } : {}),
+    };
+    const res = await Order.updateOne(filter, update);
+    return res.modifiedCount > 0;
+  }
+
   async updateShipmentIf(orderId, shipmentId, expect, set, event, { unset = {} } = {}) {
     const match = Object.fromEntries(Object.entries(expect).map(([k, v]) => [k, v]));
     return Order.findOneAndUpdate(

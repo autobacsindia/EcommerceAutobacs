@@ -5,6 +5,7 @@
  *   send-order-invoice       { orderId }          — generate + email the invoice/receipt (idempotent)
  *   send-order-status-email  { orderId, status }  — fulfillment status-change email (idempotent)
  *   send-shipment-email      { orderId, shipmentId, kind } — ONE parcel of a split shipment (idempotent per parcel)
+ *   send-delivery-update-email { orderId, shipmentId } — tracking/courier corrected after dispatch (once per change, ≤1 per parcel per 10 min)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
  *   notify-back-in-stock       { productId, variantId } — fan out to everyone waiting on a recovered item
@@ -43,6 +44,7 @@ import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice, emailExtraChargeReceipt } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
+import { emailDeliveryUpdate } from '../../services/deliveryUpdateEmailService.js';
 import { emailAffiliateApproved, emailAffiliatePayoutSent } from '../../services/affiliateEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
 import { fanOutRestock, emailBackInStock } from '../../services/restockNotificationService.js';
@@ -97,6 +99,13 @@ const handlers = {
   'send-shipment-email': async (job) => {
     const { orderId, shipmentId, kind } = job.data;
     await emailOrderStatusUpdate(orderId, kind, { shipmentId });
+  },
+
+  // A parcel's tracking/courier was corrected after it shipped. Idempotent per value
+  // set and rate-guarded per parcel — see deliveryUpdateEmailService.
+  'send-delivery-update-email': async (job) => {
+    const { orderId, shipmentId } = job.data;
+    await emailDeliveryUpdate(orderId, shipmentId || null);
   },
 
   'send-review-request': async (job) => {
