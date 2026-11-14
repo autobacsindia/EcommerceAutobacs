@@ -65,6 +65,7 @@ import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymen
 import { pinnedIds, inPinOrder } from './orderPinService.js';
 import { listDateOf } from '../utils/orderListDate.js';
 import { toPaise, fromPaise } from '../utils/money.js';
+import { saleHistoryOf } from './orderAttributionService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -286,6 +287,8 @@ function detail(u, o) {
     owesGoodie: owesGoodie(o),
     // Prices are for accounts (and the admin) — the team that reconciles the money.
     money: can.accounts(u) ? moneyOf(o) : null,
+    // Read-only: when a website order was credited to a salesman, and by whom (null when never changed).
+    saleHistory: can.accounts(u) ? saleHistoryOf(o) : null,
     payment: o.payment && typeof o.payment === 'object'
       ? { razorpayPaymentId: o.payment.gatewayPaymentId || null, method: o.payment.method || null }
       : null,
@@ -463,7 +466,7 @@ export async function listQueue(actor, queue, { cursor, ...filters } = {}) {
 
 /** One order in full, if this person may see it. */
 export async function getOrder(actor, orderId) {
-  const o = await orderRepository.findForWorkflow(orderId);
+  const o = await orderRepository.findForWorkflow(orderId, { withSaleHistory: can.accounts(actor) });
   if (!o || !canView(actor, o)) throw fail('Order not found.', 404);
   return withSkus(detail(actor, o));
 }

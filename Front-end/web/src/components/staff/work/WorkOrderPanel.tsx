@@ -17,6 +17,7 @@ import ProductLink from '@/components/staff/ProductLink';
 import CopyId from '@/components/ui/CopyId';
 import ParcelEta from './ParcelEta';
 import { LinePrice, OrderMoneySummary } from './OrderMoney';
+import SaleHistory from './SaleHistory';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 import OrderJourney from '@/components/orders/OrderJourney';
 import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
@@ -241,6 +242,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           )}
         </div>
       </div>
+
+      <SaleHistory orderId={o.id} history={o.saleHistory} />
 
       {o.owesGoodie && (
         <p className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">

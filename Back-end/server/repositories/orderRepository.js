@@ -1685,9 +1685,10 @@ class OrderRepository extends BaseRepository {
     }
   }
 
-  async findForWorkflow(orderId) {
+  /** @param {{ withSaleHistory?: boolean }} [opts] also read the seller-credit record (accounts' order panel only) */
+  async findForWorkflow(orderId, { withSaleHistory = false } = {}) {
     return Order.findById(orderId)
-      .select(OrderRepository.WORKFLOW_SELECT)
+      .select(withSaleHistory ? `${OrderRepository.WORKFLOW_SELECT} source salesAttribution` : OrderRepository.WORKFLOW_SELECT)
       .populate({ path: 'user', select: 'name email phone' })
       .populate({ path: 'salesUser', select: 'name email' })
       .populate({ path: 'payment', select: 'gatewayPaymentId method status amount createdAt' })
