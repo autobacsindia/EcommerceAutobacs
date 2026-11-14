@@ -51,7 +51,51 @@ beforeAll(async () => {
       serverSelectionTimeoutMS: 5000
     });
   }
+
+  await waitForModelInit();
 });
+
+/**
+ * Wait until every registered model has finished creating its collection and indexes,
+ * and until config/db.js's ensureCriticalIndexes() pass (if this suite loaded it) is done.
+ *
+ * Each suite runs against a brand-new database, and importing `app.js` registers ~100
+ * models. On connect, Mongoose starts `createCollection` + `createIndexes` for all of
+ * them in the background (autoCreate/autoIndex are on in tests). If the first test fires
+ * a request straight away, that request queues behind hundreds of catalog writes on a
+ * one-member replica set shared with every other worker. On a loaded machine the first
+ * `findOne`/`save` took 20–30 s each, the request outlived the client socket ("socket
+ * hang up" at ~60 s), and the still-running handler then hit a VersionError because the
+ * test's afterEach had already wiped the collection under it.
+ *
+ * Settling that work here, in the hook (which has the full test timeout), makes the
+ * first test start from the same ready schema as every later one. `Model.init()` is
+ * memoised by Mongoose, so this awaits the build already in flight rather than starting
+ * a second one.
+ */
+async function waitForModelInit() {
+  if (mongoose.connection.readyState !== 1 && mongoose.connection.readyState !== 2) {
+    return;
+  }
+
+  // A model that fails to build an index (e.g. a test that deliberately seeds duplicate
+  // rows) must still be able to run its own assertions, so failures are reported, not thrown.
+  const results = await Promise.allSettled(
+    Object.values(mongoose.connection.models).map((model) => model.init())
+  );
+
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.warn('[Test] Model init failed:', result.reason?.message ?? result.reason);
+    }
+  }
+
+  // config/db.js also starts ensureCriticalIndexes() — ~150 serial index creates/drops,
+  // including on orders and users — on 'connected' (only in suites that load it, via
+  // app.js). Left running, it broke a suite's first transaction with "Unable to write to
+  // collection … due to catalog changes". Same key as CRITICAL_INDEXES_READY there.
+  await mongoose.connection[Symbol.for('autobacs.criticalIndexesReady')];
+}
 
 // ── Per-Test Cleanup ────────────────────────────────────────────────────────
 

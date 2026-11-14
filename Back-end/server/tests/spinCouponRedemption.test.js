@@ -122,7 +122,9 @@ beforeEach(async () => {
   await cacheService.invalidatePattern('public:spin:*');
   // Production builds this in config/db.js (autoIndex is off there). It IS the
   // one-spin-per-order guarantee, so the tests must exercise the same serialisation point.
-  await SpinResult.collection.createIndex({ order: 1 }, { unique: true });
+  // Same name + options as config/db.js, so this is a no-op when that pass already built it
+  // (tests/setup.js now waits for it) instead of a "different name" clash.
+  await SpinResult.collection.createIndex({ order: 1 }, { name: 'unique_spin_per_order', unique: true });
   user = await User.create({
     name: 'Spin Buyer', email: `spin-${Date.now()}-${Math.random()}@test.com`, passwordHash: 'x',
   });

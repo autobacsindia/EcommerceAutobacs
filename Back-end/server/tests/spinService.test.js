@@ -110,7 +110,9 @@ beforeEach(async () => {
   // The unique index is the idempotency guarantee, and prod builds it from config/db.js
   // rather than from the schema (autoIndex is off there). Build it explicitly so these
   // tests exercise the same serialization point production relies on.
-  await SpinResult.collection.createIndex({ order: 1 }, { unique: true });
+  // Same name + options as config/db.js, so this is a no-op when that pass already built it
+  // (tests/setup.js now waits for it) instead of a "different name" clash.
+  await SpinResult.collection.createIndex({ order: 1 }, { name: 'unique_spin_per_order', unique: true });
   user = await User.create({
     name: 'Spin Buyer', email: `spin-${Date.now()}-${Math.random()}@test.com`, passwordHash: 'x',
   });
