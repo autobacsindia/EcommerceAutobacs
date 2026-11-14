@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star } from 'lucide-react';
+import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -100,6 +100,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
   if (team === 'procurement' || team === 'accounts') nav.push({ href: '/team/suppliers', label: 'Suppliers', icon: Factory });
   // GTM head only: customers' ratings of the salespeople (read only). The API refuses other heads.
+  // GTM: everyone (the head included) sees their OWN Roav Points; the API scopes it to them.
+  if (team === 'sales') nav.push({ href: '/team/roav-points', label: 'My Roav Points', icon: Trophy });
   if (isHead && team === 'sales') nav.push({ href: '/team/sales-ratings', label: 'Service ratings', icon: Star });
   nav.push({ href: '/team/members', label: 'My team', icon: Users });
   // Every team: how to use the panel (lib/help/teamFaq.ts).

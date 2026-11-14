@@ -13,6 +13,7 @@ import IncentiveLedgerEntry from '../models/IncentiveLedgerEntry.js';
 import IncentiveMonth from '../models/IncentiveMonth.js';
 import IncentiveOrderFlag from '../models/IncentiveOrderFlag.js';
 import IncentiveRuleSet from '../models/IncentiveRuleSet.js';
+import mongoose from 'mongoose';
 
 export const ORDER_FIELDS = 'wpId salesUser salesRep items._id items.product items.variantId items.quantity items.price items.listPrice '
   + 'discount tax totalAmount gatewayOffer buyer.type paymentStatus status paidAt listDate cancellations updatedAt';
@@ -43,6 +44,42 @@ export const userName = (id) => User.findById(id).select('name').lean().then((u)
 export const salesRepById = (id) => SalesRep.findById(id).select('name user').lean();
 export const activeTeamMemberIds = (team, limit = 500) =>
   User.find({ role: 'staff', 'staff.active': true, 'staff.team': team }).select('_id').limit(limit).lean();
+
+// ── A salesperson's own statement page (routes /incentives/me/*) ────────────
+
+/** Customer name + dates for the orders on one statement page. No phone/email/address. */
+export const orderCardsFor = (ids) => Order.find({ _id: { $in: ids } })
+  .select('wpId listDate paidAt createdAt shippingAddress.fullName').lean();
+/**
+ * Paid orders this person listed in [start, end), newest first — the candidates
+ * for "waiting for the payment check". Index: staff_sales_by_list_date.
+ */
+// `$type` restates the partial filter so the planner can use that partial index;
+// a bare equality does not imply it, and the planner fell back to the global
+// listDate index (measured: 30,000 docs examined for 50 results).
+export const paidSalesOrdersOf = (userId, start, end, limit) => Order.find({
+  salesUser: { $eq: userId, $type: 'objectId' }, paymentStatus: 'paid', listDate: { $gte: start, $lt: end },
+}).select('wpId listDate shippingAddress.fullName').sort({ listDate: -1, _id: -1 }).limit(limit).lean();
+/** Which of these orders already have any ledger row (for anyone). Index: incentive_ledger_order. */
+export const ordersWithLedger = (ids) => IncentiveLedgerEntry.distinct('order', { order: { $in: ids } });
+/*
+ * Ratings are read from the raw `orderratings` collection, the same way
+ * monthService.ratingsByEarner does: the OrderRating model belongs to another
+ * workstream and importing it here would tie Roav Points to its load order.
+ */
+const ratingsColl = () => mongoose.models.OrderRating?.collection || mongoose.connection.db.collection('orderratings');
+const RATING_FIELDS = { order: 1, stars: 1, comment: 1, sameNetworkAsSender: 1, createdAt: 1 };
+/** Ratings credited to `userId` on these orders. Index: order_1 (unique). */
+export const ratingsForOrders = (ids, userId) => ratingsColl()
+  .find({ order: { $in: ids }, salesperson: userId }, { projection: RATING_FIELDS }).limit(ids.length).toArray();
+/** One salesperson's ratings in [start, end), newest first. Index: salesperson_1_createdAt_-1. */
+export const ratingsOf = (userId, start, end, limit) => ratingsColl().find(
+  { salesperson: userId, createdAt: { $gte: start, $lt: end }, stars: { $gte: 1, $lte: 5 } },
+  { projection: RATING_FIELDS },
+).sort({ createdAt: -1 }).limit(limit).toArray();
+export const excludedRatingCount = (userId, start, end) => ratingsColl().countDocuments({
+  salesperson: userId, createdAt: { $gte: start, $lt: end }, stars: { $gte: 1, $lte: 5 }, sameNetworkAsSender: true,
+});
 
 // ── Order flags ──────────────────────────────────────────────────────────────
 
