@@ -302,7 +302,7 @@ describe('Proof for changing who is credited with an order', () => {
       expect((await reload(order)).salesAttribution).toHaveLength(MAX_CHANGES);
     });
 
-    it('proof files open for admin and marketing only; documents download, never open in the page', async () => {
+    it('proof files open for admin, marketing and accounts only; documents download, never open in the page', async () => {
       const order = await paidOrder();
       const res = await submit(admin, order._id, { to: lead.id, files: [['a.png', PNG], ['n.txt', Buffer.from('<script>x</script>')]] });
       const [png, txt] = res.body.order.history[0].files;

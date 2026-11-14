@@ -140,6 +140,12 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
    * older server.
    */
   money?: OrderMoney | null;
+  /**
+   * Accounts or admin, read-only: how the order started and each later change of
+   * who is credited with the sale, oldest first. null when the seller never
+   * changed (or for other teams); absent from an older server.
+   */
+  saleHistory?: SaleHistory | null;
   /** GTM seller, operations or admin, on a paid order that reached the customer. */
   canRaiseReturn?: boolean;
 };
@@ -174,6 +180,25 @@ export type OrderMoneyLine = {
   /** GTM: the price before the rep's offer; null when there was none. */
   listPrice: number | null;
   lineTotal: number | null;
+};
+
+export type SaleHistoryChange = {
+  at: string;
+  /** Who made the change. */
+  by: string;
+  /** Seller before / after; null = Website order (no salesman). */
+  from: string | null;
+  to: string | null;
+  note: string;
+  /** false on entries written before proof was required. */
+  proofRequired: boolean;
+  files: { id: string; name: string; contentType: string; bytes: number }[];
+};
+
+export type SaleHistory = {
+  /** "Website order", or "Sales order — Name". */
+  startedAs: string;
+  changes: SaleHistoryChange[];
 };
 
 export type OrderMoney = {

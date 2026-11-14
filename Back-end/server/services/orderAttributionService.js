@@ -56,8 +56,17 @@ const idOf = (v) => (v && v._id ? String(v._id) : v ? String(v) : null);
 const isAdmin = (u) => u?.role === 'admin';
 const isMarketing = (u) => u?.role === 'staff' && u.staff?.active === true && u.staff.team === STAFF_TEAMS.MARKETING;
 
+const isAccounts = (u) => u?.role === 'staff' && u.staff?.active === true && u.staff.team === STAFF_TEAMS.ACCOUNTS;
+
 /** Admin and marketing credit website orders. */
 export const mayAttribute = (u) => isAdmin(u) || isMarketing(u);
+
+/**
+ * Who may READ the credit history and open its proof: those who change it, plus
+ * accounts (who reconcile the sale). Reading only — every write still goes
+ * through `assertMay`, so accounts can never change the seller.
+ */
+export const mayViewAttribution = (u) => mayAttribute(u) || isAccounts(u);
 
 function assertMay(actor) {
   if (!mayAttribute(actor)) throw fail('Only admin and marketing can credit a website order to a salesman.', 403);
@@ -124,13 +133,33 @@ const shapeRow = (o) => ({
   city: [o.shippingAddress?.city, o.shippingAddress?.state].filter(Boolean).join(', '),
   items: (o.items || []).map((i) => `${i.name}${i.quantity > 1 ? ` × ${i.quantity}` : ''}`),
   seller: o.salesUser ? { id: idOf(o.salesUser), name: o.salesUser.name || '' } : null,
-  history: (o.salesAttribution || []).slice().reverse().map((h) => ({
+  history: (o.salesAttribution || []).slice().reverse().map(changeView),
+});
+
+/** One recorded change, display-safe: names, date, note, proof file names — never the storage location. */
+function changeView(h) {
+  return {
     at: h.at, by: h.byName || '', from: h.fromName || null, to: h.toName || null, note: h.note || '',
-    // Only what the panel needs: never the storage location.
+    // Entries written before proof was required have no changeId.
     proofRequired: !!h.changeId,
     files: (h.proofFiles || []).map((f) => ({ id: idOf(f._id), name: f.name || 'File', contentType: f.contentType || '', bytes: f.bytes || 0 })),
-  })),
-});
+  };
+}
+
+/**
+ * The read-only "Sale history" for the accounts order panel: how the order
+ * started, then each change, oldest first. `null` when the seller was never
+ * changed, so the panel shows nothing extra. The caller decides who sees it.
+ */
+export function saleHistoryOf(o) {
+  const changes = o?.salesAttribution || [];
+  if (!changes.length) return null;
+  const firstSeller = changes[0].fromName || '';
+  return {
+    startedAs: o.source === 'web' ? 'Website order' : `Sales order${firstSeller ? ` — ${firstSeller}` : ''}`,
+    changes: changes.map(changeView),
+  };
+}
 
 /**
  * Paid website orders, newest paid first, credited or not (so a wrong credit can
@@ -290,9 +319,9 @@ export async function setSeller(actor, orderId, { salesUserId = null, expectedSa
   return shapeRow(updated);
 }
 
-/** One proof file, streamed through us (never a public link) to those who may change credit. */
+/** One proof file, streamed through us (never a public link) to those who may see the credit history. */
 export async function getProofFile(actor, orderId, fileId) {
-  assertMay(actor);
+  if (!mayViewAttribution(actor)) throw fail('Only admin, marketing and accounts can open this file.', 403);
   const order = await loadRow(orderId);
   const f = (order?.salesAttribution || []).flatMap((h) => h.proofFiles || []).find((x) => idOf(x._id) === String(fileId));
   if (!f) throw fail('File not found.', 404);
@@ -304,4 +333,4 @@ export async function getProofFile(actor, orderId, fileId) {
   return { buffer, contentType: f.contentType, name: f.name || 'proof' };
 }
 
-export default { mayAttribute, listSellers, listWebsiteOrders, getWebsiteOrder, setSeller, getProofFile };
+export default { mayAttribute, mayViewAttribution, saleHistoryOf, listSellers, listWebsiteOrders, getWebsiteOrder, setSeller, getProofFile };
