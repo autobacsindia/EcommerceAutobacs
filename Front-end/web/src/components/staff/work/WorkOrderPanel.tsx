@@ -16,6 +16,7 @@ import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import CopyId from '@/components/ui/CopyId';
 import ParcelEta from './ParcelEta';
+import { LinePrice, OrderMoneySummary } from './OrderMoney';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 import OrderJourney from '@/components/orders/OrderJourney';
 import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
@@ -162,6 +163,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const o = q.data.order;
   const a = o.shippingAddress;
   const busy = act.isPending;
+  // Accounts / admin only (the server sends null to other teams).
+  const priceOf = new Map((o.money?.lines ?? []).map((l) => [l.itemId, l]));
 
   function lineButtons(line: WorkOrder['lines'][number]) {
     const has = (x: LineAction) => line.actions.includes(x);
@@ -257,6 +260,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                     <ProductLink product={line.productId} variantId={line.variantId}>{line.name}{line.variantLabel ? ` — ${line.variantLabel}` : ''}</ProductLink>{' '}
                     <span className="font-normal text-gray-500">× {line.quantity}</span>
                   </p>
+                  {priceOf.has(line.itemId) && <LinePrice line={priceOf.get(line.itemId)!} />}
                   {line.sku && (
                     <p className="flex items-center gap-1 text-xs text-gray-500">
                       SKU <span className="font-mono text-gray-700">{line.sku}</span>
@@ -286,6 +290,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
             </li>
           ))}
         </ul>
+        {o.money && <OrderMoneySummary money={o.money} itemCount={o.lines.length} />}
       </div>
 
       <OrderOtherPayments order={o} requests={supplierPayments.data?.requests ?? []} />
