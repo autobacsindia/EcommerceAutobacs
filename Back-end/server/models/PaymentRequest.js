@@ -118,6 +118,7 @@ const PaymentRequestSchema = new mongoose.Schema(
     customer: {
       name: { type: String, default: '' },
       phone: { type: String, default: '' },
+      alternatePhone: { type: String, default: '' },
       city: { type: String, default: '' },
     },
     // Who closed the sale: a GTM lead's name, or 'Website'.

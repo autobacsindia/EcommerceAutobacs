@@ -188,6 +188,7 @@ function shape(o) {
       name: o.user?.name || o.shippingAddress?.fullName || '',
       email: publicEmail(o.user?.email || o.guestEmail || ''),
       phone: o.shippingAddress?.phone || o.user?.phone || '',
+      alternatePhone: o.shippingAddress?.alternatePhone || '',
     },
     shippingAddress: o.shippingAddress || null,
     salesPerson: o.salesUser?.name || '',

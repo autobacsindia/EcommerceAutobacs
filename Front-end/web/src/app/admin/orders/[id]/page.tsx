@@ -93,6 +93,7 @@ interface Order {
   shippingAddress: {
     fullName: string;
     phone: string;
+    alternatePhone?: string;
     addressLine1: string;
     addressLine2?: string;
     city: string;
@@ -846,6 +847,9 @@ function AdminOrderDetailPageInner() {
             <div className="p-6">
               <p className="font-medium">{order.shippingAddress.fullName}</p>
               <p className="text-gray-600">{order.shippingAddress.phone}</p>
+              {order.shippingAddress.alternatePhone && (
+                <p className="text-gray-600">Alt: {order.shippingAddress.alternatePhone}</p>
+              )}
               <p className="text-gray-600 mt-2">
                 {order.shippingAddress.addressLine1}
                 {order.shippingAddress.addressLine2 && `, ${order.shippingAddress.addressLine2}`}

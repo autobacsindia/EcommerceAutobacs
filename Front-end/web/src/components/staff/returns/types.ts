@@ -51,7 +51,7 @@ export interface SupplierClaim {
 export interface ReturnDetail extends ReturnRow {
   problemDescription: string;
   raisedBy: string | null;
-  customerContact: { name: string; phone: string; email: string };
+  customerContact: { name: string; phone: string; alternatePhone?: string; email: string };
   seller: string;
   lines: {
     /** The handle an edit names the line by (the order line id, or its position). */

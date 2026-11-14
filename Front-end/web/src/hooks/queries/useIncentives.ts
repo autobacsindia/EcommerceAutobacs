@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
 import { incentiveKeys } from './keys';
-import type { Champion, LedgerRow, MonthView, RuleVersion, Rules, Slab, Statement, NextSlab } from '@/lib/incentives';
+import type { Champion, LedgerRow, MonthView, RuleVersion, Rules, MyMonth, MyOrdersPage, MyRatings } from '@/lib/incentives';
 
 /** Last month's Incentive Champion, for the staff-panel banner. */
 export function useIncentiveChampion(enabled = true) {
@@ -41,10 +41,26 @@ export function useIncentiveRows(earnerKey: string | null, month: string, cursor
   });
 }
 
-/** For the sales board: my month so far. */
+/** My month so far (or a closed month's snapshot) — always the logged-in person. */
 export function useMyIncentives(month: string) {
   return useQuery({
     queryKey: incentiveKeys.me(month),
-    queryFn: () => apiClient.get<{ month: string; status: string; statement: Statement | null; points: number; slab: string | null; payout: number; next: NextSlab | null; slabs: Slab[] }>(`/incentives/me?month=${month}`),
+    queryFn: () => apiClient.get<MyMonth>(`/incentives/me?month=${month}`),
+  });
+}
+
+/** My month, order by order (cursor-paginated). */
+export function useMyIncentiveOrders(month: string, cursor: string | null = null) {
+  return useQuery({
+    queryKey: incentiveKeys.myOrders(month, cursor || ''),
+    queryFn: () => apiClient.get<MyOrdersPage>(`/incentives/me/orders?month=${month}${cursor ? `&cursor=${cursor}` : ''}`),
+  });
+}
+
+/** My customers' ratings — `visible: false` unless the owner allows staff to see them. */
+export function useMyIncentiveRatings(month: string) {
+  return useQuery({
+    queryKey: incentiveKeys.myRatings(month),
+    queryFn: () => apiClient.get<MyRatings>(`/incentives/me/ratings?month=${month}`),
   });
 }

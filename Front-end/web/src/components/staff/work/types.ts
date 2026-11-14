@@ -36,7 +36,7 @@ export type WorkRow = {
   totalAmount: number;
   source: 'sales' | 'website';
   soldBy: string;
-  customer: { name: string; email: string; phone: string };
+  customer: { name: string; email: string; phone: string; alternatePhone?: string };
   city: string;
   summary: string | null;
   /** The stage behind `summary` — colours the order's pill like the stage itself. */
@@ -134,6 +134,12 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   canContactCustomer: boolean;
   /** Accounts or admin — the customer's saved bank account for refunds / NEFT. */
   canSeeCustomerBank?: boolean;
+  /**
+   * Accounts or admin: the order's money as it was sold (the order's own saved
+   * prices, never the product's current one). null for other teams; absent from an
+   * older server.
+   */
+  money?: OrderMoney | null;
   /** GTM seller, operations or admin, on a paid order that reached the customer. */
   canRaiseReturn?: boolean;
 };
@@ -159,3 +165,28 @@ export const STAGE_TONE: Record<LineStage, string> = {
   cancelled: 'bg-gray-200 text-gray-700',
 };
 
+
+/** One line's saved price. `price`/`lineTotal` are null on an old order that never stored one. */
+export type OrderMoneyLine = {
+  itemId: string;
+  quantity: number;
+  price: number | null;
+  /** GTM: the price before the rep's offer; null when there was none. */
+  listPrice: number | null;
+  lineTotal: number | null;
+};
+
+export type OrderMoney = {
+  lines: OrderMoneyLine[];
+  /** Sum of the line totals; null when any line has no saved price. */
+  itemsTotal: number | null;
+  subtotal: number | null;
+  discount: number;
+  couponCode: string;
+  shipping: number;
+  /** GST included in the prices (not added on top). */
+  tax: number;
+  total: number | null;
+  /** A bank/card offer Razorpay applied at payment. */
+  gatewayOffer: { name: string; discount: number; amountPaid: number | null } | null;
+};

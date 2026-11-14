@@ -66,6 +66,74 @@ export interface LedgerRow {
   };
 }
 
+/** GET /incentives/me — my month (snapshot once the month is closed). */
+export interface MyMonth {
+  month: string;
+  status: 'open' | 'locked' | 'approved';
+  rulesVersion: number;
+  statement: Statement | null;
+  points: number;
+  slab: string | null;
+  payout: number;
+  next: NextSlab | null;
+  slabs: Slab[];
+  policy: {
+    rating: Rules['rating'];
+    returnRateThresholdPercent: number;
+    returnPenaltyMultiplier: number;
+    perOrderBonus: number;
+    perOrderBonusMinValue: number;
+  };
+  bonusOrders: number;
+  ratingsExcluded: number;
+}
+
+export interface MyOrderLine {
+  _id: string;
+  type: 'earn' | 'reverse';
+  component: string;
+  points: number;
+  reason: string | null;
+  eventAt: string;
+  rev?: number;
+  label?: string;
+  quantity?: number;
+  fraction?: number;
+  earnMonth?: string;
+  landedLate?: boolean;
+}
+
+export type MyOrderStatus = 'counted' | 'partly_reversed' | 'reversed' | 'pending';
+
+export interface MyOrder {
+  order: string;
+  orderNumber: string;
+  date: string | null;
+  customerName: string;
+  valueExGst: number | null;
+  discountPercent: number | null;
+  discountKeep: number | null;
+  portions: { from: number; to: number; multiplier: number }[];
+  specialSourcing: boolean;
+  sourcingKeep: number | null;
+  isB2B: boolean;
+  basePoints: number;
+  bonusPoints: number;
+  points: number;
+  status: MyOrderStatus;
+  rating: { stars: number; comment: string; counted: boolean } | null;
+  lines: MyOrderLine[];
+}
+
+export interface MyPendingOrder { order: string; orderNumber: string; date: string; customerName: string; status: 'pending' }
+
+export interface MyOrdersPage { orders: MyOrder[]; nextCursor: string | null; pending: MyPendingOrder[]; ratingDetails: boolean }
+
+export interface MyRatings {
+  visible: boolean;
+  ratings: { orderNumber: string; customerName: string; stars: number; comment: string; at: string; counted: boolean }[];
+}
+
 export interface Rules {
   basePointsPerRupee: number;
   gstRate: number;
@@ -114,4 +182,28 @@ export function describeRow(r: LedgerRow): string {
   if (r.type === 'earn') return what;
   const why = { return: 'returned', refund: 'refunded', cancel: 'cancelled', recompute: 'recalculated' }[r.reason || ''] || 'reversed';
   return `${what} — ${why}`;
+}
+
+/** What a line on "My Roav Points" was for, in plain words. */
+export function describeMyLine(l: MyOrderLine, month?: string): string {
+  const what = l.component === 'core' ? 'Order value'
+    : l.component === 'order' ? 'Paid order bonus'
+      : l.component.startsWith('bonus:') ? (l.label || 'Priority product') : l.component;
+  if (l.type === 'earn') return l.rev ? `${what} (recalculated)` : what;
+  const why: Record<string, string> = {
+    return: 'returned', refund: 'refunded', cancel: 'cancelled', recompute: 'recalculated (seller or sourcing changed)',
+  };
+  // A reversal landing in a later month says which month the points were earned in.
+  const late = l.earnMonth && l.earnMonth !== month ? ` — from ${monthLabel(l.earnMonth)}` : '';
+  return `${what} — ${why[l.reason || ''] || 'reversed'}${late}`;
+}
+
+/** The rating multiplier, in plain words, from the month's counted ratings. */
+export function ratingStatus(count: number, avg: number | null, rule: Rules['rating']): { label: string; factor: number } {
+  if (count < rule.minCount) {
+    return { label: `${count} of ${rule.minCount} ratings needed — no change yet`, factor: 1 };
+  }
+  if (avg != null && avg >= rule.highAvg) return { label: `Average ${avg}★ — bonus ×${rule.highMultiplier}`, factor: rule.highMultiplier };
+  if (avg != null && avg < rule.lowAvg) return { label: `Average ${avg}★ — reduced ×${rule.lowMultiplier}`, factor: rule.lowMultiplier };
+  return { label: `Average ${avg ?? '—'}★ — no change`, factor: 1 };
 }

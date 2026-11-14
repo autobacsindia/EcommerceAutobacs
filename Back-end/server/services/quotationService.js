@@ -87,6 +87,7 @@ export function buildQuotation(order, { now = Date.now() } = {}) {
     customer: {
       name: order.user?.name || addr.fullName || 'Customer',
       phone: addr.phone || order.user?.phone || '',
+      alternatePhone: addr.alternatePhone || '',
       email: publicEmail(order.user?.email || order.guestEmail || ''),
       address: [
         addr.addressLine1,
@@ -200,6 +201,7 @@ export async function renderQuotationPdf(q) {
       const toBottom = block(L + colW + 24, 'QUOTATION FOR', q.customer.name, [
         ...q.customer.address,
         q.customer.phone ? `Phone: ${q.customer.phone}` : null,
+        q.customer.alternatePhone ? `Alt. phone: ${q.customer.alternatePhone}` : null,
         q.customer.email ? `Email: ${q.customer.email}` : null,
       ]);
       y = Math.max(fromBottom, toBottom) + 16;

@@ -386,6 +386,8 @@ export const orderRatingKeys = {
 export const incentiveKeys = {
   all: ['incentives'] as const,
   me: (month: string) => ['incentives', 'me', month] as const,
+  myOrders: (month: string, cursor: string) => ['incentives', 'me', month, 'orders', cursor] as const,
+  myRatings: (month: string) => ['incentives', 'me', month, 'ratings'] as const,
   team: (month: string) => ['incentives', 'team', month] as const,
   month: (month: string) => ['incentives', 'month', month] as const,
   months: () => ['incentives', 'months'] as const,

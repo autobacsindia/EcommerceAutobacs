@@ -207,6 +207,67 @@ describe('product links', () => {
   });
 });
 
+describe('item prices for accounts (bulk orders)', () => {
+  it('accounts and the admin see every line priced; other teams get no money block', async () => {
+    const order = await paidOrder();
+    const id = String(order._id);
+    for (const u of [await staff('accounts'), await admin()]) {
+      const { money } = await wf.getOrder(u, id);
+      expect(money.lines.map((l) => [l.quantity, l.price, l.lineTotal])).toEqual([[1, 5000, 5000], [2, 1000, 2000]]);
+      expect(money).toMatchObject({ itemsTotal: 7000, subtotal: 7000, discount: 0, shipping: 0, total: 7000, gatewayOffer: null });
+    }
+    for (const team of ['procurement', 'operations']) {
+      expect((await wf.getOrder(await staff(team), id)).money).toBeNull();
+    }
+    expect((await wf.getOrder(await staff('sales', { isHead: true }), id)).money).toBeNull();
+  });
+
+  it('a 25-line order: paise-exact line totals add up to the saved subtotal', async () => {
+    const items = Array.from({ length: 25 }, (_, i) => ({
+      product: new mongoose.Types.ObjectId(), name: `Part ${i + 1}`, price: 199.99 + i, quantity: (i % 3) + 1,
+    }));
+    const subtotal = items.reduce((s, it) => s + Math.round(it.price * 100) * it.quantity, 0) / 100;
+    const created = await paidOrder({ items });
+    await Order.updateOne({ _id: created._id }, { $set: { subtotal, totalAmount: subtotal } });
+    const { money } = await wf.getOrder(await staff('accounts'), String(created._id));
+    expect(money.lines).toHaveLength(25);
+    expect(money.lines[0]).toMatchObject({ price: 199.99, quantity: 1, lineTotal: 199.99 });
+    expect(money.lines[2]).toMatchObject({ price: 201.99, quantity: 3, lineTotal: 605.97 });
+    expect(money.itemsTotal).toBe(subtotal);
+    expect(money.subtotal).toBe(subtotal);
+  });
+
+  it('shows the order\'s saved discount, coupon, delivery, GST, rep offer price and bank offer', async () => {
+    const created = await paidOrder({ items: [
+      { product: new mongoose.Types.ObjectId(), name: 'Seat cover', price: 4500, listPrice: 5000, quantity: 2 },
+      { product: new mongoose.Types.ObjectId(), name: 'Floor mat', price: 1000, quantity: 1 },
+    ] });
+    await Order.updateOne({ _id: created._id }, { $set: {
+      subtotal: 10000, discount: 500, couponCode: 'DIWALI', shippingCost: 150, tax: 1449.15, totalAmount: 9650,
+      gatewayOffer: { name: 'Card offer', discount: 100, amountPaid: 9550, offerIds: [] },
+    } });
+    const { money } = await wf.getOrder(await staff('accounts'), String(created._id));
+    expect(money.lines[0]).toMatchObject({ price: 4500, listPrice: 5000, lineTotal: 9000 });
+    expect(money.lines[1].listPrice).toBeNull();
+    expect(money).toMatchObject({
+      itemsTotal: 10000, subtotal: 10000, discount: 500, couponCode: 'DIWALI', shipping: 150, tax: 1449.15, total: 9650,
+      gatewayOffer: { name: 'Card offer', discount: 100, amountPaid: 9550 },
+    });
+    // subtotal − discount + delivery = total (GST is inside the prices).
+    expect(money.subtotal - money.discount + money.shipping).toBe(money.total);
+  });
+
+  it('a legacy line with no saved price shows as unknown, and no items total is invented', async () => {
+    const created = await paidOrder();
+    await Order.collection.updateOne({ _id: created._id }, { $unset: { 'items.1.price': '' } });
+    const { money } = await wf.getOrder(await staff('accounts'), String(created._id));
+    expect(money.lines[1]).toMatchObject({ price: null, lineTotal: null });
+    expect(money.lines[0].lineTotal).toBe(5000);
+    expect(money.itemsTotal).toBeNull();
+    expect(money.subtotal).toBe(7000);
+  });
+});
+
 describe('in stock → supplier → proof → delivered', () => {
   it('runs the whole happy path through the real parcel machinery', async () => {
     const p = await staff('procurement');

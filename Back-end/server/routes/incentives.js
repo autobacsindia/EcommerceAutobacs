@@ -14,6 +14,7 @@ import { processOrderById, runSweep } from '../services/incentives/ledgerService
 import { teamFilter, assertCanSee, selfKey } from '../services/incentives/access.js';
 import { monthOf, isMonth } from '../services/incentives/months.js';
 import { nextSlab } from '../services/incentives/pointsMath.js';
+import { myOrders, myRatings, bonusOrderCount, excludedRatings } from '../services/incentives/myStatement.js';
 
 /**
  * Roav Points (/api/v1/incentives). Staff and admins only; who sees whose
@@ -45,6 +46,14 @@ async function personSummary(month, earnerKey) {
     points, slab: s?.slab || null, payout: (s?.payoutPaise || 0) / 100,
     next: nextSlab(points, rules.slabs),
     slabs: rules.slabs,
+    // The thresholds behind the multipliers, so a statement can say why.
+    policy: {
+      rating: rules.rating,
+      returnRateThresholdPercent: rules.returnRateThresholdPercent,
+      returnPenaltyMultiplier: rules.returnPenaltyMultiplier,
+      perOrderBonus: rules.perOrderBonus,
+      perOrderBonusMinValue: rules.perOrderBonusMinValue,
+    },
   };
 }
 const strip = ({ centi: _c, flatCenti: _f, rows: _r, ...s }) => ({ ...s, payout: (s.payoutPaise || 0) / 100 });
@@ -53,7 +62,23 @@ const strip = ({ centi: _c, flatCenti: _f, rows: _r, ...s }) => ({ ...s, payout:
 
 // GET /incentives/me?month=2026-11 — my month so far (or a closed month's snapshot)
 router.get('/me', asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await personSummary(monthParam(req.query.month), selfKey(req.user))) });
+  const month = monthParam(req.query.month);
+  const key = selfKey(req.user);
+  const [summary, bonusOrders, ratingsExcluded] = await Promise.all([
+    personSummary(month, key), bonusOrderCount(month, key), excludedRatings(month, key),
+  ]);
+  res.json({ success: true, ...summary, bonusOrders, ratingsExcluded });
+}));
+
+// GET /incentives/me/orders?month=&cursor= — my month order by order (team panel "My Roav Points").
+// Always the caller's own figures: there is no person parameter.
+router.get('/me/orders', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await myOrders(monthParam(req.query.month), selfKey(req.user), req.query)) });
+}));
+
+// GET /incentives/me/ratings?month= — my customers' stars/comments, only if the owner allows it
+router.get('/me/ratings', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await myRatings(monthParam(req.query.month), selfKey(req.user))) });
 }));
 
 // GET /incentives/me/rows?month=&cursor= — the orders behind my month

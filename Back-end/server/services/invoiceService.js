@@ -156,6 +156,7 @@ export const buildBillToLines = (order, user) => {
     isEnterprise && buyer.gstin ? `GSTIN: ${buyer.gstin}` : null,
     recipientEmail,
     billing.phone || addr.phone,
+    addr.alternatePhone ? `Alt. phone: ${addr.alternatePhone}` : null,
   ].filter(Boolean);
 
   /*
