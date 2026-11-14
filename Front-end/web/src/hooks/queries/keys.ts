@@ -393,3 +393,11 @@ export const incentiveKeys = {
   rules: () => ['incentives', 'rules'] as const,
   champion: () => ['incentives', 'champion'] as const,
 };
+
+/** Procurement's supplier price enquiries (components/procurement/enquiry.ts). */
+export const supplierEnquiryKeys = {
+  all: ['supplier-enquiries'] as const,
+  list: (params: Record<string, string>) => [...supplierEnquiryKeys.all, 'list', params] as const,
+  detail: (id: string) => [...supplierEnquiryKeys.all, 'detail', id] as const,
+  products: (q: string) => [...supplierEnquiryKeys.all, 'products', q] as const,
+};

@@ -5,7 +5,9 @@ import { AlertTriangle } from 'lucide-react';
 import { bankCode } from './api';
 import { listSuppliers, supplierKeys, type Supplier } from './suppliers';
 
-export const payLine = (s: Supplier) => (s.payment.method === 'upi'
+export const payLine = (s: Supplier) => (s.payment.method === 'none'
+  ? 'Payment details not added yet — add bank or UPI in Suppliers before paying'
+  : s.payment.method === 'upi'
   ? `UPI · ${s.payment.upiId}`
   : `${s.payment.bankName || 'Bank'} · ${s.payment.accountName} · A/c ${s.payment.accountNumber || s.payment.accountMasked} · ${bankCode(s.payment)}`);
 

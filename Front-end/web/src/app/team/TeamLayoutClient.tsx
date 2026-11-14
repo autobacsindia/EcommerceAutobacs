@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star } from 'lucide-react';
+import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Calculator, MessageSquareQuote } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -99,6 +99,14 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/past-sales', label: 'Past sales', icon: History });
   nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
   if (team === 'procurement' || team === 'accounts') nav.push({ href: '/team/suppliers', label: 'Suppliers', icon: Factory });
+  // Procurement's own tools: ask suppliers for prices on WhatsApp; work out a price.
+  if (team === 'procurement') {
+    nav.push(
+      { href: '/team/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
+      { href: '/team/price-calculator', label: 'Price calculator', icon: Calculator },
+      { href: '/team/shipping-calculator', label: 'Shipping calculator', icon: Truck },
+    );
+  }
   // GTM head only: customers' ratings of the salespeople (read only). The API refuses other heads.
   if (isHead && team === 'sales') nav.push({ href: '/team/sales-ratings', label: 'Service ratings', icon: Star });
   nav.push({ href: '/team/members', label: 'My team', icon: Users });

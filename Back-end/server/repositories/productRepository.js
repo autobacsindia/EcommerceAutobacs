@@ -131,6 +131,22 @@ class ProductRepository {
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
+  /** First image of each live product among `ids` (supplier enquiries show it to suppliers). */
+  /** Name + packed weight (shippingSize.weightKg; null = not measured yet). */
+  async findShippingWeights(ids) {
+    return Product.find({ _id: { $in: ids }, deletedAt: null })
+      .select('name shippingSize.weightKg')
+      .limit(ids.length)
+      .lean();
+  }
+
+  async findImages(ids) {
+    return Product.find({ _id: { $in: ids }, deletedAt: null })
+      .select('images')
+      .limit(ids.length)
+      .lean();
+  }
+
   /** Live products among `ids`, with what the audit and the cache purge need. */
   async findForFestivalOfferChange(ids) {
     return Product.find({ _id: { $in: ids }, deletedAt: null })

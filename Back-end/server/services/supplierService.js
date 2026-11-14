@@ -52,13 +52,6 @@ function cleanSupplier(input = {}) {
   if (gstin && !GSTIN.test(gstin)) throw fail('That GST number does not look right (15 characters, e.g. 32ABCDE1234F1Z5).', 400);
   const email = text(input.email, 160).toLowerCase();
   if (email && !EMAIL.test(email)) throw fail('Enter a valid email address, or leave it empty.', 400);
-  const payee = cleanPayee({ ...(input.payment || {}), name });
-  const payment = payee.method === 'upi'
-    ? { method: 'upi', upiId: payee.upiId, accountName: '', accountNumber: '', accountLast4: '', ifsc: '', swift: '', bankName: '' }
-    : {
-      method: 'bank', upiId: '', accountName: payee.accountName, accountNumber: payee.accountNumber,
-      accountLast4: payee.accountNumber.slice(-4), ifsc: payee.ifsc, swift: payee.swift, bankName: payee.bankName,
-    };
   return {
     name,
     nameKey: nameKeyOf(name),
@@ -68,8 +61,22 @@ function cleanSupplier(input = {}) {
     gstin,
     address: text(input.address, 500),
     notes: cleanNotes(input.notes),
-    payment,
+    payment: cleanPayment(input.payment, name),
   };
+}
+
+/** How we pay them: bank, UPI, or 'none' (not known yet — e.g. saved from a price enquiry). */
+function cleanPayment(raw, name) {
+  if (raw?.method === 'none') {
+    return { method: 'none', upiId: '', accountName: '', accountNumber: '', accountLast4: '', ifsc: '', swift: '', bankName: '' };
+  }
+  const payee = cleanPayee({ ...(raw || {}), name });
+  return payee.method === 'upi'
+    ? { method: 'upi', upiId: payee.upiId, accountName: '', accountNumber: '', accountLast4: '', ifsc: '', swift: '', bankName: '' }
+    : {
+      method: 'bank', upiId: '', accountName: payee.accountName, accountNumber: payee.accountNumber,
+      accountLast4: payee.accountNumber.slice(-4), ifsc: payee.ifsc, swift: payee.swift, bankName: payee.bankName,
+    };
 }
 
 /** Where the money goes — the fields whose change is worth a warning. */
@@ -130,7 +137,9 @@ export async function update(actor, id, input, req) {
   const clean = cleanSupplier(input);
   const set = { ...clean, updatedByName: actor.name || '' };
   if (typeof input.active === 'boolean') set.active = input.active;
-  const changedBank = destination({ ...before.payment, accountNumber: plainAccount(before) }) !== destination(clean.payment);
+  // Adding the first details to a 'none' supplier is not a change of destination (as on create).
+  const changedBank = before.payment?.method !== 'none'
+    && destination({ ...before.payment, accountNumber: plainAccount(before) }) !== destination(clean.payment);
   if (changedBank) Object.assign(set, { bankChangedAt: new Date(), bankChangedByName: actor.name || '' });
   try {
     const doc = await supplierRepository.update(id, set);
@@ -192,7 +201,7 @@ export function supplierQuery(f = {}, now = Date.now()) {
   return and(
     active == null ? null : { active },
     prefix ? { nameKey: { $gte: prefix, $lt: `${prefix}\uffff` } } : null,
-    ['bank', 'upi'].includes(f.method) ? { 'payment.method': f.method } : null,
+    ['bank', 'upi', 'none'].includes(f.method) ? { 'payment.method': f.method } : null,
     f.changed === 'recent' ? { bankChangedAt: { $gte: new Date(now - BANK_CHANGE_WARN_DAYS * 86400000) } } : null,
     searchClauses(searchWords(f.q), SUPPLIER_SEARCH),
   );
@@ -229,6 +238,9 @@ export async function payeeFor(id, now = Date.now()) {
   const s = await load(id, { account: true });
   if (s.active === false) throw fail('This supplier is marked inactive — reactivate it in Suppliers first.', 409);
   const p = s.payment || {};
+  if (p.method !== 'bank' && p.method !== 'upi') {
+    throw fail(`Add how we pay ${s.name} (bank or UPI) in Suppliers first.`, 409);
+  }
   const payee = p.method === 'upi'
     ? { name: s.name, method: 'upi', upiId: p.upiId, phone: s.phone || '' }
     : {

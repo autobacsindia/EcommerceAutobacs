@@ -12,6 +12,9 @@ const supplierRepository = {
   create: async (doc) => (await Supplier.create(doc)).toObject(),
   findById: (id, { account = false } = {}) => withAccount(Supplier.findById(id), account).lean(),
 
+  /** Name, WhatsApp number and active flag of several suppliers (supplier enquiries). */
+  findContacts: (ids) => Supplier.find({ _id: { $in: ids } }).select('name phone active').lean(),
+
   /** Save changes through the document so the account-number setter encrypts. */
   update: async (id, set) => {
     const doc = await Supplier.findById(id).select('+payment.accountNumber');

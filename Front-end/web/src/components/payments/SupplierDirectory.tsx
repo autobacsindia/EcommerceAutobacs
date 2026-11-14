@@ -45,7 +45,8 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
   const setPay = (k: keyof SupplierInput['payment']) => (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, payment: { ...v.payment, [k]: e.target.value } });
   const bank = v.payment.method === 'bank';
   const code = bankCodePayload(codeKind, v.payment[codeKind]);
-  const bankEdited = !!supplier && (
+  // Adding the first details to an "add later" supplier is not a change (the server agrees).
+  const bankEdited = !!supplier && supplier.payment.method !== 'none' && (
     v.payment.method !== supplier.payment.method || v.payment.upiId !== supplier.payment.upiId
     || v.payment.accountNumber !== supplier.payment.accountNumber
     || (bank && (code.ifsc !== supplier.payment.ifsc || code.swift !== (supplier.payment.swift || ''))));
@@ -93,10 +94,10 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
       <div>
         <span className={label}>How we pay them</span>
         <div className="flex gap-2" role="radiogroup" aria-label="Supplier payment method">
-          {(['bank', 'upi'] as const).map((m) => (
+          {(['bank', 'upi', 'none'] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={v.payment.method === m} onClick={() => setV({ ...v, payment: { ...v.payment, method: m } })}
               className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${v.payment.method === m ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700'}`}>
-              {m === 'upi' ? 'UPI' : 'Bank transfer'}
+              {m === 'upi' ? 'UPI' : m === 'none' ? 'Add later' : 'Bank transfer'}
             </button>
           ))}
         </div>
@@ -107,6 +108,8 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
             <BankCodeField kind={codeKind} value={v.payment[codeKind]} onKind={setCodeKind} onChange={(x) => setV({ ...v, payment: { ...v.payment, [codeKind]: x } })} inputClass={input} />
             <input aria-label="Bank name" className={`${input} sm:self-end`} value={v.payment.bankName} onChange={setPay('bankName')} placeholder="Bank (optional)" />
           </div>
+        ) : v.payment.method === 'none' ? (
+          <p className="mt-2 text-sm text-gray-600">Fine for asking prices. Add bank or UPI details before raising a payment to this supplier.</p>
         ) : (
           <div className="mt-2"><input aria-label="UPI ID" className={input} value={v.payment.upiId} onChange={setPay('upiId')} placeholder="UPI ID (optional — or attach their QR on each payment)" autoCapitalize="none" /></div>
         )}
@@ -176,7 +179,7 @@ const SORTS = [
   { value: 'newest', label: 'Recently added' },
   { value: 'updated', label: 'Recently edited' },
 ];
-const PAID_BY = [{ value: 'bank', label: 'Bank account' }, { value: 'upi', label: 'UPI' }];
+const PAID_BY = [{ value: 'bank', label: 'Bank account' }, { value: 'upi', label: 'UPI' }, { value: 'none', label: 'Not added yet' }];
 const STATUSES = ['active', 'inactive', 'all'] as const;
 
 /**

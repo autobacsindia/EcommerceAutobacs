@@ -186,7 +186,7 @@ it('the other teams\' menus are exactly as before the Refunds change, with the l
   expect(parts('sales', false, true)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'My orders', 'Customer decisions', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments']);
   expect(parts('sales', true, true)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'Team orders', 'Customer decisions', 'Order processing', 'Delivered', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments']);
   expect(parts('sales', false, false)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'Payments']);
-  expect(parts('procurement')).toEqual(['Team chat', 'Tasks', 'Orders', 'Delivered', 'Returns', 'Payments', 'Suppliers']);
+  expect(parts('procurement')).toEqual(['Team chat', 'Tasks', 'Orders', 'Delivered', 'Returns', 'Payments', 'Suppliers', 'Supplier enquiries', 'Price calculator', 'Shipping calculator']);
   expect(parts('operations')).toEqual(['Team chat', 'Tasks', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments']);
   expect(parts('developer')).toEqual(['Team chat', 'Tasks', 'Payments']);
   expect(parts('marketing')).toEqual(['Team chat', 'Tasks', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments']);
