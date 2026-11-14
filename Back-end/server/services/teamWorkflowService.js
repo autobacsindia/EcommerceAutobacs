@@ -64,6 +64,7 @@ import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
 import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymentRequestService.js';
 import { pinnedIds, inPinOrder } from './orderPinService.js';
 import { listDateOf } from '../utils/orderListDate.js';
+import { toPaise, fromPaise } from '../utils/money.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -225,6 +226,47 @@ export const HISTORY_LABELS = {
   eta_set: 'Expected delivery date set',
 };
 
+/** A saved rupee amount, or null when the order never stored one (old imports). */
+const savedRupees = (n) => (typeof n === 'number' && Number.isFinite(n) ? n : null);
+
+/**
+ * The order's money as it was sold, for accounts (and the admin): each line's saved
+ * unit price × quantity, then the order's own subtotal, discount, delivery, GST and
+ * total. Every figure is the order's snapshot — never the product's current price
+ * (orders are immutable financial records). Line totals are paise-exact so they add
+ * up to the subtotal; `itemsTotal` is null when any line has no saved price, so the
+ * panel never shows a sum that silently skips a line.
+ */
+function moneyOf(o) {
+  const lines = (o.items || []).map((it) => {
+    const price = savedRupees(it.price);
+    const listPrice = savedRupees(it.listPrice);
+    return {
+      itemId: idOf(it._id),
+      quantity: it.quantity,
+      price,
+      // GTM offer price: what the line listed at before the rep's discount.
+      listPrice: listPrice != null && price != null && listPrice > price ? listPrice : null,
+      lineTotal: price == null ? null : fromPaise(toPaise(price) * Number(it.quantity || 0)),
+    };
+  });
+  const priced = lines.every((l) => l.lineTotal != null);
+  const offer = o.gatewayOffer && savedRupees(o.gatewayOffer.discount) ? o.gatewayOffer : null;
+  return {
+    lines,
+    itemsTotal: priced ? fromPaise(lines.reduce((sum, l) => sum + toPaise(l.lineTotal), 0)) : null,
+    subtotal: savedRupees(o.subtotal),
+    discount: savedRupees(o.discount) || 0,
+    couponCode: o.couponCode || '',
+    shipping: savedRupees(o.shippingCost) || 0,
+    // GST is inside the prices; this is the part of the total that is GST.
+    tax: savedRupees(o.tax) || 0,
+    total: savedRupees(o.totalAmount),
+    // A bank/card offer Razorpay applied at payment: the customer paid less than the total.
+    gatewayOffer: offer ? { name: offer.name || '', discount: offer.discount, amountPaid: savedRupees(offer.amountPaid) } : null,
+  };
+}
+
 const photoPath = (orderId, shipmentId) => `/api/v1/staff/work/orders/${orderId}/parcels/${shipmentId}/photo`;
 
 /** The full order for the detail view, with the actions this person may take. */
@@ -240,6 +282,8 @@ function detail(u, o) {
     inWorkflow: !!view,
     shippingAddress: o.shippingAddress || null,
     owesGoodie: owesGoodie(o),
+    // Prices are for accounts (and the admin) — the team that reconciles the money.
+    money: can.accounts(u) ? moneyOf(o) : null,
     payment: o.payment && typeof o.payment === 'object'
       ? { razorpayPaymentId: o.payment.gatewayPaymentId || null, method: o.payment.method || null }
       : null,

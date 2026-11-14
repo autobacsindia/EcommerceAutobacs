@@ -1525,6 +1525,7 @@ class OrderRepository extends BaseRepository {
 
   /** The fields every team view of an order needs — one projection, one place. */
   static WORKFLOW_SELECT = 'orderNumber createdAt paidAt listDate status paymentStatus totalAmount subtotal items '
+    + 'shippingCost tax discount couponCode gatewayOffer '
     + 'shippingAddress user salesUser guestEmail shipments cancellations workflow payment spinReward';
 
   /**
