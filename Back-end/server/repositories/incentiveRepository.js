@@ -54,8 +54,11 @@ export const orderCardsFor = (ids) => Order.find({ _id: { $in: ids } })
  * Paid orders this person listed in [start, end), newest first — the candidates
  * for "waiting for the payment check". Index: staff_sales_by_list_date.
  */
+// `$type` restates the partial filter so the planner can use that partial index;
+// a bare equality does not imply it, and the planner fell back to the global
+// listDate index (measured: 30,000 docs examined for 50 results).
 export const paidSalesOrdersOf = (userId, start, end, limit) => Order.find({
-  salesUser: userId, paymentStatus: 'paid', listDate: { $gte: start, $lt: end },
+  salesUser: { $eq: userId, $type: 'objectId' }, paymentStatus: 'paid', listDate: { $gte: start, $lt: end },
 }).select('wpId listDate shippingAddress.fullName').sort({ listDate: -1, _id: -1 }).limit(limit).lean();
 /** Which of these orders already have any ledger row (for anyone). Index: incentive_ledger_order. */
 export const ordersWithLedger = (ids) => IncentiveLedgerEntry.distinct('order', { order: { $in: ids } });
