@@ -119,13 +119,26 @@ const connectWithRetry = async (retries = 4, interval = 2000) => {
   }
 };
 
+/**
+ * Where the in-flight ensureCriticalIndexes() pass is parked on the connection.
+ *
+ * The pass is fire-and-forget in the server (it must never block or crash startup), but
+ * it is ~150 serial createIndex/dropIndex calls. The test harness (tests/setup.js) awaits
+ * it so a suite's first transaction does not collide with it ("Unable to write to
+ * collection … due to catalog changes") — the setup reads this key off the connection
+ * rather than importing this module, so suites that never load the app don't pay for it.
+ * Symbol.for, so both sides resolve the same key without sharing an import.
+ */
+export const CRITICAL_INDEXES_READY = Symbol.for('autobacs.criticalIndexesReady');
+
 // Enhanced connection event listeners with SSL error handling
 mongoose.connection.on('connected', () => {
   console.log('✓ Mongoose connected to MongoDB');
   // Log successful connection details for monitoring
   logSuccessfulConnection(mongooseOptions);
-  // Verify critical indexes exist (idempotent — createIndex is a no-op if already present)
-  ensureCriticalIndexes();
+  // Verify critical indexes exist (idempotent — createIndex is a no-op if already present).
+  // ensureCriticalIndexes never rejects (it returns { ok: false } on error).
+  mongoose.connection[CRITICAL_INDEXES_READY] = ensureCriticalIndexes();
 });
 
 mongoose.connection.on('disconnected', () => {
