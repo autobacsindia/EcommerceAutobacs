@@ -49,6 +49,8 @@ export const PRIVATE_PREFIXES = [
   'subscription-dues',
   // Training lessons: PDFs, videos, slides (services/staffLessonService.js), one folder per lesson.
   'autobacs/lessons',
+  // Photos on procurement's supplier price enquiries (services/supplierEnquiryService.js).
+  'supplier-enquiries',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

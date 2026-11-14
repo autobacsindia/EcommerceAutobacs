@@ -15,6 +15,8 @@ class DeliveryZoneRepository {
   findByPinCode(...args) { return DeliveryZone.findByPinCode(...args); }
   getZonesSummary(...args) { return DeliveryZone.getZonesSummary(...args); }
   bulkAddPinCodes(...args) { return DeliveryZone.bulkAddPinCodes(...args); }
+  /** How many zones can quote a delivery at all (0 → no rates set up yet). */
+  countServiceable() { return DeliveryZone.countDocuments({ isServiceable: true }); }
   /** Build an unsaved zone; caller mutates then save()s it. */
   build(data) { return new DeliveryZone(data); }
 }

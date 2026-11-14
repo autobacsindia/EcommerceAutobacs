@@ -8,7 +8,8 @@ import type { CreditBalance } from './credit';
  * people who edit suppliers (procurement, admin).
  */
 export type SupplierPayment = {
-  method: 'bank' | 'upi';
+  /** 'none': saved from a price enquiry — bank or UPI must be added before paying them. */
+  method: 'bank' | 'upi' | 'none';
   upiId: string;
   accountName: string;
   /** Empty unless the viewer may edit suppliers. */

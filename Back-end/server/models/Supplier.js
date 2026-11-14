@@ -27,7 +27,9 @@ const SupplierSchema = new mongoose.Schema(
     notes: { type: String, default: '', maxlength: 6000 },
 
     payment: {
-      method: { type: String, enum: ['bank', 'upi'], required: true },
+      // 'none': saved from a price enquiry before we know how to pay them — a payment
+      // raised to them is refused until bank or UPI details are added (payeeFor).
+      method: { type: String, enum: ['bank', 'upi', 'none'], required: true },
       upiId: { type: String, default: '', maxlength: 100 },
       accountName: { type: String, default: '', maxlength: 120 },
       accountNumber: { type: String, default: '', select: false, set: encryptField },

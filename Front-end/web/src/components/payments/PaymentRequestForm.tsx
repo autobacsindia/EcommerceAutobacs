@@ -142,6 +142,7 @@ export default function PaymentRequestForm({
     e.preventDefault();
     setError('');
     if (supplier && itemIds.length === 0) { setError('Choose the item(s) this payment is for.'); return; }
+    if (picked?.payment.method === 'none') { setError(`Add how we pay ${picked.name} (bank or UPI) in Suppliers first.`); return; }
     if (!picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
     if (!supplier && !chosen) { setError('The options are still loading — try again in a moment.'); return; }
     if (setup && Number(amount) > Number(agreedTotal)) { setError(`The advance cannot be more than the agreed total (${money(Number(agreedTotal), currency)}).`); return; }
