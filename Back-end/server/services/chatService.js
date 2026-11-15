@@ -211,6 +211,7 @@ function shapeMessage(m, sender, viewer = null) {
     reactions: hide ? [] : shapeReactions(m.reactions),
     pinned: !hide && m.pinnedAt ? { by: m.pinnedByName || '', at: m.pinnedAt } : null,
     preview: !hide && m.preview ? { url: m.preview.url, title: m.preview.title, description: m.preview.description || '', site: m.preview.site || '' } : null,
+    call: m.call ? { callId: idOf(m.call.callId), media: m.call.media, outcome: m.call.outcome, durationSec: m.call.durationSec || 0 } : null,
     createdAt: m.createdAt,
     edited: !!m.editedAt,
     editedAt: m.editedAt ?? null,
@@ -806,7 +807,7 @@ function notifyMentions(channel, sender, message, people, teams, all = false) {
 
 async function insertMessage(channel, {
   kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], mentionAll = false, refs = [],
-  threadRoot = null, threadOrder, quote = null, forwardedFrom = null,
+  threadRoot = null, threadOrder, quote = null, forwardedFrom = null, call = null, push = true,
 }) {
   const at = new Date();
   // The id is chosen here so the channel's Home preview can name the message
@@ -838,6 +839,7 @@ async function insertMessage(channel, {
       ...(threadOrder ? { threadOrder } : {}),
       ...(clientId ? { clientId } : {}),
       ...(quote ? { quote } : {}),
+      ...(call ? { call } : {}),
     });
   } catch (err) {
     // Same clientId raced in from a parallel request: return the winner. The seq
@@ -878,7 +880,7 @@ async function insertMessage(channel, {
   // The first link's card, fetched after the message is out — never awaited.
   if (kind === 'user') void attachPreview(channel, doc);
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
-  void pushForMessage(channel, {
+  if (push) void pushForMessage(channel, {
     kind, text, attachments, sender, updates, mentions, mentionTeams, mentionAll, threadRoot: threadRoot?._id ?? null,
   });
   return { message, thread, duplicate: false };
@@ -1044,6 +1046,37 @@ export async function postSystemMessage(spaceKey, text, { key, orderIds, mention
     console.error(`[chat] system message to ${spaceKey} failed:`, err.message);
     return null;
   }
+}
+
+/**
+ * The line a finished person-to-person call leaves in its DM (chatCallService).
+ * Written as the caller's, keyed on the call id so a retried end writes it once.
+ * Only a missed call pops up on the callee's devices and stays unread for them;
+ * any other outcome is something both people just took part in.
+ */
+export const CALL_LINE_TEXT = Object.freeze({
+  completed: (media) => `${media === 'audio' ? 'Voice' : 'Video'} call`,
+  declined: (media) => `Declined ${media === 'audio' ? 'voice' : 'video'} call`,
+  missed: (media) => `Missed ${media === 'audio' ? 'voice' : 'video'} call`,
+  cancelled: (media) => `Missed ${media === 'audio' ? 'voice' : 'video'} call`,
+  failed: (media) => `${media === 'audio' ? 'Voice' : 'Video'} call ended`,
+});
+
+export async function postCallLine(channelId, { callId, caller, callee, media, outcome, durationSec = 0 }) {
+  const channel = await chatRepository.findChannelById(channelId);
+  if (!channel) return null;
+  const text = CALL_LINE_TEXT[outcome](media);
+  const unanswered = outcome === 'missed' || outcome === 'cancelled';
+  const { message } = await insertMessage(channel, {
+    kind: 'call',
+    sender: caller,
+    text,
+    clientId: `call:${idOf(callId)}`,
+    call: { callId, media, outcome, durationSec: Math.max(0, Math.round(durationSec)) },
+    push: unanswered,
+  });
+  if (!unanswered && callee) await markRead(callee._id ?? callee, channel._id, message.seq, 'chat');
+  return message;
 }
 
 const READ_PARTS = ['chat', 'updates', 'all'];

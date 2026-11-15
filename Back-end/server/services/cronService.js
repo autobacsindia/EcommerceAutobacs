@@ -14,6 +14,7 @@ import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '.
 import { findOriginalsMissingVariants } from './storage/variantSweep.js';
 import { storageProvider } from '../config/storage.js';
 import { postStuckDigests } from './chatStuckDigest.js';
+import { sweepCalls } from './chatCallService.js';
 import { sendOverdueReport } from './overdueReportService.js';
 import { postEtaReminders } from './parcelEtaReminders.js';
 import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
@@ -75,6 +76,7 @@ class CronService {
     this.scheduleEtaReminders();
     this.schedulePushCleanup();
     this.scheduleIncentives();
+    this.scheduleCallSweep();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -377,6 +379,20 @@ class CronService {
    * 09:30 IST, Monday–Saturday (the working week). Read-only over a bounded,
    * indexed scan, and keyed per team per day, so a double run posts once.
    */
+  scheduleCallSweep() {
+    // Team-chat calls (services/chatCallService.js): end rings nobody answered and
+    // calls whose browser went silent. Each instance also times its own rings;
+    // this catches the ones an instance was holding when it restarted.
+    // Idempotent (conditional updates), lock-guarded so replicas don't overlap.
+    const task = cron.schedule('* * * * *', () =>
+      this.withDistributedLock('cron:lock:chatCallSweep', 50, () =>
+        sweepCalls().catch(err => console.error('[CronService] Call sweep failed:', err.message))
+      ),
+      { scheduled: true, timezone: 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({ name: 'chatCallSweep', task, schedule: '* * * * *', description: 'Team chat: end unanswered and abandoned calls' });
+  }
+
   scheduleChatStuckDigest() {
     const schedule = process.env.CHAT_DIGEST_CRON || '30 9 * * 1-6';
     if (!cron.validate(schedule)) {

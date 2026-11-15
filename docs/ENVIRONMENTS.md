@@ -101,6 +101,7 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | dev seed creds | prod seed creds (set, run `seed:admin`, remove) | separate admin per DB |
 | `COMPANY_*` (`NAME`/`GSTIN`/`ADDRESS`/`CITY`/`STATE`/`PINCODE`/`PHONE`/`EMAIL`/`LOGO_URL`) | dev placeholders | real legal entity details | printed on the invoice PDF (see `config/company.js`) |
 | `INVOICE_STORE_CLOUDINARY` | `false` | `false`/`true` | optional: archive invoice PDFs to Cloudinary (email always attaches regardless) |
+| `CALL_TURN_URLS` / `CALL_TURN_SECRET` | unset (calls direct-only) | the relay's `turn:…?transport=tcp` + its `TURN_SECRET` | team-chat call relay ([infra/turn/README.md](../infra/turn/README.md)); a leaked dev secret must not mint prod relay passwords. `CALL_STUN_URLS`, `CALL_TURN_TTL_SECONDS`, `CALL_RING_SECONDS`, `CALL_STALE_SECONDS` are optional tuning (Bucket B) |
 
 **Frontend** (`.env.local` locally → Vercel in prod):
 

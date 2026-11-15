@@ -120,11 +120,24 @@ const PreviewSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// What a call line shows. A snapshot, like an order: the line never re-reads the call.
+const CallLineSchema = new mongoose.Schema(
+  {
+    callId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    media: { type: String, enum: ['audio', 'video'], required: true },
+    outcome: { type: String, enum: ['completed', 'declined', 'missed', 'cancelled', 'failed'], required: true },
+    durationSec: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
+
 const ChatMessageSchema = new mongoose.Schema(
   {
     channel: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
     seq: { type: Number, required: true },
-    kind: { type: String, enum: ['user', 'system'], default: 'user' },
+    // 'call': the line a person-to-person call leaves in its DM ("Missed video
+    // call"); `sender` is the caller, `call` holds the outcome. See ChatCall.js.
+    kind: { type: String, enum: ['user', 'system', 'call'], default: 'user' },
     /*
       Which tab of a space shows it: 'updates' = the "Order updates" tab (every
       automatic post, and a person's reply inside an order's update thread);
@@ -156,6 +169,7 @@ const ChatMessageSchema = new mongoose.Schema(
     quote: { type: QuoteSchema, default: undefined },
     forwardedFrom: { type: ForwardSchema, default: undefined },
     preview: { type: PreviewSchema, default: undefined },
+    call: { type: CallLineSchema, default: undefined },
     /*
       Pinned to the top of its conversation ("Pinned" strip), by anyone who can
       read it. `pinnedByName` is a snapshot, like a quote's author. Unset when

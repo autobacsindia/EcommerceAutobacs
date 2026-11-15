@@ -17,6 +17,11 @@ self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
   const title = data.title || 'Autobacs India';
+  // A call stopped ringing (answered, declined, missed): take its pop-up away.
+  if (data.close && data.tag) {
+    event.waitUntil(self.registration.getNotifications({ tag: data.tag }).then((list) => list.forEach((n) => n.close())));
+    return;
+  }
   event.waitUntil((async () => {
     let shown = true;
     try {
@@ -24,6 +29,8 @@ self.addEventListener('push', (event) => {
         body: data.body || '',
         tag: data.tag || undefined,
         renotify: !!data.tag, // a new message in the same chat still alerts
+        // An incoming call stays on screen until it is answered or stops ringing.
+        requireInteraction: !!data.requireInteraction,
         icon: '/web-app-manifest-192x192.png',
         badge: '/web-app-manifest-192x192.png',
         data: { url: typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/' },
