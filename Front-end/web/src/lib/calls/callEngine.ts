@@ -16,6 +16,9 @@
  *
  * Network blips: "disconnected" for a few seconds triggers an ICE restart;
  * still not connected after FAIL_AFTER_MS gives up with state "failed".
+ * A connection that never comes up at all (the other side's offer or answer
+ * never arrived, or no network path — e.g. no relay on a strict network) gives
+ * up after CONNECT_TIMEOUT_MS, instead of showing "Connecting…" for ever.
  */
 
 export type SignalKind = 'offer' | 'answer' | 'candidates';
@@ -44,6 +47,16 @@ export interface CallStatsSummary {
 export const CANDIDATE_BATCH_MS = 150;
 export const RESTART_AFTER_MS = 3_000;
 export const FAIL_AFTER_MS = 20_000;
+export const CONNECT_TIMEOUT_MS = 30_000;
+
+/**
+ * An SDP must end with CRLF; anything on the way that trims strings (our own API
+ * sanitizer did) makes Chrome refuse it as "Invalid SDP line". Put it back.
+ */
+export function withSdpLineEnd<T extends { sdp?: string } | null | undefined>(description: T): T {
+  if (!description || typeof description.sdp !== 'string' || !description.sdp || description.sdp.endsWith('\n')) return description;
+  return { ...description, sdp: `${description.sdp}\r\n` };
+}
 
 export class CallEngine {
   readonly pc: RTCPeerConnection;
@@ -57,6 +70,7 @@ export class CallEngine {
   private outboxTimer: ReturnType<typeof setTimeout> | null = null;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private failTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
   private remote: MediaStream | null = null;
   private state: EngineState = 'connecting';
   private reportedConnected = false;
@@ -83,6 +97,16 @@ export class CallEngine {
 
     // The caller sends first; the callee waits for the offer (see class note).
     if (opts.initiator) this.addLocalTracks();
+
+    this.connectTimer = setTimeout(() => {
+      this.connectTimer = null;
+      if (!this.reportedConnected) this.setState('failed');
+    }, CONNECT_TIMEOUT_MS);
+  }
+
+  /** Did this connection ever come up? (Lets the UI tell "lost" from "never connected".) */
+  get everConnected(): boolean {
+    return this.reportedConnected;
   }
 
   private addLocalTracks() {
@@ -128,7 +152,7 @@ export class CallEngine {
       return;
     }
 
-    const description = data as RTCSessionDescriptionInit;
+    const description = withSdpLineEnd(data as RTCSessionDescriptionInit);
     if (!description || (description.type !== 'offer' && description.type !== 'answer')) return;
     const collision = description.type === 'offer' && (this.makingOffer || this.pc.signalingState !== 'stable');
     this.ignoreOffer = !this.polite && collision;
@@ -165,6 +189,8 @@ export class CallEngine {
     const s = this.pc.connectionState;
     if (s === 'connected') {
       this.clearRecoveryTimers();
+      if (this.connectTimer) clearTimeout(this.connectTimer);
+      this.connectTimer = null;
       this.setState('connected');
       if (!this.reportedConnected) {
         this.reportedConnected = true;
@@ -226,6 +252,8 @@ export class CallEngine {
     if (this.state === 'closed') return;
     this.state = 'closed';
     this.clearRecoveryTimers();
+    if (this.connectTimer) clearTimeout(this.connectTimer);
+    this.connectTimer = null;
     if (this.outboxTimer) clearTimeout(this.outboxTimer);
     this.outboxTimer = null;
     this.pc.onnegotiationneeded = null;
