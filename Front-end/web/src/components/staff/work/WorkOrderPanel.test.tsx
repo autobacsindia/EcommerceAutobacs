@@ -11,6 +11,12 @@ jest.mock('@/lib/http/tokenManager', () => ({
   tokenManager: { ensureCsrfToken: jest.fn().mockResolvedValue(undefined), getHeaders: () => ({ 'Content-Type': 'application/json', 'X-XSRF-TOKEN': 't' }) },
 }));
 
+// The rating box has its own tests (components/orderRating); here only where it mounts.
+jest.mock('@/components/orderRating/PanelOrderRating', () => ({
+  __esModule: true,
+  default: ({ orderId }: { orderId: string }) => <div data-testid="order-rating">rating box {orderId}</div>,
+}));
+
 const base: WorkOrder = {
   id: 'o1', orderNumber: 'ORD1', createdAt: '2026-10-06T05:00:00Z', enteredAt: '2026-10-06T05:00:00Z',
   status: 'processing', paymentStatus: 'paid', totalAmount: 6000, source: 'website', soldBy: 'Website',
@@ -474,5 +480,24 @@ describe('WorkOrderPanel', () => {
     renderPanel();
     await screen.findByText(/Parcel 1/);
     expect(screen.queryByRole('button', { name: /Undo delivered/ })).toBeNull();
+  });
+
+  describe('customer rating ("Get rating link")', () => {
+    it('shows on a delivered sales order', async () => {
+      get.mockResolvedValue({ success: true, order: { ...base, source: 'sales', soldBy: 'Nevin', status: 'delivered' } });
+      renderPanel();
+      expect(await screen.findByTestId('order-rating')).toHaveTextContent('rating box o1');
+    });
+
+    it.each([
+      ['a website order', { source: 'website' as const, status: 'delivered' }],
+      ['a sales order not delivered yet', { source: 'sales' as const, status: 'shipped' }],
+      ['a cancelled sales order', { source: 'sales' as const, status: 'cancelled' }],
+    ])('is not mounted (no rating request) on %s', async (_label, extra) => {
+      get.mockResolvedValue({ success: true, order: { ...base, ...extra } });
+      renderPanel();
+      await screen.findByRole('button', { name: 'Copy order number ORD1' });
+      expect(screen.queryByTestId('order-rating')).toBeNull();
+    });
   });
 });

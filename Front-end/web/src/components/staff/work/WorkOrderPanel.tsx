@@ -21,6 +21,7 @@ import SaleHistory from './SaleHistory';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 import OrderJourney from '@/components/orders/OrderJourney';
 import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
+import PanelOrderRating from '@/components/orderRating/PanelOrderRating';
 import FilePicker from '@/components/payments/FilePicker';
 import { money } from '@/components/payments/api';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
@@ -455,6 +456,14 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       {o.canSeeCustomerBank && <CustomerBankCard kind="order" id={o.id} />}
 
       {o.canRaiseReturn && <div><RaiseReturnButton orderId={o.id} /></div>}
+
+      {/*
+        Customer rating of our team: the seller's "Get rating link" for a delivered
+        offline order, or the rating itself for heads/admins. Mounted only for
+        delivered sales orders, so the list never fetches it per row — only this
+        expanded card does, once. The server applies the real rules.
+      */}
+      {o.source === 'sales' && o.status === 'delivered' && <PanelOrderRating orderId={o.id} />}
 
       {/* Refunds */}
       {o.cancellations.length > 0 && (
