@@ -53,6 +53,7 @@ import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { parcelProofs, proofFilePath, LEGACY_PROOF_ID } from '../utils/shipmentView.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
+import orderTrackingService, { OTHER_CARRIER_CODE } from './orderTrackingService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
 import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
@@ -311,6 +312,10 @@ function detail(u, o) {
       sequence: s.sequence,
       status: s.status,
       courier: s.carrier?.name || '',
+      // The "Delivery partner" dropdown's code ('' for a courier typed before it existed).
+      courierCode: s.carrier?.code || '',
+      // What the link icon opens: always an http(s) URL or null (see trackingLinkFor).
+      courierUrl: orderTrackingService.trackingLinkFor(s.carrier, s.trackingNumber),
       trackingNumber: s.trackingNumber || '',
       shippedAt: s.shippedAt || null,
       deliveredAt: s.deliveredAt || null,
@@ -745,7 +750,7 @@ export async function undoDecision(actor, orderId, itemId, req) {
  * and asked to refresh. A parcel still on the single legacy `proofPhoto` has it
  * folded into the list here.
  */
-export async function editShipment(actor, orderId, shipmentId, { courierName, trackingNumber, removePhotoIds } = {}, files = [], req) {
+export async function editShipment(actor, orderId, shipmentId, { courierCode, courierName, courierUrl, trackingNumber, removePhotoIds } = {}, files = [], req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can change dispatch details.', 403);
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
@@ -759,17 +764,33 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
   const changes = [];
   let courierChanged = false;
   let trackingChanged = false;
-  if (courierName != null) {
+  const newTracking = trackingNumber != null ? String(trackingNumber).trim().slice(0, 80) : (parcel.trackingNumber || '');
+  const code = courierCode != null ? String(courierCode).trim() : '';
+  if (code) {
+    // From the "Delivery partner" dropdown: the courier's name, code and tracking link
+    // are written together, so the link always belongs to this courier + number.
+    const next = teamCarrier({ courierCode: code, courierName, courierUrl }, newTracking);
+    const prev = parcel.carrier || {};
+    const nameChanged = next.name !== (prev.name || '');
+    const codeChanged = next.code !== (prev.code || '');
+    const urlChanged = (next.trackingUrl || '') !== (prev.trackingUrl || '');
+    if (nameChanged || codeChanged) changes.push(`courier ${next.name}`);
+    else if (urlChanged && next.code === OTHER_CARRIER_CODE) changes.push('courier tracking page');
+    if (nameChanged) set['shipments.$.carrier.name'] = next.name;
+    if (codeChanged) set['shipments.$.carrier.code'] = next.code;
+    if (urlChanged) {
+      if (next.trackingUrl) set['shipments.$.carrier.trackingUrl'] = next.trackingUrl;
+      else unset['shipments.$.carrier.trackingUrl'] = '';
+    }
+    courierChanged = nameChanged || codeChanged || urlChanged;
+  } else if (courierName != null) {
     const c = String(courierName).trim().slice(0, 80);
     if (c !== (parcel.carrier?.name || '')) {
       set['shipments.$.carrier.name'] = c; changes.push(`courier ${c || '—'}`); courierChanged = true;
     }
   }
-  if (trackingNumber != null) {
-    const t = String(trackingNumber).trim().slice(0, 80);
-    if (t !== (parcel.trackingNumber || '')) {
-      set['shipments.$.trackingNumber'] = t; changes.push(`tracking ${t || '—'}`); trackingChanged = true;
-    }
+  if (newTracking !== (parcel.trackingNumber || '')) {
+    set['shipments.$.trackingNumber'] = newTracking; changes.push(`tracking ${newTracking || '—'}`); trackingChanged = true;
   }
   /*
     The courier's tracking link was built for the OLD courier + AWB. Left alone it sends
@@ -779,7 +800,9 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
   */
   const oldUrl = parcel.carrier?.trackingUrl || '';
   const sameCourier = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
-  if (courierChanged && !sameCourier(set['shipments.$.carrier.name'], parcel.carrier?.name)) {
+  if (code) {
+    // Already rebuilt above from the chosen partner and the (new) number.
+  } else if (courierChanged && !sameCourier(set['shipments.$.carrier.name'], parcel.carrier?.name)) {
     if (oldUrl) unset['shipments.$.carrier.trackingUrl'] = '';
     if (parcel.carrier?.code) unset['shipments.$.carrier.code'] = '';
   } else if (trackingChanged && oldUrl) {
@@ -833,6 +856,27 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
   }
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_dispatch_edited', shipmentId: String(shipmentId), fields: changes });
   return getOrder(actor, orderId);
+}
+
+/**
+ * The courier staff chose for a parcel, as the `carrier` subdocument to store.
+ * With a code (the "Delivery partner" dropdown): a built-in courier's own name and
+ * tracking page, or for "Other" the typed name and optional http(s) page — resolved
+ * by the same orderTrackingService the admin order page uses. Without one (an older
+ * client): the typed name only, as before. Null when there is no courier at all.
+ */
+function teamCarrier({ courierCode, courierName, courierUrl } = {}, trackingNumber) {
+  const code = String(courierCode || '').trim();
+  if (!code) {
+    const name = String(courierName || '').trim().slice(0, 80);
+    return name ? { name } : null;
+  }
+  if (!orderTrackingService.getCarrier(code)) throw fail('Choose a delivery partner from the list.', 400);
+  const { carrier, error } = orderTrackingService.resolveCarrier(code, courierName, courierUrl);
+  if (!carrier) {
+    throw fail(/required/i.test(error) ? 'Enter the delivery partner\'s name.' : error, 400);
+  }
+  return orderTrackingService.buildCarrierSubdoc(carrier, trackingNumber);
 }
 
 function mayEditShipment(u, parcel) {
@@ -938,13 +982,13 @@ function parcelLines(o, stages, itemIds, refusal) {
  * rolls the order status up), and record it. The proofs are removed again if the
  * parcel cannot be recorded.
  */
-async function createTeamParcel(actor, orderId, { lines, proofs = [], courier, tracking, includesReward, notes, action }) {
+async function createTeamParcel(actor, orderId, { lines, proofs = [], carrier, tracking, includesReward, notes, action }) {
   const stored = await storeProofs(proofs, orderId, actor);
 
   const result = await shipmentService.createShipment(orderId, {
     lines,
     trackingNumber: tracking || undefined,
-    carrier: courier ? { name: courier } : undefined,
+    carrier: carrier || undefined,
     proofPhotos: stored,
     includesReward,
     notes,
@@ -956,7 +1000,7 @@ async function createTeamParcel(actor, orderId, { lines, proofs = [], courier, t
   }
 
   await orderRepository.pushWorkflowEvent(orderId, event(actor, action, {
-    note: [courier, tracking].filter(Boolean).join(' · ') || 'Photo only',
+    note: [carrier?.name, tracking].filter(Boolean).join(' · ') || 'Photo only',
   }));
   return result.shipment;
 }
@@ -966,8 +1010,10 @@ async function createTeamParcel(actor, orderId, { lines, proofs = [], courier, t
  * tracking when known). Creates a parcel for the chosen items through
  * shipmentService, which emails the customer exactly as an admin shipment does.
  */
-export async function shipWithProof(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, files = [], req) {
+export async function shipWithProof(actor, orderId, { itemIds = [], courierCode, courierName, courierUrl, trackingNumber } = {}, files = [], req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can upload shipping proof.', 403);
+  const tracking = String(trackingNumber || '').trim().slice(0, 80);
+  const carrier = teamCarrier({ courierCode, courierName, courierUrl }, tracking);
   const proofs = checkProofs(files);
   if (!proofs.length) throw fail('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.', 400);
 
@@ -982,8 +1028,8 @@ export async function shipWithProof(actor, orderId, { itemIds = [], courierName,
   const shipment = await createTeamParcel(actor, orderId, {
     lines,
     proofs,
-    courier: String(courierName || '').trim().slice(0, 80),
-    tracking: String(trackingNumber || '').trim().slice(0, 80),
+    carrier,
+    tracking,
     // Drop-shipped by a supplier: any free gift owed on the order is NOT in this box.
     // The admin sends it separately, so it is never marked as shipped by mistake.
     includesReward: false,
@@ -1025,11 +1071,11 @@ const OWN_STOCK_STAGES = new Set([STAGE.OWN_STOCK]);
  * A double press or two people at once create ONE parcel: shipmentService's
  * compare-and-set re-validates against what is still owed, and the loser is refused.
  */
-export async function dispatchOwnStock(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, files = [], req) {
+export async function dispatchOwnStock(actor, orderId, { itemIds = [], courierCode, courierName, courierUrl, trackingNumber } = {}, files = [], req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can dispatch from our warehouse.', 403);
-  const courier = String(courierName || '').trim().slice(0, 80);
   const tracking = String(trackingNumber || '').trim().slice(0, 80);
-  if (!courier) throw fail('Enter the courier name.', 400);
+  const carrier = teamCarrier({ courierCode, courierName, courierUrl }, tracking);
+  if (!carrier?.name) throw fail('Enter the courier name.', 400);
   if (!tracking) throw fail('Enter the tracking number.', 400);
   const proofs = checkProofs(files); // optional here
 
@@ -1044,7 +1090,7 @@ export async function dispatchOwnStock(actor, orderId, { itemIds = [], courierNa
   const shipment = await createTeamParcel(actor, orderId, {
     lines,
     proofs,
-    courier,
+    carrier,
     tracking,
     includesReward: owesGoodie(o) && !rewardShipped(o),
     notes: `Dispatched from our warehouse in the team panel by ${actor.name}`,

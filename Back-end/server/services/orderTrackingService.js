@@ -12,84 +12,125 @@ import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpd
  */
 const OTHER_CARRIER_CODE = 'OTHER';
 
+/** Permissive AWB shape for couriers whose numbers we have no pattern for. */
+const LOOSE_AWB_FORMAT = /^[A-Za-z0-9][A-Za-z0-9-/]{3,39}$/;
+
 /**
- * Supported carriers with their configurations
+ * Supported carriers — the ONE courier list for the whole site (the admin order
+ * page and the team panel's "Delivery partner" dropdown both read it through
+ * GET /orders/tracking/carriers).
+ *
+ * `trackingUrl` is the courier's tracking page. Where `{id}` appears in it, the
+ * tracking number is put there (URL-encoded) and the link opens that parcel. Where
+ * it does not, the link opens the plain tracking page and staff paste the copied
+ * number in — today's VRL / Delhivery / DTDC / Trackon / Shree Tirupati pages do
+ * not take the number in the address. If one starts to, add `{id}` to its link.
+ *
+ * `deliveryPartner: true` puts the courier in the team panel's dropdown, in the
+ * order listed here.
  */
 const CARRIERS = {
+  VRL: {
+    name: 'VRL',
+    code: 'VRL',
+    deliveryPartner: true,
+    trackingUrl: 'https://www.vrlgroup.in/Tracking/TrackShipment',
+    trackingNumberFormat: LOOSE_AWB_FORMAT,
+    estimatedDeliveryDays: null
+  },
   FEDEX: {
     name: 'FedEx',
     code: 'FEDEX',
-    trackingUrl: 'https://www.fedex.com/fedextrack/?trknbr=',
+    trackingUrl: 'https://www.fedex.com/fedextrack/?trknbr={id}',
     trackingNumberFormat: /^[0-9]{12,14}$/,
     estimatedDeliveryDays: 3
   },
   UPS: {
     name: 'UPS',
     code: 'UPS',
-    trackingUrl: 'https://www.ups.com/track?tracknum=',
+    trackingUrl: 'https://www.ups.com/track?tracknum={id}',
     trackingNumberFormat: /^1Z[A-Z0-9]{16}$/,
     estimatedDeliveryDays: 3
   },
   DHL: {
     name: 'DHL',
     code: 'DHL',
-    trackingUrl: 'https://www.dhl.com/en/express/tracking.html?AWB=',
+    trackingUrl: 'https://www.dhl.com/en/express/tracking.html?AWB={id}',
     trackingNumberFormat: /^[0-9]{10,11}$/,
     estimatedDeliveryDays: 4
   },
   USPS: {
     name: 'USPS',
     code: 'USPS',
-    trackingUrl: 'https://tools.usps.com/go/TrackConfirmAction?tLabels=',
+    trackingUrl: 'https://tools.usps.com/go/TrackConfirmAction?tLabels={id}',
     trackingNumberFormat: /^[0-9]{20,22}$/,
     estimatedDeliveryDays: 5
   },
   INDIA_POST: {
     name: 'India Post',
     code: 'INDIA_POST',
-    trackingUrl: 'https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx?tracknumber=',
+    trackingUrl: 'https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx?tracknumber={id}',
     trackingNumberFormat: /^[A-Z]{2}[0-9]{9}[A-Z]{2}$/,
     estimatedDeliveryDays: 7
   },
   DELHIVERY: {
     name: 'Delhivery',
     code: 'DELHIVERY',
-    trackingUrl: 'https://www.delhivery.com/track/package/',
+    deliveryPartner: true,
+    trackingUrl: 'https://www.delhivery.com/tracking',
     trackingNumberFormat: /^[0-9]{12,15}$/,
     estimatedDeliveryDays: 2
   },
   BLUE_DART: {
     name: 'Blue Dart',
     code: 'BLUE_DART',
-    trackingUrl: 'https://www.bluedart.com/tracking?trackFor=',
+    trackingUrl: 'https://www.bluedart.com/tracking?trackFor={id}',
     trackingNumberFormat: /^[0-9]{10,12}$/,
     estimatedDeliveryDays: 2
   },
   DTDC: {
     name: 'DTDC',
     code: 'DTDC',
-    trackingUrl: 'https://www.dtdc.in/tracking.asp?tracking_no=',
+    deliveryPartner: true,
+    trackingUrl: 'https://www.dtdc.com/track-your-shipment/',
     trackingNumberFormat: /^[A-Z0-9]{10,15}$/,
     estimatedDeliveryDays: 3
+  },
+  TRACKON: {
+    name: 'Trackon',
+    code: 'TRACKON',
+    deliveryPartner: true,
+    trackingUrl: 'https://www.trackon.in/',
+    trackingNumberFormat: LOOSE_AWB_FORMAT,
+    estimatedDeliveryDays: null
+  },
+  SHREE_TIRUPATI: {
+    name: 'Shree Tirupati Courier',
+    code: 'SHREE_TIRUPATI',
+    deliveryPartner: true,
+    trackingUrl: 'https://www.shreetirupaticourier.net/',
+    trackingNumberFormat: LOOSE_AWB_FORMAT,
+    estimatedDeliveryDays: null
   },
   ECOM_EXPRESS: {
     name: 'Ecom Express',
     code: 'ECOM_EXPRESS',
-    trackingUrl: 'https://ecomexpress.in/tracking/?awb_field=',
+    trackingUrl: 'https://ecomexpress.in/tracking/?awb_field={id}',
     trackingNumberFormat: /^[0-9]{12,14}$/,
     estimatedDeliveryDays: 3
   },
-  // Escape hatch for regional/one-off couriers we don't model. The admin types
-  // the courier's name; we have no tracking-URL pattern for it, so the order
-  // carries the number only and the shipped email omits the "track" link.
+  // Escape hatch for regional/one-off couriers we don't model. Staff type the
+  // courier's name and, optionally, its tracking page (http/https only); with no
+  // page the order carries the number only and the shipped email omits the link.
   // Listed last on purpose — getSupportedCarriers preserves this order.
   OTHER: {
     name: 'Other courier',
     code: OTHER_CARRIER_CODE,
     custom: true,
+    deliveryPartner: true,
     trackingUrl: null,
     // Permissive: third-party AWBs vary wildly (letters, digits, dashes).
-    trackingNumberFormat: /^[A-Za-z0-9][A-Za-z0-9-/]{3,39}$/,
+    trackingNumberFormat: LOOSE_AWB_FORMAT,
     // No SLA to promise for an unknown courier — no ETA is derived.
     estimatedDeliveryDays: null
   }
@@ -97,6 +138,44 @@ const CARRIERS = {
 
 /** Max length accepted for an admin-typed courier name. */
 const MAX_CUSTOM_CARRIER_NAME = 60;
+
+/** Max length accepted for a staff-typed courier tracking page. */
+const MAX_CUSTOM_CARRIER_URL = 500;
+
+/** Codes offered in the team panel's "Delivery partner" dropdown, in order. */
+const DELIVERY_PARTNER_CODES = Object.values(CARRIERS).filter((c) => c.deliveryPartner).map((c) => c.code);
+
+/**
+ * The URL, normalised, when it is an absolute http(s) link — otherwise null.
+ * Everything that becomes an <a href> or an email link passes through here, so
+ * `javascript:`, `data:`, `vbscript:`, protocol-relative and credentialed URLs
+ * never get stored or rendered.
+ */
+function safeHttpUrl(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw || raw.length > MAX_CUSTOM_CARRIER_URL) return null;
+  let url;
+  try { url = new URL(raw); } catch { return null; }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  if (url.username || url.password || !url.hostname) return null;
+  return url.toString();
+}
+
+/** A courier's tracking link for one parcel: `{id}` filled in, else the plain page. */
+function carrierTrackingLink(carrier, trackingNumber) {
+  const page = carrier?.trackingUrl;
+  if (!page) return null;
+  if (!page.includes('{id}')) return page;
+  const id = String(trackingNumber || '').trim();
+  return id ? page.split('{id}').join(encodeURIComponent(id)) : null;
+}
+
+/** A built-in courier whose name matches free text typed before the dropdown existed. */
+function carrierByName(name) {
+  const n = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!n) return null;
+  return Object.values(CARRIERS).find((c) => !c.custom && c.name.toLowerCase() === n) || null;
+}
 
 /**
  * Tracking event status codes
@@ -488,7 +567,9 @@ class OrderTrackingService {
       code: carrier.code,
       estimatedDeliveryDays: carrier.estimatedDeliveryDays,
       // Tells the admin UI to show a "courier name" input for this option.
-      ...(carrier.custom ? { custom: true } : {})
+      ...(carrier.custom ? { custom: true } : {}),
+      // In the team panel's "Delivery partner" dropdown.
+      ...(carrier.deliveryPartner ? { deliveryPartner: true } : {})
     }));
   }
 
@@ -508,9 +589,10 @@ class OrderTrackingService {
    *
    * @param {string} carrierCode - Carrier code
    * @param {string} [carrierName] - Courier name, required when code is OTHER
+   * @param {string} [carrierUrl] - OTHER only: the courier's tracking page (http/https)
    * @returns {{carrier: Object|null, error: string|null}}
    */
-  resolveCarrier(carrierCode, carrierName) {
+  resolveCarrier(carrierCode, carrierName, carrierUrl) {
     const carrier = this.getCarrier(carrierCode);
     if (!carrier) {
       return { carrier: null, error: `Unknown carrier code: ${carrierCode}` };
@@ -531,8 +613,19 @@ class OrderTrackingService {
       };
     }
 
-    // Same shape as a built-in carrier, with the admin's name in place of ours.
-    return { carrier: { ...carrier, name }, error: null };
+    // Optional tracking page. Stored as typed (no `{id}` filling): it is staff
+    // input, and anything but an absolute http(s) link is refused outright.
+    const rawUrl = typeof carrierUrl === 'string' ? carrierUrl.trim() : '';
+    let customUrl = null;
+    if (rawUrl) {
+      customUrl = safeHttpUrl(rawUrl);
+      if (!customUrl) {
+        return { carrier: null, error: 'Tracking page must be a web link starting with http:// or https://' };
+      }
+    }
+
+    // Same shape as a built-in carrier, with the staff's name (and page) in place of ours.
+    return { carrier: { ...carrier, name, customUrl }, error: null };
   }
 
   /**
@@ -545,11 +638,31 @@ class OrderTrackingService {
    * @returns {{name: string, code: string, trackingUrl?: string}}
    */
   buildCarrierSubdoc(carrier, trackingNumber) {
+    const link = carrier.custom ? carrier.customUrl || null : carrierTrackingLink(carrier, trackingNumber);
     return {
       name: carrier.name,
       code: carrier.code,
-      ...(carrier.trackingUrl ? { trackingUrl: carrier.trackingUrl + trackingNumber } : {})
+      ...(link ? { trackingUrl: link } : {})
     };
+  }
+
+  /**
+   * The link the staff panel's link icon opens for a stored parcel/order carrier.
+   * Stored link first (only if it is a safe http(s) URL); else the built-in courier
+   * by code; else — parcels recorded before the dropdown, where the courier was
+   * typed — a built-in courier whose name matches. Null when there is none.
+   *
+   * @param {{name?: string, code?: string, trackingUrl?: string}} [carrier]
+   * @param {string} [trackingNumber]
+   * @returns {string|null}
+   */
+  trackingLinkFor(carrier, trackingNumber) {
+    const stored = safeHttpUrl(carrier?.trackingUrl);
+    if (stored) return stored;
+    const known = (carrier?.code && CARRIERS[carrier.code] && !CARRIERS[carrier.code].custom)
+      ? CARRIERS[carrier.code]
+      : carrierByName(carrier?.name);
+    return known ? carrierTrackingLink(known, trackingNumber) : null;
   }
 
   /**
@@ -703,6 +816,9 @@ export {
   CARRIERS,
   OTHER_CARRIER_CODE,
   MAX_CUSTOM_CARRIER_NAME,
+  MAX_CUSTOM_CARRIER_URL,
+  DELIVERY_PARTNER_CODES,
+  safeHttpUrl,
   TRACKING_STATUS,
   STATUS_DESCRIPTIONS
 };

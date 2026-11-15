@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
 import Link from 'next/link';
+import CopyId from '@/components/ui/CopyId';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
@@ -581,10 +582,10 @@ export default function OrderDetailPage() {
                 courier has none, and the old /orders/[id]/tracking fallback is
                 not a route (404). The number + carrier still show below. */}
             {!isSplitOrder && order.trackingNumber && order.carrier?.trackingUrl && (
-              <Link href={order.carrier.trackingUrl} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-white rounded-full font-display font-bold text-[15px] transition-colors">
+              <a href={order.carrier.trackingUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-white rounded-full font-display font-bold text-[15px] transition-colors">
                 <Truck className="h-4 w-4" />
                 Track Package
-              </Link>
+              </a>
             )}
             {canReturnOrder(order) && (
               <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-700 hover:bg-orange-500/10 rounded-full font-display font-bold text-[15px] transition-colors">
@@ -632,7 +633,7 @@ export default function OrderDetailPage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-ink-muted font-display mb-1">Tracking Number</p>
-                <p className="font-mono text-ink/70 font-bold">{order.trackingNumber}</p>
+                <p className="flex items-center gap-1 font-mono text-ink/70 font-bold">{order.trackingNumber}<CopyId value={order.trackingNumber} label="Tracking number" /></p>
               </div>
               {order.carrier && (
                 <div>

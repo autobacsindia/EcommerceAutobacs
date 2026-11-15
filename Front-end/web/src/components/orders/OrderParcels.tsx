@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { Package, Truck, CheckCircle2, Clock } from 'lucide-react';
+import TrackingIdDisplay from '@/components/tracking/TrackingIdDisplay';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatLongDateIST } from '@/lib/datetime';
@@ -170,17 +170,8 @@ export default function OrderParcels({ orderId, itemNames, rewardName, cardClass
 
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-muted">
                 {shipment.trackingNumber && (
-                  <span>
-                    Tracking: {shipment.carrier?.trackingUrl ? (
-                      <Link href={shipment.carrier.trackingUrl} target="_blank"
-                            className="font-mono text-gold hover:underline">
-                        {shipment.trackingNumber}
-                      </Link>
-                    ) : (
-                      <span className="font-mono text-ink/70">{shipment.trackingNumber}</span>
-                    )}
-                    {shipment.carrier?.name ? ` · ${shipment.carrier.name}` : ''}
-                  </span>
+                  <TrackingIdDisplay className="text-ink/70" partner={shipment.carrier?.name}
+                    trackingNumber={shipment.trackingNumber} url={shipment.carrier?.trackingUrl} />
                 )}
                 {shipment.deliveredAt
                   ? <span className="text-green-700">Delivered {formatLongDateIST(shipment.deliveredAt)}</span>

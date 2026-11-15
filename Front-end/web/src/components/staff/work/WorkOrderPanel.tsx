@@ -15,6 +15,11 @@ import LineSupplierPayment, { OrderOtherPayments, useOrderSupplierPayments } fro
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import CopyId from '@/components/ui/CopyId';
+import DeliveryPartnerField from '@/components/tracking/DeliveryPartnerField';
+import TrackingIdDisplay from '@/components/tracking/TrackingIdDisplay';
+import {
+  EMPTY_PARTNER, appendPartner, partnerFromParcel, partnerProblem, useDeliveryPartners, type DeliveryPartnerValue,
+} from '@/lib/deliveryPartners';
 import ParcelEta from './ParcelEta';
 import { LinePrice, OrderMoneySummary } from './OrderMoney';
 import SaleHistory from './SaleHistory';
@@ -107,7 +112,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
     for (const id of d.itemIds) heldBack.set(id, `Supplier balance ${money(d.balanceDue, d.currency)} not paid yet`);
   }
   const [editParcel, setEditParcel] = useState<string | null>(null);
-  const [parcelFix, setParcelFix] = useState({ courier: '', tracking: '' });
+  const [parcelFix, setParcelFix] = useState<{ partner: DeliveryPartnerValue; tracking: string }>({ partner: EMPTY_PARTNER, tracking: '' });
+  const partners = useDeliveryPartners();
+  const partnerOptions = partners.data ?? [];
   const [parcelFiles, setParcelFiles] = useState<File[]>([]);
   const [removeProofs, setRemoveProofs] = useState<string[]>([]);
   // Operations: the courier step being added to one parcel.
@@ -141,7 +148,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const editParcelMutation = useMutation({
     mutationFn: async (shipmentId: string) => {
       const form = new FormData();
-      form.append('courierName', parcelFix.courier.trim());
+      // No partner chosen ("Not known yet") clears the courier, as the old free-text box did.
+      if (parcelFix.partner.code) appendPartner(form, parcelFix.partner, partnerOptions);
+      else form.append('courierName', '');
       form.append('trackingNumber', parcelFix.tracking.trim());
       for (const f of parcelFiles) form.append('photo', f, f.name);
       if (removeProofs.length) form.append('removePhotoIds', JSON.stringify(removeProofs));
@@ -339,7 +348,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                   <p className="font-medium text-gray-900">
                     Parcel {p.sequence} · <span className={p.status === 'delivered' ? 'text-green-700' : p.status === 'lost' ? 'text-red-700' : 'text-sky-700'}>{p.status === 'shipped' ? 'In transit' : p.status[0].toUpperCase() + p.status.slice(1)}</span>
                   </p>
-                  <p className="text-gray-700">{[p.courier, p.trackingNumber && `Tracking ${p.trackingNumber}`].filter(Boolean).join(' · ') || 'No tracking details'}</p>
+                  <TrackingIdDisplay className="text-gray-700" partner={p.courier} trackingNumber={p.trackingNumber} url={p.courierUrl} />
                   <p className="text-xs text-gray-500">{p.items.map((i) => `${i.name} × ${i.quantity}`).join(', ')}</p>
                   <p className="text-xs text-gray-500">
                     {p.shippedAt && `Shipped ${formatDateTimeIST(p.shippedAt)}`}{p.deliveredAt && ` · Delivered ${formatDateTimeIST(p.deliveredAt)}`}
@@ -364,8 +373,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                       </button>
                     )}
                     {p.canEdit && editParcel !== p.id && (
-                      <button type="button" className={secondary} title="While the parcel is in transit"
-                        onClick={() => { setEditParcel(p.id); setParcelFix({ courier: p.courier, tracking: p.trackingNumber }); setParcelFiles([]); setRemoveProofs([]); }}>
+                      // Waits for the partner list, so an older typed courier pre-fills as its partner.
+                      <button type="button" className={secondary} title="While the parcel is in transit" disabled={partners.isLoading}
+                        onClick={() => { setEditParcel(p.id); setParcelFix({ partner: partnerFromParcel(p, partnerOptions), tracking: p.trackingNumber }); setParcelFiles([]); setRemoveProofs([]); }}>
                         <Pencil className="h-3.5 w-3.5" /> Edit dispatch details
                       </button>
                     )}
@@ -417,10 +427,19 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                   )}
                   {editParcel === p.id && (
                     <form className="space-y-2 pt-2" aria-label={`Edit dispatch details for parcel ${p.sequence}`}
-                      onSubmit={(e) => { e.preventDefault(); editParcelMutation.mutate(p.id); }}>
-                      <div className="flex flex-wrap gap-2">
-                        <input className={`${input} max-w-[12rem]`} aria-label="Courier" maxLength={80} value={parcelFix.courier} onChange={(e) => setParcelFix({ ...parcelFix, courier: e.target.value })} placeholder="Courier" />
-                        <input className={`${input} max-w-[12rem]`} aria-label="Tracking number" maxLength={80} value={parcelFix.tracking} onChange={(e) => setParcelFix({ ...parcelFix, tracking: e.target.value })} placeholder="Tracking number" />
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const problem = partnerProblem(parcelFix.partner);
+                        if (problem) { setError(problem); return; }
+                        editParcelMutation.mutate(p.id);
+                      }}>
+                      <div className="grid max-w-md gap-2 sm:grid-cols-2">
+                        <DeliveryPartnerField value={parcelFix.partner} onChange={(partner) => setParcelFix({ ...parcelFix, partner })}
+                          options={partnerOptions} loading={partners.isLoading} inputClassName={input} />
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-gray-700">Tracking number</span>
+                          <input className={input} maxLength={80} value={parcelFix.tracking} onChange={(e) => setParcelFix({ ...parcelFix, tracking: e.target.value })} />
+                        </label>
                       </div>
                       {photos.length > 0 && (
                         <fieldset className="space-y-1">
@@ -517,24 +536,27 @@ function ShipForm({ order, held, onShipped, onError }: { order: WorkOrder; held:
   const waiting = offered.filter((l) => held.has(l.itemId));
   const [selected, setSelected] = useState<string[]>(shippable.map((l) => l.itemId));
   const [files, setFiles] = useState<File[]>([]);
-  const [courier, setCourier] = useState('');
+  const [partner, setPartner] = useState<DeliveryPartnerValue>(EMPTY_PARTNER);
   const [tracking, setTracking] = useState('');
   const [busy, setBusy] = useState(false);
+  const partners = useDeliveryPartners();
   const allChosen = shippable.every((l) => selected.includes(l.itemId));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!files.length) { onError('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.'); return; }
     if (!selected.length) { onError('Choose at least one item in this parcel.'); return; }
+    const problem = partnerProblem(partner);
+    if (problem) { onError(problem); return; }
     setBusy(true);
     try {
       const form = new FormData();
       for (const f of files) form.append('photo', f, f.name); // big photos were shrunk as they were added
       form.append('itemIds', JSON.stringify(selected));
-      if (courier.trim()) form.append('courierName', courier.trim());
+      appendPartner(form, partner, partners.data ?? []);
       if (tracking.trim()) form.append('trackingNumber', tracking.trim());
       onShipped(await postForm<OrderResponse>(`/staff/work/orders/${order.id}/ship`, form));
-      setFiles([]); setCourier(''); setTracking('');
+      setFiles([]); setPartner(EMPTY_PARTNER); setTracking('');
     } catch (err) {
       onError(errorMessage(err, 'Could not upload the proof. Please try again.'));
     } finally {
@@ -589,10 +611,8 @@ function ShipForm({ order, held, onShipped, onError }: { order: WorkOrder; held:
           label="Add photo or PDF" inputLabel="Dispatch photo" icon={<Camera className="h-4 w-4" />} onError={onError} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-700">Courier (if known)</span>
-          <input className={input} maxLength={80} placeholder="e.g. Delhivery" value={courier} onChange={(e) => setCourier(e.target.value)} />
-        </label>
+        <DeliveryPartnerField value={partner} onChange={setPartner} options={partners.data ?? []}
+          loading={partners.isLoading} label="Delivery partner (if known)" inputClassName={input} />
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-gray-700">Tracking number (if on the photo)</span>
           <input className={input} maxLength={80} value={tracking} onChange={(e) => setTracking(e.target.value)} />
@@ -617,20 +637,23 @@ function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipp
   const ours = order.lines.filter((l) => l.actions.includes('dispatch_own') && l.unshipped > 0);
   const [selected, setSelected] = useState<string[]>(ours.map((l) => l.itemId));
   const [files, setFiles] = useState<File[]>([]);
-  const [courier, setCourier] = useState('');
+  const [partner, setPartner] = useState<DeliveryPartnerValue>(EMPTY_PARTNER);
   const [tracking, setTracking] = useState('');
   const [busy, setBusy] = useState(false);
+  const partners = useDeliveryPartners();
   const allChosen = ours.every((l) => selected.includes(l.itemId));
-  const ready = !!courier.trim() && !!tracking.trim() && selected.length > 0;
+  const ready = !partnerProblem(partner, { required: true }) && !!tracking.trim() && selected.length > 0;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!courier.trim() || !tracking.trim()) { onError('Enter the courier name and the tracking number.'); return; }
+    const problem = partnerProblem(partner, { required: true });
+    if (problem) { onError(problem); return; }
+    if (!tracking.trim()) { onError('Enter the tracking number.'); return; }
     if (!selected.length) { onError('Choose at least one item in this parcel.'); return; }
     setBusy(true);
     try {
       const form = new FormData();
-      form.append('courierName', courier.trim());
+      appendPartner(form, partner, partners.data ?? []);
       form.append('trackingNumber', tracking.trim());
       form.append('itemIds', JSON.stringify(selected));
       for (const f of files) form.append('photo', f, f.name);
@@ -646,7 +669,7 @@ function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipp
   return (
     <form onSubmit={submit} className="space-y-3 rounded-lg border border-teal-200 bg-teal-50/40 p-4" aria-label="Dispatch from our warehouse">
       <p className="flex items-center gap-2 font-semibold text-gray-900"><Warehouse className="h-4 w-4" /> Dispatch from our warehouse</p>
-      <p className="text-xs text-gray-600">Our own stock: no supplier and no supplier payment. Add the courier and tracking number — Operations follows it to delivery.</p>
+      <p className="text-xs text-gray-600">Our own stock: no supplier and no supplier payment. Add the delivery partner and tracking number — Operations follows it to delivery.</p>
       {order.owesGoodie && <p className="text-xs text-amber-900">Put the free gift in this box — it is recorded as sent with it.</p>}
       {ours.length > 1 && (
         <fieldset className="space-y-1">
@@ -666,10 +689,8 @@ function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipp
         </fieldset>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-700">Courier</span>
-          <input className={input} required maxLength={80} placeholder="e.g. Delhivery" value={courier} onChange={(e) => setCourier(e.target.value)} />
-        </label>
+        <DeliveryPartnerField value={partner} onChange={setPartner} options={partners.data ?? []}
+          loading={partners.isLoading} required inputClassName={input} />
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-gray-700">Tracking number</span>
           <input className={input} required maxLength={80} value={tracking} onChange={(e) => setTracking(e.target.value)} />

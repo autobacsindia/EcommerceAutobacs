@@ -6,7 +6,34 @@ import type { WorkOrder } from './types';
 
 const get = jest.fn();
 const post = jest.fn();
-jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
+// The courier list the "Delivery partner" dropdown reads (GET /orders/tracking/carriers),
+// answered here whatever each test's `get` mock returns for the order.
+const mockCarriers = {
+  success: true,
+  carriers: [
+    { code: 'FEDEX', name: 'FedEx' },
+    { code: 'VRL', name: 'VRL', deliveryPartner: true },
+    { code: 'DELHIVERY', name: 'Delhivery', deliveryPartner: true },
+    { code: 'DTDC', name: 'DTDC', deliveryPartner: true },
+    { code: 'TRACKON', name: 'Trackon', deliveryPartner: true },
+    { code: 'SHREE_TIRUPATI', name: 'Shree Tirupati Courier', deliveryPartner: true },
+    { code: 'OTHER', name: 'Other courier', custom: true, deliveryPartner: true },
+  ],
+};
+jest.mock('@/lib/api-client', () => ({
+  __esModule: true,
+  default: {
+    get: (...a: unknown[]) => (a[0] === '/orders/tracking/carriers' ? Promise.resolve(mockCarriers) : get(...a)),
+    post: (...a: unknown[]) => post(...a),
+  },
+}));
+
+/** Choose a delivery partner once the list has loaded. */
+async function pickPartner(label: string, code: string) {
+  const select = await screen.findByLabelText(label);
+  await waitFor(() => expect(select).toBeEnabled());
+  fireEvent.change(select, { target: { value: code } });
+}
 jest.mock('@/lib/http/tokenManager', () => ({
   tokenManager: { ensureCsrfToken: jest.fn().mockResolvedValue(undefined), getHeaders: () => ({ 'Content-Type': 'application/json', 'X-XSRF-TOKEN': 't' }) },
 }));
@@ -131,7 +158,7 @@ describe('WorkOrderPanel', () => {
 
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'proof.jpg', { type: 'image/jpeg' });
     fireEvent.change(await screen.findByLabelText('Dispatch photo'), { target: { files: [file] } });
-    fireEvent.change(screen.getByPlaceholderText('e.g. Delhivery'), { target: { value: 'Delhivery' } });
+    await pickPartner('Delivery partner (if known)', 'DELHIVERY');
     fireEvent.click(screen.getByRole('button', { name: /upload proof/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -140,7 +167,9 @@ describe('WorkOrderPanel', () => {
     expect(init.headers['X-XSRF-TOKEN']).toBe('t');
     expect(init.headers['Content-Type']).toBeUndefined();
     const form = init.body as FormData;
+    expect(form.get('courierCode')).toBe('DELHIVERY');
     expect(form.get('courierName')).toBe('Delhivery');
+    expect(form.get('courierUrl')).toBeNull();
     expect(JSON.parse(form.get('itemIds') as string)).toEqual(['i1']);
     expect(form.get('photo')).toBeInstanceOf(Blob);
   });
@@ -192,6 +221,48 @@ describe('WorkOrderPanel', () => {
     expect(form.getAll('photo').map((f) => (f as File).name)).toEqual(['new.jpg']);
   });
 
+  it('shows the parcel partner and tracking number with copy and open-tracking-page icons', async () => {
+    const parcel = {
+      id: 's1', sequence: 1, status: 'shipped' as const, courier: 'VRL', courierCode: 'VRL',
+      courierUrl: 'https://www.vrlgroup.in/Tracking/TrackShipment', trackingNumber: 'VRL123', shippedAt: null, deliveredAt: null,
+      items: [], photoUrl: null, canMarkDelivered: false,
+    };
+    get.mockResolvedValue({ success: true, order: { ...base, parcels: [parcel] } });
+    renderPanel();
+    expect(await screen.findByRole('button', { name: 'Copy tracking number VRL123' })).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /Open VRL's tracking page/ });
+    expect(link).toHaveAttribute('href', parcel.courierUrl);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('an older parcel (courier typed, no partner code) still shows, and the edit form maps it to the partner', async () => {
+    const parcel = {
+      id: 's1', sequence: 1, status: 'shipped' as const, courier: 'Delhivery', trackingNumber: 'DL1', shippedAt: null, deliveredAt: null,
+      items: [], photoUrl: null, canMarkDelivered: false, canEdit: true,
+    };
+    get.mockResolvedValue({ success: true, order: { ...base, parcels: [parcel] } });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderPanel();
+    expect(await screen.findByText('Delhivery')).toBeInTheDocument();
+    expect(screen.getByText('DL1')).toBeInTheDocument();
+    // No link from an older server: the icon simply isn't there.
+    expect(screen.queryByRole('link', { name: /tracking page/ })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Edit dispatch details/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /Edit dispatch details/ }));
+    const edit = screen.getByRole('form', { name: 'Edit dispatch details for parcel 1' });
+    expect(within(edit).getByLabelText('Delivery partner')).toHaveValue('DELHIVERY');
+    fireEvent.change(within(edit).getByLabelText('Delivery partner'), { target: { value: 'DTDC' } });
+    fireEvent.click(within(edit).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('courierCode')).toBe('DTDC');
+    expect(form.get('courierName')).toBe('DTDC');
+    expect(form.get('trackingNumber')).toBe('DL1');
+  });
+
   it('takes a pasted screenshot as the dispatch photo, exactly like a chosen one', async () => {
     const shippable = { ...base, canShip: true, lines: [{ ...base.lines[0], stage: 'with_supplier' as const, actions: ['ship' as const] }] };
     get.mockResolvedValue({ success: true, order: shippable });
@@ -199,7 +270,7 @@ describe('WorkOrderPanel', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
     renderPanel();
 
-    const courier = await screen.findByPlaceholderText('e.g. Delhivery');
+    const courier = await screen.findByLabelText('Tracking number (if on the photo)');
     expect(screen.getByText(/or paste a screenshot/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /upload proof/i })).toBeDisabled();
     const shot = new File([new Uint8Array([0x89, 0x50])], 'image.png', { type: 'image/png' });
@@ -281,6 +352,39 @@ describe('WorkOrderPanel', () => {
       ...over,
     });
 
+    it('Other: asks for the partner name and tracking page, refuses a javascript: link, sends an https one', async () => {
+      get.mockResolvedValue({ success: true, order: ours() });
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+      global.fetch = fetchMock as unknown as typeof fetch;
+      renderPanel();
+
+      // The dropdown lists exactly the partners, in the server's order, "Other" last — not FedEx.
+      const select = await screen.findByLabelText('Delivery partner');
+      await waitFor(() => expect(select).toBeEnabled());
+      expect(within(select).getAllByRole('option').map((o) => o.textContent))
+        .toEqual(['Choose…', 'VRL', 'Delhivery', 'DTDC', 'Trackon', 'Shree Tirupati Courier', 'Other']);
+      expect(screen.queryByLabelText('Partner name')).not.toBeInTheDocument();
+
+      fireEvent.change(select, { target: { value: 'OTHER' } });
+      fireEvent.change(screen.getByLabelText('Partner name'), { target: { value: 'Ram Transport' } });
+      fireEvent.change(screen.getByLabelText('Tracking page link (optional)'), { target: { value: 'javascript:alert(1)' } });
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'RT1' } });
+      expect(screen.getByText('Use a web link starting with http:// or https://')).toBeInTheDocument();
+      const send = screen.getByRole('button', { name: 'Dispatch all items' });
+      expect(send).toBeDisabled();
+      fireEvent.submit(screen.getByRole('form', { name: 'Dispatch from our warehouse' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/http:\/\/ or https:\/\//);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText('Tracking page link (optional)'), { target: { value: 'https://ramtransport.in/track' } });
+      fireEvent.click(send);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const body = fetchMock.mock.calls[0][1].body as FormData;
+      expect(body.get('courierCode')).toBe('OTHER');
+      expect(body.get('courierName')).toBe('Ram Transport');
+      expect(body.get('courierUrl')).toBe('https://ramtransport.in/track');
+    });
+
     it('needs courier and tracking — no photo — and posts only those to dispatch-own', async () => {
       get.mockImplementation((url: string) => Promise.resolve(url.startsWith('/payment-requests/order/') ? { requests: [] } : { success: true, order: ours() }));
       const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
@@ -294,7 +398,7 @@ describe('WorkOrderPanel', () => {
 
       const send = screen.getByRole('button', { name: 'Dispatch all items' });
       expect(send).toBeDisabled();
-      fireEvent.change(screen.getByLabelText('Courier'), { target: { value: 'Delhivery' } });
+      await pickPartner('Delivery partner', 'DELHIVERY');
       expect(send).toBeDisabled(); // tracking still missing
       fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'DL555' } });
       expect(send).toBeEnabled();
@@ -306,6 +410,7 @@ describe('WorkOrderPanel', () => {
       expect(url).toBe('/api/v1/staff/work/orders/o1/dispatch-own');
       expect(init.headers['X-XSRF-TOKEN']).toBe('t');
       const body = init.body as FormData;
+      expect(body.get('courierCode')).toBe('DELHIVERY');
       expect(body.get('courierName')).toBe('Delhivery');
       expect(body.get('trackingNumber')).toBe('DL555');
       expect(JSON.parse(body.get('itemIds') as string)).toEqual(['i1']);
@@ -319,7 +424,7 @@ describe('WorkOrderPanel', () => {
       renderPanel();
 
       expect(await screen.findByText(/Put the free gift in this box/)).toBeInTheDocument();
-      fireEvent.change(screen.getByLabelText('Courier'), { target: { value: 'Delhivery' } });
+      await pickPartner('Delivery partner', 'DELHIVERY');
       fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'DL555' } });
       const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'parcel.jpg', { type: 'image/jpeg' });
       fireEvent.change(screen.getByLabelText('Parcel photo (optional)'), { target: { files: [file] } });
@@ -334,7 +439,7 @@ describe('WorkOrderPanel', () => {
       global.fetch = jest.fn().mockResolvedValue({ ok: false, json: async () => ({ message: 'Only items marked "Our Warehouse" can go in this parcel. Refresh and choose again.' }) }) as unknown as typeof fetch;
       renderPanel();
 
-      fireEvent.change(await screen.findByLabelText('Courier'), { target: { value: 'Delhivery' } });
+      await pickPartner('Delivery partner', 'DELHIVERY');
       fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'DL555' } });
       fireEvent.click(screen.getByRole('button', { name: 'Dispatch all items' }));
       expect(await screen.findByRole('alert')).toHaveTextContent(/Only items marked "Our Warehouse"/);

@@ -63,6 +63,9 @@ jest.mock('lucide-react', () => {
   return {
     ArrowLeft: IconMock,
     MapPin: IconMock,
+    Copy: IconMock,
+    Check: IconMock,
+    ExternalLink: IconMock,
     CreditCard: IconMock,
     Package: IconMock,
     Truck: IconMock,
