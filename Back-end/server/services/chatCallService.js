@@ -329,6 +329,19 @@ export async function hangUpCall(user, callId) {
 }
 
 /**
+ * The request sanitizer (middleware/sanitizationMiddleware.js) trims every string
+ * in a body, which strips the CRLF an SDP must end with — and Chrome then refuses
+ * the whole offer ("Invalid SDP line"). An SDP never begins with whitespace and
+ * its only trailing whitespace is that CRLF, so putting it back restores exactly
+ * what the browser sent.
+ */
+export function withSdpLineEnd(description) {
+  if (!description || typeof description !== 'object' || typeof description.sdp !== 'string') return description;
+  const { sdp } = description;
+  return sdp && !sdp.endsWith('\n') ? { ...description, sdp: `${sdp}\r\n` } : description;
+}
+
+/**
  * Pass a connection-setup message to the other person's tab in the call.
  * Only between the call's two people, only from the tab that is in the call,
  * only while it is live.
@@ -351,7 +364,7 @@ export async function relaySignal(user, callId, { deviceId, kind, data } = {}) {
     fromDevice: deviceId,
     toDevice,
     kind,
-    data,
+    data: kind === 'candidates' ? data : withSdpLineEnd(data),
     route: routeOf(call),
   });
   return { sent: true };

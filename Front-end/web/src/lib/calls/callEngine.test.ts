@@ -3,7 +3,7 @@
  * candidates batched and held until a description arrives, the polite side
  * yielding on a clash, and recovery from a dropped connection.
  */
-import { CallEngine, CANDIDATE_BATCH_MS, FAIL_AFTER_MS, RESTART_AFTER_MS } from './callEngine';
+import { CallEngine, CANDIDATE_BATCH_MS, CONNECT_TIMEOUT_MS, FAIL_AFTER_MS, RESTART_AFTER_MS, withSdpLineEnd } from './callEngine';
 import type { EngineState, SignalKind } from './callEngine';
 
 class FakePeer {
@@ -118,7 +118,7 @@ describe('CallEngine', () => {
     await callee.engine.handleSignal('offer', { type: 'offer', sdp: 'first' });
     callee.peer.signalingState = 'have-local-offer'; // as if it had started a renegotiation
     await callee.engine.handleSignal('offer', { type: 'offer', sdp: 'second' });
-    expect(callee.peer.remoteDescription).toEqual({ type: 'offer', sdp: 'second' });
+    expect(callee.peer.remoteDescription).toEqual({ type: 'offer', sdp: 'second\r\n' });
   });
 
   it('restarts ICE after a short drop, and gives up if it never recovers', async () => {
@@ -160,5 +160,45 @@ describe('CallEngine', () => {
     await engine.handleSignal('offer', { type: 'offer', sdp: 'late' });
     expect(peer.remoteDescription).toBeNull();
     expect(sent).toHaveLength(0);
+  });
+
+  it('gives up when the connection never comes up, instead of "Connecting…" for ever', async () => {
+    jest.useFakeTimers();
+    try {
+      // The other side never answers the offer (or no network path exists).
+      const { states, engine } = setup(true);
+      jest.advanceTimersByTime(CONNECT_TIMEOUT_MS - 1);
+      expect(states).not.toContain('failed');
+      jest.advanceTimersByTime(2);
+      expect(states.at(-1)).toBe('failed');
+      expect(engine.everConnected).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('no give-up once connected, and close() cancels the timer', async () => {
+    jest.useFakeTimers();
+    try {
+      const a = setup(true);
+      a.peer.setConn('connected');
+      jest.advanceTimersByTime(CONNECT_TIMEOUT_MS * 2);
+      expect(a.states).not.toContain('failed');
+      expect(a.engine.everConnected).toBe(true);
+      const b = setup(false);
+      b.engine.close();
+      jest.advanceTimersByTime(CONNECT_TIMEOUT_MS * 2);
+      expect(b.states).not.toContain('failed');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('restores the CRLF a trimmed SDP lost before applying it (Chrome refuses it otherwise)', async () => {
+    const { peer, engine } = setup(false);
+    await engine.handleSignal('offer', { type: 'offer', sdp: 'v=0\r\na=ssrc:1 msid:s t' });
+    expect(peer.remoteDescription).toEqual({ type: 'offer', sdp: 'v=0\r\na=ssrc:1 msid:s t\r\n' });
+    expect(withSdpLineEnd({ type: 'answer', sdp: 'v=0\r\n' })).toEqual({ type: 'answer', sdp: 'v=0\r\n' });
+    expect(withSdpLineEnd(null)).toBeNull();
   });
 });

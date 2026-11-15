@@ -262,6 +262,29 @@ describe('Team chat calls (one-to-one)', () => {
       expect(canAccess(users.admin, ev.route)).toBe(false);
     });
 
+    // Regression (prod, 2026-11-15): the request sanitizer trims every string,
+    // which cut the CRLF an SDP must end with; Chrome then refused the offer
+    // ("Invalid SDP line") and every call sat on "Connecting…".
+    it('delivers the offer / answer SDP and candidates byte-for-byte, final CRLF included', async () => {
+      const id = await connected();
+      const sdp = [
+        'v=0', 'o=- 4611 2 IN IP4 127.0.0.1', 's=-', 't=0 0', 'a=group:BUNDLE 0', 'a=msid-semantic: WMS s1',
+        'm=video 9 UDP/TLS/RTP/SAVPF 96', 'c=IN IP4 0.0.0.0', 'a=mid:0', 'a=sendrecv', 'a=rtpmap:96 VP8/90000',
+        'a=ssrc:97243607 msid:s1 t1',
+      ].join('\r\n') + '\r\n';
+      const candidates = [{ candidate: 'candidate:1 1 udp 2122260223 a1b2.local 54321 typ host', sdpMid: '0', sdpMLineIndex: 0 }];
+      const events = await capture(async () => {
+        expect((await dev.post(`/chat/calls/${id}/signal`, { deviceId: DEV_A, kind: 'offer', data: { type: 'offer', sdp } })).status).toBe(200);
+        expect((await mkt.post(`/chat/calls/${id}/signal`, { deviceId: DEV_B, kind: 'answer', data: { type: 'answer', sdp } })).status).toBe(200);
+        expect((await dev.post(`/chat/calls/${id}/signal`, { deviceId: DEV_A, kind: 'candidates', data: candidates })).status).toBe(200);
+      });
+      const sent = events.filter((e) => e.type === 'call.signal');
+      expect(sent.map((e) => e.kind)).toEqual(['offer', 'answer', 'candidates']);
+      expect(sent[0].data).toEqual({ type: 'offer', sdp });
+      expect(sent[1].data).toEqual({ type: 'answer', sdp });
+      expect(sent[2].data).toEqual(candidates);
+    });
+
     it('refuses signals from outsiders, from another tab, before answer and after the end', async () => {
       const id = (await ring()).body.call.id;
       const offer = { kind: 'offer', data: { sdp: 'v=0' } };

@@ -10,7 +10,7 @@ import { useCanChat, useChatMe } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel } from '@/hooks/queries/useTeamChat';
 import { chatKeys } from '@/hooks/queries/keys';
 import type { CallEngine, SignalKind } from '@/lib/calls/callEngine';
-import { IDLE, callReducer, tabDeviceId } from '@/lib/calls/callState';
+import { IDLE, NEVER_CONNECTED_NOTICE, callReducer, tabDeviceId } from '@/lib/calls/callState';
 import type { CallMedia, CallPeer, CallUiState, ServerCall } from '@/lib/calls/callState';
 import { startRingtone, stopRingtone } from '@/lib/calls/ringtone';
 import dynamic from 'next/dynamic';
@@ -120,6 +120,14 @@ export default function CallProvider({ children }: { children: ReactNode }) {
   // Bumped by every connect and every teardown: a connect whose engine code was
   // still loading when the call ended (or reconnected) must not start an engine.
   const connectGen = useRef(0);
+  // Set while a start / answer / rejoin is in flight. The phase only changes after
+  // the camera prompt and the request, so without this a second tap (an impatient
+  // double-click on Answer during the permission prompt) runs the action again:
+  // a second answer is refused (409) and its clean-up tore down the first one's
+  // connection, leaving the caller on "Connecting…" for good.
+  const acting = useRef(false);
+  // Why the call ended, when this tab knows better than the server's end reason.
+  const endNoticeRef = useRef<string | null>(null);
 
   useEffect(() => { deviceRef.current = tabDeviceId(); }, []);
 
@@ -153,7 +161,8 @@ export default function CallProvider({ children }: { children: ReactNode }) {
 
   const finish = useCallback((call: ServerCall) => {
     releaseMedia();
-    dispatch({ type: 'ended', call, meId });
+    dispatch({ type: 'ended', call, meId, notice: endNoticeRef.current ?? undefined });
+    endNoticeRef.current = null;
     scheduleReset();
   }, [meId, releaseMedia, scheduleReset]);
 
@@ -179,7 +188,11 @@ export default function CallProvider({ children }: { children: ReactNode }) {
       onRemoteStream: (s) => setRemote(s),
       onState: (s) => {
         if (s === 'failed') {
-          Sentry.captureMessage('Team chat call lost its connection', { level: 'warning', tags: { feature: 'chat-call' } });
+          const never = !engine.everConnected;
+          if (never) endNoticeRef.current = NEVER_CONNECTED_NOTICE;
+          Sentry.captureMessage(never ? 'Team chat call never connected' : 'Team chat call lost its connection', {
+            level: 'warning', tags: { feature: 'chat-call', relay: iceRef.current.some((s2) => String(s2.urls).includes('turn:')) ? 'yes' : 'no' },
+          });
           void hangUpRef.current();
         } else if (s !== 'closed') {
           dispatch({ type: 'engine', state: s });
@@ -204,7 +217,8 @@ export default function CallProvider({ children }: { children: ReactNode }) {
   // ── actions ────────────────────────────────────────────────────────────────
 
   const start = useCallback(async (channelId: string, media: CallMedia) => {
-    if (!meId || IN_CALL.has(stateRef.current.phase) || stateRef.current.phase === 'incoming') return;
+    if (!meId || acting.current || IN_CALL.has(stateRef.current.phase) || stateRef.current.phase === 'incoming') return;
+    acting.current = true;
     if (resetTimer.current) clearTimeout(resetTimer.current);
     try {
       await takeMedia(media);
@@ -224,12 +238,15 @@ export default function CallProvider({ children }: { children: ReactNode }) {
       releaseMedia();
       dispatch({ type: 'error', notice: messageOf(err, 'Could not start the call') });
       scheduleReset();
+    } finally {
+      acting.current = false;
     }
   }, [meId, takeMedia, peerFor, connect, releaseMedia, scheduleReset]);
 
   const answer = useCallback(async () => {
     const { call } = stateRef.current;
-    if (!call || stateRef.current.phase !== 'incoming') return;
+    if (!call || acting.current || stateRef.current.phase !== 'incoming') return;
+    acting.current = true;
     stopRingtone();
     try {
       await takeMedia(call.media);
@@ -241,6 +258,8 @@ export default function CallProvider({ children }: { children: ReactNode }) {
       releaseMedia();
       dispatch({ type: 'error', notice: messageOf(err, 'Could not answer the call') });
       scheduleReset();
+    } finally {
+      acting.current = false;
     }
   }, [meId, takeMedia, connect, releaseMedia, scheduleReset]);
 
@@ -261,7 +280,8 @@ export default function CallProvider({ children }: { children: ReactNode }) {
     // The server's "ended" event normally lands first; this covers a lost stream.
     setTimeout(() => {
       if (stateRef.current.call?.id === call.id && stateRef.current.phase !== 'ended') {
-        dispatch({ type: 'ended', call: { ...call, status: 'ended', endReason: call.answeredAt ? 'completed' : 'cancelled' }, meId });
+        dispatch({ type: 'ended', call: { ...call, status: 'ended', endReason: call.answeredAt ? 'completed' : 'cancelled' }, meId, notice: endNoticeRef.current ?? undefined });
+        endNoticeRef.current = null;
         scheduleReset();
       }
     }, 1500);
@@ -270,7 +290,8 @@ export default function CallProvider({ children }: { children: ReactNode }) {
 
   const rejoin = useCallback(async () => {
     const { call } = stateRef.current;
-    if (!call || stateRef.current.phase !== 'rejoin') return;
+    if (!call || acting.current || stateRef.current.phase !== 'rejoin') return;
+    acting.current = true;
     try {
       await takeMedia(call.media);
       const res = await post<StartResponse>(`/channels/${call.channelId}/calls`, { media: call.media, deviceId: deviceRef.current });
@@ -285,6 +306,8 @@ export default function CallProvider({ children }: { children: ReactNode }) {
       releaseMedia();
       dispatch({ type: 'error', notice: messageOf(err, 'Could not rejoin the call') });
       scheduleReset();
+    } finally {
+      acting.current = false;
     }
   }, [takeMedia, connect, peerFor, releaseMedia, scheduleReset]);
 

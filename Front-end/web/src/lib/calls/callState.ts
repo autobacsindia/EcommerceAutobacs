@@ -52,7 +52,7 @@ export type CallAction =
   | { type: 'engine'; state: 'connecting' | 'connected' | 'reconnecting' }
   | { type: 'rejoin'; call: ServerCall; peer: CallPeer }
   | { type: 'joined'; call: ServerCall }
-  | { type: 'ended'; call: ServerCall; meId: string }
+  | { type: 'ended'; call: ServerCall; meId: string; notice?: string }
   | { type: 'error'; notice: string }
   | { type: 'minimise'; on: boolean }
   | { type: 'reset' };
@@ -94,7 +94,7 @@ export function callReducer(state: CallUiState, action: CallAction): CallUiState
       return { ...IDLE, phase: 'rejoin', call: action.call, peer: action.peer };
     case 'ended':
       if (!state.call || state.call.id !== action.call.id) return state;
-      return { ...state, phase: 'ended', call: action.call, minimised: false, notice: endNotice(action.call, action.meId, state.peer?.name || 'They') };
+      return { ...state, phase: 'ended', call: action.call, minimised: false, notice: action.notice ?? endNotice(action.call, action.meId, state.peer?.name || 'They') };
     case 'error':
       return { ...IDLE, phase: 'ended', notice: action.notice };
     case 'minimise':
@@ -131,3 +131,6 @@ export function tabDeviceId(): string {
     return make();
   }
 }
+
+/** Shown when a call was answered but the two browsers could never connect. */
+export const NEVER_CONNECTED_NOTICE = "Couldn't connect the call. One of your networks may be blocking calls — try again, or switch one of you to another Wi-Fi or mobile data.";
