@@ -651,7 +651,7 @@ router.post('/work/orders/:id/lines/:itemId/payment', validatePaymentInitiated, 
   res.json({ success: true, order: await setPaymentInitiated(req.user, req.params.id, req.params.itemId, req.body, req) });
 }));
 
-// @route  PUT /staff/work/orders/:id/parcels/:shipmentId  multipart: courierName?, trackingNumber?, photo[]?, removePhotoIds(JSON)? — correct dispatch details (30 min)
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId  multipart: courierCode?, courierName?, courierUrl?, trackingNumber?, photo[]?, removePhotoIds(JSON)? — correct dispatch details (30 min)
 router.put(
   '/work/orders/:id/parcels/:shipmentId',
   concurrentUploadGuard,
@@ -661,12 +661,12 @@ router.put(
   validateEditParcel,
   validateRequest,
   asyncHandler(async (req, res) => {
-    const { courierName, trackingNumber, removePhotoIds } = req.body;
-    res.json({ success: true, order: await editShipment(req.user, req.params.id, req.params.shipmentId, { courierName, trackingNumber, removePhotoIds }, req.files || [], req) });
+    const { courierCode, courierName, courierUrl, trackingNumber, removePhotoIds } = req.body;
+    res.json({ success: true, order: await editShipment(req.user, req.params.id, req.params.shipmentId, { courierCode, courierName, courierUrl, trackingNumber, removePhotoIds }, req.files || [], req) });
   }),
 );
 
-// @route  POST /staff/work/orders/:id/ship  multipart: photo[] (1–20), itemIds?, courierName?, trackingNumber? — procurement
+// @route  POST /staff/work/orders/:id/ship  multipart: photo[] (1–20), itemIds?, courierCode?, courierName?, courierUrl?, trackingNumber? — procurement
 router.post(
   '/work/orders/:id/ship',
   concurrentUploadGuard,
@@ -676,12 +676,12 @@ router.post(
   validateShipWithProof,
   validateRequest,
   asyncHandler(async (req, res) => {
-    const { itemIds = [], courierName, trackingNumber } = req.body;
-    res.json({ success: true, order: await shipWithProof(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.files || [], req) });
+    const { itemIds = [], courierCode, courierName, courierUrl, trackingNumber } = req.body;
+    res.json({ success: true, order: await shipWithProof(req.user, req.params.id, { itemIds, courierCode, courierName, courierUrl, trackingNumber }, req.files || [], req) });
   }),
 );
 
-// @route  POST /staff/work/orders/:id/dispatch-own  multipart: courierName, trackingNumber, itemIds?, photo[]? — procurement, our own warehouse
+// @route  POST /staff/work/orders/:id/dispatch-own  multipart: courierCode?, courierName, courierUrl?, trackingNumber, itemIds?, photo[]? — procurement, our own warehouse
 router.post(
   '/work/orders/:id/dispatch-own',
   concurrentUploadGuard,
@@ -691,8 +691,8 @@ router.post(
   validateDispatchOwnStock,
   validateRequest,
   asyncHandler(async (req, res) => {
-    const { itemIds = [], courierName, trackingNumber } = req.body;
-    res.json({ success: true, order: await dispatchOwnStock(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.files || [], req) });
+    const { itemIds = [], courierCode, courierName, courierUrl, trackingNumber } = req.body;
+    res.json({ success: true, order: await dispatchOwnStock(req.user, req.params.id, { itemIds, courierCode, courierName, courierUrl, trackingNumber }, req.files || [], req) });
   }),
 );
 

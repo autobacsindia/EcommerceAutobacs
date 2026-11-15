@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Package, Truck, CheckCircle2, AlertTriangle, FileText } from 'lucide-react';
+import TrackingIdDisplay from '@/components/tracking/TrackingIdDisplay';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatLongDateIST } from '@/lib/datetime';
@@ -532,15 +533,8 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
               {shipment.trackingNumber && (
                 <span className="flex items-center gap-1">
                   <Truck className="h-3.5 w-3.5" />
-                  {shipment.carrier?.name ? `${shipment.carrier.name} · ` : ''}
-                  {shipment.carrier?.trackingUrl ? (
-                    <a href={shipment.carrier.trackingUrl} target="_blank" rel="noopener noreferrer"
-                       className="font-mono text-blue-600 hover:underline">
-                      {shipment.trackingNumber}
-                    </a>
-                  ) : (
-                    <span className="font-mono">{shipment.trackingNumber}</span>
-                  )}
+                  <TrackingIdDisplay partner={shipment.carrier?.name} trackingNumber={shipment.trackingNumber}
+                    url={shipment.carrier?.trackingUrl} />
                 </span>
               )}
               {shipment.shippedAt && <span>Shipped {formatLongDateIST(shipment.shippedAt)}</span>}

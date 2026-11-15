@@ -403,3 +403,8 @@ export const supplierEnquiryKeys = {
   detail: (id: string) => [...supplierEnquiryKeys.all, 'detail', id] as const,
   products: (q: string) => [...supplierEnquiryKeys.all, 'products', q] as const,
 };
+
+/** The courier list (GET /orders/tracking/carriers) — lib/deliveryPartners.ts. */
+export const trackingKeys = {
+  carriers: () => ['tracking', 'carriers'] as const,
+};

@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import OfflineRefundDialog, { type OfflineRefundSubmission } from '@/components/admin/OfflineRefundDialog';
 import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download, Building2, FileText } from 'lucide-react';
+import CopyId from '@/components/ui/CopyId';
 import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS, cancellationReasonLabel } from '@/lib/constants';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
@@ -893,7 +894,7 @@ function AdminOrderDetailPageInner() {
               {order.trackingNumber && (
                 <div>
                   <p className="text-sm text-gray-500">Tracking Number</p>
-                  <p className="font-medium">{order.trackingNumber}</p>
+                  <p className="flex items-center gap-1 font-medium">{order.trackingNumber}<CopyId value={order.trackingNumber} label="Tracking number" /></p>
                   {order.carrier?.name && (
                     <p className="text-gray-600 text-sm">
                       via {order.carrier.name}

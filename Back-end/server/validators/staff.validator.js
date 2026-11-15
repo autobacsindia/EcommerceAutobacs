@@ -10,6 +10,18 @@ import mongoose from 'mongoose';
 import { STAFF_TEAM_VALUES, STAFF_USERNAME_PATTERN, STAFF_USERNAME_HINT, GTM_SUB_ROLE_VALUES } from '../config/staff.js';
 import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../config/commonPasswords.js';
 import { PARCEL_STEP_VALUES, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
+import { CARRIERS, MAX_CUSTOM_CARRIER_URL } from '../services/orderTrackingService.js';
+
+/**
+ * The "Delivery partner" dropdown: a known courier code, and for "Other" an optional
+ * tracking page. Shape only here — the service resolves the code and refuses any
+ * link that is not http(s) (orderTrackingService.safeHttpUrl), so the rule lives once.
+ */
+const deliveryPartnerFields = () => [
+  body('courierCode').optional({ values: 'falsy' }).isString().trim().isIn(Object.keys(CARRIERS)).withMessage('Choose a delivery partner from the list'),
+  body('courierUrl').optional({ values: 'falsy' }).isString().trim().isLength({ max: MAX_CUSTOM_CARRIER_URL }).withMessage('Tracking page link is too long'),
+];
+
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
 
@@ -357,6 +369,7 @@ export const validateWorkLineOnly = [...validateWorkLine];
 export const validateEditParcel = [
   ...validateWorkOrder,
   param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
+  ...deliveryPartnerFields(),
   body('courierName').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
   body('trackingNumber').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
   // JSON list of proof ids to remove (multipart sends it as a string).
@@ -387,6 +400,7 @@ const parcelItemIds = () => body('itemIds').optional({ values: 'falsy' }).custom
 export const validateShipWithProof = [
   ...validateWorkOrder,
   parcelItemIds(),
+  ...deliveryPartnerFields(),
   body('courierName').optional({ values: 'falsy' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
   body('trackingNumber').optional({ values: 'falsy' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
 ];
@@ -395,6 +409,7 @@ export const validateShipWithProof = [
 export const validateDispatchOwnStock = [
   ...validateWorkOrder,
   parcelItemIds(),
+  ...deliveryPartnerFields(),
   body('courierName').isString().withMessage('Enter the courier name').trim().notEmpty().withMessage('Enter the courier name')
     .isLength({ max: 80 }).withMessage('Courier name is too long'),
   body('trackingNumber').isString().withMessage('Enter the tracking number').trim().notEmpty().withMessage('Enter the tracking number')

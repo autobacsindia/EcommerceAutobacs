@@ -83,6 +83,10 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     sequence: number;
     status: 'packed' | 'shipped' | 'delivered' | 'lost';
     courier: string;
+    /** The "Delivery partner" code ('' for a courier typed before the dropdown). Absent from an older server. */
+    courierCode?: string;
+    /** The partner's tracking page (http/https) for the link icon, or null. Absent from an older server. */
+    courierUrl?: string | null;
     trackingNumber: string;
     shippedAt: string | null;
     deliveredAt: string | null;
