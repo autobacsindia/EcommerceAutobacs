@@ -3,6 +3,7 @@
 import { Fragment, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Lock, Star } from 'lucide-react';
 import { useMyIncentives, useMyIncentiveOrders, useMyIncentiveRatings } from '@/hooks/queries/useIncentives';
+import { useMyReviewBonus } from '@/hooks/queries/useGoogleReviews';
 import {
   currentMonthIST, shiftMonth, monthLabel, points, rupees, describeMyLine, ratingStatus,
   type MyMonth, type MyOrder, type MyOrderStatus, type MyPendingOrder,
@@ -62,6 +63,7 @@ export default function MyRoavPoints() {
           </p>
           <Summary data={data} />
           <RatingsBox data={data} month={month} />
+          <ReviewBonusBox month={month} />
         </>
       )}
 
@@ -170,6 +172,40 @@ function RatingsBox({ data, month }: { data: MyMonth; month: string }) {
                 {!r.counted && <span className="rounded bg-gray-100 px-1.5 text-xs text-gray-600">not counted — same network</span>}
               </div>
               {r.comment && <p className="mt-0.5 text-gray-600">“{r.comment}”</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+const REVIEW_ROW_TEXT: Record<string, string> = { review_adjust: 'points changed', review_unverified: 'unverified' };
+
+/** Google review bonus rows this month: verified (+), points changed (±), unverified (−). */
+function ReviewBonusBox({ month }: { month: string }) {
+  const { data, isLoading, error } = useMyReviewBonus(month);
+  if (error) return <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorText(error, 'Could not load your Google review bonus.')}</p>;
+  if (isLoading || !data) return <div aria-label="Loading Google review bonus" className="h-16 animate-pulse rounded-xl bg-gray-100" />;
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4" aria-labelledby="my-review-bonus">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="my-review-bonus" className="text-sm font-semibold text-gray-900">Google review bonus</h2>
+        <span className="text-sm font-semibold text-gray-900">{pts2(data.points)} pts</span>
+      </div>
+      {data.rows.length === 0 ? (
+        <p className="mt-1 text-sm text-gray-500">No verified Google reviews this month. Send them from Google reviews in the menu.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-gray-100 text-sm">
+          {data.rows.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+              <span className="text-gray-800">
+                Google review bonus{r.type === 'reverse' || r.reason ? ` — ${REVIEW_ROW_TEXT[r.reason || ''] || 'reversed'}` : ''}
+                {r.customerName && <span className="text-gray-500"> · {r.customerName}</span>}
+                {r.stars ? <span className="text-gray-500"> · {r.stars}★</span> : null}
+                {r.earnMonth && r.earnMonth !== month && <span className="text-gray-500"> · from {monthLabel(r.earnMonth)}</span>}
+              </span>
+              <span className={`font-medium ${r.points < 0 ? 'text-red-700' : 'text-green-700'}`}>{r.points > 0 ? '+' : ''}{pts2(r.points)} · <span className="font-normal text-gray-500">{fmtDate(r.at)}</span></span>
             </li>
           ))}
         </ul>

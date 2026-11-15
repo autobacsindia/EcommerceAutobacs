@@ -961,6 +961,13 @@ export async function ensureCriticalIndexes() {
     await db.collection('incentiverulesets').createIndex({ effectiveFrom: -1, version: -1 }, { name: 'incentive_rules_effective', background: true });
     await db.collection('incentivemonths').createIndex({ month: 1 }, { unique: true, name: 'incentive_month_unique', background: true });
     await db.collection('incentiveorderflags').createIndex({ order: 1 }, { unique: true, name: 'incentive_flag_order', background: true });
+    // Google review bonus (models/GoogleReviewSubmission.js). The dup index is what
+    // decides when the same screenshot / customer / order is sent twice at once.
+    const googleReviews = db.collection('googlereviewsubmissions');
+    await googleReviews.createIndex({ dupKeys: 1 }, { unique: true, partialFilterExpression: { active: true }, name: 'google_review_dup_active', background: true });
+    await googleReviews.createIndex({ submittedBy: 1, submitId: 1 }, { unique: true, name: 'google_review_submit_once', background: true });
+    await googleReviews.createIndex({ submittedBy: 1, _id: -1 }, { name: 'google_review_by_person', background: true });
+    await googleReviews.createIndex({ status: 1, _id: -1 }, { name: 'google_review_status', background: true });
     console.log('✓ Roav Points indexes confirmed');
 
     return { ok: true, error: null };

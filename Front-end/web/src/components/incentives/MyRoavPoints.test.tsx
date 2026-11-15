@@ -11,6 +11,8 @@ jest.mock('@/hooks/queries/useIncentives', () => ({
   useMyIncentiveOrders: () => orders,
   useMyIncentiveRatings: () => ratings,
 }));
+let reviewBonus: Q = { data: { rows: [], points: 0 } };
+jest.mock('@/hooks/queries/useGoogleReviews', () => ({ useMyReviewBonus: () => reviewBonus }));
 
 const policy = {
   rating: { minCount: 3, highAvg: 4.5, highMultiplier: 1.05, lowAvg: 3.5, lowMultiplier: 0.9 },
@@ -128,5 +130,37 @@ describe('helpers', () => {
   test('line words', () => {
     expect(describeMyLine({ _id: 'x', type: 'reverse', component: 'order', points: -200, reason: 'cancel', eventAt: '', earnMonth: '2026-10' }))
       .toBe('Paid order bonus — cancelled — from October 2026');
+  });
+});
+
+describe('MyRoavPoints — Google review bonus', () => {
+  beforeEach(() => {
+    me = { data: myMonth };
+    orders = { data: { orders: [], nextCursor: null, pending: [], ratingDetails: false } };
+    ratings = { data: { visible: false, ratings: [] } };
+  });
+
+  test('shows each review row as "Google review bonus", with reversals in red', () => {
+    reviewBonus = {
+      data: {
+        points: 30,
+        rows: [
+          { id: 'r2', review: 'g1', type: 'reverse', points: -20, reason: 'review_adjust', at: '2026-11-12T06:00:00Z', stars: 4, customerName: 'Rahul', orderNumber: '', earnMonth: '2026-11' },
+          { id: 'r1', review: 'g1', type: 'earn', points: 50, reason: null, at: '2026-11-10T06:00:00Z', stars: 5, customerName: 'Rahul', orderNumber: '', earnMonth: '2026-11' },
+        ],
+      },
+    };
+    render(<MyRoavPoints />);
+    const box = screen.getByRole('region', { name: 'Google review bonus' });
+    expect(within(box).getByText('30 pts')).toBeInTheDocument();
+    expect(within(box).getByText(/points changed/)).toBeInTheDocument();
+    expect(within(box).getByText('-20', { exact: false })).toHaveClass('text-red-700');
+    expect(within(box).getByText('+50', { exact: false })).toHaveClass('text-green-700');
+  });
+
+  test('says so when there is no review bonus this month', () => {
+    reviewBonus = { data: { rows: [], points: 0 } };
+    render(<MyRoavPoints />);
+    expect(screen.getByText(/No verified Google reviews this month/)).toBeInTheDocument();
   });
 });

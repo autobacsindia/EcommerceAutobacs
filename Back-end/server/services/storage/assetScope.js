@@ -39,6 +39,8 @@ export const PRIVATE_PREFIXES = [
   'bank-transfers',
   // Proof for changing who is credited with an order (services/orderAttributionService.js).
   'order-credit-proof',
+  // Google review screenshots (services/googleReviewService.js).
+  'google-reviews',
   // Team chat attachments (services/chatAttachmentService.js), one folder per channel.
   'chat',
   // The GPay / UPI QR a GTM lead shares with a customer (services/salesPayDetailsService.js).

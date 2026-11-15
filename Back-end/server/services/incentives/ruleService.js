@@ -7,7 +7,7 @@
  */
 import * as repo from '../../repositories/incentiveRepository.js';
 import AppError from '../../utils/AppError.js';
-import { INCENTIVE_DEFAULT_RULES } from '../../config/incentiveDefaults.js';
+import { INCENTIVE_DEFAULT_RULES, googleReviewRulesOf } from '../../config/incentiveDefaults.js';
 import { monthOf, addMonths, isMonth } from './months.js';
 
 const FIRST_MONTH = '2000-01';
@@ -147,6 +147,17 @@ export function validateRules(input) {
     throw new AppError('Multiplier cap must be one of the slab names', 400, { expose: true });
   }
   r.championBannerDays = num(input.championBannerDays ?? 7, 'Champion banner days', { min: 1, max: 28, integer: true });
+
+  // Older screens send no googleReview block: keep the defaults rather than fail.
+  const gr = input.googleReview ? input.googleReview : googleReviewRulesOf(null);
+  const maxPoints = num(gr.maxPoints, 'Google review: most points per review', { min: 1, max: 100000, integer: true });
+  if (!Array.isArray(gr.suggestedByStars) || gr.suggestedByStars.length !== 5) {
+    throw new AppError('Google review: suggested points need one value for each of 1 to 5 stars', 400, { expose: true });
+  }
+  r.googleReview = {
+    maxPoints,
+    suggestedByStars: gr.suggestedByStars.map((v, i) => num(v, `Google review: suggested points for ${i + 1} star${i ? 's' : ''}`, { min: 0, max: maxPoints, integer: true })),
+  };
   return r;
 }
 

@@ -152,7 +152,11 @@ export interface Rules {
   slabs: Slab[];
   multiplierSlabCap: string | null;
   championBannerDays: number;
+  /** Google review bonus. Absent on rule versions saved before it existed (the server then uses the defaults). */
+  googleReview?: { maxPoints: number; suggestedByStars: number[] };
 }
+
+export const GOOGLE_REVIEW_DEFAULTS = { maxPoints: 100, suggestedByStars: [0, 0, 0, 30, 50] };
 
 export interface RuleVersion { version: number; effectiveFrom: string; note: string; createdByName: string; createdAt: string; rules: Rules }
 
@@ -178,9 +182,13 @@ export const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFr
 export function describeRow(r: LedgerRow): string {
   const what = r.component === 'core' ? 'Order value'
     : r.component === 'order' ? 'Paid order bonus'
-      : r.component.startsWith('bonus:') ? (r.inputs?.label || 'Priority product') : r.component;
+      : r.component === 'review' ? 'Google review bonus'
+        : r.component.startsWith('bonus:') ? (r.inputs?.label || 'Priority product') : r.component;
   if (r.type === 'earn') return what;
-  const why = { return: 'returned', refund: 'refunded', cancel: 'cancelled', recompute: 'recalculated' }[r.reason || ''] || 'reversed';
+  const why = {
+    return: 'returned', refund: 'refunded', cancel: 'cancelled', recompute: 'recalculated',
+    review_adjust: 'points lowered', review_unverified: 'unverified',
+  }[r.reason || ''] || 'reversed';
   return `${what} — ${why}`;
 }
 

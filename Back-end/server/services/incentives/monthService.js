@@ -34,7 +34,8 @@ async function ledgerTotals(month, earnerFilter = null) {
         rep: { $max: '$earnerRep' },
         name: { $last: '$earnerName' },
         rows: { $sum: 1 },
-        orders: { $addToSet: { $cond: [{ $eq: ['$type', 'earn'] }, '$order', '$$REMOVE'] } },
+        // A Google review bonus row has no order (order: null), so it never counts as one.
+        orders: { $addToSet: { $cond: [{ $and: [{ $eq: ['$type', 'earn'] }, { $eq: [{ $type: '$order' }, 'objectId'] }] }, '$order', '$$REMOVE'] } },
         returned: { $addToSet: { $cond: [{ $and: [{ $eq: ['$type', 'reverse'] }, { $in: ['$reason', RETURN_REASONS] }] }, '$order', '$$REMOVE'] } },
       },
     },
