@@ -21,6 +21,7 @@ import { MessageCircle, Send, X, Search, ExternalLink, ArrowRight } from 'lucide
 import { isHelpBotSuppressed, OPEN_HELP_BOT_EVENT } from './helpBotVisibility';
 import apiClient from '@/lib/api';
 import { capture } from '@/lib/analytics';
+import { trackContact } from '@/lib/contactTracking';
 import { whatsappLink } from '@/lib/contactInfo';
 import { STARTERS, answerFor, type Action } from '@/lib/help/intents';
 
@@ -154,7 +155,7 @@ export default function HelpBot() {
     };
   }, [open]);
 
-  // The phone Contact button opens the bot from outside this component.
+  // Lets another control open the bot from outside this component.
   useEffect(() => {
     const openBot = () => setOpen(true);
     window.addEventListener(OPEN_HELP_BOT_EVENT, openBot);
@@ -164,10 +165,16 @@ export default function HelpBot() {
   if (isHelpBotSuppressed(pathname)) return null;
 
   const showStarters = turns.length <= 1;
-  // Clear of the sticky Add-to-cart bar (~72px + the iOS home indicator).
+  // Clear of the sticky Add-to-cart bar (up to ~117px when a sale adds a price
+  // line, measured at 390px) plus the iOS home indicator.
   const onProduct = isProductPage(pathname);
-  const launcherBottom = onProduct ? 'bottom-24 md:bottom-6' : 'bottom-5 md:bottom-6';
-  const panelBottom = onProduct ? 'bottom-44 md:bottom-28' : 'bottom-24 md:bottom-28';
+  // Plus the iOS home-bar inset on phones. ContactFab's stack is measured from these.
+  const launcherBottom = onProduct
+    ? 'bottom-[calc(132px_+_env(safe-area-inset-bottom))] md:bottom-6'
+    : 'bottom-[calc(20px_+_env(safe-area-inset-bottom))] md:bottom-6';
+  const panelBottom = onProduct
+    ? 'bottom-[calc(192px_+_env(safe-area-inset-bottom))] md:bottom-28'
+    : 'bottom-[calc(80px_+_env(safe-area-inset-bottom))] md:bottom-28';
 
   return (
     <>
@@ -176,15 +183,18 @@ export default function HelpBot() {
         type="button"
         onClick={() => {
           setOpen((v) => !v);
-          if (!open) capture('help_bot_open');
+          if (!open) {
+            capture('help_bot_open');
+            trackContact('chat', pathname);
+          }
         }}
         aria-expanded={open}
         aria-controls="help-bot-panel"
         aria-label={open ? 'Close help' : 'Open help'}
-        // Phones: the Contact button carries this, so two identical buttons don't stack.
-        className={`fixed ${launcherBottom} right-4 z-[60] hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
+        // Phones too: its own button, the lowest in the stack (ContactFab sits above).
+        className={`fixed ${launcherBottom} right-4 z-[60] flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
       >
-        {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        {open ? <X className="h-5 w-5 md:h-6 md:w-6" /> : <MessageCircle className="h-5 w-5 md:h-6 md:w-6" />}
       </button>
 
       {open && (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { LifeBuoy } from 'lucide-react';
+import { trackContact } from '@/lib/contactTracking';
 
 /**
  * Floating "Need help?" tab pinned to the right edge, linking to /contact.
@@ -30,9 +31,9 @@ const MOBILE_BREAKPOINT = 768; // matches StickyCartBar's `md:hidden`
 // help-bot launcher, both flush against the same right edge as this tab. Keep
 // the tab above them so it can never be dropped on top of a button:
 //   desktop: launcher bottom-6 (24) + 56, FABs bottom-28 (112) + 2×56 + 12 → 236
-//   mobile:  on a PDP the FABs sit at bottom-44 (176) + 2×48 + 12 → 284, which
-//            also clears the full-width sticky Add-to-Cart bar.
-const MOBILE_BOTTOM_RESERVE = 300;
+//   mobile:  on a PDP the FABs sit at 192 + 2×48 + 12 → 300, which also clears
+//            the full-width sticky Add-to-Cart bar (elsewhere they top out at 188).
+const MOBILE_BOTTOM_RESERVE = 316;
 const DESKTOP_BOTTOM_RESERVE = 252;
 // On desktop the store header is sticky (≈122px). Keep the tab below it so it can
 // never be dragged over the Cart / Account links.
@@ -150,6 +151,12 @@ export default function HelpWidget() {
     [travel],
   );
 
+  // A tap (never a drag) counts as one "Need help" contact, then opens /contact.
+  const openContact = () => {
+    trackContact('need_help', pathname);
+    router.push('/contact');
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     // Ignore secondary buttons; let normal focus/keyboard handling proceed.
     if (e.button !== 0) return;
@@ -188,7 +195,7 @@ export default function HelpWidget() {
     if (wasDrag) {
       persist(finalTop);
     } else {
-      router.push('/contact');
+      openContact();
     }
   };
 
@@ -209,12 +216,11 @@ export default function HelpWidget() {
         // Ignore auto-repeat so a held key doesn't stack router.push calls.
         if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
           e.preventDefault();
-          router.push('/contact');
+          openContact();
         }
       }}
       style={{ top: `${top}px`, touchAction: 'none' }}
-      // Phones: hidden — the Contact button (ContactFab) carries Help there.
-      className={`group fixed right-0 z-[60] hidden md:flex select-none flex-col items-center gap-1.5
+      className={`group fixed right-0 z-[60] flex select-none flex-col items-center gap-1.5
         rounded-l-2xl border border-r-0 border-[#4fd283]/40 bg-[#121414] px-2 py-3.5 sm:px-2.5 sm:py-4
         text-[#fff] shadow-[0_10px_28px_rgba(0,0,0,0.35)]
         transition-[background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
