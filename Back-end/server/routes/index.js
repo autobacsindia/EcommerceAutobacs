@@ -90,6 +90,7 @@ import adminOverviewRoutes from './adminOverview.js';
 import paymentRequestRoutes from './paymentRequests.js';
 import subscriptionDueRoutes from './subscriptionDues.js';
 import incentiveRoutes from './incentives.js';
+import googleReviewRoutes from './googleReviews.js';
 import supplierRoutes from './suppliers.js';
 import supplierEnquiryRoutes from './supplierEnquiries.js';
 import pushRoutes from './push.js';
@@ -222,6 +223,8 @@ apiRouter.use('/admin/overview', adminOverviewRoutes);
 apiRouter.use('/payment-requests', paymentRequestRoutes);
 apiRouter.use('/subscription-dues', subscriptionDueRoutes);
 apiRouter.use('/incentives', incentiveRoutes);
+// Google review bonus (salesperson sends a screenshot, marketing head / admin verifies → Roav Points).
+apiRouter.use('/google-reviews', googleReviewRoutes);
 apiRouter.use('/suppliers', supplierRoutes);
 apiRouter.use('/supplier-enquiries', supplierEnquiryRoutes);
 apiRouter.use('/push', pushRoutes);

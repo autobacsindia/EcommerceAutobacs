@@ -15,6 +15,7 @@ import { teamFilter, assertCanSee, selfKey } from '../services/incentives/access
 import { monthOf, isMonth } from '../services/incentives/months.js';
 import { nextSlab } from '../services/incentives/pointsMath.js';
 import { myOrders, myRatings, bonusOrderCount, excludedRatings } from '../services/incentives/myStatement.js';
+import { myReviewRows } from '../services/googleReviewService.js';
 
 /**
  * Roav Points (/api/v1/incentives). Staff and admins only; who sees whose
@@ -79,6 +80,12 @@ router.get('/me/orders', asyncHandler(async (req, res) => {
 // GET /incentives/me/ratings?month= — my customers' stars/comments, only if the owner allows it
 router.get('/me/ratings', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await myRatings(monthParam(req.query.month), selfKey(req.user))) });
+}));
+
+// GET /incentives/me/reviews?month= — my Google review bonus rows this month (verified, changed, reversed)
+router.get('/me/reviews', asyncHandler(async (req, res) => {
+  const rows = await myReviewRows(monthParam(req.query.month), selfKey(req.user));
+  res.json({ success: true, rows, points: Math.round(rows.reduce((a, r) => a + r.points * 100, 0)) / 100 });
 }));
 
 // GET /incentives/me/rows?month=&cursor= — the orders behind my month

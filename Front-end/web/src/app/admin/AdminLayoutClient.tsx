@@ -7,7 +7,7 @@ import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
-  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck } from 'lucide-react';
+  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
@@ -93,6 +93,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/meta-leads', label: 'Meta leads', icon: Briefcase },
       { href: '/admin/sales-reps', label: 'Sales Reps', icon: UserRoundCog },
       { href: '/admin/incentives', label: 'Roav Points', icon: Trophy },
+      { href: '/admin/google-reviews', label: 'Google reviews', icon: ThumbsUp },
       { href: '/admin/past-sales', label: 'Past sales', icon: History },
       { href: '/admin/affiliates', label: 'Affiliates', icon: Handshake },
       // Listed BEFORE the batches screen: "who is due" is the question you start from,

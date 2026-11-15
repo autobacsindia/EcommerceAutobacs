@@ -388,6 +388,7 @@ export const incentiveKeys = {
   me: (month: string) => ['incentives', 'me', month] as const,
   myOrders: (month: string, cursor: string) => ['incentives', 'me', month, 'orders', cursor] as const,
   myRatings: (month: string) => ['incentives', 'me', month, 'ratings'] as const,
+  myReviews: (month: string) => ['incentives', 'me', month, 'reviews'] as const,
   team: (month: string) => ['incentives', 'team', month] as const,
   month: (month: string) => ['incentives', 'month', month] as const,
   months: () => ['incentives', 'months'] as const,
@@ -407,4 +408,13 @@ export const supplierEnquiryKeys = {
 /** The courier list (GET /orders/tracking/carriers) — lib/deliveryPartners.ts. */
 export const trackingKeys = {
   carriers: () => ['tracking', 'carriers'] as const,
+};
+
+/** Google review bonus (`/google-reviews/*`) — salesperson submissions and the review queue. */
+export const googleReviewKeys = {
+  all: ['google-reviews'] as const,
+  policy: () => ['google-reviews', 'policy'] as const,
+  mine: (status: string) => ['google-reviews', 'mine', status] as const,
+  queue: (status: string) => ['google-reviews', 'queue', status] as const,
+  detail: (id: string) => ['google-reviews', 'detail', id] as const,
 };

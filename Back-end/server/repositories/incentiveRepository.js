@@ -99,6 +99,12 @@ export const ledgerForOrder = (orderId, limit = 2000) =>
 /** Every ledger row for a batch of orders (the sweep's one read per batch). Indexed on { order, type }. */
 export const ledgerForOrders = (ids) => IncentiveLedgerEntry.find({ order: { $in: ids } }).lean();
 export const insertLedgerRows = (rows) => IncentiveLedgerEntry.insertMany(rows, { ordered: false });
+/** One ledger row inside the caller's transaction (Google review bonus). Validates and runs the append-only hook. */
+export const insertLedgerRowInSession = (row, session) => IncentiveLedgerEntry.create([row], { session });
+/** A person's Google review bonus rows for a month (index incentive_ledger_month_earner). */
+export const reviewRowsOf = (month, earnerKey, limit) => IncentiveLedgerEntry.find({ month, earnerKey, component: 'review' })
+  .select('type review centi reason eventAt inputs.stars inputs.points inputs.customerName inputs.earnMonth orderNumber')
+  .sort({ _id: -1 }).limit(limit).lean();
 export const ledgerAggregate = (pipeline) => IncentiveLedgerEntry.aggregate(pipeline);
 export const ledgerPage = (query, select, limit) =>
   IncentiveLedgerEntry.find(query).select(select).sort({ _id: -1 }).limit(limit).lean();

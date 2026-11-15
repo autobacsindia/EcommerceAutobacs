@@ -6,7 +6,7 @@ import { Plus, Trash2, Save } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { incentiveKeys } from '@/hooks/queries/keys';
 import { useIncentiveRules } from '@/hooks/queries/useIncentives';
-import { currentMonthIST, shiftMonth, monthLabel, type Rules } from '@/lib/incentives';
+import { currentMonthIST, shiftMonth, monthLabel, GOOGLE_REVIEW_DEFAULTS, type Rules } from '@/lib/incentives';
 
 /**
  * Every Roav Points rule, editable. Saving creates a NEW version that starts
@@ -127,6 +127,16 @@ export default function IncentiveRulesForm() {
         <span className="hidden sm:block" />
         <Num label="Average below (★)" value={r.rating.lowAvg} onChange={(v) => set({ rating: { ...r.rating, lowAvg: v } })} />
         <Num label="… gives ×" value={r.rating.lowMultiplier} onChange={(v) => set({ rating: { ...r.rating, lowMultiplier: v } })} />
+      </section>
+
+      <section className="grid gap-4 rounded-lg border border-gray-200 bg-white p-4 sm:grid-cols-3">
+        <h2 className="text-base font-semibold sm:col-span-3">Google review bonus</h2>
+        <p className="-mt-3 text-xs text-gray-500 sm:col-span-3">The marketing head types the final points for each verified review. These are the suggested points, and the most one review can get.</p>
+        <Num label="Most points for one review" value={(r.googleReview || GOOGLE_REVIEW_DEFAULTS).maxPoints} onChange={(v) => set({ googleReview: { ...(r.googleReview || GOOGLE_REVIEW_DEFAULTS), maxPoints: v } })} step="1" />
+        {[4, 3, 2, 1, 0].map((i) => (
+          <Num key={i} label={`Suggested for ${i + 1}★`} value={(r.googleReview || GOOGLE_REVIEW_DEFAULTS).suggestedByStars[i]} step="1"
+            onChange={(v) => { const g = r.googleReview || GOOGLE_REVIEW_DEFAULTS; const next = [...g.suggestedByStars]; next[i] = v; set({ googleReview: { ...g, suggestedByStars: next } }); }} />
+        ))}
       </section>
 
       <section className="rounded-lg border border-gray-200 bg-white p-4">

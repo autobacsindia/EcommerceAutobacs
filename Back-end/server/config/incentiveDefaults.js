@@ -88,4 +88,16 @@ export const INCENTIVE_DEFAULT_RULES = Object.freeze({
 
   // How many days from the 1st the Incentive Champion banner shows.
   championBannerDays: 7,
+
+  // Google review bonus (services/googleReviewService.js). The marketing head or
+  // an admin types the final points for each verified review; the screen offers
+  // `suggestedByStars[stars - 1]` as a starting value. `maxPoints` caps one review.
+  googleReview: { maxPoints: 100, suggestedByStars: [0, 0, 0, 30, 50] },
 });
+
+/** The Google review settings in `rules`, falling back to the defaults (rule versions saved before they existed). */
+export const googleReviewRulesOf = (rules) => {
+  const g = rules?.googleReview;
+  if (g && Number.isInteger(g.maxPoints) && Array.isArray(g.suggestedByStars) && g.suggestedByStars.length === 5) return g;
+  return INCENTIVE_DEFAULT_RULES.googleReview;
+};

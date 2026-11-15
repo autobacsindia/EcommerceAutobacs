@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
  * `key` is the idempotency handle and is UNIQUE:
  *   earn:<order>:r<rev>:<component>:<line|order>:<earner>
  *   rev:<earn key>
+ *   review:<submission>:v<version>   (Google review bonus — one row per change)
  * so a webhook retry, a cron overlap or a re-run inserts nothing new — the
  * duplicate-key error is the "already done" answer.
  *
@@ -34,11 +35,15 @@ const IncentiveLedgerEntrySchema = new mongoose.Schema(
     earnerName: { type: String, default: '' },
     share: { type: Number, required: true, min: 0, max: 1 },
 
-    order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
+    // Every order-based row names its order. A Google review bonus (component
+    // 'review') has none: it is keyed by its submission (`review`) instead, so it
+    // is never counted as an order or grouped with one.
+    order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required() { return this.component !== 'review'; }, default: null },
+    review: { type: mongoose.Schema.Types.ObjectId, ref: 'GoogleReviewSubmission', default: null },
     orderNumber: { type: String, default: '' },
     rev: { type: Number, default: 0 },
     lineId: { type: String, default: null },
-    component: { type: String, required: true }, // core | order | bonus:<key>
+    component: { type: String, required: true }, // core | order | bonus:<key> | review
 
     centi: { type: Number, required: true },     // points × 100, after this earner's share
     flatCenti: { type: Number, required: true }, // same, without invoice multipliers

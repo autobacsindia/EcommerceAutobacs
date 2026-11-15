@@ -55,7 +55,8 @@ export async function myOrders(month, earnerKey, { cursor = null, limit = PAGE }
     after = new mongoose.Types.ObjectId(cursor);
   }
   const groups = await repo.ledgerAggregate([
-    { $match: { month, earnerKey } }, // index incentive_ledger_month_earner
+    // Order rows only: a Google review bonus has no order and is listed on its own (googleReviewService.myReviewRows).
+    { $match: { month, earnerKey, order: { $type: 'objectId' } } }, // index incentive_ledger_month_earner
     { $sort: { _id: 1 } },
     {
       $group: {
