@@ -1,11 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LifeBuoy, MessageCircle, Phone, X } from 'lucide-react';
-import { capture } from '@/lib/analytics';
-import { isHelpBotSuppressed, OPEN_HELP_BOT_EVENT } from '@/components/help/helpBotVisibility';
+import { Phone } from 'lucide-react';
+import { trackContact } from '@/lib/contactTracking';
 import { SITE_URL } from '@/lib/siteUrl';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 
@@ -37,65 +34,41 @@ function WhatsAppIcon({ className }: { className?: string }) {
  * Floating WhatsApp + Call buttons, bottom-right on every storefront page.
  *
  * On a product page the WhatsApp message carries the page link, so the sales
- * team knows which product the customer is asking about. On phones the stack
- * sits above the product page's sticky Add-to-cart bar instead of covering it.
+ * team knows which product the customer is asking about.
  *
- * Phones get ONE "Contact us" button that opens WhatsApp, Call and Help. Four
- * separate floating controls (this pair, the help tab and the chat launcher)
- * covered product photos, titles and the empty-cart text on a 375px screen.
- * Desktop keeps both buttons visible, as before.
+ * Phones show the same separate buttons as desktop (owner's call, 2026-11-15:
+ * one tap per channel, each tracked on its own). They stack ABOVE the help-chat
+ * launcher (HelpBot), which owns the lowest slot:
+ *   phones:  launcher 20px + 48 → this stack from 80px (2×48 + 12 → 188px)
+ *            on a product page everything lifts above the sticky Add-to-cart
+ *            bar (up to ~117px tall in a sale): launcher 132px, this stack
+ *            from 192px (→ 300px)
+ *   desktop: launcher 24px + 56, this stack from 112px (unchanged)
+ * Both add the iOS home-bar inset. HelpWidget's bottom reserve depends on these.
  */
 export default function ContactFab() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  // A new page closes the menu — it must not follow the customer around.
-  useEffect(() => { setOpen(false); }, [pathname]);
   if (isSuppressed(pathname)) return null;
 
   const onProduct = isProductPage(pathname);
   const message = onProduct
     ? `Hi Autobacs India! I have a question about this product: ${SITE_URL}${pathname}`
     : 'Hi Autobacs India! I have a question.';
-  // Hidden on phones until the Contact button opens them; always shown from md up.
-  const item = open ? 'flex' : 'hidden md:flex';
   const ring = 'shadow-xl shadow-black/30 ring-[3px] ring-white transition-transform hover:scale-105 focus:outline-none focus-visible:ring-[#6fdc9c]';
+  const bottom = onProduct
+    ? 'bottom-[calc(192px_+_env(safe-area-inset-bottom))]'
+    : 'bottom-[calc(80px_+_env(safe-area-inset-bottom))]';
 
   return (
-    <div
-      className={`fixed right-4 z-40 flex flex-col items-end gap-3 md:bottom-28 ${onProduct ? 'bottom-24' : 'bottom-5'}`}
-    >
-      {!isHelpBotSuppressed(pathname) && (
-        <button
-          type="button"
-          aria-label="Ask our help assistant"
-          title="Ask our help assistant"
-          onClick={() => {
-            capture('contact_click', { channel: 'assistant', path: pathname });
-            setOpen(false);
-            window.dispatchEvent(new Event(OPEN_HELP_BOT_EVENT));
-          }}
-          className={`${open ? 'flex' : 'hidden'} h-12 w-12 items-center justify-center rounded-full bg-[#2563eb] text-[#fff] md:hidden ${ring}`}
-        >
-          <MessageCircle className="h-5 w-5" />
-        </button>
-      )}
-      <Link
-        href="/contact"
-        aria-label="Help and contact page"
-        title="Help"
-        onClick={() => capture('contact_click', { channel: 'help', path: pathname })}
-        className={`${open ? 'flex' : 'hidden'} h-12 w-12 items-center justify-center rounded-full bg-[#121414] text-[#fff] md:hidden ${ring}`}
-      >
-        <LifeBuoy className="h-5 w-5" />
-      </Link>
+    <div className={`fixed right-4 z-40 flex flex-col items-end gap-3 ${bottom} md:bottom-28`}>
       <a
         href={whatsappLink(message)}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Chat with us on WhatsApp"
         title="Chat on WhatsApp"
-        onClick={() => capture('contact_click', { channel: 'whatsapp', path: pathname })}
-        className={`${item} h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#25D366] text-[#fff] ${ring}`}
+        onClick={() => trackContact('whatsapp', pathname)}
+        className={`flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#25D366] text-[#fff] ${ring}`}
       >
         <WhatsAppIcon className="h-6 w-6 md:h-7 md:w-7" />
       </a>
@@ -103,20 +76,11 @@ export default function ContactFab() {
         href={`tel:${SUPPORT_PHONE_TEL}`}
         aria-label={`Call us on ${SUPPORT_PHONE_DISPLAY}`}
         title={`Call ${SUPPORT_PHONE_DISPLAY}`}
-        onClick={() => capture('contact_click', { channel: 'call', path: pathname })}
-        className={`${item} h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] hover:bg-[#0b6b3c] ${ring}`}
+        onClick={() => trackContact('call', pathname)}
+        className={`flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] hover:bg-[#0b6b3c] ${ring}`}
       >
         <Phone className="h-5 w-5 md:h-6 md:w-6" />
       </a>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-label={open ? 'Close contact options' : 'Contact us'}
-        onClick={() => setOpen((v) => !v)}
-        className={`flex h-12 w-12 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] md:hidden ${ring}`}
-      >
-        {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
-      </button>
     </div>
   );
 }

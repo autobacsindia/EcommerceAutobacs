@@ -9,6 +9,7 @@ import path from 'path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import HelpBot from './HelpBot';
 import { OPEN_HELP_BOT_EVENT } from './helpBotVisibility';
+import { capture } from '@/lib/analytics';
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/' }));
 jest.mock('@/lib/api', () => ({ __esModule: true, default: { get: jest.fn().mockResolvedValue({ suggestions: [] }) } }));
@@ -18,7 +19,24 @@ describe('help panel', () => {
   // jsdom has no scrollIntoView; the panel scrolls to its newest message.
   beforeAll(() => { Element.prototype.scrollIntoView = () => {}; });
 
-  it('opens when the phone Contact button asks it to', () => {
+  it('shows its own launcher on phones, sized for a thumb', () => {
+    render(<HelpBot />);
+    const launcher = screen.getByRole('button', { name: 'Open help' });
+    expect(launcher).not.toHaveClass('hidden');
+    expect(launcher).toHaveClass('flex', 'h-12', 'w-12', 'md:h-14', 'md:w-14');
+    expect(launcher.className).toContain('bottom-[calc(20px_+_env(safe-area-inset-bottom))]');
+  });
+
+  it('counts one chat contact when opened, none when closed', () => {
+    (capture as jest.Mock).mockClear();
+    render(<HelpBot />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open help' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close help' })[0]);
+    const contacts = (capture as jest.Mock).mock.calls.filter(([e]) => e === 'contact_click');
+    expect(contacts).toEqual([['contact_click', { channel: 'chat', path: '/' }]]);
+  });
+
+  it('opens when another control asks it to', () => {
     render(<HelpBot />);
     expect(screen.queryByRole('button', { name: 'Close help' })).not.toBeInTheDocument();
     act(() => { window.dispatchEvent(new Event(OPEN_HELP_BOT_EVENT)); });

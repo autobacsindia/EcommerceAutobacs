@@ -9,6 +9,7 @@ import StoreFooter from './StoreFooter';
 import ShopByVehicleCard from './ShopByVehicleCard';
 import ConditionalHeader from '@/components/layout/ConditionalHeader';
 import HelpWidget from '@/components/layout/HelpWidget';
+import { trackContact } from '@/lib/contactTracking';
 import { FestivalThemeProvider } from '@/components/festival/FestivalThemeContext';
 
 const push = jest.fn();
@@ -20,6 +21,7 @@ jest.mock('@/hooks/queries/useBrands', () => ({ useBrands: () => ({ data: [] }) 
 jest.mock('@/hooks/queries/useCategories', () => ({ useCategories: () => ({ data: [] }) }));
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: () => pathname }));
+jest.mock('@/lib/contactTracking', () => ({ trackContact: jest.fn() }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null, isAuthenticated: false }) }));
 jest.mock('@/context/CartContext', () => ({ useCart: () => ({ itemCount: 0 }) }));
 jest.mock('@/hooks/queries/useVehicleMakes', () => ({
@@ -205,7 +207,7 @@ describe('Need-help tab never covers the bottom-right buttons', () => {
 
   it.each([
     ['desktop', 1440, 900, 252],
-    ['phone', 375, 812, 300],
+    ['phone', 375, 812, 316],
   ])('%s: a saved position at the very bottom is lifted above the stack', (_, w, h, reserve) => {
     setViewport(w, h);
     localStorage.setItem('help-widget-top-ratio', '1');
@@ -224,6 +226,46 @@ describe('Need-help tab never covers the bottom-right buttons', () => {
       fireEvent.pointerUp(tab(), { clientY: 5000, pointerId: 1 });
     });
     expect(parseFloat(tab().style.top)).toBeLessThanOrEqual(900 - 252);
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('Need-help tab on phones', () => {
+  const tab = () => screen.getByRole('button', { name: /Need help/ });
+  beforeEach(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 812 });
+    localStorage.removeItem('help-widget-top-ratio');
+    (trackContact as jest.Mock).mockClear();
+  });
+
+  it('shows on phones as well as desktop', () => {
+    render(<HelpWidget />);
+    expect(tab()).not.toHaveClass('hidden');
+    expect(tab()).toHaveClass('flex');
+  });
+
+  it('a tap counts one Need-help contact and opens /contact', () => {
+    render(<HelpWidget />);
+    const y = parseFloat(tab().style.top) + 10;
+    act(() => {
+      fireEvent.pointerDown(tab(), { clientY: y, pointerId: 1 });
+      fireEvent.pointerUp(tab(), { clientY: y, pointerId: 1 });
+    });
+    expect(trackContact).toHaveBeenCalledTimes(1);
+    expect(trackContact).toHaveBeenCalledWith('need_help', expect.anything());
+    expect(push).toHaveBeenCalledWith('/contact');
+  });
+
+  it('dragging it out of the way is not a contact', () => {
+    render(<HelpWidget />);
+    const y = parseFloat(tab().style.top) + 10;
+    act(() => {
+      fireEvent.pointerDown(tab(), { clientY: y, pointerId: 1 });
+      fireEvent.pointerMove(tab(), { clientY: y - 80, pointerId: 1 });
+      fireEvent.pointerUp(tab(), { clientY: y - 80, pointerId: 1 });
+    });
+    expect(trackContact).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,15 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import ContactFab from './ContactFab';
-import { OPEN_HELP_BOT_EVENT } from '@/components/help/helpBotVisibility';
+import { capture } from '@/lib/analytics';
+import { pushToGtm } from '@/lib/gtm';
 
 let pathname = '/';
 jest.mock('next/navigation', () => ({ usePathname: () => pathname }));
 jest.mock('@/lib/analytics', () => ({ capture: jest.fn() }));
+jest.mock('@/lib/gtm', () => ({ pushToGtm: jest.fn() }));
+
+beforeEach(() => jest.clearAllMocks());
 
 describe('ContactFab', () => {
   it('shows WhatsApp and Call on storefront pages', () => {
@@ -44,22 +48,40 @@ describe('ContactFab', () => {
     expect(href).not.toContain('/products/search');
   });
 
-  it('puts the help assistant behind the one phone Contact button', () => {
-    pathname = '/cart';
-    const opened = jest.fn();
-    window.addEventListener(OPEN_HELP_BOT_EVENT, opened);
+  it('shows WhatsApp and Call as separate buttons on phones too (no collapsed menu)', () => {
+    pathname = '/';
     render(<ContactFab />);
-    fireEvent.click(screen.getByRole('button', { name: 'Contact us' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Ask our help assistant' }));
-    expect(opened).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Contact us' })).toHaveAttribute('aria-expanded', 'false');
-    window.removeEventListener(OPEN_HELP_BOT_EVENT, opened);
+    for (const el of [screen.getByLabelText(/whatsapp/i), screen.getByLabelText(/call us/i)]) {
+      expect(el).not.toHaveClass('hidden');
+      // 48px tap targets on phones.
+      expect(el).toHaveClass('h-12', 'w-12');
+    }
+    expect(screen.queryByRole('button', { name: 'Contact us' })).not.toBeInTheDocument();
   });
 
-  it('offers no assistant on a page that has no help bot', () => {
-    pathname = '/login';
+  it('sits above the chat launcher, and higher still above the product page buy bar', () => {
+    pathname = '/';
+    const { container, unmount } = render(<ContactFab />);
+    const stack = () => container.firstElementChild as HTMLElement;
+    expect(stack().className).toContain('bottom-[calc(80px_+_env(safe-area-inset-bottom))]');
+    expect(stack()).toHaveClass('md:bottom-28');
+    unmount();
+    pathname = '/products/ironman-reco-traks';
+    const second = render(<ContactFab />);
+    expect((second.container.firstElementChild as HTMLElement).className)
+      .toContain('bottom-[calc(192px_+_env(safe-area-inset-bottom))]');
+  });
+
+  it('records each tap once, per channel, in PostHog and GTM', () => {
+    pathname = '/cart';
     render(<ContactFab />);
-    fireEvent.click(screen.getByRole('button', { name: 'Contact us' }));
-    expect(screen.queryByRole('button', { name: 'Ask our help assistant' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/whatsapp/i));
+    fireEvent.click(screen.getByLabelText(/call us/i));
+    expect(capture).toHaveBeenCalledTimes(2);
+    expect(capture).toHaveBeenNthCalledWith(1, 'contact_click', { channel: 'whatsapp', path: '/cart' });
+    expect(capture).toHaveBeenNthCalledWith(2, 'contact_click', { channel: 'call', path: '/cart' });
+    expect(pushToGtm).toHaveBeenCalledTimes(2);
+    expect(pushToGtm).toHaveBeenNthCalledWith(1, { event: 'contact_click', contact_channel: 'whatsapp', page_path: '/cart' });
+    expect(pushToGtm).toHaveBeenNthCalledWith(2, { event: 'contact_click', contact_channel: 'call', page_path: '/cart' });
   });
 });
