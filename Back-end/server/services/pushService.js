@@ -92,7 +92,7 @@ export async function sendToUsers(recipients, message) {
     if (!subs.length) return 0;
     const sent = [];
     await Promise.all(subs.map(async (s) => {
-      const outcome = await deliver(s, payloadFor(message, urlOf.get(idOf(s.user)) || '/'));
+      const outcome = await deliver(s, payloadFor(message, urlOf.get(idOf(s.user)) || '/'), message.ttl);
       if (outcome.result === 'sent') sent.push(s._id);
     }));
     if (sent.length) await pushSubscriptionRepository.touch(sent).catch(() => {});
@@ -109,6 +109,9 @@ function payloadFor(message, url) {
     body: String(message.body || '').slice(0, 240),
     tag: message.tag || undefined,
     url,
+    // Incoming calls: stay on screen until acted on; `close` takes a ringing pop-up away.
+    ...(message.requireInteraction && { requireInteraction: true }),
+    ...(message.close && { close: true }),
     ...(message.testId && { testId: message.testId }),
   });
 }
@@ -121,9 +124,9 @@ function payloadFor(message, url) {
  *   refused the push service turned this device down (counted; removed at MAX_FAILURES)
  *   failed  the push service had trouble (not this device's fault; nothing recorded)
  */
-async function deliver(sub, payload) {
+async function deliver(sub, payload, ttl = 3600) {
   try {
-    await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload, { TTL: 3600, urgency: 'high', timeout: 8000 });
+    await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload, { TTL: ttl, urgency: 'high', timeout: 8000 });
     return { result: 'sent' };
   } catch (err) {
     const status = Number(err?.statusCode) || 0;

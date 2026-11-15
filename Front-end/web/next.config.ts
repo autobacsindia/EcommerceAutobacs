@@ -85,8 +85,14 @@ const nextConfig: NextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           // Force HTTPS for 2 years, include subdomains
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-          // Disable browser features not needed by this app
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=()' },
+          // Camera, microphone and screen sharing: this site only (no embedded
+          // frame, no other site), for one-to-one calls in the staff panel's team
+          // chat (components/calls). Site-wide rather than /team + /admin only,
+          // because the policy is fixed when a page first loads: someone who signs
+          // in on the shop and is taken to the panel without a full reload still
+          // has the shop page's policy. The browser still asks the person before
+          // any page may use the camera or microphone.
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), display-capture=(self)' },
           // Basic XSS protection for older browsers (modern browsers use CSP)
           { key: 'X-XSS-Protection', value: '1; mode=block' },
         ],

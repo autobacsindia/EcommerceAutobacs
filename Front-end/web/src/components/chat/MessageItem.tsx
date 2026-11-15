@@ -8,6 +8,7 @@ import { meetLinkIn } from './meet';
 import { Avatar, TeamBadge, dayLabel, fileSize, timeOf, useOpenUpwardIfCut } from './chatUi';
 import EmojiPicker from './EmojiPicker';
 import { formatMessage } from './chatFormat';
+import { CallLine } from '@/components/calls/DmCallButtons';
 
 /**
  * Message text with its formatting (*bold*, _italic_, lists, code…), links and
@@ -718,6 +719,8 @@ export default function MessageItem({
                 <span className="text-[11px] text-gray-400">Esc to cancel · Ctrl+Enter to save</span>
               </div>
             </div>
+          ) : m.kind === 'call' && m.call ? (
+            <CallLine m={m} meId={meId} />
           ) : (
             <>
               {/* The words sit in a bubble (yours light blue, others' light grey);

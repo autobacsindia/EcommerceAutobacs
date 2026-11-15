@@ -140,8 +140,10 @@ export interface ChatMessage {
   id: string;
   channelId: string;
   seq: number;
-  kind: 'user' | 'system';
+  kind: 'user' | 'system' | 'call';
   text: string;
+  /** kind 'call': what happened to a one-to-one call (components/calls). */
+  call?: { callId: string; media: 'audio' | 'video'; outcome: 'completed' | 'declined' | 'missed' | 'cancelled' | 'failed'; durationSec: number } | null;
   deleted: boolean;
   sender: ChatPerson | null;
   clientId: string | null;

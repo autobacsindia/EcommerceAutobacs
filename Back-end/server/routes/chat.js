@@ -2,7 +2,7 @@ import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, staffOrAdmin } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
-import { authenticatedUserRateLimit } from '../middleware/rateLimitMiddleware.js';
+import { authenticatedUserRateLimit, callStartRateLimit, callSignalRateLimit } from '../middleware/rateLimitMiddleware.js';
 import userRepository from '../repositories/userRepository.js';
 import {
   validateChannelIdParam,
@@ -27,7 +27,20 @@ import {
   validatePin,
   validateStatus,
   validateMeet,
+  validateStartCall,
+  validateCallIdParam,
+  validateCallDevice,
+  validateCallSignal,
 } from '../validators/chat.validator.js';
+import {
+  startCall,
+  answerCall,
+  declineCall,
+  hangUpCall,
+  relaySignal,
+  heartbeatCall,
+  myLiveCall,
+} from '../services/chatCallService.js';
 import {
   listChannels,
   listFiles,
@@ -365,6 +378,38 @@ router.post('/messages/:id/reactions', validateReaction, validateRequest, asyncH
 // Soft: admins still see it (see chatService, "editing and deleting").
 router.delete('/messages/:id', validateMessageIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await deleteMessage(req.user, req.params.id)) });
+}));
+
+// ── calls (one-to-one chats only; see services/chatCallService.js) ──────────
+
+// GET /chat/calls/live — my ringing or ongoing call, to pick up after a reload
+router.get('/calls/live', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await myLiveCall(req.user)) });
+}));
+
+// POST /chat/channels/:id/calls { media, deviceId } — ring the other person
+router.post('/channels/:id/calls', callStartRateLimit, validateStartCall, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await startCall(req.user, req.params.id, req.body)) });
+}));
+
+router.post('/calls/:id/answer', callSignalRateLimit, validateCallDevice, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await answerCall(req.user, req.params.id, req.body)) });
+}));
+
+router.post('/calls/:id/decline', callSignalRateLimit, validateCallIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await declineCall(req.user, req.params.id)) });
+}));
+
+router.post('/calls/:id/hangup', callSignalRateLimit, validateCallIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await hangUpCall(req.user, req.params.id)) });
+}));
+
+router.post('/calls/:id/signal', callSignalRateLimit, validateCallSignal, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await relaySignal(req.user, req.params.id, req.body)) });
+}));
+
+router.post('/calls/:id/heartbeat', callSignalRateLimit, validateCallDevice, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await heartbeatCall(req.user, req.params.id, req.body)) });
 }));
 
 export default router;

@@ -34,6 +34,7 @@ import NotifyMenu from './NotifyMenu';
 import ForwardDialog from './ForwardDialog';
 import PinnedStrip from './PinnedStrip';
 import CallButton from './CallButton';
+import DmCallButtons from '@/components/calls/DmCallButtons';
 import ThreadPanel from './ThreadPanel';
 import { ONE_PANE_BELOW } from './useFitToViewport';
 
@@ -459,7 +460,10 @@ export default function Conversation({
                   <Users className="h-4 w-4" /> {channel.memberCount}
                 </button>
               )}
-              <CallButton channel={channel} onShare={(text) => doSend({ text, clientId: newClientId() })} />
+              {/* One-to-one chats call inside the website; groups and spaces keep Google Meet. */}
+              {channel.kind === 'dm' && !channel.group
+                ? <DmCallButtons channelId={channel.id} name={title} />
+                : <CallButton channel={channel} onShare={(text) => doSend({ text, clientId: newClientId() })} />}
               <NotifyMenu channel={channel} />
               {onSearch && (
                 <button

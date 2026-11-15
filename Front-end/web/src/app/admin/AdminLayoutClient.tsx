@@ -17,6 +17,7 @@ import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
 import { splitMore } from '@/components/panel/navMore';
+import CallProvider from '@/components/calls/CallProvider';
 
 interface NavItem {
   href: string;
@@ -246,73 +247,75 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
   const pageLabel = navSections.flatMap((s) => s.items).find((link) => link.href === activeHref)?.label;
 
   return (
-    <PanelShell
-      homeHref="/admin"
-      subtitle="Admin panel"
-      sections={sections}
-      // Every page: the menu is a slim icon strip that opens over the page on
-      // hover, keyboard focus, or the menu button (phones, touch tablets).
-      hoverRail
-      // Tasks wants the room.
-      tightPage={pathname === '/admin/tasks' || pathname.startsWith('/admin/tasks/')}
-      // The live auth user once loaded, so a name or photo change shows without a reload.
-      user={{ name: user?.name || userName, photoUrl: user?.avatarUrl, profileHref: '/admin/profile', role: 'Admin' }}
-      onLogout={handleLogout}
-      heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{pageLabel || 'Admin'}</h2>}
-      actions={
-        <>
-          {/* Stats Overview — each tile drills into the orders behind the number */}
-          <Link
-            href={ordersHref(stats.filters?.pendingOrders, 'processing,shipped')}
-            title="Orders placed but not delivered yet"
-            className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
-          >
-            <p className="text-xs text-gray-500">Pending orders</p>
-            <p className="text-base font-bold tabular-nums text-amber-700">
-              {statsFailed ? '—' : stats.pendingOrders.toLocaleString('en-IN')}
-            </p>
-          </Link>
-          <Link
-            href={ordersHref(
-              stats.filters?.totalRevenue,
-              'processing,shipped,delivered',
-              stats.revenuePeriod?.startDate
-            )}
-            title={`Realised revenue since ${stats.revenuePeriod?.startDate ?? 'the start of the financial year'} — excludes cancelled, returned and abandoned orders`}
-            className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
-          >
-            <p className="text-xs text-gray-500">
-              Revenue{stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
-            </p>
-            <p className="text-base font-bold tabular-nums text-green-700">
-              {statsFailed ? '—' : formatCurrency(stats.totalRevenue)}
-            </p>
-          </Link>
-          <span className="mx-1 hidden h-8 w-px bg-gray-200 sm:block" aria-hidden="true" />
-          <ViewWebsiteLink />
-          {/* Chat has its own button so it is one click from anywhere in admin. */}
-          <Link
-            href="/admin/chat"
-            aria-current={isLinkActive('/admin/chat') ? 'page' : undefined}
-            className={`relative inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-              isLinkActive('/admin/chat') ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
-            }`}
-          >
-            <MessagesSquare className="h-3.5 w-3.5" aria-hidden="true" />
-            Chat
-            {chatUnread > 0 && (
-              <span className="rounded-full bg-blue-600 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${chatUnread} unread`}>
-                {chatUnread > 99 ? '99+' : chatUnread}
-              </span>
-            )}
-          </Link>
-          {/* One glance for everything else that is waiting — approvals,
-              refunds — so nobody has to open each section to find out. */}
-          <NotificationBell chatHref="/admin/chat" />
-        </>
-      }
-    >
-      {children}
-    </PanelShell>
+    <CallProvider>
+      <PanelShell
+        homeHref="/admin"
+        subtitle="Admin panel"
+        sections={sections}
+        // Every page: the menu is a slim icon strip that opens over the page on
+        // hover, keyboard focus, or the menu button (phones, touch tablets).
+        hoverRail
+        // Tasks wants the room.
+        tightPage={pathname === '/admin/tasks' || pathname.startsWith('/admin/tasks/')}
+        // The live auth user once loaded, so a name or photo change shows without a reload.
+        user={{ name: user?.name || userName, photoUrl: user?.avatarUrl, profileHref: '/admin/profile', role: 'Admin' }}
+        onLogout={handleLogout}
+        heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{pageLabel || 'Admin'}</h2>}
+        actions={
+          <>
+            {/* Stats Overview — each tile drills into the orders behind the number */}
+            <Link
+              href={ordersHref(stats.filters?.pendingOrders, 'processing,shipped')}
+              title="Orders placed but not delivered yet"
+              className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
+            >
+              <p className="text-xs text-gray-500">Pending orders</p>
+              <p className="text-base font-bold tabular-nums text-amber-700">
+                {statsFailed ? '—' : stats.pendingOrders.toLocaleString('en-IN')}
+              </p>
+            </Link>
+            <Link
+              href={ordersHref(
+                stats.filters?.totalRevenue,
+                'processing,shipped,delivered',
+                stats.revenuePeriod?.startDate
+              )}
+              title={`Realised revenue since ${stats.revenuePeriod?.startDate ?? 'the start of the financial year'} — excludes cancelled, returned and abandoned orders`}
+              className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
+            >
+              <p className="text-xs text-gray-500">
+                Revenue{stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
+              </p>
+              <p className="text-base font-bold tabular-nums text-green-700">
+                {statsFailed ? '—' : formatCurrency(stats.totalRevenue)}
+              </p>
+            </Link>
+            <span className="mx-1 hidden h-8 w-px bg-gray-200 sm:block" aria-hidden="true" />
+            <ViewWebsiteLink />
+            {/* Chat has its own button so it is one click from anywhere in admin. */}
+            <Link
+              href="/admin/chat"
+              aria-current={isLinkActive('/admin/chat') ? 'page' : undefined}
+              className={`relative inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                isLinkActive('/admin/chat') ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+              }`}
+            >
+              <MessagesSquare className="h-3.5 w-3.5" aria-hidden="true" />
+              Chat
+              {chatUnread > 0 && (
+                <span className="rounded-full bg-blue-600 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${chatUnread} unread`}>
+                  {chatUnread > 99 ? '99+' : chatUnread}
+                </span>
+              )}
+            </Link>
+            {/* One glance for everything else that is waiting — approvals,
+                refunds — so nobody has to open each section to find out. */}
+            <NotificationBell chatHref="/admin/chat" />
+          </>
+        }
+      >
+        {children}
+      </PanelShell>
+    </CallProvider>
   );
 }

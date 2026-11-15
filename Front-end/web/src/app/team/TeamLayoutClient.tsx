@@ -14,6 +14,7 @@ import { splitMore } from '@/components/panel/navMore';
 import ChampionBanner from '@/components/incentives/ChampionBanner';
 import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
+import CallProvider from '@/components/calls/CallProvider';
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -162,36 +163,38 @@ export default function TeamLayoutClient({
   const { items: visible, more } = splitMore(items, TEAM_MORE_HREFS);
 
   return (
-    <PanelShell
-      homeHref="/team"
-      subtitle={`${teamLabel} Team`}
-      sections={[{ items: visible, more }]}
-      // The live auth user once loaded, so a name or photo change shows without a reload.
-      user={{ name: user?.name || userName, photoUrl: user?.avatarUrl, profileHref: '/team/profile', role: roleLabel || (isHead ? 'Team head' : 'Team member') }}
-      footer={canChangePassword && (
-        <Link href={PASSWORD_PATH} className="pn-side-link inline-flex items-center gap-1.5 text-xs">
-          <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> Change password
-        </Link>
-      )}
-      onLogout={signOut}
-      // Every page: the menu is a slim icon strip that opens over the page on
-      // hover, keyboard focus, or the menu button (phones, touch tablets).
-      hoverRail
-      // Tasks wants the room.
-      tightPage={pathname === '/team/tasks' || pathname.startsWith('/team/tasks/')}
-      heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{current?.label || `${teamLabel} Team`}</h2>}
-      // Everything waiting on this team in one place — approvals, refunds,
-      // unread chat — so nobody opens each page to check. Every team gets the
-      // website one click away, to check a product or a price as a customer sees it.
-      actions={(
-        <>
-          <ViewWebsiteLink />
-          <NotificationBell chatHref="/team/chat" />
-        </>
-      )}
-    >
-      <ChampionBanner />
-      {children}
-    </PanelShell>
+    <CallProvider>
+      <PanelShell
+        homeHref="/team"
+        subtitle={`${teamLabel} Team`}
+        sections={[{ items: visible, more }]}
+        // The live auth user once loaded, so a name or photo change shows without a reload.
+        user={{ name: user?.name || userName, photoUrl: user?.avatarUrl, profileHref: '/team/profile', role: roleLabel || (isHead ? 'Team head' : 'Team member') }}
+        footer={canChangePassword && (
+          <Link href={PASSWORD_PATH} className="pn-side-link inline-flex items-center gap-1.5 text-xs">
+            <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> Change password
+          </Link>
+        )}
+        onLogout={signOut}
+        // Every page: the menu is a slim icon strip that opens over the page on
+        // hover, keyboard focus, or the menu button (phones, touch tablets).
+        hoverRail
+        // Tasks wants the room.
+        tightPage={pathname === '/team/tasks' || pathname.startsWith('/team/tasks/')}
+        heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{current?.label || `${teamLabel} Team`}</h2>}
+        // Everything waiting on this team in one place — approvals, refunds,
+        // unread chat — so nobody opens each page to check. Every team gets the
+        // website one click away, to check a product or a price as a customer sees it.
+        actions={(
+          <>
+            <ViewWebsiteLink />
+            <NotificationBell chatHref="/team/chat" />
+          </>
+        )}
+      >
+        <ChampionBanner />
+        {children}
+      </PanelShell>
+    </CallProvider>
   );
 }

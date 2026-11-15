@@ -131,3 +131,25 @@ export const validateTyping = [
   ...validateChannelIdParam,
   body('threadRoot').optional({ values: 'null' }).custom(isObjectId).withMessage('Invalid thread'),
 ];
+
+// ── calls (services/chatCallService.js checks membership and state) ─────────
+const deviceId = () => body('deviceId').isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid device');
+
+export const validateStartCall = [
+  ...validateChannelIdParam,
+  deviceId(),
+  body('media').optional().isIn(['audio', 'video']).withMessage('Invalid call type'),
+];
+
+export const validateCallIdParam = [
+  param('id').custom(isObjectId).withMessage('Invalid call id'),
+];
+
+export const validateCallDevice = [...validateCallIdParam, deviceId()];
+
+export const validateCallSignal = [
+  ...validateCallIdParam,
+  deviceId(),
+  body('kind').isIn(['offer', 'answer', 'candidates']).withMessage('Invalid signal'),
+  body('data').exists({ values: 'null' }).withMessage('Invalid signal'),
+];
