@@ -9,12 +9,21 @@ import { useSSE } from '@/hooks/useSSE';
 import { useCanChat, useChatMe } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel } from '@/hooks/queries/useTeamChat';
 import { chatKeys } from '@/hooks/queries/keys';
-import { CallEngine } from '@/lib/calls/callEngine';
-import type { SignalKind } from '@/lib/calls/callEngine';
+import type { CallEngine, SignalKind } from '@/lib/calls/callEngine';
 import { IDLE, callReducer, tabDeviceId } from '@/lib/calls/callState';
 import type { CallMedia, CallPeer, CallUiState, ServerCall } from '@/lib/calls/callState';
 import { startRingtone, stopRingtone } from '@/lib/calls/ringtone';
-import CallOverlay from './CallOverlay';
+import dynamic from 'next/dynamic';
+
+/*
+ * The call screen and the WebRTC engine load only when a call happens: the
+ * provider itself (listening for a ring) sits on every panel page, the rest of
+ * the call code need not. Both are prefetched once the page is idle, so a ring
+ * still shows at once.
+ */
+const loadOverlay = () => import('./CallOverlay');
+const loadEngine = () => import('@/lib/calls/callEngine');
+const CallOverlay = dynamic(loadOverlay, { ssr: false });
 
 /**
  * Person-to-person calls for the staff panel (one-to-one chats only).
@@ -108,6 +117,9 @@ export default function CallProvider({ children }: { children: ReactNode }) {
   const iceRef = useRef<RTCIceServer[]>([]);
   const pendingRef = useRef<{ callId: string; kind: SignalKind; data: unknown }[]>([]);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bumped by every connect and every teardown: a connect whose engine code was
+  // still loading when the call ended (or reconnected) must not start an engine.
+  const connectGen = useRef(0);
 
   useEffect(() => { deviceRef.current = tabDeviceId(); }, []);
 
@@ -118,6 +130,7 @@ export default function CallProvider({ children }: { children: ReactNode }) {
   }, [qc]);
 
   const releaseMedia = useCallback(() => {
+    connectGen.current += 1;
     engineRef.current?.close();
     engineRef.current = null;
     screenRef.current?.stop();
@@ -146,12 +159,17 @@ export default function CallProvider({ children }: { children: ReactNode }) {
 
   const hangUpRef = useRef<() => Promise<void>>(async () => {});
 
-  const connect = useCallback((call: ServerCall) => {
+  const connect = useCallback(async (call: ServerCall) => {
     if (!localRef.current) return;
     engineRef.current?.close();
+    engineRef.current = null; // signals queue in pendingRef until the new engine exists
     setRemote(null);
     const callId = call.id;
-    const engine = new CallEngine({
+    const gen = ++connectGen.current;
+    const { CallEngine: Engine } = await loadEngine();
+    // The call ended, or a newer connect started, while the code loaded.
+    if (gen !== connectGen.current || !localRef.current) return;
+    const engine = new Engine({
       iceServers: iceRef.current,
       initiator: call.callerId === meId,
       localStream: localRef.current,
@@ -416,7 +434,23 @@ export default function CallProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('pagehide', bye);
   }, [inCall, callId]);
 
+  // Fetch the call code in the background once this person can be called, so
+  // the first ring (or click on Call) does not wait for a download.
+  const canBeCalled = canChat && !!meId;
+  useEffect(() => {
+    if (!canBeCalled) return;
+    const prefetch = () => { void loadOverlay().catch(() => {}); void loadEngine().catch(() => {}); };
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(prefetch);
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(prefetch, 2000);
+    return () => clearTimeout(t);
+  }, [canBeCalled]);
+
   useEffect(() => () => {
+    connectGen.current += 1;
     if (resetTimer.current) clearTimeout(resetTimer.current);
     engineRef.current?.close();
     stopStream(localRef.current);
@@ -425,7 +459,7 @@ export default function CallProvider({ children }: { children: ReactNode }) {
 
   const api = useMemo<CallApi>(() => ({
     state,
-    ready: canChat && !!meId,
+    ready: canBeCalled,
     busy: state.phase !== 'idle' && state.phase !== 'ended',
     localStream,
     remoteStream,
@@ -443,12 +477,12 @@ export default function CallProvider({ children }: { children: ReactNode }) {
     toggleCamera,
     toggleShare,
     minimise,
-  }), [state, canChat, meId, localStream, remoteStream, muted, cameraOff, sharing, canShare, start, answer, decline, hangUp, rejoin, dismiss, toggleMute, toggleCamera, toggleShare, minimise]);
+  }), [state, canBeCalled, localStream, remoteStream, muted, cameraOff, sharing, canShare, start, answer, decline, hangUp, rejoin, dismiss, toggleMute, toggleCamera, toggleShare, minimise]);
 
   return (
     <CallContext.Provider value={api}>
       {children}
-      <CallOverlay />
+      {state.phase !== 'idle' && <CallOverlay />}
     </CallContext.Provider>
   );
 }
