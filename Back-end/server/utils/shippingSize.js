@@ -62,3 +62,27 @@ export function normalizeShippingSize(input) {
 export function hasCompleteShippingSize(size) {
   return !!size && SHIPPING_SIZE_FIELDS.every((k) => typeof size[k] === 'number' && size[k] > 0);
 }
+
+/** Longest accepted source link for an online-listed size. */
+export const LISTED_SIZE_SOURCE_MAX = 500;
+
+/**
+ * Normalise the editor's `listedSize` payload (the bare product's size as found
+ * online). The four numbers follow normalizeShippingSize; `sourceUrl` is trimmed
+ * (blank → null, anything else passed on for the schema to check); `estimated`
+ * accepts true/'true'/'yes'/'1' as true, everything else false.
+ *
+ * Returns undefined when the input is not an object, so the stored value is kept.
+ */
+export function normalizeListedSize(input) {
+  const size = normalizeShippingSize(input);
+  if (size === undefined) return undefined;
+  const rawUrl = input.sourceUrl;
+  const url = typeof rawUrl === 'string' ? rawUrl.trim() : rawUrl;
+  const est = input.estimated;
+  return {
+    ...size,
+    sourceUrl: url === undefined || url === null || url === '' ? null : url,
+    estimated: est === true || (typeof est === 'string' && ['true', 'yes', '1'].includes(est.trim().toLowerCase())),
+  };
+}

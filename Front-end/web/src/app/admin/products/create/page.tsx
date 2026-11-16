@@ -20,6 +20,7 @@ import SlugField from '@/components/admin/SlugField';
 import { usePanel } from '@/lib/usePanel';
 import ShippingSizeFields from '@/components/admin/ShippingSizeFields';
 import { EMPTY_SHIPPING_SIZE, firstShippingSizeError, shippingSizeToPayload, type ShippingSizeForm } from '@/lib/shippingSize';
+import { EMPTY_LISTED_SIZE, firstListedSizeError, listedSizeToPayload, type ListedSizeForm, type ShippingClassChoice } from '@/lib/shippingClass';
 
 type Category = CategoryOption;
 
@@ -62,6 +63,8 @@ export default function CreateProductPage() {
   const [tagsInput, setTagsInput] = useState('');
 
   const [shippingSize, setShippingSize] = useState<ShippingSizeForm>(EMPTY_SHIPPING_SIZE);
+  const [listedSize, setListedSize] = useState<ListedSizeForm>(EMPTY_LISTED_SIZE);
+  const [shippingClass, setShippingClass] = useState<ShippingClassChoice>('');
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -186,6 +189,11 @@ export default function CreateProductPage() {
       alert(`Parcel size — ${sizeError}`);
       return;
     }
+    const listedError = firstListedSizeError(listedSize);
+    if (listedError) {
+      alert(`Parcel size — ${listedError}`);
+      return;
+    }
 
     // A sale countdown is only meaningful with a real markdown — mirror the
     // server-side rule so the admin gets an instant message, not a 400.
@@ -218,6 +226,8 @@ export default function CreateProductPage() {
       fd.append('isFeatured',       String(formData.isFeatured));
       fd.append('isFastMoving',     String(formData.isFastMoving));
       fd.append('shippingSize',     JSON.stringify(shippingSizeToPayload(shippingSize)));
+      fd.append('listedSize',       JSON.stringify(listedSizeToPayload(listedSize)));
+      fd.append('shippingClass',    shippingClass);
       fd.append('returnPolicy',     JSON.stringify({
         returnable: formData.returnable,
         cancellable: formData.cancellable,
@@ -589,7 +599,14 @@ export default function CreateProductPage() {
             </div>
 
             {/* Parcel size — what the courier charges on (Shiprocket booking) */}
-            <ShippingSizeFields value={shippingSize} onChange={setShippingSize} />
+            <ShippingSizeFields
+              value={shippingSize}
+              onChange={setShippingSize}
+              listed={listedSize}
+              onListedChange={setListedSize}
+              shippingClass={shippingClass}
+              onShippingClassChange={setShippingClass}
+            />
 
             {/* Return / cancellation policy (per the signed Roavion policy) */}
             <div className="mb-4 border-t border-gray-200 pt-4">
