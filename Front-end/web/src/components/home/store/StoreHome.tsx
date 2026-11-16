@@ -123,6 +123,7 @@ export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
     photos,
     maxOff: data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0),
     dealsTotal: data.deals.length ? data.dealsTotal : 0,
+    productTotal: data.productTotal,
     categoryCount: data.categories.length,
   };
 }

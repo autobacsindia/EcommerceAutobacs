@@ -37,6 +37,7 @@ const data: StoreHomeData = {
   categories: [{ name: 'Lighting', slug: 'lighting', href: '/categories/lighting', image: '' }],
   deals,
   dealsTotal: 76,
+  productTotal: 953,
   bestSellers: [prod('b1', 4200), prod('b2', 5499), prod('b3', 19990)],
   newArrivals: [prod('n1', 14850), prod('n2', 59999)],
   featured: [],

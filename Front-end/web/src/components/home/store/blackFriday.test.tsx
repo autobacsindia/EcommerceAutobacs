@@ -40,6 +40,7 @@ const baseData: StoreHomeData = {
   categories: [{ name: 'Lighting', slug: 'lighting', href: '/categories/lighting', image: '' }],
   deals: [prod('d1', 1620, 3840), prod('d2', 38250, 85000), prod('d3', 2176, 4352)],
   dealsTotal: 76,
+  productTotal: 953,
   bestSellers: [prod('b1', 4200), prod('b2', 5499)],
   newArrivals: [prod('n1', 14850)],
   featured: [],
@@ -113,6 +114,26 @@ describe('Black Friday home page', () => {
     renderHome(theme('blackfriday'), true, baseData, true);
     expect(screen.getByTestId('free-delivery-seal')).toBeInTheDocument();
     expect(screen.getByTestId('festive-offers')).toHaveTextContent(/Shipping, packing, delivery/i);
+  });
+
+  it('free delivery live: the stat covers the whole catalogue with the real count and ₹0 delivery fees', () => {
+    renderHome(theme('blackfriday'), true, baseData, true);
+    const stats = screen.getByTestId('festive-hero').querySelector('.bfh-stats')!;
+    expect(stats).toHaveTextContent('953');
+    expect(stats).toHaveTextContent('products · ₹0 delivery fees');
+    expect(stats).not.toHaveTextContent('on sale');
+    expect(stats).toHaveTextContent(/category\s*1/);
+  });
+
+  it('free delivery NOT live, or the count unknown: back to "N products on sale"', () => {
+    for (const [data, free] of [[baseData, false], [{ ...baseData, productTotal: 0 }, true]] as const) {
+      const { unmount } = renderHome(theme('blackfriday'), true, data, free);
+      const stats = screen.getByTestId('festive-hero').querySelector('.bfh-stats')!;
+      expect(stats).toHaveTextContent('76');
+      expect(stats).toHaveTextContent('products on sale');
+      expect(stats).not.toHaveTextContent('₹0 delivery');
+      unmount();
+    }
   });
 
   it('no discount anywhere: no "Up to 0%" tag and no red offer card', () => {

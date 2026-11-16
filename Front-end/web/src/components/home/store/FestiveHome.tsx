@@ -52,12 +52,15 @@ export function FestiveHero({
   photos,
   maxOff,
   dealsTotal,
+  productTotal = 0,
   categoryCount,
   freeDelivery = false,
 }: {
   photos: FestiveHeroPhoto[];
   maxOff: number;
   dealsTotal: number;
+  /** Every active product — the Black Friday "₹0 delivery fees" stat. */
+  productTotal?: number;
   categoryCount: number;
   /** Server: checkout is waiving shipping/packing/delivery right now. Shows the seal. */
   freeDelivery?: boolean;
@@ -73,6 +76,7 @@ export function FestiveHero({
         photos={photos}
         maxOff={maxOff}
         dealsTotal={dealsTotal}
+        productTotal={productTotal}
         categoryCount={categoryCount}
         showSeal={freeDelivery}
       />

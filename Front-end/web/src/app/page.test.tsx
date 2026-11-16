@@ -41,6 +41,7 @@ const data: StoreHomeData = {
   categories: Array.from({ length: 8 }, (_, i) => ({ name: `Cat ${i}`, slug: `c${i}`, href: `/categories/c${i}`, image: `/c${i}.jpg` })),
   deals: [prod('d1', { price: 600, originalPrice: 1000 }), prod('d2', { price: 900, originalPrice: 1000 }), prod('d3', { price: 500, originalPrice: 2000 }), prod('d4', { price: 50, originalPrice: 100 })],
   dealsTotal: 75,
+  productTotal: 953,
   // Shown premium-first, so tile order != sales rank: the badge must follow salesRank.
   bestSellers: [prod('b3', { salesRank: 3, price: 9000 }), prod('b1', { salesRank: 1, price: 5000 }), prod('b2', { salesRank: 2 }), prod('b4', { salesRank: 4 })],
   newArrivals: [prod('n1'), prod('n2'), prod('n3')],
