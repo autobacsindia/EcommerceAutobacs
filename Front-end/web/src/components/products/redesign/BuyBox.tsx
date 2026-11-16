@@ -5,6 +5,7 @@ import { useFestivalOfferPrice, useFestivalPriceRange } from '@/components/festi
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { resolveFestivalSetting, type FestivalOfferSetting, type FestivalVariantSetting } from '@/lib/festival/festivalOffer';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
+import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard, Star } from 'lucide-react';
@@ -144,6 +145,7 @@ export default function BuyBox({
   */
   const unitFestivalSetting = resolveFestivalSetting(product, selectedVariant?._id ?? null);
   const saleExpired = !isVariable && !!product.saleEndsAt && !saleLive && !!activeOriginal && activeOriginal > activePrice;
+  const offerLabel = useFestivalOfferLabel();
   const festivalOffer = useFestivalOfferPrice(
     needsSelection ? null : saleExpired ? activeOriginal : activePrice,
     unitFestivalSetting,
@@ -275,7 +277,7 @@ export default function BuyBox({
         />
         {needsSelection && festivalRange?.anyOffer && (
           <span className="w-full text-[13px] font-semibold text-[#b4231a] dark:text-[#ff8a7a]">
-            🪔 Diwali offer prices — pick a model to see its saving
+            {offerLabel.icon} {offerLabel.name} prices — pick a model to see its saving
           </span>
         )}
       </div>

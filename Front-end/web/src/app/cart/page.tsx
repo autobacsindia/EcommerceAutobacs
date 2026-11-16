@@ -21,6 +21,7 @@ import Reveal from '@/components/ui/Reveal';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
 import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
+import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { useCampaign } from '@/hooks/queries/useCampaign';
 import CampaignMeter from '@/components/campaign/CampaignMeter';
 import CampaignCartNotice from '@/components/campaign/CampaignCartNotice';
@@ -210,6 +211,7 @@ function CartPageContent() {
   };
   const { isAuthenticated } = useAuth();
   const { formatPrice } = useCurrency();
+  const offerLabel = useFestivalOfferLabel();
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
   const [recentChanges, setRecentChanges] = useState<any[]>([]);
   const [hasShownChanges, setHasShownChanges] = useState(false);
@@ -550,7 +552,7 @@ function CartPageContent() {
                   // Already inside the line prices (and so inside the subtotal above) —
                   // shown so the shopper can see what Diwali took off. Server figure.
                   <div className="flex justify-between text-[#b4231a] dark:text-[#ff8a7a] font-display text-sm">
-                    <span>🪔 Diwali offer saving (already in prices)</span>
+                    <span>{offerLabel.icon} {offerLabel.name} saving (already in prices)</span>
                     <span>{formatPrice(quote.savings.festival!, { exact: true })}</span>
                   </div>
                 )}

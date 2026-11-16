@@ -36,6 +36,7 @@ import CheckoutSummary from '@/components/checkout/CheckoutSummary';
 import { useCheckoutQuote, type CheckoutQuote } from '@/hooks/useCheckoutQuote';
 import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
+import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { formatRupees } from '@/lib/formatRupees';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
@@ -80,6 +81,8 @@ export default function CheckoutPage() {
 }
 
 function CheckoutPageContent() {
+  // How the extra festival price offer is named (Diwali / Black Friday). Words only.
+  const offerLabel = useFestivalOfferLabel();
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { cart, clearCart, isLoading: cartLoading, refreshCart } = useCart();
@@ -813,7 +816,7 @@ function CheckoutPageContent() {
                 </div>
                 {reviewQuote && (reviewQuote.savings?.festival ?? 0) > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-[#b4231a] dark:text-[#ff8a7a] font-display">🪔 Diwali offer saving (already in prices)</span>
+                    <span className="text-[#b4231a] dark:text-[#ff8a7a] font-display">{offerLabel.icon} {offerLabel.name} saving (already in prices)</span>
                     <span className="text-[#b4231a] dark:text-[#ff8a7a] font-display">{formatRupees(reviewQuote.savings.festival!, { exact: true })}</span>
                   </div>
                 )}

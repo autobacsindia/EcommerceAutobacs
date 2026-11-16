@@ -8,6 +8,7 @@
 
 import {
   resolvePublicFestivalTheme,
+  toPublicEvents,
   getFestivalThemeConfig,
   updateFestivalThemeConfig,
   isFestivalThemeLive,
@@ -33,9 +34,13 @@ const adminShape = (doc, now = new Date()) => ({
 });
 
 // @route GET /festival-theme/active  (public, shared cache)
+// `events.blackFriday.active` is the public Black Friday flag. The edge may hold
+// this response for a few minutes, so a client that acts on it re-checks
+// startsAt/endsAt on its own clock; anything money-related asks the server
+// (festivalThemeService.isBlackFridayActive) instead.
 export const getActiveFestivalTheme = async (_req, res) => {
   const theme = await resolvePublicFestivalTheme();
-  res.json({ success: true, theme });
+  res.json({ success: true, theme, events: toPublicEvents(theme) });
 };
 
 // @route GET /festival-theme/admin  (admin/marketing)

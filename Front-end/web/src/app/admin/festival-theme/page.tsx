@@ -9,7 +9,9 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import FestivalOfferPanel from '@/components/admin/FestivalOfferPanel';
 
 /**
- * Admin — festival theme (Diwali sparks, toran, fireworks, deal badges, countdown).
+ * Admin — festival theme: Diwali or Black Friday (decoration, cursor, deal badges,
+ * countdown, the festive home page). One theme at a time; Black Friday being the
+ * chosen theme IS the Black Friday event switch (events.blackFriday on the public read).
  *
  * One switch and a window in IST. The storefront hides the theme by itself once
  * the end time passes — no deploy and no need to come back and switch it off.
@@ -29,8 +31,15 @@ const label = 'block text-sm font-medium text-gray-700 mb-1';
 const input = 'w-full border border-gray-300 rounded-lg px-3 py-2';
 const hint = 'mt-1 text-xs text-gray-500';
 
+/** What each theme puts on the site, in the owner's words. */
+const THEME_HELP: Record<string, string> = {
+  diwali: 'Toran along the top, diya mouse pointer and sparkles, gold "Diwali Deal" badges, lantern home page, fireworks when an order is confirmed.',
+  blackfriday: 'Black-and-red neon look: moving "Black Friday" strip on top, red price-tag mouse pointer with sparks, big countdown, "Up to X% off" tag (the real top saving), red "Black Friday Deal" badges and offer cards. The gold "Without shipping, packing, delivery charges" seal appears only while the price offer below waives delivery fees, so it never promises what checkout does not do. Suggested dates: 23 Nov 00:00 to 30 Nov 23:59.',
+};
+
 function statusText(s: ThemeSettings): string {
-  if (s.live) return 'Showing on the website now';
+  const name = FESTIVAL_THEMES[s.themeKey]?.name ?? 'The festival theme';
+  if (s.live) return `${name} is showing on the website now`;
   if (!s.enabled) return 'Off';
   if (s.startsAt && Date.parse(s.startsAt) > Date.now()) return `Starts ${formatDateTimeIST(s.startsAt)}`;
   if (s.endsAt && Date.parse(s.endsAt) <= Date.now()) return 'Ended — switched off automatically';
@@ -94,9 +103,9 @@ export default function AdminFestivalThemePage() {
     <div className="p-8 max-w-2xl">
       <h1 className="text-3xl font-bold mb-2">Festival theme</h1>
       <p className="text-gray-600 mb-6">
-        Festive look for the shop: sparks when someone adds to cart, fireworks when an order is
-        confirmed, a toran along the top, &ldquo;Deal&rdquo; badges on sale items and an offer countdown.
-        It switches itself off at the end time.
+        Festive look for the shop — Diwali or Black Friday. Pick one, set the dates and switch it
+        on. It switches itself off at the end time, and the normal site comes back by itself.
+        It never shows in the admin or staff panels, or on checkout.
       </p>
 
       {saved && (
@@ -116,6 +125,7 @@ export default function AdminFestivalThemePage() {
           <select id="fx-theme" className={input} value={themeKey} onChange={(e) => setThemeKey(e.target.value)}>
             {Object.values(FESTIVAL_THEMES).map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
           </select>
+          {THEME_HELP[themeKey] && <p className={hint} data-testid="festival-theme-help">{THEME_HELP[themeKey]}</p>}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

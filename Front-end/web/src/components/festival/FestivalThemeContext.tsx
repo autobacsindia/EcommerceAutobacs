@@ -9,7 +9,7 @@ import {
   msUntilNextBoundary,
   type PublicFestivalTheme,
 } from '@/lib/festival/festivalTheme';
-import { getThemeTokens, type FestivalThemeTokens } from '@/lib/festival/themes';
+import { FESTIVAL_THEMES, getThemeTokens, type FestivalThemeTokens } from '@/lib/festival/themes';
 
 interface FestivalState {
   theme: PublicFestivalTheme | null;
@@ -18,9 +18,11 @@ interface FestivalState {
   live: boolean;
   /** Inside its date window AND on a route with a sparkle trail (festive routes + staff panels). */
   trailLive: boolean;
+  /** Inside its date window, on ANY route (the cart and checkout name the offer too). */
+  windowLive: boolean;
 }
 
-const FestivalContext = createContext<FestivalState>({ theme: null, tokens: null, live: false, trailLive: false });
+const FestivalContext = createContext<FestivalState>({ theme: null, tokens: null, live: false, trailLive: false, windowLive: false });
 
 /** setTimeout's ceiling (~24.8 days); longer waits just re-arm. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
@@ -69,17 +71,19 @@ export function FestivalThemeProvider({
     const root = document.documentElement;
     if (!active || !tokens) return;
     root.dataset.festival = tokens.key;
+    root.dataset.festivalStyle = tokens.style;
     root.style.setProperty('--fx-primary', tokens.colors.primary);
     root.style.setProperty('--fx-accent', tokens.colors.accent);
     return () => {
       delete root.dataset.festival;
+      delete root.dataset.festivalStyle;
       root.style.removeProperty('--fx-primary');
       root.style.removeProperty('--fx-accent');
     };
   }, [active, tokens]);
 
   return (
-    <FestivalContext.Provider value={{ theme, tokens, live: active, trailLive: trailActive }}>
+    <FestivalContext.Provider value={{ theme, tokens, live: active, trailLive: trailActive, windowLive: live && !!tokens }}>
       {children}
     </FestivalContext.Provider>
   );
@@ -93,6 +97,19 @@ export function useFestival(): { theme: PublicFestivalTheme; tokens: FestivalThe
   const { theme, tokens, live } = useContext(FestivalContext);
   if (!live || !theme || !tokens) return null;
   return { theme, tokens };
+}
+
+/**
+ * How price lines name the extra festival price offer ("🪔 Diwali offer −3%",
+ * "🏷️ Black Friday offer −3%"). Follows the festival in its date window on every
+ * route — the cart and checkout too, where the decoration itself is off — and
+ * falls back to the Diwali words when no theme is running (the offer has its own
+ * switch and may outlast the decoration). Words only; never a number.
+ */
+export function useFestivalOfferLabel(): { icon: string; name: string; before: string } {
+  const { tokens, windowLive } = useContext(FestivalContext);
+  const t = windowLive && tokens ? tokens : FESTIVAL_THEMES.diwali;
+  return { icon: t.icons.lamp, name: t.copy.offerName, before: t.copy.offerBefore };
 }
 
 /** The theme tokens if THIS page has a sparkle trail, or null. */

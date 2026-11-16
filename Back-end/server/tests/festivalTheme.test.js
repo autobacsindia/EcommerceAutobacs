@@ -13,8 +13,11 @@ import cacheService from '../services/cacheService.js';
 import {
   isFestivalThemeLive,
   toPublicTheme,
+  toPublicEvents,
+  isBlackFridayActive,
   FESTIVAL_THEME_CACHE_TAG,
 } from '../services/festivalThemeService.js';
+import { FESTIVAL_THEME_KEYS, BLACK_FRIDAY_THEME_KEY } from '../config/festivalThemes.js';
 import { festivalThemeTags } from '../utils/nextTags.js';
 import { pathsForPatterns } from '../config/cdnPurgeUrls.js';
 import * as dbHandler from './db-handler.js';
@@ -65,6 +68,32 @@ describe('toPublicTheme', () => {
   it('exposes only the four public fields', () => {
     const out = toPublicTheme({ enabled: true, themeKey: 'diwali', updatedBy: 'x', _id: 'y' }, NOW);
     expect(Object.keys(out).sort()).toEqual(['endsAt', 'live', 'startsAt', 'themeKey']);
+  });
+});
+
+describe('toPublicEvents (the Black Friday flag)', () => {
+  const bf = (startsAt, endsAt) => ({ themeKey: 'blackfriday', startsAt, endsAt, live: true });
+
+  it('blackfriday is an allowed theme key', () => {
+    expect(FESTIVAL_THEME_KEYS).toContain(BLACK_FRIDAY_THEME_KEY);
+    expect(BLACK_FRIDAY_THEME_KEY).toBe('blackfriday');
+  });
+  it('is inactive with no theme (off all year)', () => {
+    expect(toPublicEvents(null, NOW)).toEqual({ blackFriday: { active: false, startsAt: null, endsAt: null } });
+  });
+  it('is inactive while a DIFFERENT festival is on', () => {
+    const diwali = { themeKey: 'diwali', startsAt: null, endsAt: null, live: true };
+    expect(toPublicEvents(diwali, NOW).blackFriday).toEqual({ active: false, startsAt: null, endsAt: null });
+  });
+  it('is active inside the window and carries the window', () => {
+    const s = at(-HOUR).toISOString();
+    const e = at(HOUR).toISOString();
+    expect(toPublicEvents(bf(s, e), NOW).blackFriday).toEqual({ active: true, startsAt: s, endsAt: e });
+  });
+  it('re-checks the clock instead of trusting a cached live:true (not started / ended)', () => {
+    expect(toPublicEvents(bf(at(1).toISOString(), null), NOW).blackFriday.active).toBe(false);
+    expect(toPublicEvents(bf(null, NOW.toISOString()), NOW).blackFriday.active).toBe(false);
+    expect(toPublicEvents(bf(null, null), NOW).blackFriday.active).toBe(true);
   });
 });
 
@@ -179,6 +208,38 @@ describe('Festival theme API', () => {
     const anon = await request(app).get(`${BASE}/festival-theme/admin`);
     expect(anon.status).toBe(401);
     expect(await FestivalTheme.countDocuments({ enabled: true })).toBe(0);
+  });
+
+  it('exposes events.blackFriday on the public read', async () => {
+    expect((await getActive()).body.events).toEqual({ blackFriday: { active: false, startsAt: null, endsAt: null } });
+
+    const startsAt = new Date(Date.now() - HOUR).toISOString();
+    const endsAt = new Date(Date.now() + HOUR).toISOString();
+    expect((await put({ enabled: true, themeKey: 'blackfriday', startsAt, endsAt })).status).toBe(200);
+    const res = await getActive();
+    expect(res.body.theme).toMatchObject({ themeKey: 'blackfriday', live: true });
+    expect(res.body.events).toEqual({ blackFriday: { active: true, startsAt, endsAt } });
+    expect(await isBlackFridayActive()).toBe(true);
+  });
+
+  it('Black Friday is off for the server when Diwali is the theme, or the switch is off', async () => {
+    await put({ enabled: true, themeKey: 'diwali' });
+    expect(await isBlackFridayActive()).toBe(false);
+    expect((await getActive()).body.events.blackFriday.active).toBe(false);
+
+    await put({ enabled: true, themeKey: 'blackfriday' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await isBlackFridayActive()).toBe(true);
+
+    await put({ enabled: false });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await isBlackFridayActive()).toBe(false);
+    expect((await getActive()).body.events.blackFriday.active).toBe(false);
+  });
+
+  it('isBlackFridayActive answers false (never throws) when the read fails', async () => {
+    jest.spyOn(cacheService, 'wrap').mockRejectedValueOnce(new Error('redis down'));
+    await expect(isBlackFridayActive()).resolves.toBe(false);
   });
 
   it('lets the admin read the current settings uncached', async () => {
