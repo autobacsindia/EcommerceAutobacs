@@ -264,28 +264,55 @@ function followUpClause(v) {
   return FOLLOW_UP_STATUS_KEYS.includes(v) ? { followUpStatus: v } : null;
 }
 
+/*
+  Tab names as people pick them. Google keeps a tab name's stray spaces
+  ("Fortuner Suspension "), and the lead rows store it exactly, so the sheet
+  writer can find the tab again. But every request's query values are trimmed
+  (middleware/sanitizationMiddleware.js), so an exact match on the trimmed name
+  found nothing while the dropdown promised the rows. The choice is the trimmed
+  name; the filter maps it back to every stored name it stands for.
+*/
+const tabLabel = (name) => String(name ?? '').trim();
+
+/** The Tab dropdown: one choice per trimmed name, counting every stored tab it covers. */
+function tabChoices(state) {
+  const rows = new Map();
+  for (const t of state?.tabs ?? []) {
+    const name = tabLabel(t.name);
+    rows.set(name, (rows.get(name) ?? 0) + (t.rows ?? 0));
+  }
+  return [...rows].map(([name, n]) => ({ name, rows: n }));
+}
+
+function tabClause(v, state) {
+  if (!v) return null;
+  const want = tabLabel(v);
+  const names = new Set([String(v), want]);
+  for (const t of state?.tabs ?? []) if (tabLabel(t.name) === want) names.add(t.name);
+  return { tab: { $in: [...names] } };
+}
+
 /** GET /staff/meta-leads?view=all|free|mine&owner=&followUp=&tab=&q=&cursor= — keyset-paged, newest first; undated rows last. */
 export async function listMetaLeads(actor, params = {}) {
   assertViewMetaLeads(actor);
   const f = plainQuery(params);
   const view = VIEWS.includes(f.view) ? f.view : 'all';
+  // One small document; the tab filter needs its stored names.
+  const state = await metaLeadRepository.getState();
   const query = and(
-    f.tab ? { tab: String(f.tab) } : null,
+    tabClause(f.tab, state),
     ownerClause({ ...f, view }, actor),
     followUpClause(f.followUp),
     dueClause(f.due),
     searchClause(f.q),
   );
-  const [{ items, ...page }, state] = await Promise.all([
-    keysetPage({ query, sorts: SORTS, sortName: 'newest', cursor: f.cursor, pageSize: META_LEADS_PAGE_SIZE, find: (q, o) => metaLeadRepository.page(q, o) }),
-    metaLeadRepository.getState(),
-  ]);
+  const { items, ...page } = await keysetPage({ query, sorts: SORTS, sortName: 'newest', cursor: f.cursor, pageSize: META_LEADS_PAGE_SIZE, find: (q, o) => metaLeadRepository.page(q, o) });
   const related = await relatedFor(items);
   const now = new Date();
   return {
     ...page,
     leads: items.map((d) => rowOf(d, actor, relatedOf(related, d), now)),
-    tabs: (state?.tabs ?? []).map((t) => ({ name: t.name, rows: t.rows })),
+    tabs: tabChoices(state),
     sync: syncInfo(state),
     you: youOf(actor),
   };
