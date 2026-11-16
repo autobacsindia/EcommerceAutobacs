@@ -585,6 +585,40 @@ describe('API', () => {
       expect(body.sync.skippedTabs).toEqual(['odd']);
       expect(body.sync.columnsMoved).toEqual([]);
     });
+
+    // Live bug: "Fortuner Suspension (6)" listed nothing. Google keeps a tab
+    // name's stray spaces; every request has its query values trimmed.
+    test('the Tab filter lists exactly the rows its count promises, even with stray spaces in the tab name', async () => {
+      const lead = (i) => metaRow(`l:${i}`, `P${i}`, `98765${String(i).padStart(5, '0')}`);
+      await sync([
+        { name: 'Fortuner Suspension ', gid: 31, values: [META_HEAD, lead(1), lead(2), lead(3)] },
+        { name: '  Thar  Ironman', gid: 32, values: [META_HEAD, lead(4)] },
+        ...tabs([lead(5)]),
+      ]);
+      const admin = await login('admin');
+      const { body } = await request(app).get(BASE).set(admin).expect(200);
+      for (const t of body.tabs) {
+        const listed = await request(app).get(`${BASE}?tab=${encodeURIComponent(t.name)}`).set(admin).expect(200);
+        expect([t.name, listed.body.leads.length]).toEqual([t.name, t.rows]);
+      }
+      expect(body.tabs.map((t) => t.name).sort()).toEqual(['Fortuner Suspension', 'Thar  Ironman', 'jimny suspension'].sort());
+      // The untrimmed name (an old bookmarked link) reaches the same rows.
+      const raw = await request(app).get(`${BASE}?tab=${encodeURIComponent('Fortuner Suspension ')}`).set(admin).expect(200);
+      expect(raw.body.leads).toHaveLength(3);
+      expect((await request(app).get(`${BASE}?tab=nope`).set(admin).expect(200)).body.leads).toHaveLength(0);
+    });
+
+    test('tabs whose names differ only by spaces share one Tab choice, and its count is both', async () => {
+      const lead = (i) => metaRow(`l:${i}`, `P${i}`, `98765${String(i).padStart(5, '0')}`);
+      await sync([
+        { name: 'Fortuner', gid: 41, values: [META_HEAD, lead(1)] },
+        { name: 'Fortuner ', gid: 42, values: [META_HEAD, lead(2), lead(3)] },
+      ]);
+      const admin = await login('admin');
+      const { body } = await request(app).get(BASE).set(admin).expect(200);
+      expect(body.tabs).toEqual([{ name: 'Fortuner', rows: 3 }]);
+      expect((await request(app).get(`${BASE}?tab=Fortuner`).set(admin).expect(200)).body.leads).toHaveLength(3);
+    });
   });
 
   test('no login is 401, never 200', async () => { await request(app).get(BASE).expect(401); });
