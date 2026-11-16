@@ -6,7 +6,7 @@ export interface OrderDeliveryFeesSnapshot {
   remote?: boolean;
   distanceKm?: number | null;
   place?: { district?: string | null; state?: string | null } | null;
-  band?: { upToKm: number | null; ratePerKg: number } | null;
+  band?: { upToKm: number | null; ratePerKg: number; slabRate?: number } | null;
   mode?: 'courier' | 'freight';
   chargedKg?: number;
   estimated?: boolean;
@@ -73,7 +73,11 @@ export default function OrderDeliveryFees({ fees, shippingCost, admin = false, l
           {fees.pin ? ` · PIN ${fees.pin}` : ''}{fees.remote ? ' (remote area)' : ''}
           {fees.place?.district ? ` · ${fees.place.district}${fees.place.state ? `, ${fees.place.state}` : ''}` : ''}
           {typeof fees.distanceKm === 'number' ? ` · ~${fees.distanceKm.toLocaleString('en-IN')} km` : ''}
-          {fees.band ? ` · ₹${fees.band.ratePerKg}/kg band` : ''}
+          {fees.band
+            ? fees.mode === 'courier' && typeof fees.band.slabRate === 'number'
+              ? ` · ₹${fees.band.slabRate}/slab band`
+              : ` · ₹${fees.band.ratePerKg}/kg band`
+            : ''}
           {fees.estimated ? ' · box size estimated' : ''}
           {' · '}book as PREPAID — the customer must not pay the courier again.
         </p>

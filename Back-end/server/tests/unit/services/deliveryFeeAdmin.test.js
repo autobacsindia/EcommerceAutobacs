@@ -15,7 +15,7 @@ describe('parseRateCardInput', () => {
     for (const f of RATE_CARD_FIELDS) expect(typeof set[f]).toBe('number');
     expect(set['freight.minimum']).toBe(500);
     expect(set.distanceBands).toHaveLength(5);
-    expect(set.distanceBands[4]).toEqual({ upToKm: null, ratePerKg: 16 });
+    expect(set.distanceBands[4]).toEqual({ upToKm: null, ratePerKg: 16, slabRate: null });
   });
 
   it('accepts numbers typed as strings (form inputs)', () => {
@@ -47,13 +47,20 @@ describe('distance bands + origin', () => {
   const withBands = (bands) => ({ ...full(), distanceBands: bands });
   it('accepts ascending bands ending open-ended; the last band\'s km is ignored', () => {
     const set = parseRateCardInput(withBands([{ upToKm: '800', ratePerKg: '14' }, { upToKm: 99, ratePerKg: 18 }]), toRateCard(null));
-    expect(set.distanceBands).toEqual([{ upToKm: 800, ratePerKg: 14 }, { upToKm: null, ratePerKg: 18 }]);
+    expect(set.distanceBands).toEqual([{ upToKm: 800, ratePerKg: 14, slabRate: null }, { upToKm: null, ratePerKg: 18, slabRate: null }]);
+  });
+  it('takes an optional small-parcel slab rate per band; blank = all-India rate', () => {
+    const set = parseRateCardInput(withBands([{ upToKm: 800, ratePerKg: 14, slabRate: '60' }, { upToKm: null, ratePerKg: 18, slabRate: '' }]), toRateCard(null));
+    expect(set.distanceBands).toEqual([{ upToKm: 800, ratePerKg: 14, slabRate: 60 }, { upToKm: null, ratePerKg: 18, slabRate: null }]);
+    expect(toRateCard({ distanceBands: set.distanceBands }).distanceBands[0].slabRate).toBe(60);
   });
   it.each([
     ['empty', []],
     ['km going down', [{ upToKm: 1000, ratePerKg: 16 }, { upToKm: 500, ratePerKg: 16 }, { upToKm: null, ratePerKg: 16 }]],
     ['blank rate', [{ upToKm: 500, ratePerKg: '' }, { upToKm: null, ratePerKg: 16 }]],
     ['blank km', [{ upToKm: '', ratePerKg: 16 }, { upToKm: null, ratePerKg: 16 }]],
+    ['bad slab rate', [{ upToKm: 500, ratePerKg: 16, slabRate: 'abc' }, { upToKm: null, ratePerKg: 16 }]],
+    ['negative slab rate', [{ upToKm: 500, ratePerKg: 16, slabRate: -5 }, { upToKm: null, ratePerKg: 16 }]],
     ['too many', Array.from({ length: 11 }, (_, i) => ({ upToKm: (i + 1) * 100, ratePerKg: 16 }))],
   ])('refuses %s bands', (_n, bands) => {
     expect(() => parseRateCardInput(withBands(bands), toRateCard(null))).toThrow(/Distance bands/);
@@ -63,7 +70,7 @@ describe('distance bands + origin', () => {
     expect(() => parseRateCardInput({ ...full(), origin: { ...full().origin, lat: 51.5 } }, toRateCard(null))).toThrow(/origin.lat/);
   });
   it('a malformed stored band list falls back to the defaults (never misprices)', () => {
-    expect(toRateCard({ distanceBands: [{ upToKm: 500, ratePerKg: 16 }] }).distanceBands).toEqual(DEFAULT_RATE_CARD.distanceBands.map((b) => ({ ...b })));
+    expect(toRateCard({ distanceBands: [{ upToKm: 500, ratePerKg: 16 }] }).distanceBands).toEqual(DEFAULT_RATE_CARD.distanceBands.map((b) => ({ ...b, slabRate: null })));
   });
 });
 

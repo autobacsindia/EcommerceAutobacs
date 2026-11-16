@@ -185,7 +185,7 @@ describe('distance by PIN', () => {
     const hyd = (await quote(p, { deliveryPin: '500001' })).deliveryFees;
     expect(near.place).toEqual({ district: 'Gautam Buddha Nagar', state: 'Uttar Pradesh' });
     expect(near.distanceKm).toBeLessThan(30);
-    expect(near.band).toEqual({ upToKm: 500, ratePerKg: 10 });
+    expect(near.band).toEqual({ upToKm: 500, ratePerKg: 10, slabRate: 80 });
     expect(near.lines.find((l) => l.code === 'shipping').amount).toBe(100 * 10);
     expect(hyd.origin).toBe('Delhi');
     expect(hyd.distanceKm).toBeGreaterThan(1200);
@@ -199,7 +199,7 @@ describe('distance by PIN', () => {
     const f = (await quote(p, { deliveryPin: '799001' })).deliveryFees;
     expect(f.place).toBeNull();
     expect(f.distanceKm).toBeNull();
-    expect(f.band).toEqual({ upToKm: null, ratePerKg: 20 });
+    expect(f.band).toEqual({ upToKm: null, ratePerKg: 20, slabRate: 80 });
     expect(f.lines.find((l) => l.code === 'shipping').amount).toBe(100 * 20);
   });
 
@@ -213,6 +213,28 @@ describe('distance by PIN', () => {
       pin: '500001', place: { district: 'Hyderabad', state: 'Telangana' }, band: { ratePerKg: 14 }, mode: 'freight',
     });
     expect(stored.deliveryFees.distanceKm).toBeGreaterThan(1200);
+  });
+
+  it('small parcels: each band\'s own ₹ per slab (saved through the model), snapshotted on the order', async () => {
+    // Default product: 1 kg in a 20×15×10 box → 1 kg charged → 2 slabs of 0.5 kg.
+    const p = await seedProduct(5000);
+    await feesOn({ distanceBands: [
+      { upToKm: 500, ratePerKg: 16, slabRate: 60 }, { upToKm: 1500, ratePerKg: 16, slabRate: 90 }, { upToKm: null, ratePerKg: 16 },
+    ] });
+    const near = (await quote(p, { deliveryPin: '201301' })).deliveryFees;
+    const hyd = (await quote(p, { deliveryPin: '500001' })).deliveryFees;
+    const unknown = (await quote(p, { deliveryPin: '799001' })).deliveryFees;
+    expect(near.mode).toBe('courier');
+    expect(near.lines.find((l) => l.code === 'shipping').amount).toBe(2 * 60);
+    expect(hyd.lines.find((l) => l.code === 'shipping').amount).toBe(2 * 90);
+    // Last band left blank → the all-India ₹80.
+    expect(unknown.lines.find((l) => l.code === 'shipping').amount).toBe(2 * 80);
+
+    const user = await seedUser();
+    const order = await orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], { ...ADDRESS, postalCode: '500001' }, {});
+    const stored = await Order.findById(order._id).lean();
+    expect(stored.deliveryFees.band).toMatchObject({ upToKm: 1500, slabRate: 90 });
+    expect(stored.deliveryFees.lines.find((l) => l.code === 'shipping').amount).toBe(180);
   });
 });
 

@@ -171,8 +171,41 @@ describe('distance bands', () => {
     const far = computeDeliveryFees({ lines: heavy, goodsPaise: 0, distanceKm: null, card: card({ distanceBands: bands }) });
     expect(amount(near, 'shipping')).toBe(100 * 1000);
     expect(amount(far, 'shipping')).toBe(100 * 2000);
-    expect(near.band).toEqual({ upToKm: 500, ratePerKg: 10 });
-    expect(far.band).toEqual({ upToKm: null, ratePerKg: 20 });
+    expect(near.band).toEqual({ upToKm: 500, ratePerKg: 10, slabRate: 80 });
+    expect(far.band).toEqual({ upToKm: null, ratePerKg: 20, slabRate: 80 });
+  });
+
+  describe('small parcels (courier) by distance', () => {
+    const small = [line({ shippingSize: box(1.2, 20, 15, 10) })]; // 1.2 kg → 3 slabs of 0.5 kg
+    const slabBands = [
+      { upToKm: 500, ratePerKg: 16, slabRate: 60 },
+      { upToKm: 1500, ratePerKg: 16, slabRate: null }, // blank → all-India rate
+      { upToKm: null, ratePerKg: 16, slabRate: 100 },
+    ];
+    const at = (km) => computeDeliveryFees({ lines: small, goodsPaise: 0, distanceKm: km, card: card({ distanceBands: slabBands }) });
+
+    it('uses the band\'s own slab rate: near is cheaper than far', () => {
+      expect(at(25).mode).toBe('courier');
+      expect(amount(at(25), 'shipping')).toBe(3 * 6000);   // Gurugram: 3 × ₹60
+      expect(amount(at(2076), 'shipping')).toBe(3 * 10000); // Kochi: 3 × ₹100
+      expect(at(25).band.slabRate).toBe(60);
+    });
+    it('a band left blank uses the all-India courier rate', () => {
+      expect(amount(at(1241), 'shipping')).toBe(3 * 8000); // Hyderabad: 3 × ₹80
+      expect(at(1241).band.slabRate).toBe(80);
+    });
+    it('unknown PIN → the highest band\'s slab rate', () => {
+      expect(amount(at(null), 'shipping')).toBe(3 * 10000);
+    });
+    it('bands without slab rates (old saved cards) price exactly as before', () => {
+      const r = computeDeliveryFees({ lines: small, goodsPaise: 0, distanceKm: 25, card: card() });
+      expect(amount(r, 'shipping')).toBe(3 * 8000);
+    });
+    it('freight ignores the slab rate', () => {
+      const r = computeDeliveryFees({ lines: heavy, goodsPaise: 0, distanceKm: 25, card: card({ distanceBands: slabBands }) });
+      expect(r.mode).toBe('freight');
+      expect(amount(r, 'shipping')).toBe(100 * 1600);
+    });
   });
 
   it('default bands are all ₹16/kg — the same as today\'s bills at any distance', () => {

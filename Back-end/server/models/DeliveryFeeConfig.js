@@ -40,12 +40,14 @@ const DeliveryFeeConfigSchema = new mongoose.Schema({
     lat: { type: Number, min: 6, max: 38, default: D.origin.lat },     // India's bounding box
     lng: { type: Number, min: 68, max: 98, default: D.origin.lng },
   },
-  // Freight ₹/kg by distance; ascending, the last one open-ended (upToKm null).
+  // Freight ₹/kg (and optionally the courier slab rate) by distance; ascending, the last one open-ended (upToKm null).
   // Validated as a whole in services/deliveryFeeService.js parseRateCardInput.
   distanceBands: {
     type: [new mongoose.Schema({
       upToKm: { type: Number, min: 1, max: 5000, default: null },
       ratePerKg: money(16, 1000),
+      // Small-parcel ₹ per slab in this band; null = use courier.slabRate.
+      slabRate: { type: Number, min: 0, max: 10000, default: null },
     }, { _id: false })],
     default: () => D.distanceBands.map((b) => ({ ...b })),
   },

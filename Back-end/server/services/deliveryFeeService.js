@@ -75,6 +75,7 @@ export function isValidBands(bands) {
     const b = bands[i];
     const last = i === bands.length - 1;
     if (!(typeof b?.ratePerKg === 'number' && b.ratePerKg >= 0 && b.ratePerKg <= 1000)) return false;
+    if (b.slabRate != null && !(typeof b.slabRate === 'number' && b.slabRate >= 0 && b.slabRate <= 10000)) return false;
     if (last ? b.upToKm != null : !(typeof b.upToKm === 'number' && b.upToKm > 0 && b.upToKm <= 5000)) return false;
     if (!last && i > 0 && !(b.upToKm > bands[i - 1].upToKm)) return false;
   }
@@ -99,7 +100,7 @@ export function toRateCard(doc) {
     },
     // A malformed stored list falls back to the defaults rather than mispricing.
     distanceBands: (isValidBands(doc?.distanceBands) ? doc.distanceBands : d.distanceBands)
-      .map((b) => ({ upToKm: b.upToKm ?? null, ratePerKg: b.ratePerKg })),
+      .map((b) => ({ upToKm: b.upToKm ?? null, ratePerKg: b.ratePerKg, slabRate: b.slabRate ?? null })),
     packing: group('packing'),
     remoteAreaFee: pick(doc?.remoteAreaFee, d.remoteAreaFee),
     insurancePercent: pick(doc?.insurancePercent, d.insurancePercent),
@@ -310,10 +311,12 @@ export function parseRateCardInput(raw, current) {
     ? raw.distanceBands.map((b, i, all) => ({
       upToKm: i === all.length - 1 ? null : toNumber(b?.upToKm),
       ratePerKg: toNumber(b?.ratePerKg),
+      // Blank = "same as the all-India small-parcel rate".
+      slabRate: b?.slabRate == null || b.slabRate === '' ? null : toNumber(b.slabRate),
     }))
     : null;
   if (!isValidBands(bands)) {
-    throw fail('Distance bands: up to 10 bands, km going up, each with a ₹/kg from 0 to 1000; the last band has no km limit');
+    throw fail('Distance bands: up to 10 bands, km going up, each with a ₹/kg from 0 to 1000 and an optional small-parcel ₹ per slab from 0 to 10000; the last band has no km limit');
   }
   set.distanceBands = bands;
   return set;

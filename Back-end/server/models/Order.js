@@ -567,7 +567,7 @@ const OrderSchema = new mongoose.Schema({
         default: undefined,
       },
       band: {                                                   // freight distance band used
-        type: new mongoose.Schema({ upToKm: { type: Number, default: null }, ratePerKg: Number }, { _id: false }),
+        type: new mongoose.Schema({ upToKm: { type: Number, default: null }, ratePerKg: Number, slabRate: Number }, { _id: false }),
         default: undefined,
       },
       mode: { type: String, enum: ['courier', 'freight'], required: true },

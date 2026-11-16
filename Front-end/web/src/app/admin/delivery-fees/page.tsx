@@ -27,13 +27,13 @@ interface RateCard {
   paymentFeeGstPercent: number;
   gstOnFees: { enabled: boolean; percent: number };
   origin: { label: string; pin: string; lat: number; lng: number };
-  distanceBands: { upToKm: number | null; ratePerKg: number }[];
+  distanceBands: { upToKm: number | null; ratePerKg: number; slabRate?: number | null }[];
   updatedAt: string | null;
   remotePinCount: number;
   pinLocationCount: number;
 }
 
-type BandRow = { upToKm: string; ratePerKg: string };
+type BandRow = { upToKm: string; ratePerKg: string; slabRate: string };
 
 type Form = Record<string, string>;
 
@@ -105,7 +105,7 @@ function toPayload(f: Form, chargeAtCheckout: boolean, gstEnabled: boolean, band
   const out: Record<string, unknown> = {
     chargeAtCheckout,
     gstOnFees: { enabled: gstEnabled },
-    distanceBands: bands.map((b, i) => ({ upToKm: i === bands.length - 1 ? null : b.upToKm.trim(), ratePerKg: b.ratePerKg.trim() })),
+    distanceBands: bands.map((b, i) => ({ upToKm: i === bands.length - 1 ? null : b.upToKm.trim(), ratePerKg: b.ratePerKg.trim(), slabRate: b.slabRate.trim() || null })),
   };
   for (const [path, value] of Object.entries(f)) {
     const keys = path.split('.');
@@ -133,7 +133,7 @@ export default function DeliveryFeesAdminPage() {
   useEffect(() => {
     if (!config.data) return;
     setForm(toForm(config.data));
-    setBands(config.data.distanceBands.map((b) => ({ upToKm: b.upToKm == null ? '' : String(b.upToKm), ratePerKg: String(b.ratePerKg) })));
+    setBands(config.data.distanceBands.map((b) => ({ upToKm: b.upToKm == null ? '' : String(b.upToKm), ratePerKg: String(b.ratePerKg), slabRate: b.slabRate == null ? '' : String(b.slabRate) })));
     setCharge(config.data.chargeAtCheckout);
     setGstOn(config.data.gstOnFees.enabled);
   }, [config.data]);
@@ -230,14 +230,16 @@ export default function DeliveryFeesAdminPage() {
       ))}
 
       <fieldset className={`${box} mb-6`}>
-        <legend className="px-1 font-semibold">Freight rate by distance (₹ per kg)</legend>
+        <legend className="px-1 font-semibold">Delivery rate by distance</legend>
         <p className="mb-3 text-xs text-gray-500">
           Distance is a straight line from the dispatch point to the customer&apos;s PIN. A PIN we cannot place uses the
           last band. Today&apos;s bills charge ₹16/kg everywhere (Air Line Express; VRL ₹13.10).
+          {' '}&ldquo;Small parcel ₹ per slab&rdquo; prices parcels up to the courier limit by distance; leave it blank to use the
+          all-India rate per slab above.
           {' '}PIN locations loaded: {config.data?.pinLocationCount ?? 0}.
         </p>
         <table className="w-full text-sm">
-          <thead><tr className="text-left text-gray-600"><th className="py-1">Up to (km)</th><th className="py-1">₹ per kg</th><th /></tr></thead>
+          <thead><tr className="text-left text-gray-600"><th className="py-1">Up to (km)</th><th className="py-1">Big parcel ₹ per kg</th><th className="py-1">Small parcel ₹ per slab</th><th /></tr></thead>
           <tbody>
             {bands.map((b, i) => {
               const last = i === bands.length - 1;
@@ -253,6 +255,11 @@ export default function DeliveryFeesAdminPage() {
                     <input aria-label={`Band ${i + 1} rate per kg`} inputMode="decimal" className={input} value={b.ratePerKg}
                       onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, ratePerKg: e.target.value } : x)))} />
                   </td>
+                  <td className="py-1 pr-2">
+                    <input aria-label={`Band ${i + 1} small parcel rate per slab`} inputMode="decimal" className={input} value={b.slabRate}
+                      placeholder="All-India rate"
+                      onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, slabRate: e.target.value } : x)))} />
+                  </td>
                   <td className="py-1">
                     {!last && bands.length > 1 && (
                       <button type="button" className="text-xs text-red-600 underline" onClick={() => setBands((bs) => bs.filter((_, j) => j !== i))}>Remove</button>
@@ -265,7 +272,7 @@ export default function DeliveryFeesAdminPage() {
         </table>
         {bands.length < 10 && (
           <button type="button" className="mt-2 text-sm text-blue-700 underline"
-            onClick={() => setBands((bs) => [...bs.slice(0, -1), { upToKm: '', ratePerKg: bs[bs.length - 1]?.ratePerKg || '16' }, bs[bs.length - 1]])}>
+            onClick={() => setBands((bs) => [...bs.slice(0, -1), { upToKm: '', ratePerKg: bs[bs.length - 1]?.ratePerKg || '16', slabRate: bs[bs.length - 1]?.slabRate || '' }, bs[bs.length - 1]])}>
             Add a band
           </button>
         )}

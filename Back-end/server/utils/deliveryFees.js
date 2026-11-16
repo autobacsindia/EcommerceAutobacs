@@ -9,7 +9,8 @@
  * nice number" anywhere below, and every rate lives in the admin rate card.
  *
  *   charged kg   = max(actual kg, L×W×H ÷ divisor) per unit, × qty, summed per cart
- *   ≤ courierMaxKg  → COURIER parcel: slab rate per started slab (0.5 kg)
+ *   ≤ courierMaxKg  → COURIER parcel: slab rate per started slab (0.5 kg); the
+ *                     rate is the distance band's own, else the card-wide one
  *   >  courierMaxKg → FREIGHT: ₹/kg with a minimum, plus docket + other + fuel and
  *                     hamali per kg (fixed charges once per shipment)
  *   packing      = per-unit box/crate cost for the product's size class
@@ -193,7 +194,7 @@ export function computeDeliveryFees({ lines, goodsPaise, isRemote = null, distan
     mode = 'courier';
     const slabs = Math.max(1, Math.ceil(round6(rawKg / card.courier.slabKg)));
     chargedKg = round6(slabs * card.courier.slabKg);
-    amounts.shipping = slabs * toPaise(card.courier.slabRate);
+    amounts.shipping = slabs * toPaise(slabRateFor(band, card));
   } else {
     mode = 'freight';
     chargedKg = Math.ceil(round6(rawKg));
@@ -226,8 +227,17 @@ export function computeDeliveryFees({ lines, goodsPaise, isRemote = null, distan
     totalPaise: sum(amounts),
     estimated: boxSources.some((s) => s !== 'measured'),
     boxSources,
-    band: { upToKm: band.upToKm ?? null, ratePerKg: band.ratePerKg },
+    band: { upToKm: band.upToKm ?? null, ratePerKg: band.ratePerKg, slabRate: slabRateFor(band, card) },
   };
+}
+
+/**
+ * Small-parcel (courier) ₹ per slab for a band. A band may set its own rate — couriers
+ * charge far zones more — and a band that leaves it blank (null) uses the card-wide
+ * `courier.slabRate`, so an old card prices exactly as before.
+ */
+export function slabRateFor(band, card) {
+  return typeof band?.slabRate === 'number' && Number.isFinite(band.slabRate) ? band.slabRate : card.courier.slabRate;
 }
 
 function sum(amounts) {
@@ -241,4 +251,4 @@ function round6(n) {
 
 export const isValidPin = (pin) => typeof pin === 'string' && /^[1-9]\d{5}$/.test(pin);
 
-export default { computeDeliveryFees, bandFor, haversineKm, resolveBox, unitChargedKg, DEFAULT_RATE_CARD, FEE_LINES, FEE_CODES, isValidPin };
+export default { computeDeliveryFees, bandFor, slabRateFor, haversineKm, resolveBox, unitChargedKg, DEFAULT_RATE_CARD, FEE_LINES, FEE_CODES, isValidPin };
