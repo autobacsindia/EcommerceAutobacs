@@ -18,6 +18,9 @@ import type { FestivalOfferTier } from '@/lib/festival/festivalOffer';
 
 interface OfferSettings {
   enabled: boolean;
+  /** Black Friday: customers may tap "Apply offer" to set every delivery fee to ₹0. */
+  waiveDeliveryFees?: boolean;
+  deliveryFeeOfferLive?: boolean;
   startsAt: string | null;
   endsAt: string | null;
   live: boolean;
@@ -62,6 +65,7 @@ export default function FestivalOfferPanel({
 }) {
   const [saved, setSaved] = useState<OfferSettings | null>(null);
   const [enabled, setEnabled] = useState(false);
+  const [waiveFees, setWaiveFees] = useState(false);
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [saving, setSaving] = useState(false);
@@ -71,6 +75,7 @@ export default function FestivalOfferPanel({
   const apply = (o: OfferSettings) => {
     setSaved(o);
     setEnabled(o.enabled);
+    setWaiveFees(Boolean(o.waiveDeliveryFees));
     setStartsAt(isoToIstInput(o.startsAt));
     setEndsAt(isoToIstInput(o.endsAt));
   };
@@ -99,7 +104,7 @@ export default function FestivalOfferPanel({
     setSaving(true);
     try {
       const res = await apiClient.put<{ success: boolean; offer: OfferSettings }>(API_ENDPOINTS.FESTIVAL_OFFER_ADMIN, {
-        enabled, startsAt: start, endsAt: end,
+        enabled, waiveDeliveryFees: waiveFees, startsAt: start, endsAt: end,
       });
       apply(res.offer);
       setMsg('Saved. Checkout uses the new setting straight away; product pages update within a minute.');
@@ -139,6 +144,24 @@ export default function FestivalOfferPanel({
         <label className="flex items-center gap-3">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-5 w-5" />
           <span className="font-medium">Diwali discount on</span>
+        </label>
+
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={waiveFees}
+            onChange={(e) => setWaiveFees(e.target.checked)}
+            className="h-5 w-5 mt-0.5"
+            data-testid="waive-delivery-fees"
+          />
+          <span>
+            <span className="font-medium">Black Friday offer: customers can tap &quot;Apply offer&quot; for ₹0 delivery fees</span>
+            <span className="block text-xs text-gray-500">
+              Separate from the discount above — either can be on alone. Uses the same start and end dates.
+              Needs delivery fees switched on (Admin → Delivery fees).
+              {saved?.deliveryFeeOfferLive ? ' Live now.' : ''}
+            </span>
+          </span>
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">

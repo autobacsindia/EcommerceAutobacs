@@ -22,3 +22,13 @@ export const TRUST_BADGES: TrustBadge[] = [
   { icon: 'CreditCard', label: 'Secure Checkout' },
   { icon: 'Truck', label: 'Shipping extra, paid on delivery' },
 ];
+
+/** The shipping statement, true for whichever way delivery is charged right now. */
+export function shippingStatement(chargeAtCheckout: boolean): string {
+  return chargeAtCheckout ? 'Delivery fees shown at checkout' : 'Shipping extra, paid on delivery';
+}
+
+/** TRUST_BADGES with the shipping badge worded for the current delivery-fee mode. */
+export function trustBadges(chargeAtCheckout: boolean): TrustBadge[] {
+  return TRUST_BADGES.map((b) => (b.icon === 'Truck' ? { ...b, label: shippingStatement(chargeAtCheckout) } : b));
+}

@@ -3,9 +3,12 @@
 import Link from 'next/link';
 import { Truck, Clock, MapPin, CreditCard } from 'lucide-react';
 import StorePageHeader from '@/components/store/StorePageHeader';
+import { useDeliveryFeesPublic } from '@/hooks/queries/useDeliveryFeesPublic';
 
 export default function ShippingPage() {
-  const lastUpdated = 'October 30, 2026';
+  const lastUpdated = 'November 16, 2026';
+  // Which way delivery is charged right now (admin switch). Display only.
+  const { chargeAtCheckout } = useDeliveryFeesPublic();
 
   return (
     <div className="sp sh-theme">
@@ -31,7 +34,10 @@ export default function ShippingPage() {
               <div>
                 <h3 className="font-display text-ink tracking-[-0.01em] mb-1">Fast Delivery</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">
-                  Our standard delivery takes 3–5 business days. Shipping charges are extra and paid on delivery, by cash or GPay / UPI.
+                  Our standard delivery takes 3–5 business days.{' '}
+                  {chargeAtCheckout
+                    ? 'Delivery fees (shipping, packing, handling and the like) are listed one by one in your cart and at checkout, and paid with your order — the courier collects nothing.'
+                    : 'Shipping charges are extra and paid on delivery, by cash or GPay / UPI.'}
                 </p>
               </div>
             </div>
@@ -66,7 +72,9 @@ export default function ShippingPage() {
                           name: 'Standard Shipping',
                           sub: 'Courier partners such as Delhivery',
                           time: '3–5 business days',
-                          cost: ['Extra — paid on delivery', 'Cash or GPay / UPI to the courier'],
+                          cost: chargeAtCheckout
+                            ? ['Itemised delivery fees, shown before you pay', 'Based on parcel size, weight and PIN code']
+                            : ['Extra — paid on delivery', 'Cash or GPay / UPI to the courier'],
                         },
                       ].map(row => (
                         <tr key={row.name}>

@@ -8,6 +8,8 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { useCart } from '@/context/CartContext';
 import { useCheckoutQuote, type CheckoutQuote, type QuoteItem } from '@/hooks/useCheckoutQuote';
 import { formatRupees } from '@/lib/formatRupees';
+import { useDeliveryFeeOffer } from '@/hooks/useDeliveryFeeOffer';
+import DeliveryFeeBreakdown from '@/components/checkout/DeliveryFeeBreakdown';
 
 interface KarmaInfo {
   balance: number;
@@ -17,7 +19,8 @@ interface KarmaInfo {
 interface Props {
   items: QuoteItem[];
   isAuthenticated: boolean;
-  shippingCost?: number;
+  /** Delivery PIN from the chosen address — prices the remote-area fee. */
+  deliveryPin?: string;
   /** Reports the live pricing + selections up to the checkout page. */
   onChange: (state: { couponCode?: string; redeemKarmaPoints: number; quote: CheckoutQuote | null }) => void;
 }
@@ -30,7 +33,7 @@ const money = (n: number) => formatRupees((n ?? 0), { exact: true });
  * coupon code and redeem amount and renders the result. The order is recomputed
  * authoritatively at creation, so these values are display + intent only.
  */
-export default function CheckoutSummary({ items, isAuthenticated, shippingCost = 0, onChange }: Props) {
+export default function CheckoutSummary({ items, isAuthenticated, deliveryPin, onChange }: Props) {
   const [redeemPoints, setRedeemPoints] = useState(0);
   const [karma, setKarma] = useState<KarmaInfo | null>(null);
 
@@ -39,7 +42,12 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
   const { cart } = useCart();
   const appliedCode = cart?.couponCode || '';
 
-  const { quote, loading } = useCheckoutQuote(items, appliedCode || undefined, redeemPoints, shippingCost);
+  // The customer's "Apply Black Friday offer" intent; the server decides if it applies.
+  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer();
+  const { quote, loading } = useCheckoutQuote(items, appliedCode || undefined, redeemPoints, {
+    deliveryPin,
+    applyDeliveryFeeOffer: offerRequested,
+  });
 
   // Karma balance/config (coupon discovery now lives on the cart page).
   useEffect(() => {
@@ -160,11 +168,18 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
           {!!quote?.couponDiscount && (
             <Row label={`Coupon (${quote.appliedCoupon?.code})`} value={`- ${money(quote.couponDiscount)}`} positive />
           )}
-          <Row label="Shipping" value="Extra — paid on delivery" muted />
           {!!quote?.karmaDiscount && (
             <Row label={`Karma (${quote.karmaPointsUsed} pts)`} value={`- ${money(quote.karmaDiscount)}`} positive />
           )}
           <Row label="GST (18%)" value={money(quote?.tax ?? 0)} muted />
+          {/* Itemised fees + Black Friday button, after the goods and their GST. The
+              total below already includes whatever the server charged for them. */}
+          <DeliveryFeeBreakdown
+            fees={quote ? (quote.deliveryFees ?? null) : undefined}
+            loading={loading}
+            requested={offerRequested}
+            onRequestChange={setOfferRequested}
+          />
         </div>
         <div className="flex justify-between border-t border-hairline pt-3 mt-3">
           <span className="font-display text-ink tracking-[-0.01em]">Total</span>

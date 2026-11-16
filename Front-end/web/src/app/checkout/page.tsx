@@ -33,6 +33,8 @@ import { useRazorpay } from '@/hooks/useRazorpay';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import CheckoutSummary from '@/components/checkout/CheckoutSummary';
+import DeliveryFeeBreakdown from '@/components/checkout/DeliveryFeeBreakdown';
+import { useDeliveryFeeOffer, useDeliveryPin } from '@/hooks/useDeliveryFeeOffer';
 import { useCheckoutQuote, type CheckoutQuote } from '@/hooks/useCheckoutQuote';
 import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
@@ -123,10 +125,16 @@ function CheckoutPageContent() {
     })),
     [cart?.items],
   );
+  // "Apply Black Friday offer" intent, shared with the cart page and the final summary.
+  // The server decides whether it applies; this never changes a price on its own.
+  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer();
+  // PIN typed on the cart (or here); the final step prices from the address's own PIN.
+  const [deliveryPin, setDeliveryPin] = useDeliveryPin();
   const { quote: reviewQuote, loading: reviewQuoteLoading } = useCheckoutQuote(
     reviewItems,
     cart?.couponCode || undefined,
     0,
+    { applyDeliveryFeeOffer: offerRequested, deliveryPin },
   );
 
   // ── Analytics funnel (ADR-005) ──────────────────────────────────────────────
@@ -537,7 +545,10 @@ function CheckoutPageContent() {
         })),
         subtotal: validated.subtotal,
         tax: validated.tax,
-        shippingCost: 0,
+        // Delivery fees are computed by the server from the rate card; only the
+        // offer the customer SAW applied is sent. If it ended since, the server
+        // answers 409 and nothing is charged.
+        applyDeliveryFeeOffer: pricing.quote?.deliveryFees?.offer.applied === true,
         // Coupon + karma intent. The backend recomputes the authoritative discount
         // and totalAmount server-side (client values below are ignored for pricing).
         couponCode: pricing.couponCode,
@@ -582,7 +593,15 @@ function CheckoutPageContent() {
         setCurrentStep('confirmation');
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to place order');
+      if (err?.status === 409) {
+        // The Black Friday offer ended between the quote and Pay. Drop the intent so
+        // the summary re-quotes with the fees, and let the customer review the new
+        // total before paying — never charge more than they were shown.
+        setOfferRequested(false);
+        toast.error(err.message || 'The Black Friday offer has ended. Please review your new total.', { duration: 8000 });
+      } else {
+        toast.error(err.message || 'Failed to place order');
+      }
     } finally {
       setLoading(false);
     }
@@ -827,15 +846,20 @@ function CheckoutPageContent() {
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-ink-muted font-display">Shipping</span>
-                  <span className="text-ink-muted font-display text-xs">Extra — paid on delivery</span>
-                </div>
-                <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Tax (18% GST)</span>
                   <span className="text-ink/70 font-display">
                     {reviewQuote ? formatRupees(reviewQuote.tax, { exact: true }) : '—'}
                   </span>
                 </div>
+                {/* Itemised delivery fees (or "paid on delivery" while fees are off),
+                    priced for the PIN typed here; the order uses the address's PIN. */}
+                <DeliveryFeeBreakdown
+                  fees={reviewQuote ? (reviewQuote.deliveryFees ?? null) : undefined}
+                  loading={reviewQuoteLoading}
+                  requested={offerRequested}
+                  onRequestChange={setOfferRequested}
+                  pinInput={{ value: deliveryPin, onChange: setDeliveryPin }}
+                />
               </div>
               <div className="flex justify-between">
                 <span className="font-display text-ink tracking-[-0.01em]">Total</span>
@@ -1200,6 +1224,7 @@ function CheckoutPageContent() {
                 <CheckoutSummary
                   items={(cart?.items || []).map((it: any) => ({ product: it.product._id, quantity: it.quantity, variantId: it.variantId ?? null }))}
                   isAuthenticated={isAuthenticated}
+                  deliveryPin={address.postalCode}
                   onChange={setPricing}
                 />
               </div>
@@ -1261,6 +1286,26 @@ function CheckoutPageContent() {
                 .
               </p>
             </div>
+
+            {/* Reminder: the offer is live but not tapped. The customer still decides —
+                not tapping means paying the fees (owner's decision) — but they are told
+                plainly, once more, right before paying. */}
+            {pricing.quote?.deliveryFees?.offer.available && !pricing.quote.deliveryFees.offer.applied && (
+              <div className="mb-4 flex flex-col gap-2 rounded-lg border-2 border-[#E3132C] bg-[#E3132C]/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-display text-ink">
+                  You haven&apos;t applied your <strong>Black Friday offer</strong> — save{' '}
+                  <strong>{formatRupees(pricing.quote.deliveryFees.total, { exact: true })}</strong> on delivery fees.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setOfferRequested(true)}
+                  disabled={offerRequested}
+                  className="shrink-0 rounded-lg bg-[#E3132C] px-4 py-2 text-sm font-display font-bold uppercase tracking-wide text-[#fff] hover:bg-[#c40f25] disabled:opacity-70"
+                >
+                  {offerRequested ? 'Applying…' : 'Apply offer'}
+                </button>
+              </div>
+            )}
 
             {!priceConfirmationPending && (
               <button

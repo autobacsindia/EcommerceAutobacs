@@ -222,6 +222,10 @@ export const API_ENDPOINTS = {
   /** PUT /products/:id/festival-offer — product + per-model Diwali choices together. */
   PRODUCT_FESTIVAL_OFFER: (id: string) => `/products/${id}/festival-offer`,
   PRODUCT_FESTIVAL_OFFER_EXCEPTIONS: '/products/admin/festival-offer-exceptions',
+  DELIVERY_FEES_PUBLIC: '/delivery-fees/public',          // public: fees on? + Black Friday offer (display only)
+  DELIVERY_FEES_ADMIN: '/delivery-fees/admin',            // admin rate card
+  DELIVERY_FEES_REMOTE_PINS: '/delivery-fees/admin/remote-pins',
+  DELIVERY_FEES_REMOTE_PINS_REMOVE: '/delivery-fees/admin/remote-pins/remove',
   FESTIVAL_OFFER_ADMIN: '/festival-offer/admin',          // admin read/update
   PROMO_BANNER_ACTIVE: '/promo-banners/active',           // public: the live banner
   PROMO_BANNERS_ADMIN: '/promo-banners/admin',            // admin list/create

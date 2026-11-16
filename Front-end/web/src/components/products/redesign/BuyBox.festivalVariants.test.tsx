@@ -18,6 +18,9 @@ jest.mock('@/context/CurrencyContext', () => ({
   }),
 }));
 jest.mock('react-hot-toast', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+jest.mock('@/hooks/queries/useDeliveryFeesPublic', () => ({
+  useDeliveryFeesPublic: () => ({ chargeAtCheckout: false, offerLive: false, isLoading: false }),
+}));
 jest.mock('@/hooks/useAddedToCartToast', () => ({ useAddedToCartToast: () => jest.fn() }));
 jest.mock('@/hooks/queries/useCampaignProductRates', () => ({ useCampaignProductRates: () => ({ data: undefined }) }));
 jest.mock('@/components/campaign/CampaignRateBadge', () => () => null);

@@ -46,6 +46,10 @@ export const CLOSED_URL_PATHS = Object.freeze({
   // GET /festival-offer/active — Diwali price-offer switch (display only; pricing
   // reads Mongo uncached). Bare path only (src/lib/festival/festivalOffer.ts).
   'public:festival-offer': ['/festival-offer/active'],
+
+  // GET /delivery-fees/public — whether fees are charged + Black Friday offer button
+  // (display only; pricing reads Mongo uncached).
+  'public:delivery-fees': ['/delivery-fees/public'],
 });
 
 /**

@@ -36,6 +36,7 @@ import { CAMPAIGN_REASON } from '../config/campaign.js';
 import { resolveLinePercent, lineDiscountPaise, apportionCap } from '../utils/productTiers.js';
 import { applyFestivalOffer, resolveFestivalSetting } from '../utils/festivalOffer.js';
 import { isOfferLiveForPricing } from './festivalOfferService.js';
+import deliveryFeeService from './deliveryFeeService.js';
 
 // Buyer-facing rejection reasons (all whitelisted in errorMiddleware so they survive).
 const REASON = {
@@ -93,6 +94,15 @@ export const REJECTED_AFFILIATE_NO_DISCOUNT = 'affiliate_no_discount';
   working untouched.
 */
 export { effectivePrice };
+
+/**
+ * A quote as the browser may see it: without the priced `orderItems` (internal
+ * scoping/pricing fields) and the raw delivery-fee block kept for the order snapshot.
+ */
+export function toPublicQuote(quote) {
+  const { orderItems: _orderItems, deliveryFeeBlock: _block, ...publicQuote } = quote;
+  return publicQuote;
+}
 
 /**
  * Resolve a variable product's selected variant. The single implementation of
@@ -231,6 +241,13 @@ class PricingService {
           its own resolves to the product image, which is what its PDP shows.
         */
         image: resolveVariantImage(product, variantDoc)?.url,
+        // Box inputs for the delivery-fee maths (services/deliveryFeeService.js).
+        // Internal only: createOrder maps explicit fields, the quote strips orderItems.
+        shipping: {
+          shippingSize: product.shippingSize || null,
+          listedSize: product.listedSize || null,
+          shippingClass: product.shippingClass || null,
+        },
         categories: product.categories || [],
         brandSlug: product.brandSlug || null,
         onSale,
@@ -508,7 +525,10 @@ class PricingService {
    * @param {string}  [args.couponCode]
    * @param {number}  [args.redeemKarmaPoints]  points the buyer wants to spend
    * @param {string}  [args.userId]
-   * @param {number}  [args.shippingCost]       rupees
+   * @param {string}  [args.deliveryPin]        delivery PIN (remote-area fee); absent on the cart
+   * @param {boolean} [args.applyDeliveryFeeOffer] customer tapped "Apply Black Friday offer".
+   *   Shipping is NEVER taken from the client: the fee block is computed here from the
+   *   rate card (services/deliveryFeeService.js), or is 0 while fees are switched off.
    * @param {Object}  [args.session]            mongoose session (checkout path)
    * @param {Object}  [args.buyer]              { email, phone } — the self-referral keys
    *   for an affiliate coupon. Guests have no userId, so these are the only keys that
@@ -518,16 +538,16 @@ class PricingService {
    * @returns full breakdown incl. priced `orderItems` for persistence.
    */
   async computeQuote({
-    items, couponCode, redeemKarmaPoints = 0, userId = null, shippingCost = 0,
-    session = null, buyer = null, referralCode = null,
+    items, couponCode, redeemKarmaPoints = 0, userId = null,
+    deliveryPin = null, applyDeliveryFeeOffer = false,
+    session = null, buyer = null, referralCode = null, now = new Date(),
   }) {
     const { orderItems, subtotalPaise, catalogSavingsPaise, festivalSavingsPaise } =
-      await this.priceItems(items, session, { festivalOffer: true });
-    const shippingPaise = Math.max(0, toPaise(shippingCost));
+      await this.priceItems(items, session, { festivalOffer: true, now });
 
     // ── Coupon (reported, not thrown) ──────────────────────────────────────────
     let goodsCouponPaise = 0;
-    let shippingWaivePaise = 0;
+    let couponFreeShipping = false;
     let appliedCoupon = null;
     let couponError = null;
     let couponErrorCode = null;
@@ -539,7 +559,8 @@ class PricingService {
         const { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier, productTierPricing } =
           await this._evaluateCoupon(couponCode, orderItems, userId, session, new Date(), buyer);
         goodsCouponPaise = goodsDiscountPaise;
-        shippingWaivePaise = freeShipping ? shippingPaise : 0;
+        // Resolved against the delivery fees once they are known (below).
+        couponFreeShipping = Boolean(freeShipping);
         appliedCoupon = { code: coupon.code, type: coupon.type, value: coupon.value };
         /*
           Reported for EITHER ladder. This field is not merely display: orderService
@@ -637,7 +658,6 @@ class PricingService {
     }
 
     const amountAfterCouponPaise = subtotalPaise - goodsCouponPaise;
-    const effectiveShippingPaise = shippingPaise - shippingWaivePaise;
 
     // ── Karma (clamped, never errors) ──────────────────────────────────────────
     const cfg = await getLoyaltyConfig();
@@ -663,6 +683,23 @@ class PricingService {
       karmaDiscountPaise = used * pointValuePaise;
     }
 
+    // ── Delivery fees (server-computed; null while switched off) ───────────────
+    // Insurance and the payment fee are a % of what the customer pays for the goods,
+    // so this runs after coupon + karma. The Black Friday offer and a free-shipping
+    // coupon each set the CHARGED fees to 0; the itemised lines stay for display.
+    const deliveryFees = await deliveryFeeService.quoteDeliveryFees({
+      orderItems,
+      goodsPaise: amountAfterCouponPaise - karmaDiscountPaise,
+      pin: deliveryPin,
+      applyOffer: applyDeliveryFeeOffer,
+      now,
+      session,
+    });
+    const shippingPaise = deliveryFees ? deliveryFees.totalPaise : 0;
+    const offerWaives = Boolean(deliveryFees?.offer.applied);
+    const shippingWaivePaise = offerWaives || couponFreeShipping ? shippingPaise : 0;
+    const effectiveShippingPaise = shippingPaise - shippingWaivePaise;
+
     // ── Totals ─────────────────────────────────────────────────────────────────
     let totalPaise = subtotalPaise - goodsCouponPaise - karmaDiscountPaise + effectiveShippingPaise;
     if (totalPaise <= 0) {
@@ -686,10 +723,18 @@ class PricingService {
       // shipping = total. See utils/money.js subtotalBeforeTax.
       subtotalBeforeTax: subtotalBeforeTax(fromPaise(subtotalPaise), fromPaise(taxPaise)),
       couponDiscount: fromPaise(goodsCouponPaise),
-      freeShippingApplied: shippingWaivePaise > 0,
+      // A free-shipping COUPON waived the fees (the Black Friday offer is reported
+      // in deliveryFees.offer instead, so the two are never confused on the order).
+      freeShippingApplied: !offerWaives && shippingWaivePaise > 0,
       karmaDiscount: fromPaise(karmaDiscountPaise),
       discount: fromPaise(discountPaise),
       shippingCost: fromPaise(effectiveShippingPaise),
+      // Itemised fees + Black Friday offer state; null while fees are switched off.
+      deliveryFees: deliveryFees
+        ? (({ totalPaise: _t, offer: { savingPaise: _s, ...offer }, ...rest }) => ({ ...rest, offer }))(deliveryFees)
+        : null,
+      // Internal: the raw block for the order snapshot (stripped from public quotes).
+      deliveryFeeBlock: deliveryFees,
       tax: fromPaise(taxPaise),
       totalAmount: fromPaise(totalPaise),
       appliedCoupon,

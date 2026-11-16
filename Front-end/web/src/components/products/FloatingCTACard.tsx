@@ -7,7 +7,8 @@ import { ShoppingCart, Zap, Shield, Truck, RotateCcw, CreditCard, Heart } from '
 import { motion } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
-import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
+import { trustBadges, shippingStatement, type TrustIcon } from '@/lib/storePolicies';
+import { useDeliveryFeesPublic } from '@/hooks/queries/useDeliveryFeesPublic';
 import SaleCountdown, { useSaleCountdown } from './SaleCountdown';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
@@ -34,6 +35,8 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
   const [quantity, setQuantity] = useState(1);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const { chargeAtCheckout } = useDeliveryFeesPublic();
+  const badges = trustBadges(chargeAtCheckout);
 
   const { live: saleLive } = useSaleCountdown(product.saleEndsAt);
   const showSale =
@@ -187,9 +190,9 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
       {/* Trust Badges — site-wide, from a single source of truth (storePolicies) */}
       <div
         className="grid gap-3 pt-4 border-t border-hairline/20"
-        style={{ gridTemplateColumns: `repeat(${TRUST_BADGES.length}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${badges.length}, minmax(0, 1fr))` }}
       >
-        {TRUST_BADGES.map(({ icon, label }) => {
+        {badges.map(({ icon, label }) => {
           const Icon = TRUST_ICONS[icon];
           return (
             <div key={label} className="flex flex-col items-center text-center gap-2">

@@ -61,7 +61,13 @@ export const validateCheckoutQuote = [
     .withMessage('Invalid variant id'),
   body('couponCode').optional({ nullable: true }).trim().isLength({ max: 40 }),
   body('redeemKarmaPoints').optional().isInt({ min: 0 }).withMessage('redeemKarmaPoints must be ≥ 0'),
-  body('shippingCost').optional().isFloat({ min: 0 })
+  // Ignored by the server (fees are computed from the rate card); still accepted so an
+  // old cached client does not 400.
+  body('shippingCost').optional().isFloat({ min: 0 }),
+  body('deliveryPin').optional({ nullable: true, checkFalsy: true }).isString().trim()
+    .matches(/^[1-9]\d{5}$/).withMessage('PIN code must be 6 digits'),
+  body('applyDeliveryFeeOffer').optional().isBoolean({ strict: true })
+    .withMessage('applyDeliveryFeeOffer must be true or false'),
 ];
 
 // ── Loyalty config + adjust (admin) ───────────────────────────────────────────

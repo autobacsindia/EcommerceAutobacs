@@ -16,6 +16,12 @@ const FestivalOfferSchema = new mongoose.Schema({
 
   enabled: { type: Boolean, default: false },
 
+  // Black Friday: offer customers a button that sets every delivery fee to ₹0
+  // (services/deliveryFeeService.js). Its OWN switch, independent of `enabled` (the
+  // % price discount), so the fee offer can run without a price discount and vice
+  // versa. Shares the window below: the offer is live only between startsAt/endsAt.
+  waiveDeliveryFees: { type: Boolean, default: false },
+
   // Window (stored UTC; the admin enters IST). Either end may be open.
   startsAt: { type: Date, default: null },
   endsAt: { type: Date, default: null },
