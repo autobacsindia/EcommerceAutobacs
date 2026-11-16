@@ -50,6 +50,7 @@ describe('getStoreHomeData shelf order (mocked API)', () => {
           products: [api('shield', 4200, { salesScore: 6 }), api('winch', 45000, { salesScore: 1 }), api('never', 99000, { salesScore: 0 })],
         };
         if (url.includes('isFeatured=true')) return { products: [api('f-back', 185000, { stock: 'backorder' }), api('f1', 283000)] };
+        if (url.includes('sortBy=createdAt')) return { total: 953, products: [api('n1', 1500)] };
         if (url.includes('sortBy=price')) return { products: [api('d1', 814200, { brand: 'A' }), api('d2', 588499, { brand: 'B' }), api('d3', 500000, { brand: 'C' })] };
         return { products: [] };
       },
@@ -67,5 +68,15 @@ describe('getStoreHomeData shelf order (mocked API)', () => {
     const dearest = calls.find((u) => u.includes('sortBy=price'))!;
     expect(dearest).toMatch(/inStock=true/);
     expect(dearest).toMatch(/limit=24/);
+  });
+
+  it('productTotal = the active-product total from the new-arrivals request — no extra call', async () => {
+    const { getStoreHomeData } = await import('./storeData');
+    const before = calls.length;
+    const d = await getStoreHomeData();
+    expect(d.productTotal).toBe(953);
+    expect(d.newArrivals.map((p) => p.id)).toEqual(['n1']);
+    expect(calls.slice(before).filter((u) => u.includes('limit=1&') || u.endsWith('limit=1'))).toHaveLength(0);
+    expect(calls.slice(before).filter((u) => u.includes('sortBy=createdAt'))).toHaveLength(1);
   });
 });

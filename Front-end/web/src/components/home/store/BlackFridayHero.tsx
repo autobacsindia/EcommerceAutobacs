@@ -32,6 +32,7 @@ export default function BlackFridayHero({
   photos,
   maxOff,
   dealsTotal,
+  productTotal = 0,
   categoryCount,
   showSeal = false,
 }: {
@@ -40,6 +41,8 @@ export default function BlackFridayHero({
   photos: FestiveHeroPhoto[];
   maxOff: number;
   dealsTotal: number;
+  /** Every active product in the catalogue (0 when unknown). */
+  productTotal?: number;
   categoryCount: number;
   /** Only when checkout really waives shipping/packing/delivery (server flag). */
   showSeal?: boolean;
@@ -48,8 +51,13 @@ export default function BlackFridayHero({
   const [line1, line2, line3] = copy.heroTitle;
   const art = photos.slice(0, 3);
   const seal = showSeal ? tokens.freeDeliverySeal : undefined;
+  // While checkout really waives the fees (the same server check as the seal) the
+  // offer covers the whole catalogue, so the stat says so with the real count.
+  // Otherwise — or if the count is unknown — it stays "N products on sale".
+  const wholeCatalogue = showSeal && productTotal > 0;
   const stats = [
-    dealsTotal > 0 && { value: `${dealsTotal}`, label: dealsTotal === 1 ? 'product on sale' : 'products on sale' },
+    wholeCatalogue && { value: `${productTotal}`, label: `${productTotal === 1 ? 'product' : 'products'} · ₹0 delivery fees` },
+    !wholeCatalogue && dealsTotal > 0 && { value: `${dealsTotal}`, label: dealsTotal === 1 ? 'product on sale' : 'products on sale' },
     categoryCount > 0 && { value: `${categoryCount}`, label: categoryCount === 1 ? 'category' : 'categories' },
   ].filter(Boolean) as { value: string; label: string }[];
 
