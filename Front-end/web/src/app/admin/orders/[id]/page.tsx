@@ -35,6 +35,7 @@ import AdminOrderJourney from '@/components/orders/AdminOrderJourney';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderOverview from '@/components/admin/OrderOverview';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
+import OrderDeliveryFees, { type OrderDeliveryFeesSnapshot } from '@/components/orders/OrderDeliveryFees';
 
 /** What the gateway holds — and so the most a refund can send back. */
 const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
@@ -148,6 +149,7 @@ interface Order {
   /** Server-derived from the order's snapshot: subtotal minus the GST inside it. */
   subtotalBeforeTax?: number;
   shippingCost: number;
+  deliveryFees?: OrderDeliveryFeesSnapshot | null;
   tax: number;
   discount: number;
   totalAmount: number;
@@ -1169,14 +1171,17 @@ function AdminOrderDetailPageInner() {
               </div>
               
               <div className="flex justify-between">
-                <span>Shipping</span>
-                <span>{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : '₹0 (any courier charge is paid on delivery)'}</span>
-              </div>
-              
-              <div className="flex justify-between">
                 <span>Tax</span>
                 <span>₹{order.tax.toFixed(2)}</span>
               </div>
+
+              {/* Delivery fees as snapshotted on the order (never today's rates). */}
+              <OrderDeliveryFees
+                fees={order.deliveryFees}
+                shippingCost={order.shippingCost}
+                admin
+                legacyNoChargeLabel="₹0 (any courier charge is paid on delivery)"
+              />
               
               {order.discount > 0 && (
                 <div className="flex justify-between text-green-600">

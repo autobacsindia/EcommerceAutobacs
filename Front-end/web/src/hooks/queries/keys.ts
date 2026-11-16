@@ -418,3 +418,11 @@ export const googleReviewKeys = {
   queue: (status: string) => ['google-reviews', 'queue', status] as const,
   detail: (id: string) => ['google-reviews', 'detail', id] as const,
 };
+
+/** Delivery fees (`/delivery-fees/*`) — public on/off + offer flag, admin rate card, remote PINs. */
+export const deliveryFeeKeys = {
+  all: ['delivery-fees'] as const,
+  public: () => ['delivery-fees', 'public'] as const,
+  admin: () => ['delivery-fees', 'admin'] as const,
+  remotePins: (prefix: string) => ['delivery-fees', 'remote-pins', prefix] as const,
+};

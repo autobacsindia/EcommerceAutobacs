@@ -487,6 +487,24 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ ShippingClassConfig singleton index confirmed');
 
+    // MONEY: the delivery-fee rate card is a singleton; the unique key makes the
+    // admin's first-save upsert race-safe (same reason as FestivalOffer above).
+    await db.collection('deliveryfeeconfigs').createIndex(
+      { key: 1 },
+      { unique: true, background: true, name: 'key_1' }
+    );
+    // Remote (ODA) PINs: unique, and the index every checkout quote looks up.
+    await db.collection('remotepins').createIndex(
+      { pin: 1 },
+      { unique: true, background: true, name: 'pin_1' }
+    );
+    // PIN → lat/long for the delivery-fee distance band; one findOne per quote.
+    await db.collection('pinlocations').createIndex(
+      { pin: 1 },
+      { unique: true, background: true, name: 'pin_1' }
+    );
+    console.log('✓ DeliveryFeeConfig + RemotePin + PinLocation indexes confirmed');
+
     // MONEY-ADJACENT: one ACTIVE (non-cancelled) return per (order, product). This
     // is the DB race-safe backstop returnController.createReturnRequest relies on —
     // its findOne pre-check can be beaten by two concurrent submissions, and only

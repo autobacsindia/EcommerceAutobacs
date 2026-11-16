@@ -1,0 +1,108 @@
+/**
+ * DeliveryFeeBreakdown renders server figures only. These pin the money-display rules:
+ * fees off → "paid on delivery"; no PIN → no fees; the ₹0 + celebration appear only
+ * once the SERVER says the offer is applied; a pending tap cannot be tapped again.
+ */
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import DeliveryFeeBreakdown from './DeliveryFeeBreakdown';
+import type { DeliveryFeesQuote } from '@/hooks/useCheckoutQuote';
+
+const fees = (over: Partial<DeliveryFeesQuote> = {}, offer: Partial<DeliveryFeesQuote['offer']> = {}): DeliveryFeesQuote => ({
+  needsPin: false,
+  pin: '500001',
+  place: { district: 'Hyderabad', state: 'Telangana' },
+  distanceKm: 1253,
+  origin: 'Delhi',
+  remote: false,
+  mode: 'freight',
+  chargedKg: 40,
+  estimated: false,
+  gstOnFees: 18,
+  lines: [
+    { code: 'shipping', label: 'Shipping fee', amount: 640 },
+    { code: 'packing', label: 'Packing fee', amount: 500 },
+  ],
+  total: 1140,
+  offer: { code: 'blackfriday', available: true, requested: false, applied: false, saving: 0, error: null, ...offer },
+  ...over,
+});
+
+const props = { requested: false, onRequestChange: jest.fn(), reducedMotionOverride: true };
+
+beforeEach(() => jest.clearAllMocks());
+
+it('fees switched off → the old "paid on delivery" row', () => {
+  render(<DeliveryFeeBreakdown {...props} fees={null} />);
+  expect(screen.getByText('Extra — paid on delivery')).toBeInTheDocument();
+});
+
+it('renders nothing before the first quote', () => {
+  const { container } = render(<DeliveryFeeBreakdown {...props} fees={undefined} />);
+  expect(container).toBeEmptyDOMElement();
+});
+
+it('no PIN → asks for it, shows no fee lines', () => {
+  render(<DeliveryFeeBreakdown {...props} fees={fees({ needsPin: true, pin: null, lines: [], total: 0, place: null, distanceKm: null })} />);
+  expect(screen.getByText('Enter your PIN code to see delivery charges.')).toBeInTheDocument();
+  expect(screen.queryByText('Shipping fee')).not.toBeInTheDocument();
+});
+
+it('lists each fee, the place and distance, and the total', () => {
+  render(<DeliveryFeeBreakdown {...props} fees={fees()} />);
+  expect(screen.getByText('Shipping fee')).toBeInTheDocument();
+  expect(screen.getByText('Packing fee')).toBeInTheDocument();
+  expect(screen.getByTestId('delivery-place')).toHaveTextContent('Hyderabad, Telangana · ~1,253 km from Delhi');
+  expect(screen.getByText('Delivery fees total').nextSibling).toHaveTextContent('1,140');
+});
+
+it('the offer button asks the server; it is disabled while the answer is pending (double tap)', () => {
+  const onRequestChange = jest.fn();
+  const { rerender } = render(<DeliveryFeeBreakdown {...props} onRequestChange={onRequestChange} fees={fees()} />);
+  fireEvent.click(screen.getByRole('button', { name: /Apply Black Friday offer/ }));
+  expect(onRequestChange).toHaveBeenCalledWith(true);
+  // Intent is now true but the quote on screen was priced without it → pending.
+  rerender(<DeliveryFeeBreakdown {...props} requested onRequestChange={onRequestChange} fees={fees()} />);
+  const btn = screen.getByRole('button', { name: /Applying/ });
+  expect(btn).toBeDisabled();
+  fireEvent.click(btn);
+  expect(onRequestChange).toHaveBeenCalledTimes(1);
+  // No ₹0 until the server confirms.
+  expect(screen.queryByText(/you saved/)).not.toBeInTheDocument();
+});
+
+it('server-confirmed offer → fees struck through, ₹0 total, celebration once', () => {
+  const { rerender } = render(<DeliveryFeeBreakdown {...props} requested fees={fees({}, { requested: true })} loading />);
+  const applied = fees({}, { requested: true, applied: true, saving: 1140 });
+  rerender(<DeliveryFeeBreakdown {...props} requested fees={applied} />);
+  expect(screen.getByRole('dialog')).toHaveTextContent('Congratulations!');
+  expect(screen.getByRole('dialog')).toHaveTextContent('You saved ₹1,140');
+  expect(screen.getByText(/Black Friday offer applied — you saved/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  // A re-quote that is still applied does not celebrate again.
+  rerender(<DeliveryFeeBreakdown {...props} requested fees={{ ...applied }} />);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('offer ended → plain notice, no button', () => {
+  render(<DeliveryFeeBreakdown {...props} requested fees={fees({}, { available: false, requested: true, error: 'offer_ended' })} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('The Black Friday offer has ended');
+  expect(screen.queryByRole('button', { name: /Apply Black Friday offer/ })).not.toBeInTheDocument();
+});
+
+it('offer not live → no button at all', () => {
+  render(<DeliveryFeeBreakdown {...props} fees={fees({}, { available: false })} />);
+  expect(screen.queryByRole('button', { name: /Apply/ })).not.toBeInTheDocument();
+});
+
+it('PIN box reports only a complete valid PIN', () => {
+  const onChange = jest.fn();
+  render(<DeliveryFeeBreakdown {...props} fees={fees({ needsPin: true, lines: [], total: 0 })} pinInput={{ value: '', onChange }} />);
+  const box = screen.getByLabelText('Delivery PIN code');
+  act(() => { fireEvent.change(box, { target: { value: '5000' } }); });
+  expect(onChange).toHaveBeenLastCalledWith('');
+  act(() => { fireEvent.change(box, { target: { value: '500001' } }); });
+  expect(onChange).toHaveBeenLastCalledWith('500001');
+  act(() => { fireEvent.change(box, { target: { value: '012345' } }); });
+  expect(screen.getByText('Please enter a valid 6-digit PIN code.')).toBeInTheDocument();
+});

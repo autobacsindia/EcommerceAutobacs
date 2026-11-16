@@ -83,7 +83,10 @@ describe('pricingService.computeQuote', () => {
     expect(q.totalAmount).toBe(0);
   });
 
-  test('free_shipping waives the shipping cost, not goods', async () => {
+  // Delivery fees are off here (no rate card), so there is nothing to waive: the
+  // client's shippingCost is ignored (tamper vector) and the flag stays false. The
+  // fees-on case is in tests/deliveryFeesCheckout.test.js.
+  test('free_shipping never discounts goods, and a client shippingCost is ignored', async () => {
     mockProductRepo.findActiveById.mockResolvedValue(product('a', 1000));
     mockCouponRepo.findByCode.mockResolvedValue({
       _id: 'c3', code: 'FREESHIP', type: 'free_shipping', value: 0,
@@ -93,7 +96,7 @@ describe('pricingService.computeQuote', () => {
       items: [{ product: 'a', quantity: 1 }], couponCode: 'FREESHIP', shippingCost: 99
     });
     expect(q.couponDiscount).toBe(0);
-    expect(q.freeShippingApplied).toBe(true);
+    expect(q.freeShippingApplied).toBe(false);
     expect(q.shippingCost).toBe(0);
     expect(q.totalAmount).toBe(1000);
   });

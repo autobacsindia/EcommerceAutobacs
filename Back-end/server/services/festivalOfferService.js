@@ -33,6 +33,20 @@ export function isFestivalOfferLive(cfg, now = new Date()) {
 }
 
 /**
+ * Pure: is the Black Friday delivery-fee offer live? Own switch (`waiveDeliveryFees`),
+ * the offer's window. Independent of `enabled`, which is the % price discount.
+ */
+export function isDeliveryFeeOfferLive(cfg, now = new Date()) {
+  if (!cfg || !cfg.waiveDeliveryFees) return false;
+  return isFestivalOfferLive({ ...cfg, enabled: true }, now);
+}
+
+/** PRICING read for the fee offer — uncached, same reasoning as isOfferLiveForPricing. */
+export async function isDeliveryFeeOfferLiveForPricing(now = new Date(), session = null) {
+  return isDeliveryFeeOfferLive(await festivalOfferRepository.find(session), now);
+}
+
+/**
  * Pure: what the storefront receives, or null. A not-yet-started offer is returned with
  * `live: false` so a cached page can switch on at the start; off or ended is null.
  */
@@ -44,6 +58,9 @@ export function toPublicOffer(cfg, now = new Date()) {
     startsAt: toIso(cfg.startsAt),
     endsAt: toIso(cfg.endsAt),
     live: isFestivalOfferLive(cfg, now),
+    // Black Friday fee-offer switch (display only — the theme's "without shipping,
+    // packing, delivery charges" seal reads it). Pricing never reads this field.
+    waiveDeliveryFees: Boolean(cfg.waiveDeliveryFees),
     tiers: FESTIVAL_OFFER_TIERS.map((t) => ({ minPaise: t.minPaise, percent: t.percent })),
   };
 }
@@ -69,7 +86,8 @@ export async function resolvePublicFestivalOffer() {
 
 /** Uncached admin read; a never-saved offer reads as off. */
 export async function getFestivalOfferConfig() {
-  return (await festivalOfferRepository.find()) || { enabled: false, startsAt: null, endsAt: null };
+  return (await festivalOfferRepository.find())
+    || { enabled: false, waiveDeliveryFees: false, startsAt: null, endsAt: null };
 }
 
 export async function updateFestivalOfferConfig(set) {

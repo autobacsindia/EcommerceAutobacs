@@ -17,7 +17,14 @@ export interface CheckoutQuote {
   freeShippingApplied: boolean;
   karmaDiscount: number;
   discount: number;
+  /** Delivery fees CHARGED (0 when waived, or while fees are switched off). */
   shippingCost: number;
+  /**
+   * Itemised delivery fees + the Black Friday offer, server-computed. null while the
+   * shop has fees switched off (shipping is then paid to the courier on delivery).
+   * Optional so a page served mid-deploy still type-checks the old shape.
+   */
+  deliveryFees?: DeliveryFeesQuote | null;
   tax: number;
   totalAmount: number;
   appliedCoupon: { code: string; type: string; value: number } | null;
@@ -111,6 +118,48 @@ export interface FestivalOfferQuoteLine {
   mrp?: number | null;
 }
 
+export interface DeliveryFeeLine {
+  code: 'shipping' | 'packing' | 'handling' | 'docket' | 'fuel' | 'remote' | 'insurance' | 'payment' | 'gst';
+  label: string;
+  amount: number;
+}
+
+export interface DeliveryFeesQuote {
+  /** No valid PIN yet: no fees are shown or charged until one is entered. */
+  needsPin?: boolean;
+  /** The PIN the fees were priced for. */
+  pin: string | null;
+  /** India Post place for the PIN; null when the PIN is not in the location table. */
+  place?: { district: string | null; state: string | null } | null;
+  /** Straight-line km from the dispatch point; null = unknown (highest band used). */
+  distanceKm?: number | null;
+  /** Dispatch point name, e.g. "Delhi". */
+  origin?: string;
+  /** true/false once a PIN is known; null = not known yet (remote fee not included). */
+  remote: boolean | null;
+  mode: 'courier' | 'freight' | null;
+  chargedKg: number | null;
+  /** A box size was not measured, so a standard box was used. */
+  estimated: boolean;
+  /** % GST added on the fees (0 = none). */
+  gstOnFees: number;
+  lines: DeliveryFeeLine[];
+  /** All fees before any waiver. */
+  total: number;
+  offer: {
+    code: string;
+    /** The Black Friday offer is live right now (server clock). */
+    available: boolean;
+    /** This quote was asked for with the offer. */
+    requested: boolean;
+    /** Every fee is ₹0 on this quote. */
+    applied: boolean;
+    saving: number;
+    /** 'offer_ended' when it was asked for but is no longer live. */
+    error: string | null;
+  };
+}
+
 export interface QuoteItem { product: string; quantity: number; variantId?: string | null }
 
 /**
@@ -118,11 +167,18 @@ export interface QuoteItem { product: string; quantity: number; variantId?: stri
  * Mirrors the server's authoritative pricing — the order is recomputed server-side
  * at creation, so this drives display only. Stale responses are discarded by sequence.
  */
+export interface QuoteDeliveryOptions {
+  /** Delivery PIN — prices the remote-area fee. Omit on the cart page. */
+  deliveryPin?: string;
+  /** The customer tapped "Apply Black Friday offer". The server decides if it applies. */
+  applyDeliveryFeeOffer?: boolean;
+}
+
 export function useCheckoutQuote(
   items: QuoteItem[],
   couponCode: string | undefined,
   redeemKarmaPoints: number,
-  shippingCost = 0,
+  { deliveryPin, applyDeliveryFeeOffer = false }: QuoteDeliveryOptions = {},
 ) {
   const [quote, setQuote] = useState<CheckoutQuote | null>(null);
   /*
@@ -150,7 +206,14 @@ export function useCheckoutQuote(
       try {
         const res = await apiClient.post<{ success: boolean; quote: CheckoutQuote }>(
           API_ENDPOINTS.CHECKOUT_QUOTE,
-          { items, couponCode: couponCode || undefined, redeemKarmaPoints, shippingCost },
+          {
+            items,
+            couponCode: couponCode || undefined,
+            redeemKarmaPoints,
+            // Shipping is never sent: the server computes every delivery fee itself.
+            ...(deliveryPin && /^[1-9]\d{5}$/.test(deliveryPin) ? { deliveryPin } : {}),
+            applyDeliveryFeeOffer,
+          },
         );
         if (seq !== seqRef.current) return; // a newer request superseded this one
         setQuote(res.quote);
@@ -165,7 +228,7 @@ export function useCheckoutQuote(
     }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemsKey, couponCode, redeemKarmaPoints, shippingCost]);
+  }, [itemsKey, couponCode, redeemKarmaPoints, deliveryPin, applyDeliveryFeeOffer]);
 
   return { quote, quotedCouponCode, loading, error };
 }

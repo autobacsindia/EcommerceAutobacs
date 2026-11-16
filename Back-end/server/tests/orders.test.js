@@ -114,7 +114,9 @@ describe('Orders API', () => {
       // client-supplied tax is display-only input it is free to ignore. The old
       // assertion here expected 2060 (client tax honoured), which would have made a
       // tampering vector look like correct behaviour.
-      expect(res.body.order.totalAmount).toBe(2050); // (1000 * 2) + 50 shipping, tax server-computed
+      // The client's shippingCost: 50 is ignored too: delivery fees are server-computed
+      // (off in this test, so the courier is paid on delivery and nothing is added).
+      expect(res.body.order.totalAmount).toBe(2000); // 1000 * 2, tax + fees server-computed
     });
 
     it('ignores a client-supplied totalAmount', async () => {
@@ -132,7 +134,7 @@ describe('Orders API', () => {
         })
         .expect(201);
 
-      expect(res.body.order.totalAmount).toBe(2050);
+      expect(res.body.order.totalAmount).toBe(2000);
     });
 
     it('should fail if product out of stock', async () => {

@@ -101,6 +101,7 @@
     "backfill-stock-rank": "node scripts/backfill-stock-rank.js",
     "seed-search-synonyms": "node scripts/seed-search-synonyms.js",
     "compact-rate-limit-events": "node scripts/compact-rate-limit-events.js",
+    "import-pin-locations": "node scripts/import-pin-locations.js",
     "import-shipping-classes": "node scripts/import-shipping-classes.js",
     "clear-recommendation-cache": "node scripts/clear-recommendation-cache.js",
     "load-test:quick": "artillery run ../../artillery-quick-test.yml --output ../../quick-report.json",

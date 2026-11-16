@@ -62,6 +62,8 @@ const QUOTE = {
   karmaDiscount: 0,
   discount: 7188,
   shippingCost: 0,
+  // Delivery fees switched off (the server sends null): shipping is paid to the courier.
+  deliveryFees: null,
   tax: 12609.15,
   totalAmount: 82662,
   appliedCoupon: { code: 'FESTIVE2026', type: 'percentage', value: 0 },
@@ -134,7 +136,8 @@ describe('checkout review step totals', () => {
     render(<CheckoutPage />);
     await screen.findByText('Review Your Cart');
     // "Shipping" is also a step in the progress bar; the summary row is the one with a value.
-    const value = screen.getByText('Extra — paid on delivery');
+    // Rendered from the quote (deliveryFees: null = fees off), so it waits for it.
+    const value = await screen.findByText('Extra — paid on delivery');
     const row = value.parentElement!;
     expect(row).toHaveTextContent(/^Shipping/);
     expect(row).not.toHaveTextContent(/free|₹/i);

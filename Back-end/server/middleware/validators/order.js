@@ -68,7 +68,14 @@ export const validateOrder = [
   body('shippingAddress.postalCode')
     .notEmpty()
     .withMessage('Postal code is required'),
-  // discount is intentionally excluded — always ignored server-side
+  // Strict boolean: only a deliberate tap on "Apply Black Friday offer" sends true.
+  // Re-checked against the live switch in orderService (409 if it has ended).
+  body('applyDeliveryFeeOffer')
+    .optional()
+    .isBoolean({ strict: true })
+    .withMessage('applyDeliveryFeeOffer must be true or false'),
+  // discount and shippingCost are ignored server-side (delivery fees come from the
+  // rate card); shippingCost is still shape-checked so an old client does not 400.
   body('shippingCost')
     .optional()
     .isFloat({ min: 0, max: 10000 })

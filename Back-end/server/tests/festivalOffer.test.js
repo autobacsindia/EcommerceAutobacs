@@ -119,7 +119,7 @@ describe('toPublicOffer', () => {
   });
   it('carries the tier ladder so the storefront never hard-codes its own', () => {
     const out = toPublicOffer({ enabled: true, updatedBy: 'x', _id: 'y' }, NOW);
-    expect(Object.keys(out).sort()).toEqual(['code', 'endsAt', 'live', 'startsAt', 'tiers']);
+    expect(Object.keys(out).sort()).toEqual(['code', 'endsAt', 'live', 'startsAt', 'tiers', 'waiveDeliveryFees']);
     expect(out.tiers).toEqual(FESTIVAL_OFFER_TIERS.map((t) => ({ ...t })));
   });
 });

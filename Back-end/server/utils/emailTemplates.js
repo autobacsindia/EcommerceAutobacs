@@ -582,8 +582,15 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
   // Mirror the invoice PDF: when no shipping charge is on the order (the common
   // case), the customer pays the courier on delivery, by cash or GPay / UPI —
   // never render it as ₹0.00, and never as free.
-  const shippingExtra = !(Number(order.shippingCost) > 0);
-  const shippingValue = shippingExtra ? 'Extra — paid on delivery' : inr(order.shippingCost);
+  // Orders with itemised delivery fees paid them at checkout (or had them waived by
+  // the Black Friday offer) — never "paid on delivery".
+  const fees = order.deliveryFees || null;
+  const shippingExtra = !fees && !(Number(order.shippingCost) > 0);
+  const shippingValue = shippingExtra
+    ? 'Extra — paid on delivery'
+    : fees?.offer?.applied
+      ? `${inr(0)} (Black Friday offer — you saved ${inr(fees.offer.saving)})`
+      : inr(order.shippingCost);
   const shippingNote = 'Shipping is not included in this total. You pay it to the courier on delivery, by cash or GPay / UPI.';
 
   const subject = `Order confirmed — ${invNo}`;

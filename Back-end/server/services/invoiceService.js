@@ -323,7 +323,10 @@ export const generateInvoicePdf = async (order, user = null) => {
       const RIGHT = 545; // A4 width (595.28) minus the 50pt right margin
       const addr = order.shippingAddress || {};
       const created = order.createdAt ? new Date(order.createdAt) : new Date();
-      const shippingExtra = !(Number(order.shippingCost) > 0);
+      // Orders priced with itemised delivery fees carry their own snapshot: they were
+      // charged at checkout (or waived by the offer), never "paid on delivery".
+      const fees = order.deliveryFees || null;
+      const shippingExtra = !fees && !(Number(order.shippingCost) > 0);
 
       // ── Header: logo (left) + seller identity (right) ────────────────────────
       const headerTop = 45;
@@ -479,7 +482,15 @@ export const generateInvoicePdf = async (order, user = null) => {
       // comment says it is "for display only" — car accessories span 18% and 28%,
       // so every 28% line is understated. The label now says so.
       if (order.tax) sumRow(TAX_ROW_LABEL, rs(order.tax));
-      if (!order.extraChargeReceipt) sumRow(
+      if (fees && !order.extraChargeReceipt) {
+        // Each fee as charged at checkout, from the order's snapshot.
+        for (const line of fees.lines || []) sumRow(`${line.label}:`, rs(line.amount));
+        if (fees.offer?.applied) {
+          sumRow('Black Friday offer (delivery fees waived):', `- ${rs(fees.offer.saving)}`);
+        } else if (Number(fees.charged) < Number(fees.total)) {
+          sumRow('Free delivery (coupon):', `- ${rs(Number(fees.total) - Number(fees.charged))}`);
+        }
+      } else if (!order.extraChargeReceipt) sumRow(
         'Shipping Charges (Extra):',
         // The label already says "(Extra)"; the customer pays the courier on delivery.
         shippingExtra ? 'Paid on delivery' : rs(order.shippingCost),
