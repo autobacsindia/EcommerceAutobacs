@@ -216,6 +216,45 @@ class ProductRepository {
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
+  /** Live products among `ids`, with what a size-class change needs (sizes for "Automatic"). */
+  async findForShippingClassChange(ids) {
+    return Product.find({ _id: { $in: ids }, deletedAt: null })
+      .select('name slug shippingClass shippingClassSource shippingSize listedSize')
+      .limit(ids.length)
+      .lean();
+  }
+
+  /**
+   * Set one class (+ who decided it) on many products. `timestamps: false`: an
+   * internal shipping field, not a content change, so the sitemap's lastmod stays put.
+   */
+  async setShippingClass(ids, { shippingClass, shippingClassSource }) {
+    const res = await Product.updateMany(
+      { _id: { $in: ids }, deletedAt: null },
+      { $set: { shippingClass, shippingClassSource } },
+      { timestamps: false, runValidators: true },
+    );
+    return res.modifiedCount;
+  }
+
+  /**
+   * One keyset page of products in a size class; `shippingClass: null` = not set
+   * yet (a `null` match also covers products saved before the field existed).
+   * Drafts included: this is the admin's working catalogue.
+   */
+  async findByShippingClass({ shippingClass = null, afterId = null, limit = 50 } = {}) {
+    return Product.find({
+      shippingClass,
+      deletedAt: null,
+      ...(afterId && { _id: { $gt: afterId } }),
+    })
+      .select('name slug isActive shippingClass shippingClassSource')
+      .sort({ _id: 1 })
+      .limit(limit)
+      .lean()
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
   /**
    * Set the SEO team's status on one product. `timestamps: false` keeps
    * `updatedAt` untouched — a review marker is not a content change.

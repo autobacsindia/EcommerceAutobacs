@@ -471,6 +471,22 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Product festival-offer exceptions index confirmed');
 
+    // Admin "Show products by size class" list (keyset on _id). Full index: the
+    // "Not set yet" filter matches null/missing, which a partial index can't serve.
+    // autoIndex is off in prod, so this is what actually creates it. Must match Product.js.
+    await db.collection('products').createIndex(
+      { shippingClass: 1, _id: 1 },
+      { background: true, name: 'shipping_class_list' }
+    );
+    console.log('✓ Product shipping-class list index confirmed');
+
+    // Standard boxes per size class: one config document.
+    await db.collection('shippingclassconfigs').createIndex(
+      { key: 1 },
+      { unique: true, background: true, name: 'key_1' }
+    );
+    console.log('✓ ShippingClassConfig singleton index confirmed');
+
     // MONEY-ADJACENT: one ACTIVE (non-cancelled) return per (order, product). This
     // is the DB race-safe backstop returnController.createReturnRequest relies on —
     // its findOne pre-check can be beaten by two concurrent submissions, and only

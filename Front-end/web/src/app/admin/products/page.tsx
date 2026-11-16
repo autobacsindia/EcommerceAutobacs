@@ -20,6 +20,9 @@ import { usePanel } from '@/lib/usePanel';
 import { useAuth } from '@/context/AuthContext';
 import FestivalOfferBulkBar from '@/components/admin/FestivalOfferBulkBar';
 import FestivalOfferExceptions from '@/components/admin/FestivalOfferExceptions';
+import ShippingClassBulkBar from '@/components/admin/ShippingClassBulkBar';
+import ShippingClassList from '@/components/admin/ShippingClassList';
+import { shippingClassLabel, type ShippingClass, type ShippingClassSource } from '@/lib/shippingClass';
 import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
 import { canChangeFestivalOffer, festivalSettingLabel } from '@/lib/festival/festivalOfferSetting';
 
@@ -29,6 +32,8 @@ interface Product extends ScorableProduct {
   _id: string;
   seoReview?: SeoReview | null;
   festivalOfferSetting?: FestivalOfferSetting | null;
+  shippingClass?: ShippingClass | null;
+  shippingClassSource?: ShippingClassSource | null;
   name: string;
   price: number;
   stock: StockStatus;
@@ -309,6 +314,23 @@ function AdminProductsPageInner() {
         onChanged={() => queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') })}
       />
 
+      <ShippingClassList
+        canEdit={canEditFestivalOffer}
+        canEditBoxes={user?.role === 'admin'}
+        onChanged={() => queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') })}
+      />
+
+      {canEditFestivalOffer && (
+        <ShippingClassBulkBar
+          selectedIds={[...selectedIds]}
+          onDone={() => {
+            setSelectedIds(new Set());
+            queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
+            queryClient.invalidateQueries({ queryKey: adminKeys.resource('products-shipping-class') });
+          }}
+        />
+      )}
+
       {canEditFestivalOffer && (
         <FestivalOfferBulkBar
           selectedIds={[...selectedIds]}
@@ -381,6 +403,9 @@ function AdminProductsPageInner() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Diwali
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Parcel size class — set in the product editor or with the bar above">
+                  Size class
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Featured
                 </th>
@@ -392,7 +417,7 @@ function AdminProductsPageInner() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading && (
                 <tr>
-                  <td colSpan={canEditFestivalOffer ? 10 : 9} className="px-4 py-12 text-center text-sm text-gray-500">
+                  <td colSpan={canEditFestivalOffer ? 11 : 10} className="px-4 py-12 text-center text-sm text-gray-500">
                     Loading...
                   </td>
                 </tr>
@@ -462,6 +487,14 @@ function AdminProductsPageInner() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs rounded-full ${product.festivalOfferSetting ? 'bg-amber-100 text-amber-900' : 'text-gray-500'}`}>
                       {festivalSettingLabel(product.festivalOfferSetting)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span
+                      className={`px-2 py-1 text-xs rounded-full ${product.shippingClass ? 'bg-sky-100 text-sky-900' : 'text-gray-500'}`}
+                      title={product.shippingClassSource === 'auto' ? 'Worked out from the size' : undefined}
+                    >
+                      {shippingClassLabel(product.shippingClass)}{product.shippingClassSource === 'auto' ? ' · auto' : ''}
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">

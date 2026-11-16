@@ -4,7 +4,8 @@ import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue, stockRankFor } from '.
 import { snapshotStock, diffRecoveredTargets } from '../utils/restockDetect.js';
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
-import { SHIPPING_SIZE_LIMITS as SZ } from '../utils/shippingSize.js';
+import { SHIPPING_SIZE_LIMITS as SZ, LISTED_SIZE_SOURCE_MAX } from '../utils/shippingSize.js';
+import { SHIPPING_CLASSES, SHIPPING_CLASS_SOURCES } from '../utils/shippingClass.js';
 import { FESTIVAL_SETTING_MODE, FESTIVAL_CUSTOM_PERCENT_MIN, FESTIVAL_CUSTOM_PERCENT_MAX, VARIANT_SETTING_MODES } from '../utils/festivalOffer.js';
 import slugHistoryPlugin from './plugins/slugHistory.js';
 
@@ -329,6 +330,33 @@ const ProductSchema = new mongoose.Schema({
     heightCm:  { type: Number, min: SZ.heightCm.min,  max: SZ.heightCm.max,  default: null },
   },
 
+  // The BARE product's size as listed online (brand site, Amazon…), not the box.
+  // Kept apart from `shippingSize` on purpose: a courier charges on the box, so
+  // treating this as the parcel would under-quote. `sourceUrl` is where it was
+  // found, so a reviewer can check it; `estimated` = no listing existed and a
+  // similar product's size was used. Admin-only data (see utils/shippingClass.js).
+  listedSize: {
+    weightKg:  { type: Number, min: SZ.weightKg.min,  max: SZ.weightKg.max,  default: null },
+    lengthCm:  { type: Number, min: SZ.lengthCm.min,  max: SZ.lengthCm.max,  default: null },
+    breadthCm: { type: Number, min: SZ.breadthCm.min, max: SZ.breadthCm.max, default: null },
+    heightCm:  { type: Number, min: SZ.heightCm.min,  max: SZ.heightCm.max,  default: null },
+    sourceUrl: {
+      type: String,
+      default: null,
+      maxlength: LISTED_SIZE_SOURCE_MAX,
+      match: [/^https?:\/\/\S+$/i, 'Source link must start with http:// or https://'],
+    },
+    estimated: { type: Boolean, default: false },
+  },
+
+  // Coarse parcel class until (and beside) a measured box: small | medium | large |
+  // xl (freight, quoted after the order). null = not set. `shippingClassSource`
+  // says who decided it: 'manual' (admin, bulk set or reviewed import — never
+  // overwritten by a suggestion) or 'auto' (suggested from a size, recomputed
+  // when the size changes). See utils/shippingClass.js.
+  shippingClass: { type: String, enum: [...SHIPPING_CLASSES, null], default: null },
+  shippingClassSource: { type: String, enum: [...SHIPPING_CLASS_SOURCES, null], default: null },
+
   // SEO metadata overrides (meta title/description, canonical, OG image,
   // noindex, internal focus keyword). All optional — blank fields fall back to
   // values derived from the product on the frontend. See models/shared/seoSchema.js.
@@ -479,6 +507,12 @@ ProductSchema.index(
   { 'festivalOfferSetting.mode': 1, _id: 1 },
   { partialFilterExpression: { 'festivalOfferSetting.mode': { $type: 'string' } }, name: 'festival_offer_exceptions' },
 );
+
+// Admin "Show products by size class" list, keyset-paged on _id. Full (not partial):
+// the busiest filter is "Not set yet", i.e. shippingClass null OR missing, and an
+// equality-on-null query is served by this index. Built by config/db.js (autoIndex
+// is off in prod). Must match db.js.
+ProductSchema.index({ shippingClass: 1, _id: 1 }, { name: 'shipping_class_list' });
 
 // Derive `slug` from `name` when the caller didn't supply one. `slug` is required
 // and unique, but nothing upstream guarantees it: the admin create form never sends

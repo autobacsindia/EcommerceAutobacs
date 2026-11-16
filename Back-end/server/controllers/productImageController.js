@@ -31,7 +31,8 @@ import { aggregateFromVariants } from '../utils/wcVariants.js';
 import { normalizeSeo } from '../utils/seo.js';
 import { imageKey, orderGallery } from '../utils/productGallery.js';
 import { pruneDanglingPointers, planVariantOwnedCleanup } from '../utils/variantImage.js';
-import { normalizeShippingSize } from '../utils/shippingSize.js';
+import { normalizeShippingSize, normalizeListedSize } from '../utils/shippingSize.js';
+import { parseShippingClassInput, resolveShippingClass } from '../utils/shippingClass.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
 class AppError extends Error {
@@ -188,6 +189,32 @@ const normalizePreUploaded = (raw) => {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
+// Helper: decide shippingClass + shippingClassSource for this write
+// ────────────────────────────────────────────────────────────────────────────
+/**
+ * `shippingClass` is "Automatic" ('' / 'auto') or a class an admin chose. The
+ * source is never taken from the client. A write that touches neither the class
+ * nor a size leaves both alone, so an unrelated edit cannot re-suggest over the
+ * stored class. Rules: utils/shippingClass.js.
+ */
+const applyShippingClass = (fields, current) => {
+  delete fields.shippingClassSource;
+  const touched = ['shippingClass', 'shippingSize', 'listedSize'].some((k) => k in fields);
+  if (!touched && current) return;
+  let requested;
+  try {
+    requested = parseShippingClassInput(fields.shippingClass);
+  } catch {
+    throw new AppError('Size class must be Small, Medium, Large, XL or Automatic', 400);
+  }
+  const sizes = {
+    shippingSize: fields.shippingSize ?? current?.shippingSize,
+    listedSize: fields.listedSize ?? current?.listedSize,
+  };
+  Object.assign(fields, resolveShippingClass({ requested, current, sizes }));
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // Helper: parse non-file fields from multipart body
 // ────────────────────────────────────────────────────────────────────────────
 const parseProductFields = (body) => {
@@ -202,7 +229,7 @@ const parseProductFields = (body) => {
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
    'specifications', 'compatibleVehicles', 'seo', 'variants', 'uploadedImages',
-   'imageOrder', 'adoptImages', 'returnPolicy', 'shippingSize'].forEach((key) => {
+   'imageOrder', 'adoptImages', 'returnPolicy', 'shippingSize', 'listedSize'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
@@ -213,6 +240,11 @@ const parseProductFields = (body) => {
     const size = normalizeShippingSize(fields.shippingSize);
     if (size === undefined) delete fields.shippingSize;
     else fields.shippingSize = size;
+  }
+  if ('listedSize' in fields) {
+    const listed = normalizeListedSize(fields.listedSize);
+    if (listed === undefined) delete fields.listedSize;
+    else fields.listedSize = listed;
   }
 
   // ── Variable products ──────────────────────────────────────────────────────
@@ -363,6 +395,7 @@ const assertValidProduct = (fields, { partial = false } = {}) => {
 // ────────────────────────────────────────────────────────────────────────────
 export const createProductWithImages = async (req, res) => {
   const fields = parseProductFields(req.body);
+  applyShippingClass(fields, null);
   // Images the browser already uploaded straight to Cloudinary (direct upload).
   const preUploaded = normalizePreUploaded(fields.uploadedImages);
   delete fields.uploadedImages;
@@ -475,6 +508,7 @@ export const updateProductWithImages = async (req, res, next) => {
   if (!product) throw new AppError('Product not found', 404);
 
   const fields = parseProductFields(req.body);
+  applyShippingClass(fields, product);
   // Images the browser already uploaded straight to Cloudinary (direct upload).
   const preUploaded = normalizePreUploaded(fields.uploadedImages);
   delete fields.uploadedImages;

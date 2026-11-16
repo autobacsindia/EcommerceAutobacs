@@ -28,6 +28,7 @@ import { generateSlug } from '@/lib/utils';
 import { usePanel } from '@/lib/usePanel';
 import ShippingSizeFields from '@/components/admin/ShippingSizeFields';
 import { EMPTY_SHIPPING_SIZE, firstShippingSizeError, shippingSizeToForm, shippingSizeToPayload, type ShippingSize, type ShippingSizeForm } from '@/lib/shippingSize';
+import { EMPTY_LISTED_SIZE, firstListedSizeError, listedSizeToForm, listedSizeToPayload, shippingClassToChoice, type ListedSize, type ListedSizeForm, type ShippingClass, type ShippingClassChoice, type ShippingClassSource } from '@/lib/shippingClass';
 
 type Category = CategoryOption;
 
@@ -81,6 +82,9 @@ interface Product {
     nonReturnReason?: 'electrical' | 'custom' | 'imported' | 'installed' | null;
   };
   shippingSize?: ShippingSize | null;
+  listedSize?: ListedSize | null;
+  shippingClass?: ShippingClass | null;
+  shippingClassSource?: ShippingClassSource | null;
 }
 
 /** Stable empty gallery — an inline `[]` would be a fresh prop every render. */
@@ -145,6 +149,8 @@ export default function EditProductPage() {
   });
   
   const [shippingSize, setShippingSize] = useState<ShippingSizeForm>(EMPTY_SHIPPING_SIZE);
+  const [listedSize, setListedSize] = useState<ListedSizeForm>(EMPTY_LISTED_SIZE);
+  const [shippingClass, setShippingClass] = useState<ShippingClassChoice>('');
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<CloudinaryImage[]>([]);
   // The full gallery (saved + pending) in the admin's chosen display order, and
@@ -357,6 +363,8 @@ export default function EditProductPage() {
       setFestivalOfferSetting(productData.festivalOfferSetting ?? null);
       setFestivalOfferVariantSettings(productData.festivalOfferVariantSettings ?? null);
       setShippingSize(shippingSizeToForm(productData.shippingSize));
+      setListedSize(listedSizeToForm(productData.listedSize));
+      setShippingClass(shippingClassToChoice(productData.shippingClass, productData.shippingClassSource));
 
       // Hydrate variable-product models (if any) so edits preserve variant _ids
       // AND their WooCommerce linkage — see EditorVariant.wpVariationId. A field
@@ -460,6 +468,12 @@ export default function EditProductPage() {
       setSubmitting(false);
       return;
     }
+    const listedError = firstListedSizeError(listedSize);
+    if (listedError) {
+      alert(`Parcel size — ${listedError}`);
+      setSubmitting(false);
+      return;
+    }
 
     const price = parseFloat(formData.price);
     const stock = formData.stock;
@@ -525,6 +539,8 @@ export default function EditProductPage() {
         nonReturnReason: formData.returnable ? null : (formData.nonReturnReason || null),
       }));
       fd.append('shippingSize', JSON.stringify(shippingSizeToPayload(shippingSize)));
+      fd.append('listedSize', JSON.stringify(listedSizeToPayload(listedSize)));
+      fd.append('shippingClass', shippingClass);
       if (formData.offerStartDate) fd.append('offerStartDate', formData.offerStartDate);
       if (formData.offerEndDate)   fd.append('offerEndDate',   formData.offerEndDate);
 
@@ -1082,7 +1098,14 @@ export default function EditProductPage() {
             </div>
 
             {/* Parcel size — what the courier charges on (Shiprocket booking) */}
-            <ShippingSizeFields value={shippingSize} onChange={setShippingSize} />
+            <ShippingSizeFields
+              value={shippingSize}
+              onChange={setShippingSize}
+              listed={listedSize}
+              onListedChange={setListedSize}
+              shippingClass={shippingClass}
+              onShippingClassChange={setShippingClass}
+            />
 
             {/* Return / cancellation policy (per the signed Roavion policy) */}
             <div className="mb-4 border-t border-gray-200 pt-4">

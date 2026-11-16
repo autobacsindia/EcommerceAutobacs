@@ -19,6 +19,8 @@ import {
 import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { setFestivalOfferSetting, listFestivalOfferExceptions, setProductFestivalOffer } from "../controllers/productFestivalOfferController.js";
 import { validateSetFestivalOfferSetting, validateFestivalOfferExceptions, validateSetProductFestivalOffer } from "../validators/festivalOffer.validator.js";
+import { setShippingClass, listShippingClass, getShippingClassBoxes, putShippingClassBoxes } from "../controllers/shippingClassController.js";
+import { validateSetShippingClass, validateListShippingClass, validateClassBoxes } from "../validators/shippingClass.validator.js";
 import { httpCache } from "../middleware/httpCache.js";
 import { invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 import {
@@ -427,6 +429,35 @@ router.patch(
   validateRequest,
   asyncHandler(setFestivalOfferSetting)
 );
+
+// @route   PATCH /products/shipping-class  { productIds[], shippingClass: small|medium|large|xl|auto }
+// @desc    Set the size class on many products (the admin list's bulk bar)
+// @access  Private/Admin, Marketing
+router.patch(
+  "/shipping-class",
+  protect,
+  adminOrMarketing,
+  validateSetShippingClass,
+  validateRequest,
+  asyncHandler(setShippingClass)
+);
+
+// @route   GET /products/admin/shipping-class?class=small|medium|large|xl|none&cursor=&limit=
+// @desc    Products in one size class ('none' = not set yet), keyset-paged
+// @access  Private/Admin, Marketing
+router.get(
+  "/admin/shipping-class",
+  protect,
+  adminOrMarketing,
+  validateListShippingClass,
+  validateRequest,
+  asyncHandler(listShippingClass)
+);
+
+// @route   GET|PUT /products/admin/shipping-class-boxes  { boxes: { small, medium, large } }
+// @desc    The standard box per size class. Changing it is admin-only.
+router.get("/admin/shipping-class-boxes", protect, adminOrMarketing, asyncHandler(getShippingClassBoxes));
+router.put("/admin/shipping-class-boxes", protect, admin, validateClassBoxes, validateRequest, asyncHandler(putShippingClassBoxes));
 
 // @route   PUT /products/:id/festival-offer  { mode, percent?, variants?[] }
 // @desc    The product editor's Diwali box: product choice + per-model choices, saved together
