@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { useFestivalOfferPrice, useFestivalPriceRange } from '@/components/festival/FestivalOfferContext';
+import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { resolveFestivalSetting, type FestivalOfferSetting, type FestivalVariantSetting } from '@/lib/festival/festivalOffer';
 import { toast } from 'react-hot-toast';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
@@ -65,6 +66,7 @@ export default function StickyCartBar({
   const activeStock: StockStatus = variant ? variant.stock : product.stock;
   // Diwali offer for the exact unit — an extra % on top of its selling price
   // (display mirror; the cart charges the server's figure).
+  const offerLabel = useFestivalOfferLabel();
   const festivalOffer = useFestivalOfferPrice(
     needsSelection ? null : activePrice,
     resolveFestivalSetting(product, variant?._id ?? null),
@@ -169,7 +171,7 @@ export default function StickyCartBar({
                 : fmt(festivalOffer ? festivalOffer.finalPrice : activePrice)}
               {festivalOffer && (
                 <span className="ml-2 align-middle text-xs font-semibold text-ink-muted">
-                  🪔 −{festivalOffer.percent}% Diwali · was <s>{fmt(festivalOffer.basePrice)}</s>
+                  {offerLabel.icon} −{festivalOffer.percent}% {offerLabel.name} · was <s>{fmt(festivalOffer.basePrice)}</s>
                 </span>
               )}
             </p>

@@ -28,7 +28,7 @@ export default function FestivalDealBadge({
   if (!festival) return null;
   if (price !== undefined && !offer) return null;
   return (
-    <span className={`fx-deal-badge ${className}`} style={festivalVars(festival.tokens)} data-testid="festival-deal-badge">
+    <span className={`fx-deal-badge ${className}`} data-fx-style={festival.tokens.style} style={festivalVars(festival.tokens)} data-testid="festival-deal-badge">
       <span aria-hidden="true">{festival.tokens.icons.lamp}</span>
       {festival.tokens.copy.dealBadge}
     </span>

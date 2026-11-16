@@ -8,6 +8,7 @@ import { useCurrency } from '@/context/CurrencyContext';
 import { useFestival } from '@/components/festival/FestivalThemeContext';
 import { festivalVars } from '@/components/festival/festivalStyle';
 import { GIFT_BAND_LIMITS, type GiftTier } from './giftTiers';
+import BlackFridayHero from './BlackFridayHero';
 import type { StoreProduct } from './storeData';
 
 /**
@@ -23,6 +24,16 @@ import type { StoreProduct } from './storeData';
  * The first client render matches the server HTML because the provider's
  * `initialLive` is computed during the same server render — no flash, no shift.
  */
+
+/**
+ * The home page's outer wrapper, tagged with the live festival's style so the
+ * store's own colour tokens can follow it (Black Friday turns the brand-green
+ * accents red). In the server HTML, so nothing flashes from green to red.
+ */
+export function FestiveScope({ className, children }: { className: string; children: ReactNode }) {
+  const festival = useFestival();
+  return <div className={className} data-fx-style={festival?.tokens.style}>{children}</div>;
+}
 
 /** Renders `festive` while the festival is live on this route, `normal` otherwise. */
 export function FestiveSwitch({ festive, normal }: { festive: ReactNode; normal: ReactNode }) {
@@ -42,15 +53,31 @@ export function FestiveHero({
   maxOff,
   dealsTotal,
   categoryCount,
+  freeDelivery = false,
 }: {
   photos: FestiveHeroPhoto[];
   maxOff: number;
   dealsTotal: number;
   categoryCount: number;
+  /** Server: checkout is waiving shipping/packing/delivery right now. Shows the seal. */
+  freeDelivery?: boolean;
 }) {
   const festival = useFestival();
   if (!festival) return null;
   const { tokens } = festival;
+  if (tokens.style === 'neon') {
+    return (
+      <BlackFridayHero
+        tokens={tokens}
+        theme={festival.theme}
+        photos={photos}
+        maxOff={maxOff}
+        dealsTotal={dealsTotal}
+        categoryCount={categoryCount}
+        showSeal={freeDelivery}
+      />
+    );
+  }
   const copy = tokens.home;
   const [before, accent, after] = copy.heroTitle;
   const stats = [
@@ -109,6 +136,53 @@ export function FestiveHero({
   );
 }
 
+/**
+ * Black Friday offer cards, under the category cards. Three doors into the sale:
+ * the real top saving, the free-delivery promise (only for a theme that sets the
+ * seal — it must match what checkout charges), and shop-by-car. Renders nothing
+ * outside a neon-style festival.
+ */
+export function FestiveOffers({
+  maxOff,
+  dealsTotal,
+  freeDelivery = false,
+}: {
+  maxOff: number;
+  dealsTotal: number;
+  /** Server: checkout is waiving shipping/packing/delivery right now (lib/festival/freeDelivery.ts). */
+  freeDelivery?: boolean;
+}) {
+  const festival = useFestival();
+  if (!festival || festival.tokens.style !== 'neon') return null;
+  const { tokens } = festival;
+  const seal = freeDelivery ? tokens.freeDeliverySeal : undefined;
+  return (
+    <section className="bfo" style={festivalVars(tokens)} aria-label={`${tokens.name} offers`} data-testid="festive-offers">
+      {maxOff > 0 && (
+        <Link href="/offers" className="bfo-card bfo-card-red" data-festive-tap>
+          <span className="bfo-kicker">{tokens.name} deals</span>
+          <span className="bfo-big">Up to {maxOff}% off</span>
+          <span className="bfo-text">
+            {dealsTotal > 0 ? `${dealsTotal} ${dealsTotal === 1 ? 'product' : 'products'} on sale` : 'On genuine parts'} · Shop now →
+          </span>
+        </Link>
+      )}
+      {seal && (
+        <Link href="/offers" className="bfo-card bfo-card-gold">
+          <span className="bfo-kicker">{seal.top}</span>
+          <span className="bfo-big">{seal.middle}</span>
+          <span className="bfo-text">{seal.bottom} on {tokens.name} orders</span>
+        </Link>
+      )}
+      <Link href="/vehicles" className="bfo-card bfo-card-dark">
+        <span className="bfo-kicker">Made for your car</span>
+        <span className="bfo-big">Shop by vehicle</span>
+        <span className="bfo-text">Pick your car — see only parts that fit →</span>
+      </Link>
+    </section>
+  );
+}
+
 /** "Today's Deals" shelf, retitled for the festival. Same products, same tiles. */
 export function DealsShelf({ products }: { products: StoreProduct[] }) {
   const festival = useFestival();
@@ -136,13 +210,13 @@ export function GiftSection({ tiers }: { tiers: GiftTier[] }) {
         : `${formatPrice(GIFT_BAND_LIMITS[1])} and above`;
 
   return (
-    <section className="fxg" style={festivalVars(festival.tokens)} aria-labelledby="fxg-title" data-testid="festive-gifts">
+    <section className="fxg" data-fx-style={festival.tokens.style} style={festivalVars(festival.tokens)} aria-labelledby="fxg-title" data-testid="festive-gifts">
       <div className="fxg-head">
         <div>
-          <h2 id="fxg-title" className="fxg-title"><span aria-hidden="true">🎁</span> {copy.giftTitle}</h2>
+          <h2 id="fxg-title" className="fxg-title">{festival.tokens.style === 'neon' ? null : <span aria-hidden="true">🎁 </span>}{copy.giftTitle}</h2>
           <p className="fxg-sub">{copy.giftSubtitle}</p>
         </div>
-        <Link href="/offers" className="fxg-link">Explore gifts →</Link>
+        <Link href="/offers" className="fxg-link">{festival.tokens.style === 'neon' ? 'Explore all deals →' : 'Explore gifts →'}</Link>
       </div>
       <div className={`fxg-tiers fxg-tiers-${tiers.length}`}>
         {tiers.map((t) => (
@@ -172,9 +246,15 @@ export function FestiveWish() {
   if (!festival) return null;
   const { tokens } = festival;
   return (
-    <section className="fxw" style={festivalVars(tokens)} data-testid="festive-wish">
+    <section className="fxw" data-fx-style={tokens.style} style={festivalVars(tokens)} data-testid="festive-wish">
       <p className="fxw-title">
-        <span aria-hidden="true">{tokens.icons.lamp}</span> {tokens.home.wishTitle} <span aria-hidden="true">{tokens.icons.lamp}</span>
+        {tokens.style === 'neon' ? (
+          tokens.home.wishTitle
+        ) : (
+          <>
+            <span aria-hidden="true">{tokens.icons.lamp}</span> {tokens.home.wishTitle} <span aria-hidden="true">{tokens.icons.lamp}</span>
+          </>
+        )}
       </p>
       <p className="fxw-sub">{tokens.home.wishSubtitle}</p>
     </section>
