@@ -508,6 +508,12 @@ ProductSchema.index(
   { partialFilterExpression: { 'festivalOfferSetting.mode': { $type: 'string' } }, name: 'festival_offer_exceptions' },
 );
 
+// Admin "Show products by size class" list, keyset-paged on _id. Full (not partial):
+// the busiest filter is "Not set yet", i.e. shippingClass null OR missing, and an
+// equality-on-null query is served by this index. Built by config/db.js (autoIndex
+// is off in prod). Must match db.js.
+ProductSchema.index({ shippingClass: 1, _id: 1 }, { name: 'shipping_class_list' });
+
 // Derive `slug` from `name` when the caller didn't supply one. `slug` is required
 // and unique, but nothing upstream guarantees it: the admin create form never sends
 // one, so every create used to die on a ValidationError. Server-side derivation also
