@@ -27,7 +27,7 @@
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
-import staffProjectRepository, { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES } from '../repositories/staffProjectRepository.js';
+import staffProjectRepository, { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES, projectCode, projectNumberIn } from '../repositories/staffProjectRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
@@ -243,6 +243,7 @@ function shape(p, viewer, counts = NO_COUNTS, today = todayIST()) {
   const archived = !!p.archivedAt;
   return {
     id: idOf(p._id),
+    code: projectCode(p.number),
     name: p.name,
     description: p.description || '',
     colour: p.colour || 'blue',
@@ -334,7 +335,7 @@ export async function listProjects(actor, { state = 'active', cursor } = {}) {
 export async function pickableProjects(actor) {
   if (!inPanel(actor)) return { projects: [] };
   const rows = await staffProjectRepository.page({ archivedAt: null, ...visibleQuery(actor) }, { limit: PROJECT_PICK_MAX });
-  return { projects: rows.map((p) => ({ id: idOf(p._id), name: p.name, colour: p.colour || 'blue' })) };
+  return { projects: rows.map((p) => ({ id: idOf(p._id), code: projectCode(p.number), name: p.name, colour: p.colour || 'blue' })) };
 }
 
 export async function getProject(actor, id) {
@@ -496,6 +497,23 @@ export async function projectForTask(actor, raw) {
   return p;
 }
 
+/**
+ * The project a payment may be linked to, from what someone typed ("PRJ-0007",
+ * "prj7", "7"). null/'' means no project. It must exist and be live — an
+ * archived project takes no new links (its old ones stay). Whoever is not the
+ * admin or accounts (`seesAll`) must also see the project, so a code cannot be
+ * used to read a project's name they are not in.
+ */
+export async function projectForLink(actor, raw, { seesAll = false } = {}) {
+  if (raw == null || String(raw).trim() === '') return null;
+  const number = projectNumberIn(raw);
+  if (!number) throw fail('Type a project ID like PRJ-0007.', 400);
+  const p = await staffProjectRepository.findByNumber(number);
+  if (!p || !(seesAll || seesProject(actor, p))) throw fail(`Project ${projectCode(number)} was not found.`, 400);
+  if (p.archivedAt) throw fail(`Project ${projectCode(number)} is deleted — restore it first to link to it.`, 400);
+  return p;
+}
+
 /** A project as stored (archived or not), for its lists and statuses; null if gone. */
 export const projectById = (id) => (id ? staffProjectRepository.findById(id) : Promise.resolve(null));
 
@@ -505,4 +523,4 @@ export async function projectName(id) {
   return (await staffProjectRepository.findById(id))?.name ?? null;
 }
 
-export { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES };
+export { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES, projectCode, projectNumberIn };

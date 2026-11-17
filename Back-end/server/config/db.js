@@ -721,6 +721,18 @@ export async function ensureCriticalIndexes() {
       { deal: 1, createdAt: 1 },
       { partialFilterExpression: { deal: { $type: 'objectId' } }, name: 'payment_request_deal', background: true }
     );
+    // Payments linked to a project / carrying another ID (the admin's lookup), and the
+    // double-submit guard (one request per requester + clientId) — same names as the schema.
+    // Not partial: see models/PaymentRequest.js for why.
+    await db.collection('paymentrequests').createIndex({ project: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_project', background: true });
+    await db.collection('paymentrequests').createIndex(
+      { reference: 1, createdAt: -1 },
+      { partialFilterExpression: { reference: { $gt: '' } }, name: 'payment_request_reference', background: true }
+    );
+    await db.collection('paymentrequests').createIndex(
+      { requestedBy: 1, clientId: 1 },
+      { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'payment_request_client_id', background: true }
+    );
     console.log('✓ SupplierDeal indexes confirmed');
 
     // Supplier credit (models/SupplierLedgerEntry.js) — same names as the schema.
@@ -752,6 +764,11 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasks').createIndex({ teams: 1, list: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team_list', background: true });
     // One project's tasks (models/StaffProject.js). Not partial: see the schema for why.
     await db.collection('stafftasks').createIndex({ project: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_project', background: true });
+    // The tasks linked to one order (the admin's lookup). Partial: most tasks have no order.
+    await db.collection('stafftasks').createIndex(
+      { 'order.target': 1, _id: -1 },
+      { partialFilterExpression: { 'order.target': { $type: 'objectId' } }, name: 'staff_task_order', background: true }
+    );
     await db.collection('staffprojects').createIndex({ archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_all', background: true });
     await db.collection('staffprojects').createIndex({ 'people.user': 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_people', background: true });
     await db.collection('staffprojects').createIndex({ teams: 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_teams', background: true });
@@ -766,6 +783,12 @@ export async function ensureCriticalIndexes() {
     await db.collection('staffprojectreminders').createIndex(
       { expiresAt: 1 },
       { expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: 'date' } }, name: 'staff_project_reminder_ttl', background: true }
+    );
+    // PRJ-0007: one project per number (models/StaffProject.js). Partial, so the
+    // projects not yet backfilled (no number) do not collide on null.
+    await db.collection('staffprojects').createIndex(
+      { number: 1 },
+      { unique: true, partialFilterExpression: { number: { $type: 'number' } }, name: 'staff_project_number', background: true }
     );
     // Imported rows (scripts/import-clickup.js): one per source item, so a re-run never duplicates.
     await db.collection('stafftasks').createIndex(

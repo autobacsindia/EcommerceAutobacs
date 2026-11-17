@@ -155,6 +155,10 @@ router.post('/:id/pay', concurrentUploadGuard, attachmentSizeGuard, uploadPaymen
 router.put('/:id/payment', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.editPayment(req.user, req.params.id, req.body, req.files || [], req) });
 }));
+// POST /payment-requests/:id/links { project?: 'PRJ-0007' | '', reference?: text | '' } — which project / other ID it is for
+router.post('/:id/links', asyncHandler(async (req, res) => {
+  res.json({ success: true, request: await pr.setLinks(req.user, req.params.id, req.body, req) });
+}));
 // POST /payment-requests/:id/order { orderId | null } — link an expense to an order, change or remove it
 router.post('/:id/order', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.linkOrder(req.user, req.params.id, req.body, req) });

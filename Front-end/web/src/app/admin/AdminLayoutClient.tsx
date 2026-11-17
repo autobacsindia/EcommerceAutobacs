@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
-  MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
+  MessagesSquare, Package, ScanSearch, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
   Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
@@ -32,6 +32,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/admin/overview', label: 'Company overview', icon: Building2 },
+      { href: '/admin/lookup', label: 'Find by ID', icon: ScanSearch },
       { href: '/admin/chat', label: 'Team Chat', icon: MessagesSquare },
       { href: '/admin/tasks', label: 'Tasks', icon: ListTodo },
       { href: '/admin/lessons', label: 'Lessons', icon: GraduationCap },

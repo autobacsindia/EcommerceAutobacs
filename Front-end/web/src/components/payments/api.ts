@@ -39,6 +39,10 @@ export type PaymentRequest = {
     accountNumber?: string; ifsc?: string; swift?: string; bankName?: string; phone?: string;
   };
   order: { id: string; number: string } | null;
+  /** The project it is for, as it was when linked ("PRJ-0007 Diwali launch"). */
+  project?: { id: string; code: string; name: string } | null;
+  /** Any other ID it belongs to (a supplier invoice number, a courier AWB), or ''. */
+  reference?: string;
   itemNames: string[];
   customer: { name: string; phone: string; alternatePhone?: string; city: string } | null;
   closedBy: string;
@@ -56,6 +60,8 @@ export type PaymentRequest = {
     approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean; edit?: boolean; editPayment?: boolean;
     /** An expense: may link it to an order, change or remove the link (any status — no money changes). */
     linkOrder?: boolean;
+    /** May set, change or remove its project and other ID (any kind, any status — no money changes). */
+    linkProject?: boolean;
   };
   /** One part of a supplier deal: its currency is the deal's and cannot change. */
   dealId?: string | null;
@@ -76,6 +82,8 @@ export type PaymentRequest = {
   bill?: number | null;
   /** Paid, and the customer cancelled the items since: the refund the supplier owes. */
   supplierRefund?: SupplierRefund | null;
+  /** For whoever pays: a fingerprint of the amount and payee shown, sent back with "Pay". */
+  payVersion?: string;
   /** The requester may edit until then (null for admins, or once it can no longer be edited). */
   editableUntil?: string | null;
 };
@@ -256,6 +264,10 @@ export const lookupOrders = (q: string) =>
 /** Link an expense to an order, change it, or remove it (null). */
 export const linkOrder = (id: string, orderId: string | null) =>
   apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(id)}/order`, { orderId });
+
+/** Set, change or clear a request's project ("PRJ-0007" / '') and other ID (text / ''). Only the keys sent change. */
+export const setLinks = (id: string, links: { project?: string; reference?: string }) =>
+  apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(id)}/links`, links);
 
 /** Multipart POST (the JSON client can't send files), with the same CSRF header it uses. */
 export async function postForm<T>(endpoint: string, form: FormData, method: 'POST' | 'PUT' = 'POST'): Promise<T> {

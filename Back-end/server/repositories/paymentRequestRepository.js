@@ -22,6 +22,42 @@ export const sumByCurrency = (rows = []) => {
 const paymentRequestRepository = {
   create: async (doc, session = null) => (await PaymentRequest.create([doc], { session }))[0].toObject(),
   findById: (id) => PaymentRequest.findById(id).lean(),
+  /** The request this person already raised with this browser id (payment_request_client_id). */
+  findByClientId: (requestedBy, clientId) => PaymentRequest.findOne({ requestedBy, clientId: { $type: 'string', $eq: clientId } }).lean(),
+
+  /**
+   * The admin's lookup: a page of the requests linked to a project (payment_request_project)
+   * or carrying an other ID (payment_request_reference), newest first. `after` is the last
+   * row's { createdAt, _id }; `limit` bounds the read.
+   */
+  pageLinked: (by, { after = null, limit }) => {
+    // One order's rows ride payment_request_order and are sorted in memory: an order has a handful.
+    // Plain equality on the project (an ObjectId from our own read): payment_request_project is a sorted range.
+    const base = by.project ? { project: by.project }
+      : by.order ? { order: { $eq: by.order, $type: 'objectId' } }
+        : { reference: { $eq: by.reference, $gt: '' } };
+    // `createdAt ≤ cursor` bounds the index range so the next page starts where the last ended
+    // (an $or alone read two pages' worth of keys — measured); the $or then drops the ties already shown.
+    const keyset = after
+      ? { createdAt: { $lte: after.createdAt }, $or: [{ createdAt: { $lt: after.createdAt } }, { _id: { $lt: after.id } }] }
+      : {};
+    return PaymentRequest.find({ ...base, ...keyset })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .select('number kind status team category amount currency foreignAmount payee.name order orderNumber project projectCode projectName reference requestedByName payment.paidAt payment.transactionAt createdAt')
+      .lean();
+  },
+  /** The orders of a project's payments, each once (payment_request_project; at most `cap` rows read). */
+  ordersForProject: async (projectId, cap) => [...new Set((await PaymentRequest.find({ project: projectId, order: { $type: 'objectId' } })
+    .select('order').limit(cap).lean()).map((r) => String(r.order)))],
+  /** The projects of an order's payments, each once (payment_request_order). */
+  projectsForOrder: async (orderId, cap) => [...new Set((await PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' }, project: { $type: 'objectId' } })
+    .select('project').limit(cap).lean()).map((r) => String(r.project)))],
+  /** What a project's payments add up to, by status (payment_request_project; one project's rows). */
+  totalsForProject: (projectId) => PaymentRequest.aggregate([
+    { $match: { project: projectId } },
+    { $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' } } },
+  ]).option({ maxTimeMS: 5000 }),
 
   /**
    * Move a request on, but only if it is still in one of `from` — the guard that
@@ -82,9 +118,9 @@ const paymentRequestRepository = {
   }).select('number status').lean(),
 
   // Supplier requests only: an expense linked to the order (a courier charge) never holds its items.
-  findOpenForOrder: (orderId) => PaymentRequest.find({
+  findOpenForOrder: (orderId, session = null) => PaymentRequest.find({
     order: { $eq: orderId, $type: 'objectId' }, kind: 'supplier', status: { $in: ['submitted', 'approved', 'on_hold'] },
-  }).select('number status itemIds').lean(),
+  }).select('number status itemIds').session(session).lean(),
 
   /** Every supplier request for an order, for the order panel. */
   findForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' } })

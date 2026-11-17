@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import Counter from './Counter.js';
 
 /**
  * A project in the staff Tasks module: one piece of work with an owner, people,
@@ -16,7 +17,21 @@ import mongoose from 'mongoose';
  *
  * Deleting archives the row (`archivedAt`). Its tasks keep their link, so
  * restoring it brings everything back; while archived it grants nobody access.
+ *
+ * Every project has a number from the 'staffProject' counter, shown as its code
+ * "PRJ-0007" (projectCode below): what people type on an expense to link it, and
+ * what the admin searches. Never reused, archived or not. Projects from before
+ * numbers got theirs from scripts/backfill-project-numbers.js.
  */
+export const PROJECT_COUNTER = 'staffProject';
+/** 7 → "PRJ-0007"; 12345 → "PRJ-12345". null for a project not yet numbered. */
+export const projectCode = (n) => (Number.isInteger(n) && n > 0 ? `PRJ-${String(n).padStart(4, '0')}` : null);
+/** "PRJ-0007", "prj7", "PRJ 7" or "7" → 7; anything else → null. */
+export function projectNumberIn(raw) {
+  const m = /^\s*(?:prj[\s-]*)?0*(\d{1,9})\s*$/i.exec(String(raw ?? ''));
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 export const PROJECT_STATUSES = Object.freeze(['on_track', 'at_risk', 'late', 'done']);
 export const PROJECT_COLOURS = Object.freeze(['gray', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'violet', 'pink']);
 
@@ -113,6 +128,8 @@ const StaffProjectSchema = new mongoose.Schema(
     createdByName: { type: String, default: '' },
     /** The browser's id for this create, so a double-clicked "Create" makes one project. */
     clientId: { type: String, default: undefined, maxlength: 64 },
+    /** PRJ-<number>: set once when created (the pre-save hook below), never changed. */
+    number: { type: Number, default: undefined, immutable: true },
   },
   { timestamps: true, collection: 'staffprojects' },
 );
@@ -125,6 +142,21 @@ const StaffProjectSchema = new mongoose.Schema(
 StaffProjectSchema.index({ archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_all' });
 StaffProjectSchema.index({ 'people.user': 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_people' });
 StaffProjectSchema.index({ teams: 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_teams' });
+// One project per number. Partial: projects from before numbers have none until backfilled.
+StaffProjectSchema.index(
+  { number: 1 },
+  { unique: true, partialFilterExpression: { number: { $type: 'number' } }, name: 'staff_project_number' },
+);
+
+/*
+  Every new project is numbered here — the panel's create, the ClickUp importer,
+  a test fixture — so no path can make one without a code. The counter is one
+  atomic $inc: two projects created at the same moment get different numbers. A
+  create that then fails (validation) leaves a gap, never a duplicate.
+*/
+StaffProjectSchema.pre('save', async function numberNewProject() {
+  if (this.isNew && this.number == null) this.number = await Counter.next(PROJECT_COUNTER);
+});
 // `$type`, never `$ne` — MongoDB rejects `$ne` in a partialFilterExpression.
 StaffProjectSchema.index(
   { createdBy: 1, clientId: 1 },

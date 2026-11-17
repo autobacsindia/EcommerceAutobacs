@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
-  accountName, actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  accountName, actOn, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
@@ -97,6 +97,69 @@ function OrderLinkRow({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Payme
 }
 
 /**
+ * Which project and other ID a request belongs to, with Edit. Any status and
+ * kind — no money changes; the server checks the project exists and keeps every
+ * change in the history.
+ */
+function ProjectLinkRows({ r, onSaved }: { r: PaymentRequest; onSaved: (next: PaymentRequest) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [project, setProject] = useState(r.project?.code ?? '');
+  const [reference, setReference] = useState(r.reference ?? '');
+  const [error, setError] = useState('');
+  const save = useMutation({
+    mutationFn: async () => (await setLinks(r.id, { project: project.trim(), reference: reference.trim() })).request,
+    onSuccess: (next) => { onSaved(next); setEditing(false); setError(''); },
+    onError: (e) => setError(errorMessage(e, 'Could not save. Refresh and try again.')),
+  });
+  const may = Boolean(r.can.linkProject);
+  if (!r.project && !r.reference && !may) return null;
+  const field = 'w-full rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none';
+  if (editing) {
+    return (
+      <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+        <dt className="text-gray-500">Project / other ID</dt>
+        <dd className="space-y-2 rounded-lg border border-gray-200 p-2">
+          <label className="block text-xs text-gray-600">Project ID
+            <input aria-label="Project ID" className={field} value={project} onChange={(e) => setProject(e.target.value)} placeholder="e.g. PRJ-0007 — empty for none" maxLength={20} autoFocus />
+          </label>
+          <label className="block text-xs text-gray-600">Other ID
+            <input aria-label="Other ID" className={field} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. INV-2231 — empty for none" maxLength={60} />
+          </label>
+          <div className="flex gap-2">
+            <button type="button" disabled={save.isPending} onClick={() => save.mutate()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+              {save.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save
+            </button>
+            <button type="button" onClick={() => { setEditing(false); setProject(r.project?.code ?? ''); setReference(r.reference ?? ''); setError(''); }}
+              className="rounded-lg px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-100">Cancel</button>
+          </div>
+          {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+        </dd>
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+        <dt className="text-gray-500">Project</dt>
+        <dd className="flex flex-wrap items-center gap-2 text-gray-900">
+          {r.project
+            ? <span className="inline-flex items-center gap-1"><span className="font-mono font-medium">{r.project.code}</span> {r.project.name}<CopyId value={r.project.code} label="Project ID" /></span>
+            : <span className="text-gray-500">Not linked to a project</span>}
+          {may && (
+            <button type="button" onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-gray-50">
+              <Link2 className="h-3 w-3" /> {r.project || r.reference ? 'Change' : 'Link project / other ID'}
+            </button>
+          )}
+        </dd>
+      </div>
+      {r.reference && <Row k="Other ID" v={r.reference} copy="Other ID" />}
+    </>
+  );
+}
+
+/**
  * One payment request with everything it carries, and the buttons this person
  * may press now (`request.can`, decided by the server). Used by the team panel
  * and the admin page.
@@ -134,11 +197,17 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
         if (pay.account.trim()) form.append('accountLabel', pay.account.trim());
       } else if (pay.rupees.trim()) form.append('rupees', pay.rupees.trim());
       if (note.trim()) form.append('note', note.trim());
+      // The figures this screen shows: the server refuses if the request changed since.
+      if (q.data?.request.payVersion) form.append('payVersion', q.data.request.payVersion);
       for (const f of proof) form.append('proof', f);
       return (await postForm<{ request: PaymentRequest }>(`/payment-requests/${id}/pay`, form)).request;
     },
     onSuccess: done,
-    onError: (e) => setError(errorMessage(e, 'That did not work. Refresh and try again.')),
+    onError: (e, a) => {
+      setError(errorMessage(e, 'That did not work. Refresh and try again.'));
+      // Changed under us: show the new figures at once, so the admin checks what they will pay.
+      if (a === 'pay') qc.invalidateQueries({ queryKey: paymentKeys.one(id) });
+    },
   });
 
   const r = q.data?.request;
@@ -196,6 +265,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                   done(next);
                 }} />
               ) : <Row k="Order" v={r.order?.number} copy="Order number" />}
+              <ProjectLinkRows key={`${r.id}-${r.project?.code ?? ''}-${r.reference ?? ''}`} r={r} onSaved={done} />
               <Row k="Items" v={r.itemNames.join(', ')} />
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.alternatePhone && `Alt: ${r.customer.alternatePhone}`, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />
