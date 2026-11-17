@@ -4,6 +4,7 @@ import ProductRow from './ProductRow';
 import BrandStrip from './BrandStrip';
 import TrustStrip from './TrustStrip';
 import ReviewStrip from './ReviewStrip';
+import PressStrip from './PressStrip';
 import { discountPct, type StoreHomeData, type StoreProduct } from './storeData';
 import { DealsShelf, FestiveHero, FestiveOffers, FestiveScope, FestiveSwitch, FestiveWish, GiftSection, type FestiveHeroPhoto } from './FestiveHome';
 import { buildGiftTiers } from './giftTiers';
@@ -200,6 +201,7 @@ export default function StoreHome({
           />
           <BrandStrip brands={data.brands} />
           <ReviewStrip reviews={data.reviews} />
+          <PressStrip press={data.press ?? []} />
           <FestiveWish />
         </div>
       </main>

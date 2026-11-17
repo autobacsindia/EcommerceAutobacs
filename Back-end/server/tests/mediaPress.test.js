@@ -1,9 +1,19 @@
 import request from 'supertest';
-import { app, cronService, adaptiveThrottlingService } from '../app.js';
+import { jest } from '@jest/globals';
 import bcrypt from 'bcryptjs';
-import User from '../models/User.js';
-import PressCoverage from '../models/PressCoverage.js';
-import * as dbHandler from './db-handler.js';
+
+// The home page's "As featured in" strip is a cached server fetch; every press
+// write must ask the storefront to refresh it, or it lingers for the ISR window.
+const revalidateFrontendTags = jest.fn();
+jest.unstable_mockModule('../services/frontendRevalidator.js', () => ({
+  revalidateFrontendTags,
+  default: { revalidateFrontendTags },
+}));
+
+const { app, cronService, adaptiveThrottlingService } = await import('../app.js');
+const { default: User } = await import('../models/User.js');
+const { default: PressCoverage } = await import('../models/PressCoverage.js');
+const dbHandler = await import('./db-handler.js');
 
 const BASE = '/api/v1';
 
@@ -93,6 +103,27 @@ describe('Press coverage API', () => {
 
     await agent.delete(`${BASE}/media/admin/press/${item._id}`).set('X-XSRF-TOKEN', csrfToken).expect(200);
     expect(await PressCoverage.countDocuments()).toBe(0);
+  });
+
+  it('every press write refreshes the home page strip (create, edit, delete)', async () => {
+    revalidateFrontendTags.mockClear();
+    const created = await agent
+      .post(`${BASE}/media/admin/press`)
+      .set('X-XSRF-TOKEN', csrfToken)
+      .send({ publication: 'CEO Times', headline: 'H', url: 'https://x.com/r' })
+      .expect(201);
+    await agent.put(`${BASE}/media/admin/press/${created.body.data._id}`).set('X-XSRF-TOKEN', csrfToken).send({ featured: true }).expect(200);
+    await agent.delete(`${BASE}/media/admin/press/${created.body.data._id}`).set('X-XSRF-TOKEN', csrfToken).expect(200);
+
+    expect(revalidateFrontendTags).toHaveBeenCalledTimes(3);
+    for (const [tags] of revalidateFrontendTags.mock.calls) expect(tags).toEqual(['home:press']);
+  });
+
+  it('a failed write (validation / not found) does not fire a refresh', async () => {
+    revalidateFrontendTags.mockClear();
+    await agent.post(`${BASE}/media/admin/press`).set('X-XSRF-TOKEN', csrfToken).send({ publication: 'Only' }).expect(400);
+    await agent.put(`${BASE}/media/admin/press/507f1f77bcf86cd799439011`).set('X-XSRF-TOKEN', csrfToken).send({ headline: 'x' }).expect(404);
+    expect(revalidateFrontendTags).not.toHaveBeenCalled();
   });
 
   it('rejects unauthenticated admin access', async () => {
