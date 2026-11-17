@@ -13,15 +13,20 @@ import { QuickDate, QuickMove, QuickPeople, QuickPriority } from './CardActions'
 import TaskMenu from './TaskMenu';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { Chip, GroupCount, GroupPill, SkeletonRows } from './ui';
-import { TASK_STATUSES, confirmComplete, isConflict, listOf, orderHrefFor, projectOf, type Task, type TaskFilters, type TaskStatus } from './types';
+import { TASK_STATUSES, confirmComplete, isConflict, listOf, orderHrefFor, projectListOf, projectOf, stageOf, type ProjectStage, type Task, type TaskFilters, type TaskStatus } from './types';
+
+/** One board column: a status, or one of the project's own statuses (`stageId`). */
+type Column = { key: string; label: string; kind: TaskStatus; stageId?: string; colour?: string };
 
 /** How many finished cards the Done column shows; the rest are in the list view. */
 const DONE_SHOWN = 20;
 
-function BoardCard({ t, base, status, onOpen, onMove, moving, onTag, activeTag, dragging, onDrag }: {
-  t: Task; base?: string; status: TaskStatus; onOpen: (id: string) => void; onMove: (t: Task, s: TaskStatus) => void; moving: boolean;
+function BoardCard({ t, base, column, columns, onOpen, onMove, onMoveTo, moving, onTag, activeTag, dragging, onDrag }: {
+  t: Task; base?: string; column: Column; columns: Column[]; onOpen: (id: string) => void; onMove: (t: Task, s: TaskStatus) => void;
+  onMoveTo: (t: Task, c: Column) => void; moving: boolean;
   onTag?: (tag: string) => void; activeTag?: string; dragging: boolean; onDrag: (id: string | null) => void;
 }) {
+  const status = column.kind;
   const edit = useQuickEdit();
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.preventDefault(); onOpen(t.id); } };
   const done = t.status === 'done';
@@ -85,14 +90,14 @@ function BoardCard({ t, base, status, onOpen, onMove, moving, onTag, activeTag, 
       {/* Phones and tablets cannot drag: a small picker does the same move. */}
       {t.can.status && (
         <select
-          value={status}
+          value={column.key}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
-          onChange={(e) => onMove(t, e.target.value as TaskStatus)}
+          onChange={(e) => { const c = columns.find((x) => x.key === e.target.value); if (c) onMoveTo(t, c); }}
           aria-label={`Move ${t.code}`}
           className="mt-2 w-full rounded-md border border-gray-200 px-1.5 py-1 text-xs md:hidden"
         >
-          {TASK_STATUSES.map((s) => <option key={s.value} value={s.value}>Move to: {s.label}</option>)}
+          {columns.map((c) => <option key={c.key} value={c.key}>Move to: {c.label}</option>)}
         </select>
       )}
     </li>
@@ -105,17 +110,22 @@ function BoardCard({ t, base, status, onOpen, onMove, moving, onTag, activeTag, 
  * (someone changed the task first, no permission) the card goes back and a
  * message says why.
  */
-export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base }: {
+export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, stages = [] }: {
   filters: TaskFilters; onOpen: (id: string) => void; quickAddFor?: string | null; onTag?: (tag: string) => void;
   /** Where the panel's pages live (/team or /admin), for the order link on a card. */
   base?: string;
+  /** A project's own statuses: they become the columns. Empty: To do · In progress · Complete. */
+  stages?: ProjectStage[];
 }) {
   const refresh = useRefreshTasks();
   const open = useTaskPages(filters, 'open');
   // A date filter is about what is still to do: the Done column has nothing to add.
   const done = useTaskPages(filters, 'done', !filters.due);
-  const [moved, setMoved] = useState<Record<string, TaskStatus>>({});
-  const [over, setOver] = useState<TaskStatus | null>(null);
+  const allColumns: Column[] = stages.length
+    ? stages.map((s) => ({ key: s.id, label: s.name, kind: s.type, stageId: s.id, colour: s.colour }))
+    : TASK_STATUSES.map((c) => ({ key: c.value, label: c.label, kind: c.value }));
+  const [moved, setMoved] = useState<Record<string, string>>({});
+  const [over, setOver] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
   // A task just ticked done can sit in both lists until both reload: show it
@@ -125,14 +135,18 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base }:
     ...(filters.due ? [] : (done.data?.pages[0]?.tasks ?? []).slice(0, DONE_SHOWN)),
   ].map((t) => [t.id, t]));
   const tasks: Task[] = [...byId.values()];
-  const statusOf = (t: Task) => moved[t.id] ?? t.status;
+  // The column a card is in: where it was just dropped, else its status (or the project's own one).
+  const columnOf = (t: Task): Column => {
+    const key = moved[t.id] ?? (stages.length ? stageOf(stages, t)?.id ?? '' : t.status);
+    return allColumns.find((c) => c.key === key) ?? allColumns.find((c) => c.kind === t.status) ?? allColumns[0];
+  };
   const unmove = (id: string) => setMoved((m) => { const next = { ...m }; delete next[id]; return next; });
 
   const move = useMutation({
-    mutationFn: ({ t, status }: { t: Task; status: TaskStatus }) =>
-      apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, { rev: t.rev, status }),
-    onMutate: ({ t, status }) => { setMoved((m) => ({ ...m, [t.id]: status })); },
-    onSuccess: (_r, { t, status }) => { if (status === 'done') toast.success(`${t.code} complete`, { id: `done-${t.id}` }); },
+    mutationFn: ({ t, col }: { t: Task; col: Column }) =>
+      apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, col.stageId ? { rev: t.rev, stageId: col.stageId } : { rev: t.rev, status: col.kind }),
+    onMutate: ({ t, col }) => { setMoved((m) => ({ ...m, [t.id]: col.key })); },
+    onSuccess: (_r, { t, col }) => { if (col.kind === 'done' && t.status !== 'done') toast.success(`${t.code} complete`, { id: `done-${t.id}` }); },
     onError: (e, { t }) => {
       unmove(t.id);
       toast.error(isConflict(e)
@@ -141,57 +155,65 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base }:
     },
     onSettled: async (_r, _e, { t }) => { await refresh(); unmove(t.id); },
   });
+  const onMoveTo = (t: Task, col: Column) => {
+    const from = columnOf(t);
+    if (col.key === from.key || (col.kind === 'done' && from.kind !== 'done' && !confirmComplete(t))) return;
+    move.mutate({ t, col });
+  };
+  // A plain status (the tick, the quick move menu): the first column of that kind.
   const onMove = (t: Task, status: TaskStatus) => {
-    if (status === statusOf(t) || (status === 'done' && !confirmComplete(t))) return;
-    move.mutate({ t, status });
+    if (status === columnOf(t).kind) return;
+    const col = allColumns.find((c) => c.kind === status) ?? (status === 'in_progress' ? allColumns.find((c) => c.kind === 'todo') : undefined);
+    if (col) onMoveTo(t, col);
   };
 
   if (open.isLoading) return <SkeletonRows rows={6} />;
   if (open.isError) return <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage(open.error, 'Could not load tasks.')}</p>;
 
-  const columns = TASK_STATUSES.filter((c) => !(filters.due && c.value === 'done'));
+  const columns = allColumns.filter((c) => !(filters.due && c.kind === 'done'));
+  const firstDone = columns.find((c) => c.kind === 'done')?.key;
   return (
     <div className="space-y-3">
       <div className="relative -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:snap-none">
         {columns.map((col) => {
-          const cards = tasks.filter((t) => statusOf(t) === col.value);
+          const cards = tasks.filter((t) => columnOf(t).key === col.key);
           return (
             <section
-              key={col.value}
+              key={col.key}
               aria-label={col.label}
-              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(col.value); }}
-              onDragLeave={() => setOver((o) => (o === col.value ? null : o))}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(col.key); }}
+              onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
               onDrop={(e) => {
                 e.preventDefault();
                 setOver(null);
                 setDragging(null);
                 const t = byId.get(e.dataTransfer.getData('text/plain'));
-                if (t?.can.status) onMove(t, col.value);
+                if (t?.can.status) onMoveTo(t, col);
               }}
-              data-status={col.value}
-              data-over={over === col.value}
+              data-status={col.kind}
+              data-over={over === col.key}
               // A wide screen: each column scrolls on its own under its heading, ClickUp-style.
               className="tk-col flex w-[272px] shrink-0 snap-start flex-col rounded-xl transition-[background-color,box-shadow] md:w-auto md:min-w-[236px] md:flex-1 lg:max-h-[calc(100dvh-11rem)] lg:min-h-64"
             >
               <h3 className="flex items-center gap-2 px-2.5 pb-2 pt-2.5">
-                <GroupPill status={col.value}>{col.label}</GroupPill>
-                <GroupCount status={col.value}>{cards.length}</GroupCount>
+                <GroupPill status={col.kind} colour={col.colour}>{col.label}</GroupPill>
+                <GroupCount status={col.kind}>{cards.length}</GroupCount>
               </h3>
               {cards.length === 0 && <p className="px-3 py-2 text-center text-xs text-gray-500">No tasks here</p>}
               <ul className="min-h-4 flex-1 space-y-1.5 overflow-y-auto px-2 pb-1 [scrollbar-width:thin]">
                 {cards.map((t) => (
                   <BoardCard
-                    key={t.id} t={t} base={base} status={statusOf(t)} onOpen={onOpen} onMove={onMove}
+                    key={t.id} t={t} base={base} column={columnOf(t)} columns={allColumns} onOpen={onOpen} onMove={onMove} onMoveTo={onMoveTo}
                     moving={move.isPending && move.variables?.t.id === t.id} onTag={onTag} activeTag={filters.tag}
                     dragging={dragging === t.id} onDrag={setDragging}
                   />
                 ))}
               </ul>
-              {col.value === 'done' && (done.data?.pages[0]?.tasks.length ?? 0) > DONE_SHOWN && (
+              {col.key === firstDone && (done.data?.pages[0]?.tasks.length ?? 0) > DONE_SHOWN && (
                 <p className="px-3 pb-2 pt-1 text-xs text-gray-500">Showing the latest {DONE_SHOWN}. The list view has the rest.</p>
               )}
-              {col.value !== 'done' && quickAddFor !== null && (
-                <div className="px-2 pb-2 pt-1"><QuickAdd status={col.value} assigneeId={quickAddFor} listId={listOf(filters)} projectId={projectOf(filters)} personal={filters.view === 'personal'} variant="board" /></div>
+              {col.kind !== 'done' && quickAddFor !== null && (
+                <div className="px-2 pb-2 pt-1"><QuickAdd status={col.kind} stageId={col.stageId} assigneeId={quickAddFor} listId={listOf(filters)} projectId={projectOf(filters)} projectListId={projectListOf(filters)} personal={filters.view === 'personal'} variant="board" /></div>
               )}
             </section>
           );

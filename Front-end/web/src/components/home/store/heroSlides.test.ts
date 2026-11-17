@@ -14,6 +14,7 @@ const base: StoreHomeData = {
   newArrivals: [prod('n1'), prod('n2'), prod('n3')],
   featured: [],
   premiumPicks: [],
+  dearest: [],
   categoryRows: [],
   brands: [],
   reviews: [],

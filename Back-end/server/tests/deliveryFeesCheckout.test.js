@@ -8,7 +8,7 @@
  *   - offer on/off totals; offer requested while the event is off → not applied, order 409;
  *   - a client-sent shippingCost is ignored (tamper);
  *   - remote PIN adds the ODA fee; the order's PIN comes from its shipping address;
- *   - a product with no size falls back to the Small box;
+ *   - a product with no size falls back to its CATEGORY's class (no category → Medium);
  *   - GST-on-fees toggle; double tap = same quote, one order snapshot;
  *   - order snapshots every fee line, offer applied yes/no and the saving.
  */
@@ -23,7 +23,8 @@ import FestivalOffer from '../models/FestivalOffer.js';
 import DeliveryFeeConfig from '../models/DeliveryFeeConfig.js';
 import RemotePin from '../models/RemotePin.js';
 import PinLocation from '../models/PinLocation.js';
-import { setBlackFridayGateForTests } from '../services/deliveryFeeService.js';
+import { setBlackFridayGateForTests, resetCategoryIndexForTests } from '../services/deliveryFeeService.js';
+import Category from '../models/Category.js';
 import pricingService, { toPublicQuote } from '../services/pricingService.js';
 import orderService from '../services/orderService.js';
 import { DEFAULT_RATE_CARD } from '../utils/deliveryFees.js';
@@ -62,9 +63,10 @@ const quote = (p, extra = {}, quantity = 1) => pricingService.computeQuote({
 beforeAll(async () => { await useTransactionalDb(); setBlackFridayGateForTests(async () => true); });
 afterAll(() => setBlackFridayGateForTests(null));
 afterEach(async () => {
+  resetCategoryIndexForTests();
   await Promise.all([
     FestivalOffer.deleteMany({}), DeliveryFeeConfig.deleteMany({}), RemotePin.deleteMany({}),
-    Coupon.deleteMany({}), PinLocation.deleteMany({}),
+    Coupon.deleteMany({}), PinLocation.deleteMany({}), Category.deleteMany({}),
   ]);
 });
 
@@ -122,7 +124,7 @@ describe('fees switched ON', () => {
     expect(far.totalAmount).toBeGreaterThan(near.totalAmount + 750); // + GST/payment fee on it
   });
 
-  it('a product with no size at all is charged the Small box, flagged estimated', async () => {
+  it('a product with no size and no category is charged the Medium box, flagged estimated', async () => {
     const sized = await seedProduct(5000);
     const bare = await seedProduct(5000, {
       shippingSize: { weightKg: null, lengthCm: null, breadthCm: null, heightCm: null }, shippingClass: null,
@@ -130,20 +132,22 @@ describe('fees switched ON', () => {
     await feesOn();
     const a = await quote(bare, { deliveryPin: '400001' });
     expect(a.deliveryFees.estimated).toBe(true);
-    // Small standard box (1 kg, 30×20×15 → 2 kg) — never a guessed bigger box.
-    expect(a.deliveryFees.chargedKg).toBe(2);
+    // Medium standard box (5 kg, 50×40×30 → 13.3 kg) — not the ½ kg minimum.
+    expect(a.deliveryFees.chargedKg).toBe(14);
     expect((await quote(sized, { deliveryPin: '400001' })).deliveryFees.estimated).toBe(false);
   });
 
-  it('GST-on-fees toggle: off removes the GST line and lowers the total by exactly that line', async () => {
+  it('GST-on-fees toggle: off removes the GST line; Razorpay\'s GST then moves into the payment fee', async () => {
     const p = await seedProduct(5000);
     await feesOn();
     const on = await quote(p, { deliveryPin: '400001' });
     await feesOn({ gstOnFees: { enabled: false, percent: 18 } });
     const off = await quote(p, { deliveryPin: '400001' });
-    const gstLine = on.deliveryFees.lines.find((l) => l.code === 'gst').amount;
+    const amt = (q, code) => q.deliveryFees.lines.find((l) => l.code === code)?.amount ?? 0;
     expect(off.deliveryFees.lines.find((l) => l.code === 'gst')).toBeUndefined();
-    expect(on.totalAmount - off.totalAmount).toBeCloseTo(gstLine, 2);
+    // On: 2% fee + one GST line. Off: 2% × 1.18 fee, no GST line. GST is never stacked.
+    expect(amt(off, 'payment')).toBeGreaterThan(amt(on, 'payment'));
+    expect(on.totalAmount - off.totalAmount).toBeCloseTo(amt(on, 'gst') - (amt(off, 'payment') - amt(on, 'payment')), 2);
   });
 
   it('a rate change prices the very next quote (no cache in the money path)', async () => {
@@ -391,5 +395,72 @@ describe('order creation (authoritative)', () => {
     expect(q.shippingCost).toBe(0);
     expect(q.totalAmount).toBe(5000);
     expect(q.deliveryFees.offer.applied).toBe(false);
+  });
+});
+
+/*
+  Regression, 2026-11-17: the owner's cart — "Mercedes-Benz W221 S-Class to Maybach Kit
+  W223 Conversion Kit", ₹5,05,000, PIN 682019 (Ernakulam). The live product had NO size
+  data, only its categories, and was quoted ₹320 shipping, ₹20 packing, an uncapped
+  ₹11,937.94 payment fee and ₹2,300.93 GST charged on top of Razorpay's GST.
+*/
+describe('Maybach conversion kit to Kochi, no size data', () => {
+  const seedKit = async () => {
+    const bodyKits = await Category.create({ name: 'Body Kits', slug: 'body-kits' });
+    const conversion = await Category.create({ name: 'Conversion Kit', slug: 'conversion-kit', parent: bodyKits._id });
+    const exterior = await Category.create({ name: 'Exterior', slug: 'exterior' });
+    await PinLocation.create({ pin: '682019', lat: 9.97, lng: 76.29, district: 'Ernakulam', state: 'Kerala' });
+    return seedProduct(505000, {
+      name: 'Mercedes-Benz W221 S-Class to Maybach Kit W223 Conversion Kit',
+      shippingSize: { weightKg: null, lengthCm: null, breadthCm: null, heightCm: null },
+      shippingClass: null,
+      categories: [conversion._id, exterior._id],
+    });
+  };
+  const line = (fees, code) => fees.lines.find((l) => l.code === code)?.amount ?? 0;
+
+  it('quotes freight in the body-kit range, payment fee ≤ ₹999, GST once', async () => {
+    const kit = await seedKit();
+    await feesOn();
+    const fees = (await quote(kit, { deliveryPin: '682019' })).deliveryFees;
+
+    expect(fees.place).toEqual({ district: 'Ernakulam', state: 'Kerala' });
+    expect(fees.distanceKm).toBeGreaterThan(2000);
+    expect(fees.mode).toBe('freight');
+    expect(fees.estimated).toBe(true);
+    expect(fees.chargedKg).toBe(276); // XL crate, 208×70×85
+    // Docket + handling show for freight.
+    expect(line(fees, 'docket')).toBe(150);
+    expect(line(fees, 'handling')).toBeCloseTo(124.2, 2);
+    expect(line(fees, 'shipping')).toBe(4416);
+    expect(line(fees, 'packing')).toBe(1500);
+    expect(line(fees, 'insurance')).toBe(505);
+    // Capped, and no Razorpay GST stacked under our GST line.
+    expect(line(fees, 'payment')).toBe(999);
+    const beforeGst = fees.lines.filter((l) => l.code !== 'gst').reduce((a, l) => a + l.amount, 0);
+    expect(line(fees, 'gst')).toBeCloseTo(Math.round(beforeGst * 18) / 100, 2);
+    // Owner's body-kit range.
+    expect(fees.total).toBeGreaterThanOrEqual(5000);
+    expect(fees.total).toBeLessThanOrEqual(10000);
+    expect(fees.total).toBeCloseTo(9114.56, 2);
+  });
+
+  it('the order charges the same capped fees (server recomputes, Razorpay amount includes them)', async () => {
+    const kit = await seedKit();
+    await feesOn();
+    const user = await seedUser();
+    const order = await orderService.createOrder(user._id, [{ product: kit._id, quantity: 1 }], { ...ADDRESS, postalCode: '682019' }, {});
+    const stored = await Order.findById(order._id).lean();
+    expect(stored.deliveryFees.lines.find((l) => l.code === 'payment').amount).toBe(999);
+    expect(stored.deliveryFees.charged).toBeCloseTo(9114.56, 2);
+    expect(stored.totalAmount).toBeCloseTo(505000 + 9114.56, 2);
+  });
+
+  it('a raised cap and real band rate flow straight through (admin edits, no deploy)', async () => {
+    const kit = await seedKit();
+    await feesOn({ paymentFeeMax: 0, distanceBands: [{ upToKm: 2000, ratePerKg: 16 }, { upToKm: null, ratePerKg: 22.5 }] });
+    const fees = (await quote(kit, { deliveryPin: '682019' })).deliveryFees;
+    expect(line(fees, 'shipping')).toBe(6210); // 276 kg × ₹22.50
+    expect(line(fees, 'payment')).toBeGreaterThan(10000); // no cap: 2% of ₹5,05,000+
   });
 });

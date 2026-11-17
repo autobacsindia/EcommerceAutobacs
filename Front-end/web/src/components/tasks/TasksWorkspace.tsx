@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, BellDot, CalendarClock, SlidersHorizontal, ChevronRight, CircleCheck, CircleHelp, Columns3, Eye, Flag, FolderKanban, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, TriangleAlert, User, Users, X, Zap } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, BellDot, CalendarClock, CalendarDays, SlidersHorizontal, ChevronRight, CircleCheck, CircleHelp, Columns3, Eye, Flag, FolderKanban, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, TriangleAlert, User, Users, X, Zap } from 'lucide-react';
 import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -12,6 +12,7 @@ import { taskKeys } from '@/hooks/queries/keys';
 import TaskListView from './TaskList';
 import { useTaskPages } from './hooks';
 import TaskBoard from './TaskBoard';
+import TaskCalendar from './TaskCalendar';
 import TrashList from './TrashList';
 import TaskDetail, { type TaskNav } from './TaskDetail';
 import TaskForm, { useAssignees } from './TaskForm';
@@ -25,14 +26,14 @@ import { TimerChip, TimerNotice } from './Timer';
 import { teamColour } from '@/components/chat/chatUi';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import { SpaceTree, allLists, dotOf, useSpace } from './spaces';
-import { ProjectHeader, ProjectsView, useProject } from './Projects';
+import { ProjectHeader, ProjectListTabs, ProjectsView, useProject } from './Projects';
 import { TaskRulesEditor } from './dueRules';
 import {
-  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, listOf, personLabel, projectOf, unreadLabel,
+  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, listOf, personLabel, projectListOf, projectOf, unreadLabel,
   type InboxFilter, type Task, type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
 } from './types';
 
-type Layout = 'list' | 'board';
+type Layout = 'list' | 'board' | 'calendar';
 const LAYOUT_KEY = 'tasks-view-mode';
 const HELP_KEY = 'tasks-help-hidden';
 const GROUP_KEY = 'tasks-group-by';
@@ -139,14 +140,15 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const [layout, setLayoutState] = useState<Layout>('list');
   const [groupBy, setGroupByState] = useState<TaskGroupBy>('status');
   useEffect(() => {
-    if (read(LAYOUT_KEY) === 'board') setLayoutState('board');
+    const saved = read(LAYOUT_KEY);
+    if (saved === 'board' || saved === 'calendar') setLayoutState(saved);
     setGroupByState(asGroup(read(GROUP_KEY)));
   }, []);
   const setLayout = (l: Layout) => { setLayoutState(l); write(LAYOUT_KEY, l); };
   const setGroupBy = (g: TaskGroupBy) => { setGroupByState(g); write(GROUP_KEY, g); };
 
   const { values: lp, set: setList, clear: clearList } = useListParams({
-    view: 'mine', team: '', list: '', project: '', due: '', priority: '', assignee: '', tag: '', q: '', sort: 'due',
+    view: 'mine', team: '', list: '', project: '', plist: '', due: '', priority: '', assignee: '', tag: '', q: '', sort: 'due',
   });
   // The Inbox (?view=inbox) is not a list of tasks: it replaces the list, filters and board.
   const inInbox = lp.view === 'inbox';
@@ -171,6 +173,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const priority = asPriority(lp.priority);
   const assignee = view === 'team' || view === 'project' ? lp.assignee : '';
   const projectId = view === 'project' ? lp.project : '';
+  // One list inside the project (its id), 'none' for tasks in no list, '' for all of them.
+  const projectList = projectId ? lp.plist : '';
   const tag = lp.tag;
   const sort = asSort(lp.sort);
   const q = lp.q;
@@ -178,9 +182,9 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const dueNow = !inOther && view === 'mine' && due === 'late';
   // Leaving "Today & overdue" (My tasks + the Late filter) drops that filter too,
   // or "My tasks" would look dead: same list, same filter, nothing changes.
-  const setView = (v: TaskView, nextTeam = '') => setList({ view: v, team: v === 'team' ? nextTeam : '', list: '', project: '', ...(dueNow ? { due: '' } : {}) });
-  const openProject = (id: string) => setList({ view: 'project', project: id, team: '', list: '', assignee: '', ...(dueNow ? { due: '' } : {}) });
-  const showProjects = () => setList({ view: 'projects', project: '', team: '', list: '', assignee: '', due: '' });
+  const setView = (v: TaskView, nextTeam = '') => setList({ view: v, team: v === 'team' ? nextTeam : '', list: '', project: '', plist: '', ...(dueNow ? { due: '' } : {}) });
+  const openProject = (id: string) => setList({ view: 'project', project: id, plist: '', team: '', list: '', assignee: '', ...(dueNow ? { due: '' } : {}) });
+  const showProjects = () => setList({ view: 'projects', project: '', plist: '', team: '', list: '', assignee: '', due: '' });
   // A team's space in the side menu: the whole team, one list, or 'none' (Other tasks).
   const pickList = (t: string, l: string) => setList({ view: 'team', team: isAdmin ? t : '', list: l, project: '', assignee: '', ...(dueNow ? { due: '' } : {}) });
   const [unfolded, setUnfolded] = useState<Record<string, boolean>>({});
@@ -217,6 +221,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     { key: '/', run: (e) => { if (!idle) return; e.preventDefault(); searchRef.current?.focus(); } },
     { key: 'l', run: () => { if (idle) setLayout('list'); } },
     { key: 'b', run: () => { if (idle) setLayout('board'); } },
+    { key: 'c', run: () => { if (idle) setLayout('calendar'); } },
     { key: '?', run: (e) => { if (!idle) return; e.preventDefault(); setShortcuts(true); } },
   ]);
 
@@ -235,10 +240,12 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     ...(approver ? [{ value: 'approvals' as const, label: 'Approve dates' }] : []),
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
-  const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team, list, project: projectId };
+  const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team, list, project: projectId, projectList };
   const project = useProject(projectId || null);
   // A project this person may not see (or one deleted since): nothing to list under it.
   const projectGone = view === 'project' && project.isError;
+  // The project's own statuses, when it has them: the board's columns and the list's groups.
+  const stages = view === 'project' ? project.data?.statuses ?? [] : [];
   const narrowed = !!(due || priority || q || tag || assignee);
   // The same requests (and cache entries) as the list's or board's own: no extra call.
   const openPages = useTaskPages(filters, 'open', !inOther && !projectGone);
@@ -319,6 +326,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
       { keys: ['/'], label: 'Search tasks' },
       { keys: ['L'], label: 'Show as a list' },
       { keys: ['B'], label: 'Show as a board' },
+      { keys: ['C'], label: 'Show as a calendar' },
       { keys: ['Space'], label: 'Tick the task in focus (to change several at once)' },
       { keys: ['J'], label: 'Next task (with a task open)' },
       { keys: ['K'], label: 'Previous task (with a task open)' },
@@ -458,13 +466,13 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
             </h1>
           </div>
           {!inOther && <div className="order-3 flex basis-full gap-1 lg:order-2 lg:shrink-0 lg:basis-auto" role="tablist" aria-label="Show as">
-            {([['list', 'List', List], ['board', 'Board', Columns3]] as const).map(([value, label, Icon]) => (
+            {([['list', 'List', List, 'L'], ['board', 'Board', Columns3, 'B'], ['calendar', 'Calendar', CalendarDays, 'C']] as const).map(([value, label, Icon, key]) => (
               <button
                 key={value}
                 role="tab"
                 aria-selected={layout === value}
                 onClick={() => setLayout(value)}
-                title={`${label} (${value === 'list' ? 'L' : 'B'})`}
+                title={`${label} (${key})`}
                 className={`-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-2.5 text-sm font-medium transition-colors ${
                   layout === value ? 'border-blue-500 font-semibold text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'
                 }`}
@@ -523,7 +531,10 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
           <TeamOverview team={isAdmin ? team : ''} spaceTeam={isAdmin ? team : myTeam || ''} onOpen={setOpenId} onPickList={(l) => pickList(isAdmin ? team : myTeam || '', l)} />
         ) : (<>
         {view === 'project' && (project.data
-          ? <ProjectHeader p={project.data} onBack={showProjects} isAdmin={isAdmin} />
+          ? <>
+            <ProjectHeader p={project.data} onBack={showProjects} isAdmin={isAdmin} />
+            <ProjectListTabs p={project.data} value={projectList} onChange={(plist) => setList({ plist })} />
+          </>
           : project.isError ? (
             <div role="alert" className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center">
               <p className="font-semibold text-gray-900">This project isn’t available</p>
@@ -581,7 +592,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
               {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </label>
-          <div className="col-span-2 flex shrink-0 gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 sm:col-span-1" role="group" aria-label="Due date">
+          {layout !== 'calendar' && <div className="col-span-2 flex shrink-0 gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 sm:col-span-1" role="group" aria-label="Due date">
             {DUES.map((d) => {
               const on = due === d.value || (d.value === 'overdue' && due === 'late');
               return (
@@ -595,7 +606,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
                 </button>
               );
             })}
-          </div>
+          </div>}
           {due === 'late' && <span className="col-span-2 shrink-0 whitespace-nowrap text-xs text-gray-500">(late or due today)</span>}
           {tag && (
             <span className="col-span-2 inline-flex h-8 shrink-0 items-center gap-1 justify-self-start rounded-lg bg-blue-50 pl-2 pr-1 text-sm font-medium text-blue-800">
@@ -610,8 +621,10 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
 
         {inTrash ? (
           <TrashList filters={filters} base={base} onOpen={setOpenId} />
+        ) : layout === 'calendar' ? (
+          <TaskCalendar filters={filters} onOpen={setOpenId} />
         ) : layout === 'board' ? (
-          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} onTag={filterTag} base={base} />
+          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} onTag={filterTag} base={base} stages={stages} />
         ) : (
           <TaskListView
             // A new list is a new selection: ticks never carry over to tasks no longer shown.
@@ -620,6 +633,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
             onOpen={setOpenId}
             quickAddFor={quickAddFor}
             groupBy={groupBy}
+            stages={stages}
             onTag={filterTag}
             base={base}
             empty={<EmptyState view={view} narrowed={narrowed} onNew={() => setCreating(true)} />}
@@ -640,6 +654,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
           listTeam={spaceTeam || (isAdmin ? null : myTeam)}
           defaultListId={listOf(filters)}
           defaultProjectId={projectOf(filters)}
+          defaultProjectListId={projectListOf(filters)}
           personal={view === 'personal'}
         />
       </Dialog>

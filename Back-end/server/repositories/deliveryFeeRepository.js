@@ -1,6 +1,7 @@
 import DeliveryFeeConfig from '../models/DeliveryFeeConfig.js';
 import RemotePin from '../models/RemotePin.js';
 import PinLocation from '../models/PinLocation.js';
+import Category from '../models/Category.js';
 
 /** Rate-card singleton + the remote (ODA) PIN list. */
 class DeliveryFeeRepository {
@@ -67,6 +68,11 @@ class DeliveryFeeRepository {
   async removeRemotePins(pins) {
     const res = await RemotePin.deleteMany({ pin: { $in: pins } });
     return res.deletedCount || 0;
+  }
+
+  /** Every category's slug + parent (≈250 rows): the input to the category size-class guess. */
+  async findCategoryRefs() {
+    return Category.find({}, { slug: 1, parent: 1 }).lean();
   }
 }
 

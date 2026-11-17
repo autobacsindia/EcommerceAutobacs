@@ -12,7 +12,7 @@
 import { useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, ChevronRight, FolderKanban, Loader2, Pencil, Plus, Trash2, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarDays, ChevronRight, CircleDot, FolderKanban, ListTree, Loader2, Pencil, Plus, Trash2, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
@@ -20,7 +20,7 @@ import AssigneePicker from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { Avatar, AvatarStack } from './ui';
 import { Dialog } from './Overlays';
-import { formatDueDay, isConflict, newClientId, type Project, type ProjectPage, type ProjectStatus } from './types';
+import { STAGE_TYPES, formatDueDay, isConflict, newClientId, type Project, type ProjectPage, type ProjectStatus, type TaskStatus } from './types';
 import { PROJECT_COLOURS, projectDot } from './ProjectPicker';
 import { ProjectDetailsPanel } from './ProjectDetails';
 
@@ -105,6 +105,91 @@ export function useProject(id: string | null | undefined) {
     retry: (count, e) => (e as { status?: number })?.status !== 404 && count < 1,
     refetchInterval: 60_000,
   });
+}
+
+/** Save one change to a project (its lists, from the tabs), against the revision shown. */
+function useSaveProject(p: Project) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Record<string, unknown>) => apiClient.patch<{ project: Project }>(`/staff/tasks/projects/${encodeURIComponent(p.id)}`, { rev: p.rev, ...patch }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: taskKeys.projects() });
+      queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+    },
+    onError: (e) => {
+      if (isConflict(e)) queryClient.invalidateQueries({ queryKey: taskKeys.projects() });
+      toast.error(isConflict(e) ? 'Someone changed this project just now — it has been reloaded. Try again.' : errorMessage(e, 'Could not save the project.'));
+    },
+  });
+}
+
+/**
+ * The lists inside a project, as tabs over its tasks (ClickUp's Folder → Lists):
+ * "All tasks", each list, and "No list" for tasks in none. The owner (and the
+ * admin) adds a list right here; renaming, ordering and deleting are in Edit.
+ */
+export function ProjectListTabs({ p, value, onChange }: { p: Project; value: string; onChange: (plist: string) => void }) {
+  const save = useSaveProject(p);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  // A list deleted since the link was made: show everything rather than nothing.
+  const current = value === 'none' || p.lists.some((l) => l.id === value) ? value : '';
+  if (!p.lists.length && !p.can.edit) return null;
+  const tab = (key: string, label: string) => (
+    <button
+      key={key || 'all'}
+      role="tab"
+      aria-selected={current === key}
+      onClick={() => onChange(key)}
+      className={`-mb-px inline-flex h-9 shrink-0 items-center whitespace-nowrap border-b-2 px-2.5 text-sm font-medium ${
+        current === key ? 'border-blue-500 font-semibold text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'
+      }`}
+    >
+      {label}
+    </button>
+  );
+  const add = () => {
+    const n = name.replace(/\s+/g, ' ').trim();
+    if (!n) { setAdding(false); return; }
+    save.mutate({ lists: [...p.lists, { name: n }] }, {
+      onSuccess: (res) => {
+        setName('');
+        setAdding(false);
+        const made = res.project.lists.find((l) => l.name.toLowerCase() === n.toLowerCase());
+        if (made) onChange(made.id);
+      },
+    });
+  };
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-gray-200 [scrollbar-width:thin]">
+      <ListTree aria-hidden className="mr-1 h-4 w-4 shrink-0 text-gray-400" />
+      <div role="tablist" aria-label="Lists in this project" className="flex shrink-0 items-center">
+        {tab('', 'All tasks')}
+        {p.lists.map((l) => tab(l.id, l.name))}
+        {p.lists.length > 0 && tab('none', 'No list')}
+      </div>
+      {p.can.edit && (adding ? (
+        <form onSubmit={(e) => { e.preventDefault(); add(); }} className="flex shrink-0 items-center gap-1 py-1">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') { setAdding(false); setName(''); } }}
+            maxLength={60}
+            placeholder="List name, e.g. Ads"
+            aria-label="New list name"
+            className="h-8 w-40 rounded-md border border-gray-300 px-2 text-sm"
+          />
+          <button type="submit" disabled={save.isPending} className="h-8 rounded-md bg-blue-600 px-2.5 text-xs font-semibold text-white disabled:opacity-50">Add</button>
+          <button type="button" onClick={() => { setAdding(false); setName(''); }} aria-label="Cancel" className="rounded p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+        </form>
+      ) : (
+        <button type="button" onClick={() => setAdding(true)} className="inline-flex h-9 shrink-0 items-center gap-1 px-2 text-sm font-medium text-gray-500 hover:text-blue-700">
+          <Plus aria-hidden className="h-4 w-4" /> Add list
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ── The Projects page ───────────────────────────────────────────────────────
@@ -310,6 +395,108 @@ export function ProjectHeader({ p, onBack, isAdmin }: { p: Project; onBack: () =
  * Nothing shows as saved until the server says so; a double click makes one
  * project (one clientId per form).
  */
+type ListDraft = { key: string; id?: string; name: string };
+type StageDraft = { key: string; id?: string; name: string; colour: string; type: TaskStatus };
+let draftSeq = 0;
+const draftKey = () => `d${(draftSeq += 1)}`;
+/** The usual three, as a starting point when a project turns on its own statuses. */
+const STARTER_STAGES = (): StageDraft[] => [
+  { key: draftKey(), name: 'To do', colour: 'gray', type: 'todo' },
+  { key: draftKey(), name: 'In progress', colour: 'blue', type: 'in_progress' },
+  { key: draftKey(), name: 'Done', colour: 'green', type: 'done' },
+];
+const folded = (x: string) => x.replace(/\s+/g, ' ').trim().toLowerCase();
+const dupName = (names: string[]) => names.map(folded).find((n, i, all) => n && all.indexOf(n) !== i);
+const moveIn = <T,>(list: T[], i: number, by: number) => {
+  const j = i + by;
+  if (j < 0 || j >= list.length) return list;
+  const next = [...list];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+};
+const rowButton = 'rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30';
+
+/** Lists inside the project: names, in order. A deleted list's tasks go to "No list". */
+function ListsEditor({ lists, onChange }: { lists: ListDraft[]; onChange: (l: ListDraft[]) => void }) {
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-500"><ListTree aria-hidden className="h-3.5 w-3.5" /> Lists (optional)</legend>
+      {lists.map((l, i) => (
+        <div key={l.key} className="flex items-center gap-1">
+          <input
+            value={l.name}
+            onChange={(e) => onChange(lists.map((x) => (x.key === l.key ? { ...x, name: e.target.value } : x)))}
+            maxLength={60}
+            aria-label={`List ${i + 1} name`}
+            placeholder="e.g. Ads"
+            className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900"
+          />
+          <button type="button" onClick={() => onChange(moveIn(lists, i, -1))} disabled={i === 0} aria-label={`Move ${l.name || 'list'} up`} className={rowButton}><ArrowUp className="h-4 w-4" /></button>
+          <button type="button" onClick={() => onChange(moveIn(lists, i, 1))} disabled={i === lists.length - 1} aria-label={`Move ${l.name || 'list'} down`} className={rowButton}><ArrowDown className="h-4 w-4" /></button>
+          <button type="button" onClick={() => onChange(lists.filter((x) => x.key !== l.key))} aria-label={`Remove ${l.name || 'list'}`} className={rowButton}><Trash2 className="h-4 w-4" /></button>
+        </div>
+      ))}
+      {lists.length < 20 && (
+        <button type="button" onClick={() => onChange([...lists, { key: draftKey(), name: '' }])} className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline">
+          <Plus aria-hidden className="h-4 w-4" /> Add a list
+        </button>
+      )}
+      <p className="text-xs text-gray-500">Split the project into parts, like “Ads”, “Website” and “Emails”. Removing a list keeps its tasks: they move to “No list”.</p>
+    </fieldset>
+  );
+}
+
+/** The project's own statuses: name, colour and what each counts as. None = To do / In progress / Done. */
+function StatusesEditor({ stages, onChange }: { stages: StageDraft[]; onChange: (s: StageDraft[]) => void }) {
+  if (!stages.length) {
+    return (
+      <fieldset>
+        <legend className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-500"><CircleDot aria-hidden className="h-3.5 w-3.5" /> Statuses</legend>
+        <p className="text-sm text-gray-700">Using the usual three: To do, In progress, Done.</p>
+        <button type="button" onClick={() => onChange(STARTER_STAGES())} className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline">
+          <Plus aria-hidden className="h-4 w-4" /> Use this project’s own statuses
+        </button>
+      </fieldset>
+    );
+  }
+  const set = (key: string, patch: Partial<StageDraft>) => onChange(stages.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-500"><CircleDot aria-hidden className="h-3.5 w-3.5" /> Statuses (board columns, in order)</legend>
+      {stages.map((x, i) => (
+        <div key={x.key} className="flex flex-wrap items-center gap-1 sm:flex-nowrap">
+          <select value={x.colour} onChange={(e) => set(x.key, { colour: e.target.value })} aria-label={`${x.name || 'Status'} colour`} className="w-20 rounded-lg border border-gray-200 px-1 py-1.5 text-xs">
+            {PROJECT_COLOURS.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <input
+            value={x.name}
+            onChange={(e) => set(x.key, { name: e.target.value })}
+            maxLength={30}
+            aria-label={`Status ${i + 1} name`}
+            placeholder="e.g. Review"
+            className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900"
+          />
+          <select value={x.type} onChange={(e) => set(x.key, { type: e.target.value as TaskStatus })} aria-label={`${x.name || 'Status'} counts as`} className="rounded-lg border border-gray-200 px-1 py-1.5 text-xs">
+            {STAGE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <button type="button" onClick={() => onChange(moveIn(stages, i, -1))} disabled={i === 0} aria-label={`Move ${x.name || 'status'} up`} className={rowButton}><ArrowUp className="h-4 w-4" /></button>
+          <button type="button" onClick={() => onChange(moveIn(stages, i, 1))} disabled={i === stages.length - 1} aria-label={`Move ${x.name || 'status'} down`} className={rowButton}><ArrowDown className="h-4 w-4" /></button>
+          <button type="button" onClick={() => onChange(stages.filter((y) => y.key !== x.key))} aria-label={`Remove ${x.name || 'status'}`} className={rowButton}><Trash2 className="h-4 w-4" /></button>
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-3">
+        {stages.length < 12 && (
+          <button type="button" onClick={() => onChange([...stages, { key: draftKey(), name: '', colour: 'gray', type: 'in_progress' }])} className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline">
+            <Plus aria-hidden className="h-4 w-4" /> Add a status
+          </button>
+        )}
+        <button type="button" onClick={() => onChange([])} className="text-sm font-medium text-gray-500 hover:underline">Go back to the usual three</button>
+      </div>
+      <p className="text-xs text-gray-500">“Counts as” decides what the status means everywhere else: Done finishes the task. Removing a status moves its tasks to the first status that counts the same.</p>
+    </fieldset>
+  );
+}
+
 export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
   project?: Project; isAdmin: boolean; onDone: (p: Project) => void; onCancel: () => void; onDeleted?: () => void;
 }) {
@@ -327,8 +514,25 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
   const owner = ownerId || me?.id || '';
   const [memberIds, setMemberIds] = useState<string[]>(project ? project.people.map((x) => x.id).filter((x) => x !== project.owner.id) : []);
   const [statusOverride, setStatusOverride] = useState<string>(project?.statusOverride ?? 'auto');
+  const [lists, setLists] = useState<ListDraft[]>(() => (project?.lists ?? []).map((l) => ({ key: draftKey(), id: l.id, name: l.name })));
+  const [stages, setStages] = useState<StageDraft[]>(() => (project?.statuses ?? []).map((x) => ({ key: draftKey(), id: x.id, name: x.name, colour: x.colour, type: x.type })));
   const [error, setError] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
   const datesBackwards = !!startOn && !!dueOn && startOn > dueOn;
+  const nameMissing = !name.trim();
+  // Shown once they leave the box, try to save, or start typing elsewhere —
+  // so a name typed into the description box is explained, not silently refused.
+  const showNameError = nameTouched || !!description.trim();
+  // The server's rules for lists and statuses, said before it would refuse.
+  const listProblem = lists.some((l) => !l.name.trim()) ? 'Name every list, or remove the empty one.'
+    : dupName(lists.map((l) => l.name)) ? 'Two lists have the same name.' : '';
+  const stageProblem = !stages.length ? ''
+    : stages.some((x) => !x.name.trim()) ? 'Name every status, or remove the empty one.'
+      : dupName(stages.map((x) => x.name)) ? 'Two statuses have the same name.'
+        : !stages.some((x) => x.type === 'todo') ? 'Keep at least one status that counts as “Not started”.'
+          : !stages.some((x) => x.type === 'done') ? 'Keep at least one status that counts as “Done”.' : '';
+  const blockedBecause = nameMissing ? 'Add a project name to continue.' : datesBackwards ? 'Fix the dates to continue.' : !owner ? 'Pick an owner to continue.'
+    : listProblem || stageProblem;
   const members = memberIds.filter((x) => x !== owner);
   const byId = new Map(choices.map((p) => [p.id, p]));
   const picked = members.map((x) => byId.get(x)).filter((p): p is NonNullable<typeof p> => !!p);
@@ -342,6 +546,8 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
       const fields = {
         name: name.trim(), description: description.trim(), colour, startOn: startOn || null, dueOn: dueOn || null,
         ...(isAdmin || !project ? { ownerId: owner } : {}), memberIds: members,
+        lists: lists.map((l) => ({ ...(l.id ? { id: l.id } : {}), name: l.name.trim() })),
+        statuses: stages.map((x) => ({ ...(x.id ? { id: x.id } : {}), name: x.name.trim(), colour: x.colour, type: x.type })),
       };
       return project
         ? apiClient.patch<{ project: Project }>(`/staff/tasks/projects/${encodeURIComponent(project.id)}`, { rev: project.rev, ...fields, statusOverride })
@@ -362,7 +568,7 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); setError(''); if (name.trim() && !datesBackwards && owner) save.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); setError(''); setNameTouched(true); if (!blockedBecause) save.mutate(); }}
       className="flex max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
     >
       <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
@@ -370,25 +576,36 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
         <button type="button" onClick={onCancel} aria-label="Close" className="rounded-md p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={80}
-          required
-          autoFocus
-          placeholder="Project name, e.g. Diwali 2026 launch"
-          aria-label="Project name"
-          className="w-full border-0 bg-transparent p-0 text-lg font-semibold text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-400"
-        />
+        <label className="block text-xs font-medium text-gray-500">
+          <span className="mb-1 block">Project name <span aria-hidden className="text-red-600">*</span></span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => setNameTouched(true)}
+            maxLength={80}
+            required
+            autoFocus
+            aria-label="Project name"
+            placeholder="e.g. Diwali 2026 launch"
+            aria-invalid={nameMissing && showNameError}
+            aria-describedby={nameMissing && showNameError ? 'project-name-error' : undefined}
+            className={`w-full rounded-lg border px-3 py-2 text-base font-semibold text-gray-900 placeholder:font-normal placeholder:text-gray-400 ${nameMissing && showNameError ? 'border-red-400' : 'border-gray-300'}`}
+          />
+          {nameMissing && showNameError && (
+            <span id="project-name-error" role="alert" className="mt-1 block font-medium text-red-700">Name is required. Type the project name here.</span>
+          )}
+        </label>
+        <label className="block text-xs font-medium text-gray-500">
+          <span className="mb-1 block">Description (optional)</span>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           maxLength={2000}
           rows={2}
-          placeholder="What is it for? (optional)"
-          aria-label="Description"
-          className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          placeholder="What is it for?"
+          className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
         />
+        </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-medium text-gray-500">
             <span className="mb-1 block">Start date</span>
@@ -444,9 +661,11 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
             ))}
           </div>
         </fieldset>
+        <ListsEditor lists={lists} onChange={setLists} />
+        <StatusesEditor stages={stages} onChange={setStages} />
         {project && (
           <label className="block text-xs font-medium text-gray-500">
-            <span className="mb-1 block">Status</span>
+            <span className="mb-1 block">Project status</span>
             <select value={statusOverride} onChange={(e) => setStatusOverride(e.target.value)} aria-label="Status" className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm text-gray-900">
               <option value="auto">Automatic — from the tasks and the deadline</option>
               {PROJECT_STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -466,10 +685,11 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
             <Trash2 aria-hidden className="h-4 w-4" /> Delete
           </button>
         )}
-        <button type="button" onClick={onCancel} className="ml-auto rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
+        {blockedBecause && !busy && <p className="ml-auto text-xs text-gray-500">{blockedBecause}</p>}
+        <button type="button" onClick={onCancel} className={`${blockedBecause && !busy ? '' : 'ml-auto '}rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100`}>Cancel</button>
         <button
           type="submit"
-          disabled={busy || !name.trim() || datesBackwards || !owner}
+          disabled={busy || !!blockedBecause}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
         >
           {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
