@@ -26,16 +26,19 @@ function QuadCard({ title, tiles, more }: { title: string; tiles: Tile[]; more: 
  * Amazon's signature 4-up cards that overlap the bottom of the banner: two cards of
  * categories, one of top deals, one to shop by vehicle. All from live data.
  */
+/** The "Top deals for you" box shows the first this-many deals (the deals shelf skips them). */
+export const TOP_DEAL_TILES = 4;
+
 export default function CategoryCards({ categories, deals }: { categories: StoreCategory[]; deals: StoreProduct[] }) {
   const withImg = categories.filter((c) => c.image);
   const cats = (withImg.length >= 8 ? withImg : categories).map((c) => ({ label: c.name, href: c.href, image: c.image }));
-  const dealTiles = deals.slice(0, 4).map((d) => ({ label: d.name, href: d.href, image: d.image }));
+  const dealTiles = deals.slice(0, TOP_DEAL_TILES).map((d) => ({ label: d.name, href: d.href, image: d.image }));
 
   return (
     <div className="sh-quads">
       {cats.length >= 4 && <QuadCard title="Shop by category" tiles={cats.slice(0, 4)} more={{ label: 'See all categories', href: '/categories' }} />}
       {cats.length >= 8 && <QuadCard title="Upgrade your ride" tiles={cats.slice(4, 8)} more={{ label: 'Explore more', href: '/categories' }} />}
-      {dealTiles.length >= 4 && <QuadCard title="Top deals for you" tiles={dealTiles} more={{ label: "See all deals", href: '/offers' }} />}
+      {dealTiles.length >= TOP_DEAL_TILES && <QuadCard title="Top deals for you" tiles={dealTiles} more={{ label: "See all deals", href: '/offers' }} />}
       <ShopByVehicleCard />
     </div>
   );
