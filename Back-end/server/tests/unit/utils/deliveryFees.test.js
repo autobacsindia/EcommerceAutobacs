@@ -61,14 +61,29 @@ describe('charged weight', () => {
   });
 });
 
-describe('box resolution (missing size → safe fallback)', () => {
-  it('measured box first, then online size + margin, then class box, then the Small box', () => {
+describe('box resolution (missing size → category → safe fallback)', () => {
+  it('measured box first, then online size + margin, then stored class, then category class, then Small', () => {
     expect(resolveBox({ shippingSize: box(2, 30, 20, 10) }).source).toBe('measured');
     expect(resolveBox({ listedSize: box(2, 30, 20, 10) }).source).toBe('listed');
-    expect(resolveBox({ shippingClass: 'medium' })).toEqual({ box: DEFAULT_CLASS_BOXES.medium, source: 'class' });
-    expect(resolveBox({ shippingClass: 'xl' })).toEqual({ box: DEFAULT_CLASS_BOXES.large, source: 'class' });
-    expect(resolveBox({})).toEqual({ box: DEFAULT_CLASS_BOXES.small, source: 'fallback' });
+    expect(resolveBox({ shippingClass: 'medium' })).toEqual({ box: DEFAULT_CLASS_BOXES.medium, source: 'class', cls: 'medium' });
+    // XL has no admin standard box → the rate card's XL crate (owner's Hyderabad bill).
+    expect(resolveBox({ shippingClass: 'xl' })).toEqual({ box: DEFAULT_RATE_CARD.xlBox, source: 'class', cls: 'xl' });
+    expect(resolveBox({ categoryClass: 'xl' })).toEqual({ box: DEFAULT_RATE_CARD.xlBox, source: 'category', cls: 'xl' });
+    expect(resolveBox({ categoryClass: 'large' })).toEqual({ box: DEFAULT_CLASS_BOXES.large, source: 'category', cls: 'large' });
+    // A stored class beats the category guess; a real size beats both.
+    expect(resolveBox({ shippingClass: 'small', categoryClass: 'xl' }).cls).toBe('small');
+    expect(resolveBox({ shippingSize: box(2, 30, 20, 10), categoryClass: 'xl' }).source).toBe('measured');
+    expect(resolveBox({})).toEqual({ box: DEFAULT_CLASS_BOXES.small, source: 'fallback', cls: null });
     expect(resolveBox(null).source).toBe('fallback');
+  });
+
+  it('the XL crate is admin-editable through the rate card', () => {
+    const r = computeDeliveryFees({
+      lines: [line({ categoryClass: 'xl' })], goodsPaise: 0,
+      card: card({ xlBox: { weightKg: 300, lengthCm: 100, breadthCm: 50, heightCm: 50 }, gstOnFees: { enabled: false, percent: 18 }, paymentFeePercent: 0 }),
+    });
+    expect(r.chargedKg).toBe(300); // actual weight beats 250 kg volumetric
+    expect(amount(r, 'packing')).toBe(150000); // XL crate packing
   });
 
   it('an incomplete measured size is ignored, not half-used', () => {
@@ -91,10 +106,26 @@ describe('percentage fees, remote area and GST', () => {
     expect(amount(computeDeliveryFees({ ...base, card: card() }), 'insurance')).toBe(1000);
   });
 
-  it('payment fee = Razorpay 2% + 18% GST on (goods + other fees)', () => {
+  it('GST on fees OFF: payment fee = Razorpay 2% + its 18% GST on (goods + other fees)', () => {
     const r = computeDeliveryFees({ ...base, card: card({ gstOnFees: { enabled: false, percent: 18 } }) });
     const others = sumLines(r) - amount(r, 'payment');
     expect(amount(r, 'payment')).toBe(Math.round((1000000 + others) * 2.36 / 100));
+  });
+
+  it('GST on fees ON: payment fee is the 2% alone — GST is charged once, by the GST line', () => {
+    const r = computeDeliveryFees({ ...base, card: card() });
+    const beforePayment = sumLines(r) - amount(r, 'payment') - amount(r, 'gst');
+    expect(amount(r, 'payment')).toBe(Math.round((1000000 + beforePayment) * 2 / 100));
+    expect(amount(r, 'gst')).toBe(Math.round((beforePayment + amount(r, 'payment')) * 18 / 100));
+  });
+
+  it('payment fee is capped at paymentFeeMax (default ₹999); 0 = no cap', () => {
+    const big = { lines: base.lines, goodsPaise: 50500000 }; // ₹5,05,000
+    expect(amount(computeDeliveryFees({ ...big, card: card() }), 'payment')).toBe(99900);
+    expect(amount(computeDeliveryFees({ ...big, card: card({ paymentFeeMax: 500 }) }), 'payment')).toBe(50000);
+    expect(amount(computeDeliveryFees({ ...big, card: card({ paymentFeeMax: 0 }) }), 'payment')).toBeGreaterThan(1000000);
+    // Under the cap the percentage applies unchanged.
+    expect(amount(computeDeliveryFees({ ...base, card: card() }), 'payment')).toBeLessThan(99900);
   });
 
   it('remote area fee only for a remote PIN; unknown PIN (cart page) adds nothing', () => {
@@ -103,13 +134,15 @@ describe('percentage fees, remote area and GST', () => {
     expect(amount(computeDeliveryFees({ ...base, isRemote: null, card: card() }), 'remote')).toBe(0);
   });
 
-  it('GST on fees toggles: on adds 18% of every other fee, off adds no GST line', () => {
+  it('GST on fees toggles: on adds one 18% line on every other fee, off adds no GST line', () => {
     const on = computeDeliveryFees({ ...base, card: card() });
     const off = computeDeliveryFees({ ...base, card: card({ gstOnFees: { enabled: false, percent: 18 } }) });
     expect(amount(off, 'gst')).toBe(0);
     expect(off.lines.some((l) => l.code === 'gst')).toBe(false);
-    expect(amount(on, 'gst')).toBe(Math.round((sumLines(off)) * 18 / 100));
-    expect(on.totalPaise).toBe(off.totalPaise + amount(on, 'gst'));
+    expect(amount(on, 'gst')).toBe(Math.round((sumLines(on) - amount(on, 'gst')) * 18 / 100));
+    // Every non-payment line is identical; only the payment fee drops Razorpay's GST.
+    for (const code of ['shipping', 'packing', 'insurance']) expect(amount(on, code)).toBe(amount(off, code));
+    expect(amount(on, 'payment')).toBeLessThan(amount(off, 'payment'));
   });
 
   it('total always equals the sum of the lines, lines follow the fixed order, zero lines are hidden', () => {
@@ -229,4 +262,49 @@ it('isValidPin', () => {
   expect(isValidPin('035101')).toBe(false);
   expect(isValidPin('73510')).toBe(false);
   expect(isValidPin(735101)).toBe(false);
+});
+
+describe("owner's real bills (freight)", () => {
+  const noExtras = (over = {}) => card({ gstOnFees: { enabled: false, percent: 18 }, paymentFeePercent: 0, insurancePercent: 0, ...over });
+  it('Hyderabad (Air Line Express): 208×70×85 → 276 kg → ₹4,416 freight + ₹150 docket + ₹30 fuel = ₹4,596', () => {
+    const r = computeDeliveryFees({ lines: [line({ shippingSize: box(60, 208, 70, 85) })], goodsPaise: 0, card: noExtras() });
+    expect(r.chargedKg).toBe(276);
+    expect(amount(r, 'shipping') + amount(r, 'docket') + amount(r, 'fuel')).toBe(459600);
+  });
+  it('Kerala (VRL): 360 kg at ₹15/kg → ₹5,400 freight', () => {
+    const r = computeDeliveryFees({
+      lines: [line({ shippingSize: box(360, 100, 100, 100) })], goodsPaise: 0, distanceKm: 2076,
+      card: noExtras({ distanceBands: [{ upToKm: null, ratePerKg: 15 }] }),
+    });
+    expect(r.chargedKg).toBe(360);
+    expect(amount(r, 'shipping')).toBe(540000);
+  });
+});
+
+describe('the ₹5,05,000 Maybach conversion kit to Kochi (PIN 682019), no size data (2026-11-17)', () => {
+  // The live product had no box, listed size or class, only categories → XL by category.
+  const kit = () => computeDeliveryFees({
+    lines: [line({ categoryClass: 'xl' })], goodsPaise: 50500000, isRemote: false, distanceKm: 2076, card: card(),
+  });
+
+  it('is freight with docket, handling and fuel — not a ½ kg parcel', () => {
+    const r = kit();
+    expect(r.mode).toBe('freight');
+    expect(r.chargedKg).toBe(276);
+    expect(r.estimated).toBe(true);
+    expect(r.lines.map((l) => l.code)).toEqual(['shipping', 'packing', 'handling', 'docket', 'fuel', 'insurance', 'payment', 'gst']);
+    expect(rupees(amount(r, 'shipping'))).toBe(4416);
+    expect(rupees(amount(r, 'packing'))).toBe(1500);
+  });
+  it('payment fee is capped at ₹999 (was ₹11,937.94)', () => {
+    expect(rupees(amount(kit(), 'payment'))).toBe(999);
+  });
+  it('GST is charged once: 18% of every other line, and no Razorpay GST inside the payment fee', () => {
+    const r = kit();
+    expect(amount(r, 'gst')).toBe(Math.round((sumLines(r) - amount(r, 'gst')) * 18 / 100));
+    expect(rupees(amount(r, 'gst'))).toBe(1390.36);
+  });
+  it('total is in the owner\'s body-kit range (₹5,000–10,000)', () => {
+    expect(rupees(kit().totalPaise)).toBe(9114.56);
+  });
 });

@@ -206,11 +206,18 @@ const STATUS_ICON: Record<TaskStatus, LucideIcon> = {
   todo: CircleDashed, in_progress: CircleDot, done: CircleCheck,
 };
 
-export function GroupPill({ status, children }: { status?: TaskStatus; children: ReactNode }) {
+/** A project status's own colour (the owner picks it), solid so it reads the same in light and dark. */
+const STAGE_PILL: Record<string, string> = {
+  gray: 'bg-gray-500 text-white', red: 'bg-red-600 text-white', orange: 'bg-orange-600 text-white', amber: 'bg-amber-500 text-gray-950',
+  green: 'bg-green-600 text-white', teal: 'bg-teal-600 text-white', blue: 'bg-blue-600 text-white', violet: 'bg-violet-600 text-white', pink: 'bg-pink-600 text-white',
+};
+
+export function GroupPill({ status, colour, children }: { status?: TaskStatus; colour?: string; children: ReactNode }) {
   if (status) {
     const Icon = STATUS_ICON[status];
+    const look = (colour && STAGE_PILL[colour]) || `tk-pill ${STATUS_STYLE[status].pill}`;
     return (
-      <span data-status={status} className={`tk-pill inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] font-bold uppercase tracking-wide ${STATUS_STYLE[status].pill}`}>
+      <span data-status={status} data-colour={colour || undefined} className={`inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] font-bold uppercase tracking-wide ${look}`}>
         <Icon aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />{children}
       </span>
     );

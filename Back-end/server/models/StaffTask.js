@@ -226,6 +226,27 @@ const StaffTaskSchema = new mongoose.Schema(
      */
     project: { type: mongoose.Schema.Types.ObjectId, default: undefined },
     /**
+     * Which of its project's lists it is in (StaffProject.lists[]._id), or none.
+     * Read against the project when shown: an id the project no longer has
+     * reads as "no list", so a list deleted mid-way never strands a task.
+     */
+    projectList: { type: mongoose.Schema.Types.ObjectId, default: undefined },
+    /**
+     * Its project's own status ("Review", "Waiting on supplier":
+     * StaffProject.statuses[]._id), when the project has its own statuses.
+     * `status` always holds that status's kind (todo / in_progress / done), so
+     * everything that counts or sorts by status keeps working unchanged.
+     * `stageName` is the name, copied so every list can show it without a lookup.
+     */
+    stage: { type: mongoose.Schema.Types.ObjectId, default: undefined },
+    stageName: { type: String, default: undefined, maxlength: 30 },
+    /**
+     * Where an imported task came from ("clickup:<task id>"), so running an
+     * import again updates nothing twice and creates no copies
+     * (scripts/import-clickup.js).
+     */
+    importKey: { type: String, default: undefined, maxlength: 100 },
+    /**
      * A private task in its maker's Personal list: only they see it — not the
      * team, not a head, not the admin. It has no teams, followers or list, and
      * can never be given to anyone (services/staffTaskService.js).
@@ -291,6 +312,11 @@ StaffTaskSchema.index({ project: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff
 StaffTaskSchema.index(
   { 'order.target': 1, _id: -1 },
   { partialFilterExpression: { 'order.target': { $type: 'objectId' } }, name: 'staff_task_order' },
+);
+// One imported task per source task: what makes re-running an import safe. Partial: most tasks are not imported.
+StaffTaskSchema.index(
+  { importKey: 1 },
+  { unique: true, partialFilterExpression: { importKey: { $type: 'string' } }, name: 'staff_task_import_key' },
 );
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });

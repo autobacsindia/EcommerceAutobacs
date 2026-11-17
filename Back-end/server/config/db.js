@@ -782,6 +782,15 @@ export async function ensureCriticalIndexes() {
       { number: 1 },
       { unique: true, partialFilterExpression: { number: { $type: 'number' } }, name: 'staff_project_number', background: true }
     );
+    // Imported rows (scripts/import-clickup.js): one per source item, so a re-run never duplicates.
+    await db.collection('stafftasks').createIndex(
+      { importKey: 1 },
+      { unique: true, partialFilterExpression: { importKey: { $type: 'string' } }, name: 'staff_task_import_key', background: true }
+    );
+    await db.collection('staffprojects').createIndex(
+      { importKey: 1 },
+      { unique: true, partialFilterExpression: { importKey: { $type: 'string' } }, name: 'staff_project_import_key', background: true }
+    );
     await db.collection('stafftasklinks').createIndex({ pair: 1 }, { unique: true, name: 'staff_task_link_pair', background: true });
     await db.collection('stafftasklinks').createIndex({ from: 1, kind: 1 }, { name: 'staff_task_link_from', background: true });
     await db.collection('stafftasklinks').createIndex({ to: 1, kind: 1 }, { name: 'staff_task_link_to', background: true });

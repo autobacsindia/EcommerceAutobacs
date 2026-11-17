@@ -1,7 +1,7 @@
-import StaffProject, { PROJECT_STATUSES, PROJECT_COLOURS, projectCode, projectNumberIn } from '../models/StaffProject.js';
+import StaffProject, { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES, projectCode, projectNumberIn } from '../models/StaffProject.js';
 import StaffTask from '../models/StaffTask.js';
 
-export { PROJECT_STATUSES, PROJECT_COLOURS, projectCode, projectNumberIn };
+export { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES, projectCode, projectNumberIn };
 
 /**
  * Projects of the staff Tasks module (models/StaffProject.js).
@@ -31,6 +31,13 @@ const staffProjectRepository = {
       .limit(limit)
       .lean();
   },
+
+  /**
+   * One change over a project's tasks (reconcileProjectTasks). `filter` always
+   * starts with `project`, so it is one range of staff_task_project. Bumps each
+   * task's rev, so an editor holding the old version is told to reload.
+   */
+  updateTasks: (filter, update) => StaffTask.updateMany(filter, { ...update, $inc: { rev: 1 } }),
 
   /** Compare-and-set: null when someone changed it first. */
   updateIfRev: (id, rev, set) => StaffProject.findOneAndUpdate(

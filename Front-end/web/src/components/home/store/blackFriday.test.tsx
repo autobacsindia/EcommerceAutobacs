@@ -45,6 +45,7 @@ const baseData: StoreHomeData = {
   newArrivals: [prod('n1', 14850)],
   featured: [],
   premiumPicks: [],
+  dearest: [],
   categoryRows: [],
   brands: [],
   reviews: [],
@@ -74,7 +75,7 @@ describe('Black Friday theme tokens', () => {
     const bf = FESTIVAL_THEMES.blackfriday;
     expect(bf).toBeDefined();
     expect(bf.style).toBe('neon');
-    const words = JSON.stringify({ copy: bf.copy, home: bf.home, ticker: bf.ticker, seal: bf.freeDeliverySeal });
+    const words = JSON.stringify({ copy: bf.copy, home: bf.home, ticker: bf.ticker, seal: bf.freeDeliverySeal, perks: bf.perks });
     expect(words).not.toMatch(/\d+\s*%/);
   });
   it('Diwali keeps its own style and has no free-delivery seal', () => {
@@ -95,6 +96,10 @@ describe('Black Friday home page', () => {
     expect(within(hero).getByRole('link', { name: `Up to ${maxOff}% off — shop the deals` })).toHaveAttribute('href', '/offers');
     expect(within(hero).getByTestId('free-delivery-seal')).toHaveTextContent(/Without.*Shipping, packing, delivery.*charges/i);
     expect(within(hero).getByRole('link', { name: /Shop Black Friday Deals/ })).toHaveAttribute('href', '/offers');
+    // Each hero card names its product under the photo.
+    for (const card of hero.querySelectorAll('.bfh-card')) {
+      expect(card.querySelector('.bfh-card-name')?.textContent).toMatch(/^Product /);
+    }
 
     const offers = screen.getByTestId('festive-offers');
     expect(offers).toHaveTextContent(`Up to ${maxOff}% off`);
@@ -134,6 +139,42 @@ describe('Black Friday home page', () => {
       expect(stats).not.toHaveTextContent('₹0 delivery');
       unmount();
     }
+  });
+
+  it('perks carousel: every waived fee, read once by screen readers, only while the fee offer is live', () => {
+    {
+      const { unmount } = renderHome(theme('blackfriday'), true, baseData, false);
+      expect(screen.queryByTestId('offer-perks')).not.toBeInTheDocument();
+      unmount();
+    }
+    renderHome(theme('blackfriday'), true, baseData, true);
+    const perks = screen.getByTestId('offer-perks');
+    // Readers get one clean list; the copies that make the loop are hidden from them.
+    const list = within(perks).getByRole('list', { name: 'Black Friday delivery offer' });
+    const items = within(list).getAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual(FESTIVAL_THEMES.blackfriday.perks!.map((p) => `${p.strong} ${p.text}`));
+    for (const name of ['Shipping', 'Packing', 'Handling', 'Insurance', 'Platform fee']) {
+      expect(list).toHaveTextContent(name);
+    }
+    // It sits at the top of the hero, before the headline.
+    const hero = screen.getByTestId('festive-hero');
+    const heading = within(hero).getByRole('heading', { name: /Black\s*Friday/i });
+    expect(perks.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('full-width night background: the page wrapper is neon only while Black Friday is live', () => {
+    {
+      const { container, unmount } = renderHome(theme('blackfriday'), true);
+      expect(container.querySelector('.sh')).toHaveAttribute('data-fx-style', 'neon');
+      unmount();
+    }
+    {
+      const { container, unmount } = renderHome(theme('diwali'), true);
+      expect(container.querySelector('.sh')).toHaveAttribute('data-fx-style', 'diwali');
+      unmount();
+    }
+    const { container } = renderHome(null, false);
+    expect(container.querySelector('.sh')).not.toHaveAttribute('data-fx-style');
   });
 
   it('no discount anywhere: no "Up to 0%" tag and no red offer card', () => {

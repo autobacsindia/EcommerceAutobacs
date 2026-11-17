@@ -1011,3 +1011,75 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 @media (max-width: 768px) and (prefers-reduced-motion: no-preference) {
   .bfh-card-media, .bfh-beam, .bfh-cube-1, .bfh-cube-2 { animation: none; }
 }
+
+/* ── Black Friday: full-width night background ─────────────────────────────
+   The page wrapper is full width but the content stops at 1500px, so wide
+   screens showed light-grey bands either side. While the neon theme is on the
+   page colour itself turns night-black with soft red light at the edges; the
+   white cards keep their own background, so content is unchanged. `--bg` also
+   drives the hero's bottom fade, so the hero melts into the page. Scoped to
+   [data-fx-style='neon'] (server-rendered), so switching the theme off restores
+   the normal colour with nothing left behind. A fixed, non-repeating gradient:
+   painted once, no image download, no layout effect. */
+.sh[data-fx-style='neon'] {
+  --bg: #09090b;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(38% 46% at 0% 18%, rgba(200, 16, 46, 0.26), transparent 72%),
+    radial-gradient(38% 46% at 100% 52%, rgba(200, 16, 46, 0.2), transparent 72%),
+    radial-gradient(30% 30% at 0% 92%, rgba(255, 210, 63, 0.06), transparent 72%);
+  background-attachment: fixed;
+}
+/* Premium shelves: a thin neon edge and a deeper shadow on the white cards. */
+.sh[data-fx-style='neon'] .st-card {
+  border: 1px solid rgba(255, 45, 70, 0.28);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 18px 40px -18px rgba(200, 16, 46, 0.45);
+}
+
+/* ── Black Friday hero: offer perks carousel ───────────────────────────── */
+.bfh-perks { position: relative; z-index: 3; height: 44px; overflow: hidden; display: flex; align-items: center;
+  background: linear-gradient(180deg, rgba(20, 20, 24, 0.96), rgba(8, 8, 10, 0.96));
+  border-top: 1px solid rgba(255, 45, 70, 0.55); border-bottom: 1px solid rgba(255, 45, 70, 0.55);
+  box-shadow: inset 0 0 18px rgba(255, 45, 70, 0.18), 0 8px 24px -10px rgba(255, 45, 70, 0.6);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+.bfh-perks-row { display: flex; width: max-content; }
+.bfh-perks-half { display: flex; margin: 0; padding: 0; list-style: none; }
+.bfh-perk { display: inline-flex; align-items: center; gap: 8px; padding: 0 26px; white-space: nowrap; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; color: #fff; }
+.bfh-perk strong { color: #ffd23f; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; text-shadow: 0 0 10px rgba(255, 210, 63, 0.45); }
+.bfh-perk + .bfh-perk { border-left: 1px solid rgba(255, 45, 70, 0.4); }
+.bfh-perk-icon { flex: none; color: #ff2d46; filter: drop-shadow(0 0 4px rgba(255, 45, 70, 0.8)); }
+@media (max-width: 768px) {
+  .bfh-perks { height: 36px; }
+  .bfh-perk { font-size: 12px; padding: 0 16px; gap: 6px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bfh-perks-row { animation: bfh-perks 40s linear infinite; }
+  .bfh-perks:hover .bfh-perks-row { animation-play-state: paused; }
+}
+/* Motion off: it stands still and the visitor can scroll it sideways. */
+@media (prefers-reduced-motion: reduce) {
+  .bfh-perks { overflow-x: auto; scrollbar-width: none; }
+  .bfh-perks-half + .bfh-perks-half { display: none; }
+}
+@keyframes bfh-perks { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ── Black Friday hero: dark "showroom" product cards ──────────────────────
+   Black frame, neon-red rim, a soft stage light behind the photo and the
+   product name underneath — so photos shot on any background read as part of
+   the neon stage instead of white cards pasted on it. Same box sizes as before
+   (the photo keeps its 4:5 box; the name is one fixed-height line), so nothing
+   moves while images load. */
+.bfh-card { padding: 8px 8px 0; background: linear-gradient(180deg, #17171c, #0b0b0e);
+  box-shadow: 0 0 0 1px rgba(255, 45, 70, 0.7), 0 0 22px rgba(255, 45, 70, 0.35), 0 24px 48px rgba(0, 0, 0, 0.7); }
+.bfh-card::after { content: ''; position: absolute; left: 12%; right: 12%; bottom: -14px; height: 18px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 45, 70, 0.55), transparent); filter: blur(4px); pointer-events: none; }
+.bfh-card-media { background: radial-gradient(120% 90% at 50% 40%, #ffffff 0%, #eceef2 55%, #c9ccd3 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.bfh-card-name { display: block; height: 38px; padding: 0 4px; line-height: 38px; color: #f4f4f8; font-size: 12.5px; font-weight: 700;
+  letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bfh-card:hover .bfh-card-name { color: #ffd23f; }
+@media (max-width: 768px) {
+  .bfh-card { padding: 4px 4px 0; }
+  .bfh-card-name { height: 26px; line-height: 26px; font-size: 10.5px; padding: 0 2px; }
+}

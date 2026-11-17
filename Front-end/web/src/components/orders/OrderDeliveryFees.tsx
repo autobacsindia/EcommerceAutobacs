@@ -43,19 +43,27 @@ export default function OrderDeliveryFees({ fees, shippingCost, admin = false, l
       </div>
     );
   }
+  const bf = fees.offer.applied;
   const waived = fees.charged < fees.total;
   return (
     <div className="space-y-1.5" data-testid="order-delivery-fees">
       {fees.lines.map((l) => (
-        <div key={l.code} className="flex justify-between">
+        <div key={l.code} className="flex justify-between gap-3">
           <span className="text-ink-muted">{l.label}</span>
-          <span className={waived ? 'text-ink-muted line-through' : 'text-ink/70'}>{money(l.amount)}</span>
+          {bf ? (
+            // Black Friday: the full fee, struck through, and the ₹0 the customer paid.
+            <span className="text-right">
+              <s className="text-ink-muted">{money(l.amount)}</s>{' '}
+              <span className="font-semibold text-green-700">{money(0)} (Black Friday offer)</span>
+            </span>
+          ) : (
+            <span className={waived ? 'text-ink-muted line-through' : 'text-ink/70'}>{money(l.amount)}</span>
+          )}
         </div>
       ))}
-      {fees.offer.applied ? (
-        <div className="flex justify-between text-green-700">
-          <span>Black Friday offer — delivery fees waived</span>
-          <span>-{money(fees.offer.saving)}</span>
+      {bf ? (
+        <div className="flex justify-between rounded-md bg-green-50 px-2 py-1.5 font-semibold text-green-700">
+          <span>🎉 You saved {money(fees.offer.saving)} with the Black Friday offer</span>
         </div>
       ) : waived ? (
         <div className="flex justify-between text-green-700">

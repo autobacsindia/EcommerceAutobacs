@@ -36,7 +36,7 @@ const project = (over: Partial<Project> = {}): Project => ({
   owner: { id: 'u1', name: 'Meera' },
   people: [{ id: 'u1', name: 'Meera', team: 'marketing' }, { id: 'u2', name: 'Arun', team: 'procurement' }],
   teams: [{ value: 'marketing', label: 'Marketing' }, { value: 'procurement', label: 'Procurement' }],
-  startOn: '2026-10-01', dueOn: '2026-10-25',
+  startOn: '2026-10-01', dueOn: '2026-10-25', lists: [], statuses: [],
   status: 'at_risk', statusLabel: 'At risk', statusOverride: null,
   progress: { total: 3, done: 1, overdue: 1, percent: 33 },
   archivedAt: null, createdBy: { id: 'u1', name: 'Meera' }, rev: 2,
@@ -131,6 +131,29 @@ describe('the Projects page', () => {
     expect(body.clientId).toEqual(expect.any(String));
     // It opens the new project.
     await waitFor(() => expect(addressBar.search).toContain('project=p9'));
+  });
+
+  it('a name typed into the description box is explained, not silently refused', async () => {
+    serve({ projects: [] });
+    addressBar.reset('/team/tasks', 'view=projects');
+    head();
+    fireEvent.click((await screen.findAllByRole('button', { name: /New project/ }))[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'New project' });
+    const nameBox = within(dialog).getByLabelText('Project name');
+    expect(nameBox).toHaveFocus();
+    expect(nameBox).toBeRequired();
+    // The owner's mistake: the name went into the description.
+    fireEvent.change(within(dialog).getByLabelText(/Description/), { target: { value: 'Black Friday 2026 campaign' } });
+    expect(within(dialog).getByRole('button', { name: 'Create project' })).toBeDisabled();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Name is required');
+    expect(within(dialog).getByText('Add a project name to continue.')).toBeInTheDocument();
+    expect(nameBox).toHaveAttribute('aria-invalid', 'true');
+    // Typing the name clears both and enables the button.
+    fireEvent.change(nameBox, { target: { value: 'Black Friday 2026 campaign' } });
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    expect(within(dialog).queryByText('Add a project name to continue.')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Create project' })).toBeEnabled();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('refuses a start date after the deadline before sending anything', async () => {

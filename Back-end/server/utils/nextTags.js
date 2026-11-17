@@ -102,4 +102,13 @@ export const articleTags = (article) => {
  */
 export const spinTags = () => ['home:spin'];
 
-export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags, festivalThemeTags, festivalOfferTags, spinTags };
+/**
+ * Tags for a press-coverage write (create / edit / delete).
+ *
+ * The /media page reads press client-side, but the home page's "As featured in"
+ * strip server-fetches GET /media/press with this tag, so without it a new or
+ * unpublished press item would linger on the home page for the 300s ISR window.
+ */
+export const pressTags = () => ['home:press'];
+
+export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags, festivalThemeTags, festivalOfferTags, spinTags, pressTags };

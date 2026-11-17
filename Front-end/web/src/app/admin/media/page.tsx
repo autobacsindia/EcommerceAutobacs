@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Star, Search, ExternalLink, Newspaper, ChevronLeft, ChevronRight } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
+import SingleImageUpload from '@/components/ui/SingleImageUpload';
 
 // Media = external Press Coverage cards rendered on the public /media page.
 // (Blog posts + gallery/videos are managed in the Blog admin.)
@@ -41,6 +43,8 @@ export default function AdminMediaPage() {
   const [editing, setEditing] = useState<PressItem | null>(null);
   const [form, setForm] = useState({ ...EMPTY_PRESS });
   const [saving, setSaving] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -61,12 +65,14 @@ export default function AdminMediaPage() {
 
   function openNew() {
     setEditing(null);
+    setImageError(null);
     setForm({ ...EMPTY_PRESS });
     setShowForm(true);
   }
 
   function openEdit(item: PressItem) {
     setEditing(item);
+    setImageError(null);
     setForm({
       publication: item.publication, date: item.date || '', headline: item.headline,
       excerpt: item.excerpt || '', url: item.url, image: item.image || '',
@@ -75,6 +81,20 @@ export default function AdminMediaPage() {
       featured: item.featured, status: item.status,
     });
     setShowForm(true);
+  }
+
+  // Signed direct upload (same helper as the blog cover) into the `media` folder.
+  async function handleImageUpload(file: File) {
+    setImageError(null);
+    setImageUploading(true);
+    try {
+      const { url } = await uploadImageToCloudinary(file, 'media');
+      setForm(f => ({ ...f, image: url }));
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : 'Image upload failed');
+    } finally {
+      setImageUploading(false);
+    }
   }
 
   async function save(e: React.FormEvent) {
@@ -300,7 +320,18 @@ export default function AdminMediaPage() {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Image / clipping URL</label>
+                  {/* Upload our own copy of the photo — linking to the publication's
+                      image breaks when they move it, and loads from their server. */}
+                  <SingleImageUpload
+                    label="Photo / clipping"
+                    value={form.image}
+                    onUpload={handleImageUpload}
+                    onRemove={() => { setForm(f => ({ ...f, image: '' })); setImageError(null); }}
+                    uploading={imageUploading}
+                    error={imageError}
+                    disabled={saving}
+                  />
+                  <label className="text-xs text-gray-500 block mt-2 mb-1">…or paste an image link</label>
                   <input
                     value={form.image}
                     onChange={e => setForm(f => ({ ...f, image: e.target.value }))}
@@ -380,7 +411,7 @@ export default function AdminMediaPage() {
                 <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
                   Cancel
                 </button>
-                <button type="submit" disabled={saving} className="px-5 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60">
+                <button type="submit" disabled={saving || imageUploading} className="px-5 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60">
                   {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
                 </button>
               </div>

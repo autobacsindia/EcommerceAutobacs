@@ -17,6 +17,7 @@ export function listParams(filters: TaskFilters, state: TaskBucket): Record<stri
   if (filters.q?.trim()) p.q = filters.q.trim();
   if ((filters.view === 'team' || filters.view === 'project') && filters.assignee) p.assignee = filters.assignee;
   if (filters.view === 'project' && filters.project) p.project = filters.project;
+  if (filters.view === 'project' && filters.projectList) p.projectList = filters.projectList;
   if (filters.view === 'team' && filters.team) p.team = filters.team;
   if (filters.view === 'team' && filters.list) p.list = filters.list;
   if (filters.tag) p.tag = filters.tag;
@@ -94,7 +95,11 @@ export function useQuickEdit() {
 }
 
 /** What "+ Add task" may set beside the title (the board's chips). */
-export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[]; listId?: string; projectId?: string; personal?: boolean };
+export type QuickExtras = {
+  assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[]; listId?: string; projectId?: string; personal?: boolean;
+  /** Inside a project: one of its lists, and one of its own statuses. */
+  projectListId?: string; stageId?: string;
+};
 
 /**
  * "+ Add task" inside a status group or board column: a title, Enter, done.
@@ -119,6 +124,8 @@ export function useQuickAdd() {
         ...(extras.tags?.length ? { tags: extras.tags } : {}),
         ...(extras.listId ? { listId: extras.listId } : {}),
         ...(extras.projectId ? { projectId: extras.projectId } : {}),
+        ...(extras.projectId && extras.projectListId ? { projectListId: extras.projectListId } : {}),
+        ...(extras.projectId && extras.stageId ? { stageId: extras.stageId } : {}),
         ...(extras.personal ? { personal: true } : {}),
         clientId,
       });

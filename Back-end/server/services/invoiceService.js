@@ -31,6 +31,7 @@ import { formatLongDateIST } from '../utils/datetime.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import { describeEmiPlan } from '../utils/paymentMethodDetails.js';
 import { discountLabel } from '../utils/quoteDiscount.js';
+import { deliveryFeeBreakdown } from '../utils/deliveryFeeBreakdown.js';
 
 /** Payment enum → invoice-facing label. */
 const PAYMENT_METHOD_LABELS = {
@@ -482,14 +483,16 @@ export const generateInvoicePdf = async (order, user = null) => {
       // comment says it is "for display only" — car accessories span 18% and 28%,
       // so every 28% line is understated. The label now says so.
       if (order.tax) sumRow(TAX_ROW_LABEL, rs(order.tax));
-      if (fees && !order.extraChargeReceipt) {
+      const feeView = fees && !order.extraChargeReceipt ? deliveryFeeBreakdown(order) : null;
+      if (feeView?.waived) {
+        // Black Friday: no fee was charged, so none is a line of this invoice's total.
+        // They are listed (struck through, ₹0) in the savings box under the total —
+        // for information only, never as a taxable supply.
+        sumRow('Delivery fees:', rs(0));
+      } else if (feeView) {
         // Each fee as charged at checkout, from the order's snapshot.
-        for (const line of fees.lines || []) sumRow(`${line.label}:`, rs(line.amount));
-        if (fees.offer?.applied) {
-          sumRow('Black Friday offer (delivery fees waived):', `- ${rs(fees.offer.saving)}`);
-        } else if (Number(fees.charged) < Number(fees.total)) {
-          sumRow('Free delivery (coupon):', `- ${rs(Number(fees.total) - Number(fees.charged))}`);
-        }
+        for (const line of feeView.lines) sumRow(`${line.label}:`, rs(line.amount));
+        if (feeView.couponSaving > 0) sumRow('Free delivery (coupon):', `- ${rs(feeView.couponSaving)}`);
       } else if (!order.extraChargeReceipt) sumRow(
         'Shipping Charges (Extra):',
         // The label already says "(Extra)"; the customer pays the courier on delivery.
@@ -508,6 +511,53 @@ export const generateInvoicePdf = async (order, user = null) => {
       if (order.gatewayOffer?.discount > 0) {
         sumRow('Razorpay offer:', `- ${rs(order.gatewayOffer.discount)}`, { muted: true });
         sumRow('Amount paid:', rs(order.gatewayOffer.amountPaid));
+      }
+
+      // ── What was payable, and what the Black Friday offer made ₹0 ────────────
+      if (feeView) {
+        y += 4;
+        const p = feeView.payable;
+        doc.font(FONT).fontSize(8.5).fillColor('#333').text(
+          `Payable: products ${rs(p.products)} (GST ${rs(p.gst)} included)`
+            + ` + delivery fees ${rs(p.fees)} = ${rs(p.total)}`,
+          LEFT, y, { width: RIGHT - LEFT, align: 'right' }
+        );
+        y = doc.y + 6;
+      }
+      if (feeView?.waived && feeView.lines.length) {
+        y += 6;
+        const pad = 10;
+        const rowH = 14;
+        const boxH = pad * 2 + 16 + 12 + feeView.lines.length * rowH + 18;
+        if (y + boxH > doc.page.height - 130) { doc.addPage(); y = 50; }
+        const top = y;
+        const inner = RIGHT - LEFT - pad * 2;
+        const zeroX = RIGHT - pad - 150;   // "₹0.00 (Black Friday offer)" column
+        const wasX = zeroX - 100;          // struck-through full price column
+        doc.save();
+        doc.roundedRect(LEFT, top, RIGHT - LEFT, boxH, 4).fillAndStroke('#fff7ed', '#f59e0b');
+        doc.restore();
+        let by = top + pad;
+        doc.font(FONT_BOLD).fontSize(10).fillColor('#92400e')
+          .text('Black Friday offer — delivery fees waived', LEFT + pad, by, { width: inner, lineBreak: false });
+        by += 16;
+        doc.font(FONT).fontSize(7.5).fillColor('#78350f')
+          .text('These fees were not charged and are not part of the invoice total (shown for information).',
+            LEFT + pad, by, { width: inner, lineBreak: false });
+        by += 12;
+        for (const line of feeView.lines) {
+          doc.font(FONT).fontSize(9).fillColor('#333')
+            .text(line.label, LEFT + pad, by, { width: wasX - LEFT - pad - 8, lineBreak: false });
+          // Full price struck through, then ₹0 — what the fee would have been, and is.
+          doc.fillColor('#888').text(rs(line.amount), wasX, by, { width: 92, align: 'right', strike: true, lineBreak: false });
+          doc.font(FONT_BOLD).fillColor('#15803d')
+            .text(`${rs(0)} (Black Friday offer)`, zeroX, by, { width: 150, align: 'right', lineBreak: false });
+          by += rowH;
+        }
+        doc.font(FONT_BOLD).fontSize(10.5).fillColor('#15803d')
+          .text(`You saved ${rs(feeView.saving)} with the Black Friday offer`, LEFT + pad, by + 3,
+            { width: inner, align: 'right', lineBreak: false });
+        y = top + boxH + 6;
       }
 
       // ── Footer note ──────────────────────────────────────────────────────────

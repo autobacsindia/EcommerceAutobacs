@@ -1,6 +1,7 @@
 import StoreHome from '@/components/home/store/StoreHome';
 import { getStoreHomeData } from '@/components/home/store/storeData';
 import { getFreeDeliveryOfferLive } from '@/lib/festival/freeDelivery';
+import { getFestivalTheme, isFestivalLive } from '@/lib/festival/festivalTheme';
 
 /**
  * Home page — the light, Amazon-style store (components/home/store).
@@ -21,6 +22,8 @@ export const revalidate = 300;
 export default async function Home() {
   // Independent reads — the promo strip never waits on the heavier shelves.
   // Header, promo strip and footer come from the root layout, as on every page.
-  const [data, freeDelivery] = await Promise.all([getStoreHomeData(), getFreeDeliveryOfferLive()]);
-  return <StoreHome data={data} freeDelivery={freeDelivery} />;
+  // getFestivalTheme() is the same tagged fetch the root layout makes, so this
+  // read is deduplicated by Next — no extra request.
+  const [data, freeDelivery, theme] = await Promise.all([getStoreHomeData(), getFreeDeliveryOfferLive(), getFestivalTheme()]);
+  return <StoreHome data={data} freeDelivery={freeDelivery} festive={isFestivalLive(theme)} />;
 }

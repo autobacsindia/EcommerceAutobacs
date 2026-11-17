@@ -45,6 +45,28 @@ const PersonSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/** The kinds a project's own status can be: what it counts as everywhere else. */
+export const PROJECT_STAGE_TYPES = Object.freeze(['todo', 'in_progress', 'done']);
+
+/** One list inside a project ("Ads", "Website", "Emails"). Order is the array order. */
+const ProjectListSchema = new mongoose.Schema(
+  { name: { type: String, required: true, maxlength: 60 } },
+  { _id: true },
+);
+
+/**
+ * One of the project's own statuses ("Review", "Waiting on supplier"). Order is
+ * the array order (the board's columns). Empty array: the usual three.
+ */
+const ProjectStageSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, maxlength: 30 },
+    colour: { type: String, enum: PROJECT_COLOURS, default: 'gray' },
+    type: { type: String, enum: PROJECT_STAGE_TYPES, required: true },
+  },
+  { _id: true },
+);
+
 const StaffProjectSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, maxlength: 80 },
@@ -59,6 +81,12 @@ const StaffProjectSchema = new mongoose.Schema(
     dueOn: { type: String, default: null },
     /** The list order: the deadline, 'YYYY-MM-DD', or '9999-12-31' for none. */
     rank: { type: String, required: true },
+    /** Its lists, at most PROJECT_LISTS_MAX (services/staffProjectService.js). */
+    lists: { type: [ProjectListSchema], default: [] },
+    /** Its own statuses, at most PROJECT_STAGES_MAX; none means To do / In progress / Done. */
+    statuses: { type: [ProjectStageSchema], default: [] },
+    /** Where an imported project came from ("clickup:folder:<id>"), so a re-run finds it again. */
+    importKey: { type: String, default: undefined, maxlength: 100 },
     /** Set by the owner to say how it stands; null lets the tasks decide. */
     statusOverride: { type: String, enum: [...PROJECT_STATUSES, null], default: null },
     rev: { type: Number, default: 1 },
@@ -100,6 +128,11 @@ StaffProjectSchema.pre('save', async function numberNewProject() {
 StaffProjectSchema.index(
   { createdBy: 1, clientId: 1 },
   { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_project_client_id' },
+);
+
+StaffProjectSchema.index(
+  { importKey: 1 },
+  { unique: true, partialFilterExpression: { importKey: { $type: 'string' } }, name: 'staff_project_import_key' },
 );
 
 export default mongoose.models.StaffProject || mongoose.model('StaffProject', StaffProjectSchema);
