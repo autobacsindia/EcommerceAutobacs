@@ -47,6 +47,8 @@ export interface StoreProduct {
   festivalOfferSetting?: FestivalOfferSetting | null;
   /** Coarse availability; 'out'/'backorder' tiles sort last on every shelf. */
   stock: StockStatus;
+  /** Slug of the product's first category, when the API sent it (used to vary the hero). */
+  category?: string;
   /**
    * 1-based position in the best-seller ranking. Shelves are shown premium-first, so
    * a tile's position is no longer its sales rank — the "#1 Best seller" badge reads
@@ -107,6 +109,8 @@ interface ApiProduct {
   name: string;
   slug?: string;
   brand?: string;
+  /** Populated on the public list routes: `[{ _id, name, slug }]`. */
+  categories?: Array<{ slug?: string } | string>;
   price: number;
   originalPrice?: number | null;
   festivalOfferSetting?: FestivalOfferSetting | null;
@@ -141,7 +145,13 @@ export const toStoreProduct = (p: ApiProduct): StoreProduct => {
     ...(p.productType === 'variable' && { variable: true }),
     ...(p.festivalOfferSetting && { festivalOfferSetting: p.festivalOfferSetting }),
     stock: getStockStatus(p),
+    ...(firstCategorySlug(p) && { category: firstCategorySlug(p) }),
   };
+};
+
+const firstCategorySlug = (p: ApiProduct): string | undefined => {
+  const c = p.categories?.[0];
+  return c && typeof c === 'object' && c.slug ? c.slug : undefined;
 };
 
 /** Whole-number percentage off, or 0 when not on sale. */
