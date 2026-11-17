@@ -1,5 +1,5 @@
 import { claimShelves } from './uniqueShelves';
-import { buildShelves } from './StoreHome';
+import { buildShelves, pickHeroShowcase } from './StoreHome';
 import type { StoreHomeData, StoreProduct } from './storeData';
 
 const prod = (id: string, price = 1000, originalPrice?: number): StoreProduct => ({
@@ -105,5 +105,38 @@ describe('buildShelves (the home page)', () => {
     const s = buildShelves(tiny, false);
     expect(s.bestSellers).toHaveLength(5);
     expect(s.newArrivals).toHaveLength(5);
+  });
+});
+
+describe('pickHeroShowcase (the three hero photos)', () => {
+  // Shaped like the live deals on 2026-11-17: three of the dearest were one maker's suspension kits.
+  const deal = (id: string, price: number, brand: string, category: string, extra: Partial<StoreProduct> = {}): StoreProduct =>
+    ({ ...prod(id, price, Math.round(price * 1.2)), brand, category, ...extra });
+  const deals = [
+    deal('thunder', 283000, 'Profender', 'suspension'),
+    deal('storm', 268000, 'Profender', 'suspension'),
+    deal('maybach', 505000, '', 'conversion-kit'),
+    deal('gls', 162000, '', 'conversion-kit'),
+    deal('raptor', 257280, '', 'body-kits'),
+    deal('apex', 185000, 'Profender', 'suspension-kit', { stock: 'backorder' }),
+    deal('wheel', 125000, '', 'steering-wheel'),
+    deal('noimg', 900000, '', 'audio', { image: '' }),
+    deal('nosale', 800000, '', 'lighting', { originalPrice: undefined }),
+  ];
+
+  it('the most valuable in-stock deals with a photo, one per brand and one per category', () => {
+    expect(ids(pickHeroShowcase(deals))).toEqual(['maybach', 'thunder', 'raptor']);
+  });
+
+  it('the hero uses them, each tagged with its own real discount', async () => {
+    const { buildFestiveHero, buildSlides } = await import('./StoreHome');
+    const data = { categories: [], deals, dealsTotal: 9, productTotal: 9, bestSellers: [], newArrivals: [], featured: [deals[1]], premiumPicks: [], dearest: [], categoryRows: [], brands: [], reviews: [] } as StoreHomeData;
+    const hero = buildFestiveHero(data, buildSlides(data));
+    expect(hero.photos.map((p) => p.href)).toEqual(['/products/maybach', '/products/thunder', '/products/raptor']);
+    expect(hero.photos.every((p) => p.off === 17)).toBe(true);
+  });
+
+  it('fewer than three varied deals: a short pick, so the hero keeps the banner photos', () => {
+    expect(pickHeroShowcase(deals.slice(0, 2))).toHaveLength(1);
   });
 });
