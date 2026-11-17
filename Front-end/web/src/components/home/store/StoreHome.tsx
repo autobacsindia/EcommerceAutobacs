@@ -111,16 +111,48 @@ export function buildSlides(data: StoreHomeData): BannerSlide[] {
   return slides;
 }
 
+/** Photos in the festive hero. */
+const HERO_SHOWCASE = 3;
+
 /**
- * Inputs for the festive hero, from the same live data and the same featured-
- * first photo choice as the normal banners. Photos come from the deals banner
- * when there is one (so a "-X%" tag is always the product's real discount),
- * otherwise from the first banner.
+ * The three products the festive hero shows — the first thing a visitor sees,
+ * so the best AND varied: the most valuable deals that are in stock, on sale
+ * and have a photo, at most one per brand and one per category. Without the
+ * spread the hero showed three near-identical suspension kits of one maker.
+ * Fewer than three such products → the caller falls back to the banner photos.
+ */
+export function pickHeroShowcase(deals: StoreProduct[]): StoreProduct[] {
+  const brands = new Set<string>();
+  const categories = new Set<string>();
+  const picked: StoreProduct[] = [];
+  const candidates = deals
+    .filter((p) => p.image && p.stock === 'in' && discountPct(p) > 0)
+    .sort((a, b) => b.price - a.price);
+  for (const p of candidates) {
+    if (picked.length >= HERO_SHOWCASE) break;
+    const brand = p.brand.trim().toLowerCase();
+    if (brand && brands.has(brand)) continue;
+    if (p.category && categories.has(p.category)) continue;
+    picked.push(p);
+    if (brand) brands.add(brand);
+    if (p.category) categories.add(p.category);
+  }
+  return picked;
+}
+
+/**
+ * Inputs for the festive hero, from the same live data. Photos are the varied
+ * best deals (pickHeroShowcase), each tagged with its own real discount; with
+ * too few such deals they fall back to the deals banner's (or first banner's)
+ * photos.
  */
 export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
-  const source = slides.find((s) => s.id === 'deals') ?? slides[0];
   const offByHref = new Map(data.deals.map((p) => [p.href, discountPct(p)]));
-  const photos: FestiveHeroPhoto[] = (source?.images ?? []).map((img) => ({ ...img, off: offByHref.get(img.href) ?? 0 }));
+  const showcase = pickHeroShowcase(data.deals);
+  const source = slides.find((s) => s.id === 'deals') ?? slides[0];
+  const photos: FestiveHeroPhoto[] = showcase.length >= HERO_SHOWCASE
+    ? showcase.map((p) => ({ src: p.image, href: p.href, name: p.name, off: discountPct(p) }))
+    : (source?.images ?? []).map((img) => ({ ...img, off: offByHref.get(img.href) ?? 0 }));
   return {
     photos,
     maxOff: data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0),
