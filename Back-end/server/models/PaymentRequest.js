@@ -121,6 +121,20 @@ const PaymentRequestSchema = new mongoose.Schema(
       alternatePhone: { type: String, default: '' },
       city: { type: String, default: '' },
     },
+    // Optional: the staff project this cost belongs to (models/StaffProject.js),
+    // typed as its code. The code and name are snapshotted, so the request still
+    // says "PRJ-0007 Diwali launch" if the project is renamed or deleted later.
+    // Only says which project — never changes the money.
+    project: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffProject', default: null },
+    projectCode: { type: String, default: '' },
+    projectName: { type: String, default: '' },
+    // Optional: any other ID the cost belongs to (a supplier invoice number, a
+    // courier AWB, a ClickUp task) — free text, searched by the admin's lookup.
+    reference: { type: String, default: '', maxlength: 60 },
+    // The browser's id for this submit, so a double-clicked "Submit" or a
+    // replayed request raises one request (unique per requester, below).
+    clientId: { type: String, default: undefined, maxlength: 64 },
+
     // Who closed the sale: a GTM lead's name, or 'Website'.
     closedBy: { type: String, default: '' },
 
@@ -206,6 +220,25 @@ PaymentRequestSchema.index({ updatedAt: -1 }, { name: 'payment_request_updated' 
 PaymentRequestSchema.index(
   { order: 1, status: 1 },
   { name: 'payment_request_order', partialFilterExpression: { order: { $type: 'objectId' } } }
+);
+
+/*
+  One project's payments, newest first (the admin's project lookup; keyset on createdAt, _id).
+  NOT partial on purpose: a partial index needs the query to restate `$type`, and then
+  the planner no longer treats the project as an equality and sorts every one of the
+  project's payments in memory to show 20 (measured: 200 keys read for a page, in
+  tests/linkLookupIndexUsage.test.js). One small null key per other payment is cheaper.
+*/
+PaymentRequestSchema.index({ project: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_project' });
+// "Which payments carry reference INV-2231?" — only rows that have one.
+PaymentRequestSchema.index(
+  { reference: 1, createdAt: -1 },
+  { name: 'payment_request_reference', partialFilterExpression: { reference: { $gt: '' } } }
+);
+// A double-submitted expense / supplier request is saved once. `$type`, never `$ne`.
+PaymentRequestSchema.index(
+  { requestedBy: 1, clientId: 1 },
+  { unique: true, name: 'payment_request_client_id', partialFilterExpression: { clientId: { $type: 'string' } } }
 );
 
 // A supplier deal's parts (supplierDealService: paid / waiting / balance).

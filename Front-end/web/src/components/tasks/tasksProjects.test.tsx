@@ -32,7 +32,7 @@ const wrap = (ui: React.ReactElement) => render(
 );
 
 const project = (over: Partial<Project> = {}): Project => ({
-  id: 'p1', name: 'Diwali launch', description: 'Banners, stock and the offer page', colour: 'violet',
+  id: 'p1', code: 'PRJ-0007', name: 'Diwali launch', description: 'Banners, stock and the offer page', colour: 'violet',
   owner: { id: 'u1', name: 'Meera' },
   people: [{ id: 'u1', name: 'Meera', team: 'marketing' }, { id: 'u2', name: 'Arun', team: 'procurement' }],
   teams: [{ value: 'marketing', label: 'Marketing' }, { value: 'procurement', label: 'Procurement' }],
@@ -98,6 +98,8 @@ describe('the Projects page', () => {
     expect(within(card).getByText('Meera')).toBeInTheDocument();
     expect(within(card).getByText('Marketing')).toBeInTheDocument();
     expect(within(card).getByText('Procurement')).toBeInTheDocument();
+    // Its project ID, to type on a payment.
+    expect(within(card).getByText('PRJ-0007')).toBeInTheDocument();
   });
 
   it('a member who cannot start projects sees no New project button, and a plain empty message', async () => {
@@ -177,6 +179,7 @@ describe('one project', () => {
     expect(within(header).getByRole('heading', { name: 'Diwali launch' })).toBeInTheDocument();
     expect(within(header).getByText('At risk')).toBeInTheDocument();
     expect(within(header).getByText('2 people')).toBeInTheDocument();
+    expect(within(header).getByText('PRJ-0007')).toBeInTheDocument();
     expect(await screen.findByText('Design banners')).toBeInTheDocument();
     const call = listCalls().find((u) => u.includes('view=project'));
     expect(call).toContain('project=p1');

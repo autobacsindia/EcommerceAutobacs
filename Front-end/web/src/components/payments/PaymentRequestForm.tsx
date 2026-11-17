@@ -1,7 +1,7 @@
 'use client';
 
 import CopyId from '@/components/ui/CopyId';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -15,6 +15,7 @@ import { MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
 import type { Supplier } from './suppliers';
 import RichTextBox from '@/components/ui/RichTextBox';
+import { newClientId } from '@/components/tasks/types';
 import { richTextToPlain } from '@/lib/richText';
 
 /** The server takes up to five bills and one payee QR per request. */
@@ -84,6 +85,11 @@ export default function PaymentRequestForm({
   const [saveSupplier, setSaveSupplier] = useState(false);
   // Supplier credit to take off this bill (what the picked supplier owes us, same currency).
   const [creditToUse, setCreditToUse] = useState('');
+  // Optional: the project ("PRJ-0007") and any other ID this cost belongs to. The server checks the project exists.
+  const [projectCode, setProjectCode] = useState('');
+  const [reference, setReference] = useState('');
+  // One id per form: a double-clicked Submit, or a retry after a dropped reply, raises one expense.
+  const clientId = useRef(newClientId());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [filling, setFilling] = useState(false);
@@ -163,6 +169,9 @@ export default function PaymentRequestForm({
       form.append('amount', amount);
     }
     form.append('description', description.trim());
+    if (projectCode.trim()) form.append('project', projectCode.trim());
+    if (reference.trim()) form.append('reference', reference.trim());
+    if (!supplier) form.append('clientId', clientId.current);
     // A saved supplier is sent by id: the server copies its details itself.
     if (picked) form.append('supplierId', picked.id);
     if (picked && creditNum > 0) form.append('creditToUse', String(creditNum));
@@ -259,6 +268,19 @@ export default function PaymentRequestForm({
           )}
         </div>
       )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className={label} htmlFor="pr-project">Project ID (optional)</label>
+          <input id="pr-project" className={input} value={projectCode} onChange={(e) => setProjectCode(e.target.value)} placeholder="e.g. PRJ-0007" autoComplete="off" maxLength={20} />
+          <p className="mt-1 text-xs text-gray-500">If this cost is for a project, type its ID — it is on the project’s page.</p>
+        </div>
+        <div>
+          <label className={label} htmlFor="pr-reference">Other ID (optional)</label>
+          <input id="pr-reference" className={input} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. supplier invoice INV-2231" autoComplete="off" maxLength={60} />
+          <p className="mt-1 text-xs text-gray-500">Any other number this payment belongs to — the admin can search it.</p>
+        </div>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {chooseCurrency && options && (

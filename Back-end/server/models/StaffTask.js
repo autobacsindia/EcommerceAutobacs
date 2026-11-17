@@ -308,6 +308,11 @@ StaffTaskSchema.index(
   in tests/staffProjectIndexUsage.test.js). One small key per task is cheaper.
 */
 StaffTaskSchema.index({ project: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_project' });
+// The tasks linked to one order (the admin's lookup), newest first. Partial: most tasks have no order.
+StaffTaskSchema.index(
+  { 'order.target': 1, _id: -1 },
+  { partialFilterExpression: { 'order.target': { $type: 'objectId' } }, name: 'staff_task_order' },
+);
 // One imported task per source task: what makes re-running an import safe. Partial: most tasks are not imported.
 StaffTaskSchema.index(
   { importKey: 1 },

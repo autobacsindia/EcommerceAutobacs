@@ -28,6 +28,27 @@ export const LIST_PROJECTION = Object.freeze({
  * Data access only — who may do what lives in services/staffTaskService.js.
  */
 const staffTaskRepository = {
+  /**
+   * The admin's lookup: a page of the tasks linked to an order (staff_task_order),
+   * newest first, archived ones too. `after` is the last row's _id.
+   */
+  pageForOrder: (orderId, { after = null, limit }) => StaffTask.find({
+    'order.target': { $eq: orderId, $type: 'objectId' }, ...(after ? { _id: { $lt: after } } : {}),
+  }).sort({ 'order.target': 1, _id: -1 }).limit(limit).select('number title status bucket dueOn assignees project order createdAt').lean(),
+  /**
+   * The admin's lookup: a page of one project's tasks in one bucket ('open' / 'done'),
+   * in list order (staff_task_project: equality on project + bucket, keyset on rank, _id).
+   */
+  pageForProject: (projectId, bucket, { after = null, limit }) => StaffTask.find({
+    project: projectId, bucket,
+    ...(after ? { $or: [{ rank: { $gt: after.rank } }, { rank: after.rank, _id: { $gt: after.id } }] } : {}),
+  }).sort({ rank: 1, _id: 1 }).limit(limit).select('number title status bucket dueOn assignees project order rank createdAt').lean(),
+  /** The projects of an order's tasks, each once (staff_task_order; bounded by `cap` tasks read). */
+  projectsForOrder: async (orderId, cap) => [...new Set((await StaffTask.find({ 'order.target': { $eq: orderId, $type: 'objectId' }, project: { $type: 'objectId' } })
+    .select('project').limit(cap).lean()).map((t) => String(t.project)))],
+  /** The orders linked from a project's tasks, each once (staff_task_project; bounded by `cap` tasks read). */
+  ordersForProject: async (projectId, cap) => [...new Set((await StaffTask.find({ project: projectId, 'order.target': { $type: 'objectId' } })
+    .select('order.target').limit(cap).lean()).map((t) => String(t.order.target)))],
   model: StaffTask,
   commentModel: StaffTaskComment,
 
