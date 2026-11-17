@@ -248,6 +248,27 @@ describe('a project’s own statuses', () => {
     expect((await raw(shipped)).stage).toBeUndefined();
   });
 
+  it('deleting a status moves its tasks where the owner says, never between open and done', async () => {
+    const p = await change(head, await start(head, { memberIds: [String(member._id)] }), { statuses: STAGES });
+    const [ideas, designing, review, live] = p.statuses;
+    const a = await edit(member, await give(head, { assigneeId: String(member._id), projectId: p.id }), { stageId: review.id });
+    const b = await edit(member, await give(head, { assigneeId: String(member._id), projectId: p.id }), { stageId: review.id });
+    const kept = [ideas, designing, live];
+    // Open tasks cannot be sent to a done status, nor the other way round.
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: live.id }] }), /not Done/);
+    // Only a status being removed, to one that stays; once each.
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: designing.id, to: ideas.id }] }), /being removed/);
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: review.id }] }), /stays/);
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: ideas.id }, { from: review.id, to: ideas.id }] }), /once/);
+    await status(400, () => change(head, p, { statusMoves: [] }), /Send the statuses/);
+    await status(403, () => change(member, p, { statuses: kept, statusMoves: [{ from: review.id, to: ideas.id }] }));
+    // Nothing moved by any refusal.
+    expect(await fresh(head, a)).toMatchObject({ stage: review.id });
+    // Review → Ideas (not started), though the clean-up alone would pick Designing.
+    await change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: ideas.id }] });
+    for (const t of [a, b]) expect(await fresh(head, t)).toMatchObject({ stage: ideas.id, statusLabel: 'Ideas', status: 'todo', bucket: 'open' });
+  });
+
   it('moving a task to another project re-places it in that project’s statuses, or none', async () => {
     const p = await change(head, await start(head), { statuses: STAGES });
     const plain = await start(head, { name: 'Plain' });

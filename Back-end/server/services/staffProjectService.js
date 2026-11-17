@@ -195,6 +195,33 @@ function cleanStatuses(raw, before = []) {
 }
 
 /**
+ * Where the tasks of each deleted status go: [{ from, to }] by status id. `from`
+ * must be a status being deleted, `to` one that stays. Open and done never mix —
+ * a done task moved to an open status would reopen with nobody saying so — so
+ * `to` must be open (not started / active) exactly when `from` was. A deleted
+ * status with no move falls to the usual clean-up: the first status of its kind.
+ */
+function cleanStatusMoves(raw, before, after) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) throw fail('Say where each removed status’s tasks go.', 400);
+  const old = new Map(before.map((x) => [idOf(x._id), x]));
+  const kept = new Map(after.map((x) => [idOf(x._id), x]));
+  const seen = new Set();
+  return raw.map((m) => {
+    const from = old.get(String(m?.from ?? ''));
+    if (!from || kept.has(idOf(from._id))) throw fail('Only a status being removed can move its tasks.', 400);
+    if (seen.has(idOf(from._id))) throw fail(`Say once where “${from.name}” tasks go.`, 400);
+    seen.add(idOf(from._id));
+    const to = kept.get(String(m?.to ?? ''));
+    if (!to || !old.has(idOf(to._id))) throw fail(`Pick a status that stays for the “${from.name}” tasks.`, 400);
+    if ((from.type === 'done') !== (to.type === 'done')) {
+      throw fail(`“${from.name}” tasks are ${from.type === 'done' ? 'finished' : 'not finished'}: move them to a status that is ${from.type === 'done' ? 'Done' : 'not Done'}.`, 400);
+    }
+    return { from: from._id, to };
+  });
+}
+
+/**
  * The status of `stages` a task of kind `status` goes into: the first of that
  * kind, or — for an active task when the project has no active status — the
  * first not-started one. null when the project uses the usual three.
@@ -424,11 +451,13 @@ export async function updateProject(actor, id, input = {}, req) {
     const was = (p.lists || []).map((l) => `${idOf(l._id)}:${l.name}`).join('|');
     if (lists.map((l) => `${idOf(l._id)}:${l.name}`).join('|') !== was) set.lists = lists;
   }
+  let moves = [];
   if (has('statuses')) {
     const statuses = cleanStatuses(input.statuses, p.statuses || []);
     const was = (p.statuses || []).map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|');
     if (statuses.map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|') !== was) set.statuses = statuses;
-  }
+    moves = cleanStatusMoves(input.statusMoves, p.statuses || [], statuses);
+  } else if (has('statusMoves')) throw fail('Send the statuses with where their tasks go.', 400);
   if (has('ownerId') || has('memberIds')) {
     const ownerId = has('ownerId') ? input.ownerId : idOf(p.owner.user);
     const memberIds = has('memberIds') ? input.memberIds : (p.people || []).map((x) => idOf(x.user));
@@ -445,6 +474,13 @@ export async function updateProject(actor, id, input = {}, req) {
   const next = await staffProjectRepository.updateIfRev(p._id, rev, set);
   if (!next) throw fail('Someone changed this project just now. It has been reloaded — try again.', 409);
   // After the project landed: move its tasks onto lists and statuses it still has.
+  // A deleted status's tasks go where the owner chose first; the clean-up places anything left.
+  for (const m of moves) {
+    await staffProjectRepository.updateTasks(
+      { project: next._id, stage: m.from },
+      { $set: { stage: m.to._id, stageName: m.to.name, status: m.to.type } },
+    );
+  }
   if (set.lists || set.statuses) await reconcileProjectTasks(next);
   auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffProject', p._id, { changes: Object.keys(set) });
   return getProject(actor, next._id);
