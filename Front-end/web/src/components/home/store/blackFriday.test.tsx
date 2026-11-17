@@ -96,6 +96,10 @@ describe('Black Friday home page', () => {
     expect(within(hero).getByRole('link', { name: `Up to ${maxOff}% off — shop the deals` })).toHaveAttribute('href', '/offers');
     expect(within(hero).getByTestId('free-delivery-seal')).toHaveTextContent(/Without.*Shipping, packing, delivery.*charges/i);
     expect(within(hero).getByRole('link', { name: /Shop Black Friday Deals/ })).toHaveAttribute('href', '/offers');
+    // Each hero card names its product under the photo.
+    for (const card of hero.querySelectorAll('.bfh-card')) {
+      expect(card.querySelector('.bfh-card-name')?.textContent).toMatch(/^Product /);
+    }
 
     const offers = screen.getByTestId('festive-offers');
     expect(offers).toHaveTextContent(`Up to ${maxOff}% off`);
