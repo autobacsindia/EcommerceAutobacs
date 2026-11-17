@@ -87,7 +87,7 @@ describe('Project details over HTTP', () => {
     const slip = await nevin.session.get(`/staff/tasks/projects/${id}/slip/delivery`);
     expect(slip.status).toBe(200);
     expect(slip.headers['content-type']).toBe('application/pdf');
-    expect(slip.headers['content-disposition']).toMatch(/^inline; filename="Delivery-slip-[0-9A-F]{6}-Vicky-s-Hilux\.pdf"$/);
+    expect(slip.headers['content-disposition']).toMatch(/^inline; filename="Delivery-slip-PRJ-\d{4}-Vicky-s-Hilux\.pdf"$/);
     expect(slip.headers['cache-control']).toBe('private, no-store');
     expect(Buffer.from(slip.body).subarray(0, 5).toString()).toBe('%PDF-');
 

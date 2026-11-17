@@ -25,6 +25,7 @@ import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import SlipTemplate from '../models/SlipTemplate.js';
+import { projectCode } from '../models/StaffProject.js';
 import staffProjectRepository from '../repositories/staffProjectRepository.js';
 import { companyInfo } from '../config/company.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
@@ -475,7 +476,8 @@ export async function saveSlipValues(actor, projectId, key, input = {}, req) {
 // ── What a slip prints ──────────────────────────────────────────────────────
 
 /** "PRJ-0007" once projects are numbered (feat/project-ids-payment-links), else the short id. */
-export const projectRef = (p) => (Number.isInteger(p?.number) ? `PRJ-${String(p.number).padStart(4, '0')}` : `#${idOf(p._id).slice(-6).toUpperCase()}`);
+/** The project's PRJ-0007 code; a short id for a project not yet numbered. */
+export const projectRef = (p) => projectCode(p?.number) || `#${idOf(p._id).slice(-6).toUpperCase()}`;
 
 const row = (p, t, key, now) => {
   const m = metaOf(t, key);
