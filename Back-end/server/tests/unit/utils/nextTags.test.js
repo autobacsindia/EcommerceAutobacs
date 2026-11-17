@@ -14,6 +14,7 @@ import {
   careersTags,
   articleTags,
   spinTags,
+  pressTags,
 } from '../../../utils/nextTags.js';
 
 // Mirrors ALLOWED_PREFIXES in services/frontendRevalidator.js. Duplicated on
@@ -34,6 +35,7 @@ describe('every builder emits only allowlisted tags', () => {
     ['categoryTags (no slug)', categoryTags(null)],
     ['careersTags', careersTags()],
     ['articleTags', articleTags({ slug: 'post', type: 'blog' })],
+    ['pressTags', pressTags()],
   ];
 
   it.each(cases)('%s', (_name, tags) => {

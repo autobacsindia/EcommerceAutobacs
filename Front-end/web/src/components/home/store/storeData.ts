@@ -24,7 +24,7 @@ const REVALIDATE = 300;
   and an edited logo stayed visible until the 300s window lapsed. Seen for real
   when a brand logo was repointed off Cloudinary and the old one kept serving.
 */
-const TAGS = { products: 'home:products', categories: 'home:categories', brands: 'home:brands' };
+const TAGS = { products: 'home:products', categories: 'home:categories', brands: 'home:brands', press: 'home:press' };
 
 export interface StoreProduct {
   id: string;
@@ -78,6 +78,17 @@ export interface StoreBrand {
   logo: string;
 }
 
+/** A featured press item for the home "As featured in" strip (links out). */
+export interface StorePress {
+  id: string;
+  publication: string;
+  date: string;
+  headline: string;
+  excerpt: string;
+  url: string;
+  image: string;
+}
+
 export interface StoreCategoryRow {
   category: StoreCategory;
   products: StoreProduct[];
@@ -101,6 +112,8 @@ export interface StoreHomeData {
   categoryRows: StoreCategoryRow[];
   brands: StoreBrand[];
   reviews: StoreReview[];
+  /** Featured, published press items (max PRESS_LIMIT). Optional so fixtures without it still type-check. */
+  press?: StorePress[];
 }
 
 interface ApiImage { url?: string; isPrimary?: boolean }
@@ -174,6 +187,33 @@ const productPage = async (query: string): Promise<{ products: ApiProduct[]; tot
   return { products: res.products ?? [], total: typeof res.total === 'number' && res.total > 0 ? res.total : 0 };
 };
 const productList = async (query: string): Promise<ApiProduct[]> => (await productPage(query)).products;
+
+interface ApiPress { _id: string; publication?: string; date?: string; headline?: string; excerpt?: string; url?: string; image?: string; featured?: boolean }
+
+/** How many press cards the home strip shows at most. */
+export const PRESS_LIMIT = 3;
+const isWebUrl = (u?: string) => !!u && /^https?:\/\//i.test(u);
+/** An image may also be one of our own files (e.g. /images/press/…), but never protocol-relative `//host`. */
+const isImageSrc = (u?: string) => isWebUrl(u) || (!!u && u.startsWith('/') && !u.startsWith('//'));
+
+/**
+ * Featured press only, so the admin decides what earns home-page space (the
+ * /media page lists the rest). The endpoint already returns published items,
+ * featured first. A non-http(s) link is dropped rather than rendered as an href.
+ */
+export const toStorePress = (items: ApiPress[]): StorePress[] =>
+  items
+    .filter((p) => p.featured && p.headline && p.publication && isWebUrl(p.url))
+    .slice(0, PRESS_LIMIT)
+    .map((p) => ({
+      id: p._id,
+      publication: p.publication!,
+      date: p.date || '',
+      headline: p.headline!,
+      excerpt: p.excerpt || '',
+      url: p.url!,
+      image: isImageSrc(p.image) ? p.image! : '',
+    }));
 
 const usable = (p: ApiProduct) => !!p.name && typeof p.price === 'number' && p.price > 0 && !!primaryImage(p.images);
 
@@ -285,6 +325,14 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     }));
   }, [] as StoreReview[]);
 
+  // Tagged `home:press`: every press create/edit/delete revalidates it (routes/media.js).
+  const pressP = safe(async () => {
+    const res = await serverFetch<{ data?: ApiPress[] }>(`/media/press`, {
+      next: { revalidate: REVALIDATE, tags: [TAGS.press] },
+    });
+    return toStorePress(res.data ?? []);
+  }, [] as StorePress[]);
+
   const categories = await categoriesP;
   const bySlug = new Map(categories.map((c) => [c.slug, c]));
   const candidates = ROW_CANDIDATES.map((s) => bySlug.get(s)).filter(Boolean) as StoreCategory[];
@@ -299,8 +347,8 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     ),
   }), { category: c, products: [] as StoreProduct[] })));
 
-  const [deals, bestSellers, newest, featured, dearest, brands, reviews, rows] = await Promise.all([
-    dealsP, bestP, newP, featuredP, dearestP, brandsP, reviewsP, rowsP,
+  const [deals, bestSellers, newest, featured, dearest, brands, reviews, rows, press] = await Promise.all([
+    dealsP, bestP, newP, featuredP, dearestP, brandsP, reviewsP, rowsP, pressP,
   ]);
   return {
     categories,
@@ -317,5 +365,6 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     categoryRows: rows.filter((r) => r.products.length >= MIN_ROW),
     brands,
     reviews,
+    press,
   };
 }

@@ -11,7 +11,7 @@ import { slugify } from "../utils/slug.js";
 import { unreservedBlogSlug } from "../utils/blogSlug.js";
 import { cleanArticleHTML } from "../utils/htmlSanitizer.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
-import { articleTags } from "../utils/nextTags.js";
+import { articleTags, pressTags } from "../utils/nextTags.js";
 import cacheService from "../services/cacheService.js";
 import { CACHE_VERSION } from "../services/cache/config.js";
 import { invalidateCache } from "../middleware/cacheMiddleware.js";
@@ -505,6 +505,7 @@ router.post("/admin/press", protect, adminOrMarketing, asyncHandler(async (req, 
 
   const item = await PressCoverage.create(payload);
   invalidateCache(MEDIA_TAGS.press);
+  revalidateFrontendTags(pressTags());
   res.status(201).json({ success: true, data: item });
 }));
 
@@ -516,6 +517,7 @@ router.put("/admin/press/:id", protect, adminOrMarketing, asyncHandler(async (re
   PRESS_FIELDS.forEach((f) => { if (req.body[f] !== undefined) item[f] = req.body[f]; });
   await item.save();
   invalidateCache(MEDIA_TAGS.press);
+  revalidateFrontendTags(pressTags());
   res.json({ success: true, data: item });
 }));
 
@@ -524,6 +526,7 @@ router.delete("/admin/press/:id", protect, admin, asyncHandler(async (req, res) 
   const item = await PressCoverage.findByIdAndDelete(req.params.id);
   if (!item) return res.status(404).json({ success: false, message: "Press item not found" });
   invalidateCache(MEDIA_TAGS.press);
+  revalidateFrontendTags(pressTags());
   res.json({ success: true, message: "Press item deleted" });
 }));
 
