@@ -225,7 +225,12 @@ function FeeOfferCelebration({
 /** 6-digit PIN box: reports a PIN only once it is complete and valid. */
 function PinBox({ value, onChange }: { value: string; onChange: (pin: string) => void }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => { setDraft(value); }, [value]);
+  // Remember what the box reported: an incomplete PIN reports '' — copying that
+  // back would wipe the five digits still being typed (or corrected).
+  const reported = useRef(value);
+  useEffect(() => {
+    if (value !== reported.current) { reported.current = value; setDraft(value); }
+  }, [value]);
   const invalid = draft.length === 6 && !/^[1-9]\d{5}$/.test(draft);
   return (
     <div>
@@ -240,7 +245,9 @@ function PinBox({ value, onChange }: { value: string; onChange: (pin: string) =>
         onChange={(e) => {
           const next = e.target.value.replace(/\D/g, '').slice(0, 6);
           setDraft(next);
-          onChange(/^[1-9]\d{5}$/.test(next) ? next : '');
+          const pin = /^[1-9]\d{5}$/.test(next) ? next : '';
+          reported.current = pin;
+          onChange(pin);
         }}
         aria-invalid={invalid}
         className="w-full bg-obsidian-raised border border-hairline text-ink rounded-lg px-3 py-2 text-sm font-display focus:outline-none focus:border-gold"
