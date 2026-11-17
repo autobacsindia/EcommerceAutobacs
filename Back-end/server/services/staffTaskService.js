@@ -69,7 +69,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import staffTaskTimeRepository from '../repositories/staffTaskTimeRepository.js';
 import { sendToUsers } from './pushService.js';
 import { listForTask, liveList } from './staffTaskListService.js';
-import { inProjectAccess, loadVisibleProject, projectForTask, projectName } from './staffProjectService.js';
+import { inProjectAccess, loadVisibleProject, projectForTask, projectName, projectById, stageFor } from './staffProjectService.js';
 import { orderNumber } from './invoiceService.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
@@ -355,7 +355,9 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
       ? { description }
       : { summary: summary.length > SUMMARY_MAX ? `${summary.slice(0, SUMMARY_MAX - 1)}…` : summary }),
     status: shownStatus(t.status),
-    statusLabel: STATUS_LABELS[shownStatus(t.status)],
+    // A project's own status shows by its name ("Review"); `status` stays its kind.
+    statusLabel: (t.stage && t.stageName) || STATUS_LABELS[shownStatus(t.status)],
+    stage: t.stage ? idOf(t.stage) : null,
     priority: t.priority,
     priorityLabel: PRIORITY_LABELS[t.priority],
     dueOn: t.dueOn || null,
@@ -378,6 +380,7 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
     list: idOf(t.list),
     project: idOf(t.project),
+    projectList: t.project ? idOf(t.projectList) : null,
     // The parent's number and title travel with the sub-task, so a row can say
     // "in T-20 …" even to someone who may not open T-20.
     parent: t.parent ? { id: idOf(t.parent.task), code: `T-${t.parent.number}`, title: t.parent.title || '' } : null,
@@ -641,6 +644,18 @@ export const TASK_SORTS = Object.freeze({
   updated: { field: 'updatedAt', dir: -1, type: 'date' },
 });
 const TASK_COUNT_CAP = 1000;
+/** The longest stretch the calendar asks for: six weeks, plus a little. */
+export const CALENDAR_DAYS_MAX = 45;
+
+/** A list of `project` by id (null/'' for none); refused if the project doesn't have it. */
+function listInProject(project, raw) {
+  if (raw == null || raw === '') return null;
+  if (!project) throw fail('Put the task in a project first.', 400);
+  const found = (project.lists || []).find((l) => idOf(l._id) === String(raw));
+  if (!found) throw fail('That list is no longer in the project.', 400);
+  return found;
+}
+const listName = (project, id) => (project?.lists || []).find((l) => same(l._id, id))?.name || '';
 
 /** Time spent on each row, from one total over the page (running timers counted up to now). */
 async function withTime(rows) {
@@ -653,7 +668,7 @@ async function withTime(rows) {
   return rows.map((r) => ({ ...r, timeSeconds: seconds.get(r.id) ?? 0, waitingOn: waiting.get(r.id) ?? 0 }));
 }
 
-export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, list, project, priority, tag, q, sort, cursor } = {}) {
+export async function listTasks(actor, { view = 'mine', state = 'open', due, dueFrom, dueTo, assignee, team, list, project, projectList, priority, tag, q, sort, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
     query['assignees.user'] = actor._id;
@@ -693,6 +708,12 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
     const p = await loadVisibleProject(actor, project);
     query.project = p._id;
     query.personal = { $ne: true };
+    // One of its lists, or the tasks in none of them.
+    if (projectList === 'none') query.projectList = null;
+    else if (projectList) {
+      if (!(p.lists || []).some((l) => idOf(l._id) === String(projectList))) throw fail('That list is no longer in the project.', 400);
+      query.projectList = new mongoose.Types.ObjectId(String(projectList));
+    }
     if (assignee) {
       if (!mongoose.isValidObjectId(assignee)) throw fail('Invalid person.', 400);
       query['assignees.user'] = new mongoose.Types.ObjectId(assignee);
@@ -721,7 +742,14 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
     'today now', except an untimed 'today' (late only from tomorrow).
   */
   let range = null;
-  if (due && state === 'open') {
+  // The calendar: open tasks due within the days shown (at most CALENDAR_DAYS_MAX of them).
+  if ((dueFrom || dueTo) && state === 'open') {
+    const from = cleanDay(dueFrom, 'from');
+    const to = cleanDay(dueTo, 'to');
+    if (!from || !to || from > to) throw fail('Pick the days to show.', 400);
+    if (to > addDays(from, CALENDAR_DAYS_MAX - 1)) throw fail(`Show at most ${CALENDAR_DAYS_MAX} days at a time.`, 400);
+    range = { $gte: from, $lt: addDays(to, 1) };
+  } else if (due && state === 'open') {
     if (due === 'overdue') range = { $lte: `${today} ${now}`, $ne: today };
     else if (due === 'today') range = { $gte: today, $lt: tomorrow };
     else if (due === 'late') range = { $lt: tomorrow };
@@ -901,6 +929,17 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   // A project: one the giver sees. Never for a personal task — its project's people would see it.
   if (personal && input.projectId) throw fail('A personal task can’t go in a project.', 400);
   const project = personal ? null : await projectForTask(actor, input.projectId);
+  const projectList = listInProject(project, input.projectListId);
+  // In a project with its own statuses, the task starts in one of them (never a done one).
+  const stages = project?.statuses || [];
+  let stage = stageFor(stages, status);
+  if (input.stageId) {
+    if (!stages.length) throw fail('This project has no statuses of its own.', 400);
+    stage = stages.find((x) => idOf(x._id) === String(input.stageId));
+    if (!stage) throw fail('That status is no longer in the project.', 400);
+    if (stage.type === 'done') throw fail('Start the task in a status that isn’t done.', 400);
+  }
+  const startStatus = stage ? stage.type : status;
   const keyFor = (who) => (!clientId ? undefined : many ? `${clientId}.${idOf(who[0]._id)}` : clientId);
   const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, rows.map(keyFor)) : [];
   const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
@@ -927,11 +966,13 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         title,
         description,
         priority,
-        status,
+        status: startStatus,
         dueOn,
         dueTime,
         startOn,
         ...(tags.length ? { tags } : {}),
+        ...(stage ? { stage: stage._id, stageName: stage.name } : {}),
+        ...(projectList ? { projectList: projectList._id } : {}),
         ...peopleFields(who),
         ...(personal ? { personal: true, team: null, teams: [] } : {}),
         ...(estimateMinutes ? { estimateMinutes } : {}),
@@ -944,7 +985,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         groupSize: many ? people.length : undefined,
         list: list?._id ?? null,
         ...(project ? { project: project._id } : {}),
-        ...placeOf({ status, dueOn, dueTime }),
+        ...placeOf({ status: startStatus, dueOn, dueTime }),
         clientId: key,
         history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }],
       });
@@ -1053,7 +1094,7 @@ async function applyUpdate(actor, t, input, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId', 'projectId', 'estimateMinutes'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId', 'projectId', 'projectListId', 'stageId', 'estimateMinutes'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -1161,6 +1202,50 @@ async function applyUpdate(actor, t, input, req) {
         note('project', (await projectName(t.project)) || '', want?.name || '');
       }
     }
+  }
+
+  // The project's own lists and statuses, when the task is (or is going) in one.
+  const projectNow = set.project !== undefined ? set.project : t.project;
+  const movedProject = set.project !== undefined;
+  const proj = projectNow && (has('projectListId') || has('stageId') || set.status !== undefined || movedProject || (!t.stage && entries.length))
+    ? await projectById(projectNow)
+    : null;
+  if (has('projectListId') || movedProject) {
+    // Another project's lists are not this one's: a move empties it unless a list of the new one is sent.
+    const want = has('projectListId') ? listInProject(projectNow ? proj : null, input.projectListId) : null;
+    if (idOf(want?._id) !== idOf(t.projectList)) {
+      if (!movedProject) needEdit();
+      set.projectList = want?._id ?? null;
+      if (!movedProject || want) note('project_list', listName(t.project && !movedProject ? proj : null, t.projectList), want?.name || '');
+    }
+  }
+  const stages = proj?.statuses || [];
+  if (has('stageId') && input.stageId) {
+    if (!stages.length) throw fail('This project has no statuses of its own.', 400);
+    const want = stages.find((x) => idOf(x._id) === String(input.stageId));
+    if (!want) throw fail('That status is no longer in the project.', 400);
+    if (idOf(want._id) !== idOf(t.stage) || movedProject) {
+      if (!canSetStatus(actor, t)) throw fail('Only the person doing this task, whoever gave it, the team head or the admin can move it.', 403);
+      if (want.type !== shownStatus(t.status)) {
+        set.status = want.type;
+        set.completedAt = want.type === 'done' ? now : null;
+      }
+      set.stage = want._id;
+      set.stageName = want.name;
+      note('status', t.stageName || STATUS_LABELS[shownStatus(t.status)], want.name);
+    }
+  } else if (stages.length && (set.status !== undefined || movedProject || !t.stage)) {
+    // A plain status (from any list), a new project, or a task not placed yet: the first status of its kind.
+    const kind = set.status ?? t.status;
+    const want = stageFor(stages, kind);
+    if (idOf(want._id) !== idOf(t.stage)) {
+      set.stage = want._id;
+      set.stageName = want.name;
+      if (want.type !== shownStatus(kind)) set.status = want.type;
+    }
+  } else if ((movedProject || (proj && !stages.length)) && t.stage) {
+    set.stage = null;
+    set.stageName = null;
   }
 
   if (!entries.length) return shape(t, actor, { full: true });

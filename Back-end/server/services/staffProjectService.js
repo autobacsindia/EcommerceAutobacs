@@ -27,7 +27,7 @@
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
-import staffProjectRepository, { PROJECT_STATUSES, PROJECT_COLOURS } from '../repositories/staffProjectRepository.js';
+import staffProjectRepository, { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES } from '../repositories/staffProjectRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
@@ -45,6 +45,12 @@ export const PROJECT_PICK_MAX = 200;
 /** "At risk" when the deadline is this close and less than AT_RISK_PERCENT is done. */
 export const AT_RISK_DAYS = 7;
 export const AT_RISK_PERCENT = 80;
+/** Lists inside one project, and its own statuses. */
+export const PROJECT_LISTS_MAX = 20;
+export const PROJECT_LIST_NAME_MAX = 60;
+export const PROJECT_STAGES_MAX = 12;
+export const PROJECT_STAGE_NAME_MAX = 30;
+export const STAGE_TYPE_LABELS = Object.freeze({ todo: 'Not started', in_progress: 'Active', done: 'Done' });
 const NO_DUE = '9999-12-31';
 
 export const PROJECT_STATUS_LABELS = Object.freeze({
@@ -139,6 +145,64 @@ function cleanStatusOverride(raw) {
   if (!PROJECT_STATUSES.includes(raw)) throw fail('Pick a valid status.', 400);
   return raw;
 }
+/** A project's lists, in order: names unique (ignoring case), known ids kept so tasks stay in them. */
+function cleanLists(raw, before = []) {
+  if (!Array.isArray(raw)) throw fail('Lists must be a list.', 400);
+  if (raw.length > PROJECT_LISTS_MAX) throw fail(`A project can have at most ${PROJECT_LISTS_MAX} lists.`, 400);
+  const known = new Set(before.map((l) => idOf(l._id)));
+  const seen = new Set();
+  return raw.map((x) => {
+    const name = String(x?.name ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+    if (!name) throw fail('Give every list a name.', 400);
+    if (name.length > PROJECT_LIST_NAME_MAX) throw fail(`Keep list names under ${PROJECT_LIST_NAME_MAX} characters.`, 400);
+    const key = name.toLocaleLowerCase('en-IN');
+    if (seen.has(key)) throw fail(`There are two lists called “${name}”.`, 400);
+    seen.add(key);
+    const id = x?.id && known.has(String(x.id)) ? new mongoose.Types.ObjectId(String(x.id)) : new mongoose.Types.ObjectId();
+    return { _id: id, name };
+  });
+}
+
+/**
+ * A project's own statuses, in board order. None at all means the usual three.
+ * Otherwise at least one "Not started" and one "Done" kind, so every task has a
+ * status to start in and one to finish in.
+ */
+function cleanStatuses(raw, before = []) {
+  if (!Array.isArray(raw)) throw fail('Statuses must be a list.', 400);
+  if (!raw.length) return [];
+  if (raw.length > PROJECT_STAGES_MAX) throw fail(`A project can have at most ${PROJECT_STAGES_MAX} statuses.`, 400);
+  const known = new Set(before.map((x) => idOf(x._id)));
+  const seen = new Set();
+  const out = raw.map((x) => {
+    const name = String(x?.name ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+    if (!name) throw fail('Give every status a name.', 400);
+    if (name.length > PROJECT_STAGE_NAME_MAX) throw fail(`Keep status names under ${PROJECT_STAGE_NAME_MAX} characters.`, 400);
+    const key = name.toLocaleLowerCase('en-IN');
+    if (seen.has(key)) throw fail(`There are two statuses called “${name}”.`, 400);
+    seen.add(key);
+    if (!PROJECT_STAGE_TYPES.includes(x?.type)) throw fail(`Say whether “${name}” is not started, active or done.`, 400);
+    const colour = x?.colour == null || x.colour === '' ? 'gray' : x.colour;
+    if (!PROJECT_COLOURS.includes(colour)) throw fail('Pick one of the colours.', 400);
+    const id = x?.id && known.has(String(x.id)) ? new mongoose.Types.ObjectId(String(x.id)) : new mongoose.Types.ObjectId();
+    return { _id: id, name, colour, type: x.type };
+  });
+  if (!out.some((x) => x.type === 'todo')) throw fail('Keep at least one “Not started” status, for new tasks.', 400);
+  if (!out.some((x) => x.type === 'done')) throw fail('Keep at least one “Done” status, to finish tasks in.', 400);
+  return out;
+}
+
+/**
+ * The status of `stages` a task of kind `status` goes into: the first of that
+ * kind, or — for an active task when the project has no active status — the
+ * first not-started one. null when the project uses the usual three.
+ */
+export function stageFor(stages, status) {
+  if (!stages?.length) return null;
+  const kind = status === 'waiting' ? 'in_progress' : status;
+  return stages.find((x) => x.type === kind) || (kind === 'in_progress' ? stages.find((x) => x.type === 'todo') : null) || null;
+}
+
 const cleanClientId = (raw) => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(raw) ? raw : undefined);
 
 /** The owner and members, loaded and checked: all in the panel, or nothing is saved. */
@@ -185,6 +249,8 @@ function shape(p, viewer, counts = NO_COUNTS, today = todayIST()) {
     teams: (p.teams || []).map((t) => ({ value: t, label: STAFF_TEAM_LABELS[t] || t })),
     startOn: p.startOn || null,
     dueOn: p.dueOn || null,
+    lists: (p.lists || []).map((l) => ({ id: idOf(l._id), name: l.name })),
+    statuses: (p.statuses || []).map((x) => ({ id: idOf(x._id), name: x.name, colour: x.colour || 'gray', type: x.type })),
     status,
     statusLabel: PROJECT_STATUS_LABELS[status],
     statusOverride: p.statusOverride || null,
@@ -288,12 +354,14 @@ export async function createProject(actor, input = {}, req) {
   const startOn = cleanDay(input.startOn, 'start');
   const dueOn = cleanDay(input.dueOn, 'deadline');
   checkDates(startOn, dueOn);
+  const lists = input.lists == null ? [] : cleanLists(input.lists);
+  const statuses = input.statuses == null ? [] : cleanStatuses(input.statuses);
   // A head who names no owner owns it; the admin may hand it to anyone.
   const { owner, people, teams } = await loadPeople(input.ownerId || actor._id, input.memberIds);
   let doc;
   try {
     doc = await staffProjectRepository.create({
-      name, description, colour, owner, people, teams, startOn, dueOn,
+      name, description, colour, owner, people, teams, startOn, dueOn, lists, statuses,
       rank: dueOn || NO_DUE,
       statusOverride: null,
       createdBy: actor._id,
@@ -327,7 +395,7 @@ export async function updateProject(actor, id, input = {}, req) {
     if (want !== !!p.archivedAt) set.archivedAt = want ? new Date() : null;
   }
   const archivedAfter = set.archivedAt !== undefined ? !!set.archivedAt : !!p.archivedAt;
-  const editing = ['name', 'description', 'colour', 'startOn', 'dueOn', 'ownerId', 'memberIds', 'statusOverride'].some(has);
+  const editing = ['name', 'description', 'colour', 'startOn', 'dueOn', 'ownerId', 'memberIds', 'statusOverride', 'lists', 'statuses'].some(has);
   if (editing && archivedAfter) throw fail('This project is deleted. Restore it first.', 409);
 
   if (has('name')) { const name = cleanName(input.name); if (name !== p.name) set.name = name; }
@@ -344,6 +412,16 @@ export async function updateProject(actor, id, input = {}, req) {
     const s = cleanStatusOverride(input.statusOverride);
     if (s !== (p.statusOverride || null)) set.statusOverride = s;
   }
+  if (has('lists')) {
+    const lists = cleanLists(input.lists, p.lists || []);
+    const was = (p.lists || []).map((l) => `${idOf(l._id)}:${l.name}`).join('|');
+    if (lists.map((l) => `${idOf(l._id)}:${l.name}`).join('|') !== was) set.lists = lists;
+  }
+  if (has('statuses')) {
+    const statuses = cleanStatuses(input.statuses, p.statuses || []);
+    const was = (p.statuses || []).map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|');
+    if (statuses.map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|') !== was) set.statuses = statuses;
+  }
   if (has('ownerId') || has('memberIds')) {
     const ownerId = has('ownerId') ? input.ownerId : idOf(p.owner.user);
     const memberIds = has('memberIds') ? input.memberIds : (p.people || []).map((x) => idOf(x.user));
@@ -359,8 +437,45 @@ export async function updateProject(actor, id, input = {}, req) {
   if (!Object.keys(set).length) return getProject(actor, p._id);
   const next = await staffProjectRepository.updateIfRev(p._id, rev, set);
   if (!next) throw fail('Someone changed this project just now. It has been reloaded — try again.', 409);
+  // After the project landed: move its tasks onto lists and statuses it still has.
+  if (set.lists || set.statuses) await reconcileProjectTasks(next);
   auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffProject', p._id, { changes: Object.keys(set) });
   return getProject(actor, next._id);
+}
+
+/**
+ * Bring a project's tasks in line with its lists and statuses, after either
+ * changed: a task in a deleted list goes to "no list"; a task whose status
+ * was deleted (or that has none yet) goes to the first status of its kind;
+ * a renamed status's tasks show the new name; turning the project's own
+ * statuses off leaves every task on To do / In progress / Done.
+ *
+ * Every step is a filter on what is still wrong, so running it again — after
+ * a crash half-way, or from the importer — changes only what is left. Until it
+ * has run, a task's stale list or status reads as none (never as an error).
+ */
+export async function reconcileProjectTasks(p) {
+  const project = p._id;
+  const listIds = (p.lists || []).map((l) => l._id);
+  await staffProjectRepository.updateTasks({ project, projectList: { $exists: true, $nin: listIds } }, { $unset: { projectList: 1 } });
+  const stages = p.statuses || [];
+  if (!stages.length) {
+    await staffProjectRepository.updateTasks({ project, stage: { $exists: true } }, { $unset: { stage: 1, stageName: 1 } });
+    return;
+  }
+  for (const kind of PROJECT_STAGE_TYPES) {
+    const target = stageFor(stages, kind);
+    const fits = stages.filter((x) => x.type === kind).map((x) => x._id);
+    const kinds = kind === 'in_progress' ? ['in_progress', 'waiting'] : [kind];
+    // Only an active task can land on a status of another kind (not started), and both are open: no bucket moves.
+    await staffProjectRepository.updateTasks(
+      { project, status: { $in: kinds }, $or: [{ stage: { $exists: false } }, { stage: { $nin: fits } }] },
+      { $set: { stage: target._id, stageName: target.name, status: target.type } },
+    );
+  }
+  for (const x of stages) {
+    await staffProjectRepository.updateTasks({ project, stage: x._id, stageName: { $ne: x.name } }, { $set: { stageName: x.name } });
+  }
 }
 
 /**
@@ -375,10 +490,13 @@ export async function projectForTask(actor, raw) {
   return p;
 }
 
+/** A project as stored (archived or not), for its lists and statuses; null if gone. */
+export const projectById = (id) => (id ? staffProjectRepository.findById(id) : Promise.resolve(null));
+
 /** A live project's name, for a task's history (null if gone). */
 export async function projectName(id) {
   if (!id) return null;
   return (await staffProjectRepository.findById(id))?.name ?? null;
 }
 
-export { PROJECT_STATUSES, PROJECT_COLOURS };
+export { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES };

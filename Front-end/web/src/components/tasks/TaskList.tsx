@@ -12,8 +12,8 @@ import BulkBar from './BulkBar';
 import TaskMenu from './TaskMenu';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
-  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, listOf, newClientId, peopleOf, projectOf,
-  type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
+  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, listOf, newClientId, peopleOf, projectListOf, projectOf,
+  type ProjectStage, type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
 } from './types';
 
 /** The round tick at the start of a row: one click marks the task done (or opens it again). */
@@ -286,11 +286,14 @@ function QuickChips({ extras, ids, onChange, noPeople = false }: { extras: Quick
  * date, the priority and tags before it is saved. One id per draft: a double
  * Enter or a retried request makes one task.
  */
-export function QuickAdd({ status, assigneeId, listId, projectId, personal = false, label = 'Add task', variant = 'list' }: {
+export function QuickAdd({ status, assigneeId, listId, projectId, projectListId, stageId, personal = false, label = 'Add task', variant = 'list' }: {
   status: TaskStatus; assigneeId?: string; label?: string; variant?: 'list' | 'board';
   /** Inside one list of a space: the new task goes in it. */
   listId?: string;
   projectId?: string;
+  /** Inside a project: the list shown, and the project status of the column or group. */
+  projectListId?: string;
+  stageId?: string;
   /** In the Personal list: private, so nobody to give it to. */
   personal?: boolean;
 }) {
@@ -327,7 +330,7 @@ export function QuickAdd({ status, assigneeId, listId, projectId, personal = fal
         e.preventDefault();
         const text = title.trim();
         if (!text || nobody) return;
-        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(board && !personal && chosen.length ? { assigneeIds: chosen } : {}), ...(listId ? { listId } : {}), ...(projectId ? { projectId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
+        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(board && !personal && chosen.length ? { assigneeIds: chosen } : {}), ...(listId ? { listId } : {}), ...(projectId ? { projectId } : {}), ...(projectId && projectListId ? { projectListId } : {}), ...(projectId && stageId ? { stageId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
           // Ready for the next one; the people and the chips stay, the name clears.
           onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
         });
@@ -370,7 +373,7 @@ export function QuickAdd({ status, assigneeId, listId, projectId, personal = fal
 }
 
 function GroupHeading({ g }: { g: TaskGroup }) {
-  if (g.kind === 'status') return <GroupPill status={g.value as TaskStatus}>{g.label}</GroupPill>;
+  if (g.kind === 'status') return <GroupPill status={g.value as TaskStatus} colour={g.colour}>{g.label}</GroupPill>;
   if (g.kind === 'person') return <span className="flex items-center gap-2 text-sm font-semibold text-gray-900"><Avatar name={g.label} id={g.value} />{g.label}</span>;
   if (g.kind === 'priority') {
     return <GroupPill><PriorityFlagIcon priority={g.value as keyof typeof PRIORITY_STYLE} />{g.label}</GroupPill>;
@@ -380,9 +383,9 @@ function GroupHeading({ g }: { g: TaskGroup }) {
 }
 const PriorityFlagIcon = ({ priority }: { priority: keyof typeof PRIORITY_STYLE }) => <PriorityFlag priority={priority} />;
 
-function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, projectId, personal, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
+function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, projectId, projectListId, personal, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
   g: TaskGroup; onOpen: (id: string) => void; collapsed: boolean; onToggle: () => void; base?: string;
-  quickAddFor?: string | null; listId?: string; projectId?: string; personal?: boolean; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
+  quickAddFor?: string | null; listId?: string; projectId?: string; projectListId?: string; personal?: boolean; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
   onTag?: (tag: string) => void; activeTag?: string; countLabel?: string;
 }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown;
@@ -421,7 +424,7 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, projectId,
             ))}
           </ul>
           {footer}
-          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} assigneeId={quickAddFor} listId={listId} projectId={projectId} personal={personal} />}
+          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} stageId={g.addStage} assigneeId={quickAddFor} listId={listId} projectId={projectId} projectListId={projectListId} personal={personal} />}
         </div>
       )}
     </section>
@@ -434,9 +437,11 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, projectId,
  * at the bottom, and a bar for changing every ticked task at once.
  * `quickAddFor`: who a quick-added task goes to (undefined = me; null = no quick add).
  */
-export default function TaskListView({ filters, onOpen, quickAddFor, empty, groupBy = 'status', onTag, canChangeAssignee = true, base }: {
+export default function TaskListView({ filters, onOpen, quickAddFor, empty, groupBy = 'status', onTag, canChangeAssignee = true, base, stages = [] }: {
   filters: TaskFilters; onOpen: (id: string) => void; quickAddFor?: string | null; empty: ReactNode;
   groupBy?: TaskGroupBy; onTag?: (tag: string) => void; canChangeAssignee?: boolean; base?: string;
+  /** A project's own statuses: the status groups are these. */
+  stages?: ProjectStage[];
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ done: true });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -453,7 +458,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
   const toggle = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
   const narrowed = !!(filters.q || filters.due || filters.priority || filters.tag);
   // An empty status group is shown (for its "+ Add task") only while the list has rows and is not narrowed.
-  const groups = groupTasks(rows, groupBy, { hideEmpty: rows.length === 0 || narrowed });
+  const groups = groupTasks(rows, groupBy, { hideEmpty: rows.length === 0 || narrowed, stages });
   const onSelect = (ts: Task[], on: boolean) => setSelected((cur) => {
     const next = new Set(cur);
     for (const t of ts) { if (on) next.add(t.id); else next.delete(t.id); }
@@ -477,6 +482,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
           quickAddFor={quickAddFor}
           listId={listOf(filters)}
           projectId={projectOf(filters)}
+          projectListId={projectListOf(filters)}
           personal={filters.view === 'personal'}
           selected={selected}
           onSelect={onSelect}

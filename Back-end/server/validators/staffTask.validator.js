@@ -29,6 +29,10 @@ export const validateTaskList = [
   query('team').optional().isIn([...STAFF_TEAM_VALUES, 'admin']).withMessage('Invalid team'),
   query('tag').optional().isString().isLength({ max: 60 }).withMessage('Invalid tag'),
   query('list').optional().custom((v) => v === 'none' || isObjectId(v)).withMessage('Invalid list'),
+  query('projectList').optional().custom((v) => v === 'none' || isObjectId(v)).withMessage('Invalid list'),
+  // The calendar's days, 'YYYY-MM-DD' (the service checks the span).
+  query('dueFrom').optional().matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Invalid day'),
+  query('dueTo').optional().matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Invalid day'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
   // due (default) | newest | oldest | updated; anything else reads as due, so an old link still opens.
   query('sort').optional().isString().isLength({ max: 20 }).withMessage('Invalid sort'),
@@ -55,6 +59,8 @@ export const validateTaskCreate = [
   optionalId('orderId'),
   optionalId('listId'),
   optionalId('projectId'),
+  optionalId('projectListId'),
+  optionalId('stageId'),
   optionalId('parentId'),
   body('clientId').optional().isString().isLength({ max: 64 }),
 ];
@@ -79,6 +85,8 @@ export const validateTaskUpdate = [
   optionalId('orderId'),
   optionalId('listId'),
   optionalId('projectId'),
+  optionalId('projectListId'),
+  optionalId('stageId'),
 ];
 
 export const validateTaskFollowers = [
@@ -251,6 +259,15 @@ const projectFields = [
   optionalId('ownerId'),
   body('memberIds').optional().isArray({ max: 60 }).withMessage('Members must be a list'),
   body('memberIds.*').optional().custom(isObjectId).withMessage('Invalid member'),
+  // Lists and statuses inside the project; names, kinds and limits are checked by the service.
+  body('lists').optional().isArray({ max: 40 }).withMessage('Lists must be a list'),
+  body('lists.*.id').optional({ values: 'null' }).custom(isObjectId).withMessage('Invalid list'),
+  body('lists.*.name').optional().isString().isLength({ max: 200 }),
+  body('statuses').optional().isArray({ max: 40 }).withMessage('Statuses must be a list'),
+  body('statuses.*.id').optional({ values: 'null' }).custom(isObjectId).withMessage('Invalid status'),
+  body('statuses.*.name').optional().isString().isLength({ max: 200 }),
+  body('statuses.*.colour').optional().isString().isLength({ max: 20 }),
+  body('statuses.*.type').optional().isIn(['todo', 'in_progress', 'done']).withMessage('Invalid status kind'),
 ];
 export const validateProjectCreate = [
   body('name').isString().withMessage('Give the project a name'),

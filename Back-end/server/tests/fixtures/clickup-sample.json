@@ -1,0 +1,271 @@
+{
+ "source": "clickup-api-v2",
+ "fetchedAt": "2026-11-16T05:00:00.000Z",
+ "workspace": {
+  "id": "9001",
+  "name": "Sample workspace"
+ },
+ "members": [
+  {
+   "id": "101",
+   "username": "Jenna",
+   "email": "jenna@clickup.test"
+  }
+ ],
+ "spaces": [
+  {
+   "id": "s1",
+   "name": "Marketing",
+   "statuses": [
+    {
+     "status": "backlog",
+     "type": "open",
+     "color": "#87909e",
+     "orderindex": 0
+    },
+    {
+     "status": "doing",
+     "type": "custom",
+     "color": "#4194f6",
+     "orderindex": 1
+    },
+    {
+     "status": "shipped",
+     "type": "done",
+     "color": "#2ecd6f",
+     "orderindex": 2
+    }
+   ],
+   "folders": [
+    {
+     "id": "f1",
+     "name": "Black Friday 2026",
+     "lists": [
+      {
+       "id": "l1",
+       "name": "Ads",
+       "statuses": [
+        {
+         "status": "to do",
+         "type": "open",
+         "color": "#d3d3d3",
+         "orderindex": 0
+        },
+        {
+         "status": "in review",
+         "type": "custom",
+         "color": "#f9d900",
+         "orderindex": 1
+        },
+        {
+         "status": "complete",
+         "type": "closed",
+         "color": "#6bc950",
+         "orderindex": 2
+        }
+       ],
+       "tasks": [
+        {
+         "id": "cu1",
+         "name": "Design the Black Friday banners",
+         "text_content": "Three sizes: 1080x1080, 1200x628, 1080x1920.",
+         "status": {
+          "status": "in review",
+          "type": "custom",
+          "color": "#f9d900",
+          "orderindex": 1
+         },
+         "priority": {
+          "id": "2",
+          "priority": "high"
+         },
+         "assignees": [
+          {
+           "id": 101,
+           "username": "Jenna",
+           "email": "jenna@clickup.test"
+          },
+          {
+           "id": 103,
+           "username": "Old Freelancer",
+           "email": "freelancer@gone.test"
+          }
+         ],
+         "creator": {
+          "id": 102,
+          "username": "Amarnath",
+          "email": "AMAR@clickup.test"
+         },
+         "tags": [
+          {
+           "name": "Design"
+          },
+          {
+           "name": "#BF2026"
+          }
+         ],
+         "due_date": "1795150800000",
+         "due_date_time": true,
+         "start_date": "1794767400000",
+         "time_estimate": "5400000",
+         "date_created": "1793503800000",
+         "date_updated": "1794281400000",
+         "checklists": [
+          {
+           "name": "Sizes",
+           "items": [
+            {
+             "name": "Square",
+             "resolved": true
+            },
+            {
+             "name": "Wide",
+             "resolved": false
+            }
+           ]
+          }
+         ],
+         "attachments": [
+          {
+           "title": "brief.pdf",
+           "url": "https://example.test/brief.pdf"
+          }
+         ],
+         "url": "https://app.clickup.com/t/cu1",
+         "comments": [
+          {
+           "id": "c1",
+           "comment_text": "First draft is up.",
+           "user": {
+            "id": 101,
+            "username": "Jenna",
+            "email": "jenna@clickup.test"
+           },
+           "date": "1793856600000"
+          },
+          {
+           "id": "c2",
+           "comment_text": "Use the red logo.",
+           "user": {
+            "id": 103,
+            "username": "Old Freelancer",
+            "email": "freelancer@gone.test"
+           },
+           "date": "1793946600000"
+          }
+         ]
+        },
+        {
+         "id": "cu2",
+         "name": "Square size",
+         "parent": "cu1",
+         "status": {
+          "status": "complete",
+          "type": "closed",
+          "color": "#6bc950",
+          "orderindex": 2
+         },
+         "assignees": [
+          {
+           "id": 101,
+           "username": "Jenna",
+           "email": "jenna@clickup.test"
+          }
+         ],
+         "creator": {
+          "id": 101,
+          "username": "Jenna",
+          "email": "jenna@clickup.test"
+         },
+         "date_created": "1793590200000",
+         "date_done": "1794137400000",
+         "comments": []
+        },
+        {
+         "id": "cu3",
+         "name": "Book Meta ads",
+         "status": {
+          "status": "to do",
+          "type": "open",
+          "color": "#d3d3d3",
+          "orderindex": 0
+         },
+         "assignees": [],
+         "priority": null,
+         "due_date": "1795559400000",
+         "start_date": "1795717800000",
+         "date_created": "1793676600000",
+         "comments": []
+        }
+       ]
+      },
+      {
+       "id": "l2",
+       "name": "Website",
+       "statuses": [],
+       "tasks": [
+        {
+         "id": "cu4",
+         "name": "Sale landing page",
+         "status": {
+          "status": "doing",
+          "type": "custom"
+         },
+         "assignees": [
+          {
+           "id": 102,
+           "username": "Amarnath",
+           "email": "AMAR@clickup.test"
+          }
+         ],
+         "creator": {
+          "id": 102,
+          "username": "Amarnath",
+          "email": "AMAR@clickup.test"
+         },
+         "priority": {
+          "id": "1"
+         },
+         "date_created": "1793763000000",
+         "comments": []
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "lists": [
+    {
+     "id": "l3",
+     "name": "Office admin",
+     "statuses": [],
+     "tasks": [
+      {
+       "id": "cu5",
+       "name": "Renew domain",
+       "status": {
+        "status": "shipped",
+        "type": "done"
+       },
+       "assignees": [
+        {
+         "id": 103,
+         "username": "Old Freelancer",
+         "email": "freelancer@gone.test"
+        }
+       ],
+       "creator": {
+        "id": 103,
+        "username": "Old Freelancer",
+        "email": "freelancer@gone.test"
+       },
+       "date_created": "1790825400000",
+       "date_closed": "1790911800000",
+       "comments": []
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

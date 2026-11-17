@@ -110,3 +110,39 @@ describe('projects', () => {
     expect(scans(head)).toBe(false);
   });
 });
+
+/*
+  Measured 2026-11-16 (20k tasks, one 2k-task project split over 4 lists): one
+  list's page read 119 keys for 51 rows on staff_task_project, ~1 ms — the
+  list is filtered inside the project's range, which is bounded by the project.
+  Not worth a fifth project index (a write cost on every task) until a project
+  is far bigger. The calendar's day range read exactly the rows it returned.
+*/
+describe('lists inside a project, and the calendar', () => {
+  const listIds = [0, 1, 2, 3].map(() => new mongoose.Types.ObjectId());
+  beforeEach(async () => {
+    await StaffTask.collection.updateMany({ project: projectIds[0] }, [{ $set: { projectList: { $arrayElemAt: [listIds, { $mod: ['$number', 4] }] } } }]);
+  });
+
+  it('one list of a project stays inside the project\'s range, never a scan', async () => {
+    const explain = await StaffTask.find({ bucket: 'open', project: projectIds[0], projectList: listIds[1], personal: { $ne: true } })
+      .sort({ rank: 1, _id: 1 }).limit(51).explain('executionStats');
+    expect(scans(explain)).toBe(false);
+    expect(indexesIn(explain)).toEqual(['staff_task_project']);
+    // At most the project's open tasks (~133 of its 200), never the 6000 in the collection.
+    expect(exec(explain).totalKeysExamined).toBeLessThanOrEqual(PER_PROJECT);
+    expect(planOf(explain)).not.toContain('"stage":"SORT"');
+  });
+
+  it('the calendar\'s days are one range of the list\'s own index', async () => {
+    const mine = await StaffTask.find({ bucket: 'open', 'assignees.user': people[3], rank: { $gte: ymd(-5), $lt: ymd(37) } })
+      .sort({ rank: 1, _id: 1 }).limit(51).explain('executionStats');
+    expect(scans(mine)).toBe(false);
+    expect(indexesIn(mine)).toEqual(['staff_task_assignees']);
+    expect(exec(mine).totalKeysExamined).toBeLessThanOrEqual(exec(mine).nReturned + 1);
+    const project = await StaffTask.find({ bucket: 'open', project: projectIds[0], rank: { $gte: ymd(-5), $lt: ymd(37) }, personal: { $ne: true } })
+      .sort({ rank: 1, _id: 1 }).limit(51).explain('executionStats');
+    expect(indexesIn(project)).toEqual(['staff_task_project']);
+    expect(exec(project).totalKeysExamined).toBeLessThanOrEqual(exec(project).nReturned + 1);
+  });
+});

@@ -26,14 +26,15 @@ import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
+import { useProject } from './Projects';
 import {
-  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
+  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, stageOf, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
 type Patch = Partial<{
   title: string; description: string; priority: TaskPriority; dueOn: string | null; dueTime: string | null; startOn: string | null; tags: string[];
-  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null; projectId: string | null; estimateMinutes: number | null;
+  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null; projectId: string | null; projectListId: string | null; stageId: string; estimateMinutes: number | null;
 }>;
 
 const LINK_WORDS: Record<string, string> = { waiting_on: 'waiting on', blocking: 'blocking', related: 'related to' };
@@ -59,6 +60,7 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   order: (h) => `changed the order from ${h.from} to ${h.to}`,
   project: (h) => (h.from && h.to ? `moved it from the project ${h.from} to ${h.to}` : h.to ? `put it in the project ${h.to}` : `took it out of the project ${h.from || ''}`.trim()),
   list: (h) => (h.from && h.to ? `moved it from the list ${h.from} to ${h.to}` : h.to ? `put it in the list ${h.to}` : `took it out of the list ${h.from}`),
+  project_list: (h) => (h.from && h.to ? `moved it from the project list ${h.from} to ${h.to}` : h.to ? `put it in the project list ${h.to}` : `took it out of the project list${h.from ? ` ${h.from}` : ''}`),
   edited: (h) => `edited the ${h.from}`,
   check_added: (h) => `added the step "${h.to}"`,
   check_renamed: (h) => `renamed a step to "${h.to}"`,
@@ -532,6 +534,10 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
   });
   const task = q.data?.task;
   const people = useAssignees();
+  // Its project's own lists and statuses (none if it has none, or this person can't open the project).
+  const taskProject = useProject(task?.project && !task.personal ? task.project : null);
+  const stages = taskProject.data?.statuses ?? [];
+  const projectLists = taskProject.data?.lists ?? [];
 
   const save = useMutation({
     mutationFn: (patch: Patch) => apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(id)}`, { rev: task!.rev, ...patch }),
@@ -602,6 +608,12 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
     if (status === 'done' && !confirmComplete(task)) return;
     save.mutate({ status });
   };
+  const shownStage = stageOf(stages, task);
+  const setStage = (id: string) => {
+    const to = stages.find((x) => x.id === id);
+    if (!to || (to.type === 'done' && task.status !== 'done' && !confirmComplete(task))) return;
+    save.mutate({ stageId: id });
+  };
   // The parent, as a way back up: in the window it switches to it; on a page it is a link.
   const parentLink = task.parent && (onOpen
     ? <button type="button" onClick={() => onOpen(task.parent!.id)} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></button>
@@ -647,7 +659,17 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       <div className="@container">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-0.5 border-y border-gray-100 py-3 @xl:grid-cols-2">
           <Field label="Status" icon={CircleDot}>
-            {task.can.status ? (
+            {task.can.status && stages.length ? (
+              <select
+                value={shownStage?.id ?? ''}
+                onChange={(e) => setStage(e.target.value)}
+                disabled={save.isPending}
+                aria-label="Status"
+                className={statusSelectClass(task.status)}
+              >
+                {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            ) : task.can.status ? (
               <select
                 value={task.status}
                 onChange={(e) => setStatus(e.target.value as TaskStatus)}
@@ -657,7 +679,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
               >
                 {TASK_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
-            ) : <StatusPill status={task.status} />}
+            ) : stages.length ? <StatusPill status={task.status}>{task.statusLabel}</StatusPill> : <StatusPill status={task.status} />}
           </Field>
           <Field label="Timer" icon={TimerIcon}>
             <TimerButton task={task} />
@@ -742,6 +764,20 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
                 disabled={!task.can.edit || save.isPending}
                 onChange={(projectId) => save.mutate({ projectId })}
               />
+            </Field>
+          )}
+          {task.project && projectLists.length > 0 && (
+            <Field label="Project list" icon={ListTree}>
+              <select
+                value={projectLists.some((l) => l.id === task.projectList) ? task.projectList ?? '' : ''}
+                onChange={(e) => save.mutate({ projectListId: e.target.value || null })}
+                disabled={!task.can.edit || save.isPending}
+                aria-label="Project list"
+                className={`${quietControl} w-full`}
+              >
+                <option value="">No list</option>
+                {projectLists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
             </Field>
           )}
           <Field label="Given by" icon={UserPlus}>
