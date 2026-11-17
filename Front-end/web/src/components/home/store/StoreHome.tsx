@@ -115,40 +115,46 @@ export function buildSlides(data: StoreHomeData): BannerSlide[] {
 const HERO_SHOWCASE = 3;
 
 /**
- * The three products the festive hero shows — the first thing a visitor sees,
- * so the best AND varied: the most valuable deals that are in stock, on sale
- * and have a photo, at most one per brand and one per category. Without the
- * spread the hero showed three near-identical suspension kits of one maker.
- * Fewer than three such products → the caller falls back to the banner photos.
+ * The three products the festive hero shows — the first thing a visitor sees.
+ *
+ * 1. The admin's choice first: products ticked "Featured" on the product form
+ *    (in stock, with a photo). The owner knows which products sell and
+ *    photograph well; a rule cannot judge a photo.
+ * 2. Topped up automatically when fewer than three are ticked: the most
+ *    valuable deals that are in stock, on sale and have a photo.
+ *
+ * Either way at most one per brand and one per category, so the hero never
+ * shows three near-identical suspension kits of one maker. Fewer than three in
+ * total → the caller falls back to the banner photos.
  */
-export function pickHeroShowcase(deals: StoreProduct[]): StoreProduct[] {
+export function pickHeroShowcase(deals: StoreProduct[], featured: StoreProduct[] = []): StoreProduct[] {
   const brands = new Set<string>();
   const categories = new Set<string>();
   const picked: StoreProduct[] = [];
-  const candidates = deals
-    .filter((p) => p.image && p.stock === 'in' && discountPct(p) > 0)
-    .sort((a, b) => b.price - a.price);
-  for (const p of candidates) {
-    if (picked.length >= HERO_SHOWCASE) break;
+  const take = (p: StoreProduct) => {
+    if (picked.length >= HERO_SHOWCASE || picked.some((q) => q.id === p.id)) return;
     const brand = p.brand.trim().toLowerCase();
-    if (brand && brands.has(brand)) continue;
-    if (p.category && categories.has(p.category)) continue;
+    if (brand && brands.has(brand)) return;
+    if (p.category && categories.has(p.category)) return;
     picked.push(p);
     if (brand) brands.add(brand);
     if (p.category) categories.add(p.category);
-  }
+  };
+  const byPrice = (a: StoreProduct, b: StoreProduct) => b.price - a.price;
+  featured.filter((p) => p.image && (p.stock === 'in' || p.stock === 'low')).sort(byPrice).forEach(take);
+  deals.filter((p) => p.image && p.stock === 'in' && discountPct(p) > 0).sort(byPrice).forEach(take);
   return picked;
 }
 
 /**
- * Inputs for the festive hero, from the same live data. Photos are the varied
- * best deals (pickHeroShowcase), each tagged with its own real discount; with
- * too few such deals they fall back to the deals banner's (or first banner's)
- * photos.
+ * Inputs for the festive hero, from the same live data. Photos are the
+ * admin's featured picks topped up with the best deals (pickHeroShowcase), each
+ * tagged with its own real discount (0 = no tag); with too few they fall back to
+ * the deals banner's (or first banner's) photos.
  */
 export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
   const offByHref = new Map(data.deals.map((p) => [p.href, discountPct(p)]));
-  const showcase = pickHeroShowcase(data.deals);
+  const showcase = pickHeroShowcase(data.deals, data.featured);
   const source = slides.find((s) => s.id === 'deals') ?? slides[0];
   const photos: FestiveHeroPhoto[] = showcase.length >= HERO_SHOWCASE
     ? showcase.map((p) => ({ src: p.image, href: p.href, name: p.name, off: discountPct(p) }))
@@ -176,7 +182,9 @@ export function buildShelves(data: StoreHomeData, festive = false, heroHrefs: st
   for (const list of [data.deals, data.featured, data.bestSellers, data.newArrivals, data.dearest]) {
     for (const p of list) if (hero.has(p.href)) seen.add(p.id);
   }
-  if (data.deals.length >= TOP_DEAL_TILES) for (const p of data.deals.slice(0, TOP_DEAL_TILES)) seen.add(p.id);
+  // The "Top deals for you" box skips the hero's products too (topDeals below).
+  const topDeals = data.deals.filter((p) => !hero.has(p.href));
+  if (topDeals.length >= TOP_DEAL_TILES) for (const p of topDeals.slice(0, TOP_DEAL_TILES)) seen.add(p.id);
 
   const [deals] = claimShelves([{ products: data.deals, min: MIN_ROW, whenShort: 'repeat' }], seen);
   // Premium Picks is rebuilt from what is still unseen (featured first, then the
@@ -202,7 +210,7 @@ export function buildShelves(data: StoreHomeData, festive = false, heroHrefs: st
     if (products.length) categoryRows.push({ category: row.category, products });
   }
   const [newArrivals] = claimShelves([{ products: data.newArrivals, min: MIN_ROW, whenShort: 'repeat' }], seen);
-  return { deals, premiumPicks, giftTiers, bestSellers, categoryRows, newArrivals };
+  return { topDeals, deals, premiumPicks, giftTiers, bestSellers, categoryRows, newArrivals };
 }
 
 /**
@@ -242,7 +250,7 @@ export default function StoreHome({
           normal={<HeroBanners slides={slides} />}
         />
         <div className="sh-content">
-          <CategoryCards categories={data.categories} deals={data.deals} />
+          <CategoryCards categories={data.categories} deals={shelves.topDeals} />
           <FestiveOffers maxOff={festiveHero.maxOff} dealsTotal={festiveHero.dealsTotal} freeDelivery={freeDelivery} />
           <DealsShelf products={shelves.deals} />
           <ProductRow

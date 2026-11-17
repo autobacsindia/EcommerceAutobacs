@@ -127,6 +127,7 @@ export default function BlackFridayHero({
                     <Img src={p.src} alt={p.name} className="bfh-card-img" sizes="(max-width: 768px) 30vw, 200px" priority={k === 0} />
                   </span>
                   {p.off > 0 && <span className="bfh-card-tag">-{p.off}%</span>}
+                  <span className="bfh-card-name">{p.name}</span>
                 </Link>
               ))}
             </div>

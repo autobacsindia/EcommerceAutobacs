@@ -69,6 +69,12 @@ describe('buildShelves (the home page)', () => {
     ...s.categoryRows.flatMap((r) => r.products), ...s.newArrivals,
   ];
 
+  it('the "Top deals for you" box skips the hero\'s products, and the deals shelf skips the box', () => {
+    const s = buildShelves(data, true, ['/products/d0', '/products/d2']);
+    expect(ids(s.topDeals).slice(0, 4)).toEqual(['d1', 'd3', 'd4', 'd5']);
+    expect(ids(s.deals)).toEqual(['d6', 'd7', 'd8', 'd9']);
+  });
+
   it('no product appears on two shelves, and nothing from the hero or the top deals box', () => {
     const s = buildShelves(data, true, ['/products/f0']);
     const shown = ids(all(s));
@@ -132,8 +138,19 @@ describe('pickHeroShowcase (the three hero photos)', () => {
     const { buildFestiveHero, buildSlides } = await import('./StoreHome');
     const data = { categories: [], deals, dealsTotal: 9, productTotal: 9, bestSellers: [], newArrivals: [], featured: [deals[1]], premiumPicks: [], dearest: [], categoryRows: [], brands: [], reviews: [] } as StoreHomeData;
     const hero = buildFestiveHero(data, buildSlides(data));
-    expect(hero.photos.map((p) => p.href)).toEqual(['/products/maybach', '/products/thunder', '/products/raptor']);
+    // `storm` is ticked Featured, so it leads; Profender is then taken, so no `thunder`.
+    expect(hero.photos.map((p) => p.href)).toEqual(['/products/storm', '/products/maybach', '/products/raptor']);
     expect(hero.photos.every((p) => p.off === 17)).toBe(true);
+  });
+
+  it('the admin\'s Featured products come first (in stock, with a photo, still one per brand), topped up by deals', () => {
+    const featured = [
+      deal('f-kit', 120000, 'Profender', 'suspension'),
+      deal('f-kit2', 110000, 'Profender', 'coil'), // same maker → skipped
+      deal('f-back', 300000, '', 'audio', { stock: 'backorder' }), // not buyable now → skipped
+      deal('f-plain', 40000, '', 'lighting', { originalPrice: undefined }), // not on sale is fine for a pick
+    ];
+    expect(ids(pickHeroShowcase(deals, featured))).toEqual(['f-kit', 'f-plain', 'maybach']);
   });
 
   it('fewer than three varied deals: a short pick, so the hero keeps the banner photos', () => {
