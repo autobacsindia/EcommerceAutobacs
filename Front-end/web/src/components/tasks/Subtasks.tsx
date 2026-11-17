@@ -12,6 +12,7 @@ import AssigneePicker from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { CompleteButton } from './TaskList';
 import { AvatarStack, DuePill, StatusPill } from './ui';
+import { DueRuleHint } from './dueRules';
 import {
   MAX_ASSIGNEES, SUBTASKS_MAX, isConflict, newClientId, peopleOf,
   type Subtask, type SubtaskList, type Task, type TaskStatus,
@@ -63,7 +64,8 @@ function QuickSubtask({ parent, onAdded }: { parent: Task; onAdded: () => void }
   const people = useAssignees().data?.people ?? [];
   const [title, setTitle] = useState('');
   const [who, setWho] = useState<string[]>([]);
-  const [dueOn, setDueOn] = useState('');
+  // Every task needs a due date: a sub-task starts with its parent's (moved if wanted).
+  const [dueOn, setDueOn] = useState(parent.dueOn ?? '');
   const [dating, setDating] = useState(false);
   const [error, setError] = useState('');
   const clientId = useRef(newClientId());
@@ -74,7 +76,7 @@ function QuickSubtask({ parent, onAdded }: { parent: Task; onAdded: () => void }
       clientId: clientId.current,
       shared: true,
       ...(who.length ? { assigneeIds: who } : {}),
-      ...(dueOn ? { dueOn } : {}),
+      dueOn,
     }),
     onSuccess: () => {
       setError('');
@@ -89,7 +91,7 @@ function QuickSubtask({ parent, onAdded }: { parent: Task; onAdded: () => void }
   const chip = 'inline-flex h-7 items-center gap-1 rounded-md border border-gray-200 px-2 text-xs text-gray-600 hover:bg-gray-50';
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); if (title.trim() && !add.isPending) add.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); if (title.trim() && dueOn && !add.isPending) add.mutate(); }}
       className="flex flex-wrap items-center gap-2 border-t border-gray-100 px-2.5 py-2"
     >
       <input
@@ -125,9 +127,11 @@ function QuickSubtask({ parent, onAdded }: { parent: Task; onAdded: () => void }
       ) : (
         <button type="button" onClick={() => setDating(true)} className={chip}><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date</button>
       )}
-      <button type="submit" disabled={!title.trim() || add.isPending} className="h-7 rounded-md bg-gray-900 px-3 text-xs font-semibold text-white disabled:opacity-40">
+      <button type="submit" disabled={!title.trim() || !dueOn || add.isPending} className="h-7 rounded-md bg-gray-900 px-3 text-xs font-semibold text-white disabled:opacity-40">
         {add.isPending ? 'Adding…' : 'Add'}
       </button>
+      {title.trim() && !dueOn && <p className="w-full text-xs text-gray-500">Pick a due date — every task needs one.</p>}
+      <div className="w-full empty:hidden"><DueRuleHint dueOn={dueOn} priority="normal" personal={!!parent.personal} /></div>
       {error && <p role="alert" className="w-full text-sm text-red-600">{error}</p>}
     </form>
   );

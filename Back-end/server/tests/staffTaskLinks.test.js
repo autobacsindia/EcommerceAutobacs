@@ -26,6 +26,8 @@ const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskLink } = await import('../models/StaffTaskLink.js');
 const tasks = await import('../services/staffTaskService.js');
 const links = await import('../services/staffTaskLinkService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 let n = 0;
@@ -47,7 +49,7 @@ beforeEach(async () => {
   mate = await person('staff', { team: 'procurement' }, 'Bala');
   outsider = await person('staff', { team: 'sales' }, 'Sam');
 });
-const make = async (title, by = head, who = doer) => (await tasks.createTask(by, { title, assigneeIds: [String(who._id)] }, req)).task;
+const make = async (title, by = head, who = doer) => (await tasks.createTask(by, { dueOn: DUE, title, assigneeIds: [String(who._id)] }, req)).task;
 const codes = (list) => list.map((x) => x.task.code);
 
 describe('adding links', () => {
@@ -175,7 +177,7 @@ describe('who may do what', () => {
 });
 
 describe('personal tasks', () => {
-  const personal = async (who, title) => (await tasks.createTask(who, { title, personal: true }, req)).task;
+  const personal = async (who, title) => (await tasks.createTask(who, { dueOn: DUE, title, personal: true }, req)).task;
 
   it('link only with your other personal tasks', async () => {
     const p1 = await personal(doer, 'Private one');

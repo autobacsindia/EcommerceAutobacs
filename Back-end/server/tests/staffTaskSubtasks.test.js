@@ -41,6 +41,8 @@ const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: staffTaskRepository } = await import('../repositories/staffTaskRepository.js');
 const tasks = await import('../services/staffTaskService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 const settle = () => new Promise((r) => setTimeout(r, 40));
@@ -70,9 +72,9 @@ beforeEach(async () => {
 });
 
 /** Priya's "Diwali stock check" for herself, and sub-tasks under it. */
-const parentTask = async (extra = {}) => (await tasks.createTask(priya, { title: 'Diwali stock check', ...extra }, req)).task;
+const parentTask = async (extra = {}) => (await tasks.createTask(priya, { dueOn: DUE, title: 'Diwali stock check', ...extra }, req)).task;
 const sub = async (parent, title, who = arun, extra = {}, actor = priya) => (await tasks.createTask(actor, {
-  title, parentId: parent.id, assigneeIds: [String(who._id)], shared: true, ...extra,
+  dueOn: DUE, title, parentId: parent.id, assigneeIds: [String(who._id)], shared: true, ...extra,
 }, req)).task;
 const patch = async (actor, id, input) => tasks.updateTask(actor, id, { rev: (await raw(id)).rev, ...input }, req);
 
@@ -94,7 +96,7 @@ describe('making a sub-task', () => {
 
   it('a double-click or retry makes one; a retry still succeeds when the parent is full', async () => {
     const p = await parentTask();
-    const input = { title: 'Count wipers', parentId: p.id, clientId: 'sub-retry-01' };
+    const input = { dueOn: DUE, title: 'Count wipers', parentId: p.id, clientId: 'sub-retry-01' };
     const [a, b] = await Promise.all([tasks.createTask(priya, input, req), tasks.createTask(priya, input, req)]);
     expect(a.task.id).toBe(b.task.id);
     expect(await StaffTask.countDocuments({ 'parent.task': p.id })).toBe(1);
@@ -135,7 +137,7 @@ describe('making a sub-task', () => {
   it('"own copy each" makes one sub-task per person, all counted', async () => {
     const p = await parentTask();
     const { tasks: made } = await tasks.createTask(priya, {
-      title: 'Count your shelf', parentId: p.id, assigneeIds: [String(arun._id), String(bala._id)],
+      dueOn: DUE, title: 'Count your shelf', parentId: p.id, assigneeIds: [String(arun._id), String(bala._id)],
     }, req);
     expect(made).toHaveLength(2);
     expect(made.every((t) => t.parent.id === p.id)).toBe(true);
@@ -227,7 +229,7 @@ describe('archiving a parent', () => {
     expect(ba.archivedWithParent).toBeNull();
     expect(await counts(p.id)).toEqual({ total: 2, done: 1 });
     // Back in the right place in its list (sorted by due day again).
-    expect(bb.rank).toBe(tasks.placeOf({ status: 'todo', dueOn: null }).rank);
+    expect(bb.rank).toBe(tasks.placeOf({ status: 'todo', dueOn: DUE }).rank);
   });
 
   it('a retry finishes a half-done archive (and a half-done restore)', async () => {
@@ -333,7 +335,7 @@ describe('a checklist step becomes a sub-task', () => {
 
   it('a half-done first try (sub-task made, step still there) is finished by the retry', async () => {
     const { p, step } = await withStep();
-    await tasks.createTask(priya, { title: step.text, parentId: p.id, clientId: 'step-sub-0003', shared: true }, req, { note: false });
+    await tasks.createTask(priya, { dueOn: DUE, title: step.text, parentId: p.id, clientId: 'step-sub-0003', shared: true }, req, { note: false });
     const { subtask } = await tasks.subtaskFromStep(priya, p.id, String(step._id), { clientId: 'step-sub-0003' }, req);
     expect(await StaffTask.countDocuments({ 'parent.task': p.id })).toBe(1);
     expect(subtask.title).toBe('Count Bosch pads');

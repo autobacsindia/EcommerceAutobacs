@@ -138,7 +138,9 @@ export function QuickDate({ t, onSave, busy, variant = 'card' }: { t: Task; onSa
         try { e.currentTarget.showPicker?.(); } catch { /* older browser: the field still takes typing */ }
       }}
       onKeyDown={stop}
-      onChange={(e) => { if ((e.target.value || null) !== t.dueOn) onSave({ dueOn: e.target.value || null }); }}
+      // A date can be moved, never taken off: every task needs one.
+      onChange={(e) => { if (e.target.value && e.target.value !== t.dueOn) onSave({ dueOn: e.target.value }); }}
+      required
       className="tk-qa-date absolute inset-0 h-full! min-h-0! w-full cursor-pointer opacity-0"
     />
   );

@@ -27,6 +27,8 @@ jest.unstable_mockModule('../services/pushService.js', () => ({ ...pushMock, def
 const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const tasks = await import('../services/staffTaskService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 let n = 0;
@@ -49,7 +51,7 @@ beforeEach(async () => {
   me = await person('staff', { team: 'procurement' }, 'Arun');
   mate = await person('staff', { team: 'procurement' }, 'Bala');
 });
-const mine = async (extra = {}) => (await tasks.createTask(me, { title: 'Renew my licence', personal: true, ...extra }, req)).task;
+const mine = async (extra = {}) => (await tasks.createTask(me, { dueOn: DUE, title: 'Renew my licence', personal: true, ...extra }, req)).task;
 
 describe('the Personal list', () => {
   it('only its maker sees it: everyone else gets 404, the admin too', async () => {
@@ -61,7 +63,7 @@ describe('the Personal list', () => {
 
   it('is in the maker\'s Personal and My tasks lists, and no team list', async () => {
     const t = await mine();
-    const shared = (await tasks.createTask(me, { title: 'Team job' }, req)).task;
+    const shared = (await tasks.createTask(me, { dueOn: DUE, title: 'Team job' }, req)).task;
     expect(codes(await tasks.listTasks(me, { view: 'personal' }))).toEqual([t.code]);
     expect(codes(await tasks.listTasks(me, { view: 'mine' })).sort()).toEqual([t.code, shared.code].sort());
     expect(codes(await tasks.listTasks(me, { view: 'team' }))).toEqual([shared.code]);
@@ -116,12 +118,12 @@ describe('the Personal list', () => {
 
   it('a sub-task of it is personal too, whoever was picked; a shared task refuses one', async () => {
     const t = await mine();
-    const { task: child } = await tasks.createTask(me, { title: 'Step', parentId: t.id, assigneeIds: [String(mate._id)] }, req);
+    const { task: child } = await tasks.createTask(me, { dueOn: DUE, title: 'Step', parentId: t.id, assigneeIds: [String(mate._id)] }, req);
     expect(child.personal).toBe(true);
     expect(child.assignees.map((p) => p.name)).toEqual(['Arun']);
     await refused(tasks.getTask(mate, child.id), 404);
-    const shared = (await tasks.createTask(me, { title: 'Team job' }, req)).task;
-    await refused(tasks.createTask(me, { title: 'Secret', parentId: shared.id, personal: true }, req), 400);
+    const shared = (await tasks.createTask(me, { dueOn: DUE, title: 'Team job' }, req)).task;
+    await refused(tasks.createTask(me, { dueOn: DUE, title: 'Secret', parentId: shared.id, personal: true }, req), 400);
   });
 
   it('a retried create makes one task', async () => {
@@ -151,9 +153,9 @@ describe('the Personal list', () => {
 
 describe('time estimate', () => {
   it('is optional, set when made, changed and cleared, and logged', async () => {
-    const { task } = await tasks.createTask(head, { title: 'Stock check', assigneeIds: [String(me._id)], estimateMinutes: 120 }, req);
+    const { task } = await tasks.createTask(head, { dueOn: DUE, title: 'Stock check', assigneeIds: [String(me._id)], estimateMinutes: 120 }, req);
     expect(task.estimateMinutes).toBe(120);
-    expect((await tasks.createTask(head, { title: 'None', assigneeIds: [String(me._id)] }, req)).task.estimateMinutes).toBeNull();
+    expect((await tasks.createTask(head, { dueOn: DUE, title: 'None', assigneeIds: [String(me._id)] }, req)).task.estimateMinutes).toBeNull();
     const changed = await tasks.updateTask(head, task.id, { rev: task.rev, estimateMinutes: 90 }, req);
     expect(changed.estimateMinutes).toBe(90);
     expect(changed.history[0]).toMatchObject({ action: 'estimate', from: '120', to: '90' });
@@ -164,11 +166,11 @@ describe('time estimate', () => {
   });
 
   it.each([[0], [-5], [60001], [1.5], ['abc']])('refuses %p', async (estimateMinutes) => {
-    await refused(tasks.createTask(me, { title: 'x', estimateMinutes }, req), 400);
+    await refused(tasks.createTask(me, { dueOn: DUE, title: 'x', estimateMinutes }, req), 400);
   });
 
   it('only editors change it; the same value changes nothing; a stale edit is refused', async () => {
-    const { task } = await tasks.createTask(head, { title: 'Job', assigneeIds: [String(me._id)], estimateMinutes: 60 }, req);
+    const { task } = await tasks.createTask(head, { dueOn: DUE, title: 'Job', assigneeIds: [String(me._id)], estimateMinutes: 60 }, req);
     await refused(tasks.updateTask(me, task.id, { rev: task.rev, estimateMinutes: 30 }, req), 403);
     expect((await tasks.updateTask(me, task.id, { rev: task.rev, estimateMinutes: 60 }, req)).rev).toBe(task.rev);
     await tasks.updateTask(head, task.id, { rev: task.rev, title: 'Job 2' }, req);

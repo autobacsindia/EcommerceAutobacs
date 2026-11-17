@@ -33,6 +33,8 @@ const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const tasks = await import('../services/staffTaskService.js');
 const { backfill } = await import('../scripts/backfill-task-assignees.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 let n = 0;
@@ -57,7 +59,7 @@ beforeEach(async () => {
 
 describe('every write carries the several-people fields', () => {
   it('a task for one person: that person and their team', async () => {
-    const { task } = await tasks.createTask(procHead, { title: 'Count stock', assigneeId: String(procA._id) }, req);
+    const { task } = await tasks.createTask(procHead, { dueOn: DUE, title: 'Count stock', assigneeId: String(procA._id) }, req);
     const t = await raw(task.id);
     expect(people(t)).toEqual([{ user: String(procA._id), name: 'Arun' }]);
     expect(t.teams).toEqual(['procurement']);
@@ -65,7 +67,7 @@ describe('every write carries the several-people fields', () => {
   });
 
   it('the admin\'s own task: team null in both forms', async () => {
-    const { task } = await tasks.createTask(admin, { title: 'Plan training' }, req);
+    const { task } = await tasks.createTask(admin, { dueOn: DUE, title: 'Plan training' }, req);
     const t = await raw(task.id);
     expect(t.team).toBeNull();
     expect(people(t)).toEqual([{ user: String(admin._id), name: 'Owner' }]);
@@ -74,7 +76,7 @@ describe('every write carries the several-people fields', () => {
 
   it('"own copy each" still makes one task per person, each with its own one person', async () => {
     const { tasks: made } = await tasks.createTask(admin, {
-      title: 'Read the new policy', assigneeIds: [String(procA._id), String(salesA._id)], clientId: 'copies-0001',
+      dueOn: DUE, title: 'Read the new policy', assigneeIds: [String(procA._id), String(salesA._id)], clientId: 'copies-0001',
     }, req);
     expect(made).toHaveLength(2);
     const [a, b] = await Promise.all(made.map((t) => raw(t.id)));
@@ -85,7 +87,7 @@ describe('every write carries the several-people fields', () => {
   });
 
   it('a retried create does not write the task twice', async () => {
-    const input = { title: 'Once', assigneeId: String(procA._id), clientId: 'retry-0001' };
+    const input = { dueOn: DUE, title: 'Once', assigneeId: String(procA._id), clientId: 'retry-0001' };
     const first = await tasks.createTask(procHead, input, req);
     const again = await tasks.createTask(procHead, input, req);
     expect(again.duplicate).toBe(true);
@@ -94,7 +96,7 @@ describe('every write carries the several-people fields', () => {
   });
 
   it('giving it to someone else moves the new fields with it', async () => {
-    const { task } = await tasks.createTask(admin, { title: 'Call Bosch', assigneeId: String(procA._id) }, req);
+    const { task } = await tasks.createTask(admin, { dueOn: DUE, title: 'Call Bosch', assigneeId: String(procA._id) }, req);
     await tasks.updateTask(admin, task.id, { rev: task.rev, assigneeId: String(salesA._id) }, req);
     const t = await raw(task.id);
     expect(String(t.assignee)).toBe(String(salesA._id));
@@ -103,7 +105,7 @@ describe('every write carries the several-people fields', () => {
   });
 
   it('a change that is not about the person leaves the fields as they were', async () => {
-    const { task } = await tasks.createTask(procHead, { title: 'Call Bosch', assigneeId: String(procA._id) }, req);
+    const { task } = await tasks.createTask(procHead, { dueOn: DUE, title: 'Call Bosch', assigneeId: String(procA._id) }, req);
     await tasks.updateTask(procHead, task.id, { rev: task.rev, status: 'in_progress', priority: 'high' }, req);
     const t = await raw(task.id);
     expect(people(t)).toEqual([{ user: String(procA._id), name: 'Arun' }]);
@@ -111,7 +113,7 @@ describe('every write carries the several-people fields', () => {
   });
 
   it('a bulk change of person writes them too', async () => {
-    const { task } = await tasks.createTask(admin, { title: 'Bulk', assigneeId: String(procA._id) }, req);
+    const { task } = await tasks.createTask(admin, { dueOn: DUE, title: 'Bulk', assigneeId: String(procA._id) }, req);
     const r = await tasks.bulkUpdate(admin, { items: [{ id: task.id, rev: task.rev }], changes: { assigneeId: String(salesA._id) } }, req);
     expect(r.changed).toBe(1);
     const t = await raw(task.id);
@@ -120,7 +122,7 @@ describe('every write carries the several-people fields', () => {
   });
 
   it('a refused change of person writes nothing', async () => {
-    const { task } = await tasks.createTask(procHead, { title: 'Mine to give', assigneeId: String(procA._id) }, req);
+    const { task } = await tasks.createTask(procHead, { dueOn: DUE, title: 'Mine to give', assigneeId: String(procA._id) }, req);
     await expect(tasks.updateTask(procA, task.id, { rev: task.rev, assigneeId: String(salesA._id) }, req))
       .rejects.toMatchObject({ statusCode: 403 });
     expect(people(await raw(task.id))).toEqual([{ user: String(procA._id), name: 'Arun' }]);
@@ -193,7 +195,7 @@ describe('scripts/backfill-task-assignees.js', () => {
   });
 
   it('tasks written by the app itself need nothing', async () => {
-    await tasks.createTask(procHead, { title: 'New', assigneeId: String(procA._id) }, req);
+    await tasks.createTask(procHead, { dueOn: DUE, title: 'New', assigneeId: String(procA._id) }, req);
     expect(await backfill(db())).toMatchObject({ total: 1, missing: 0, mismatched: 0 });
   });
 });

@@ -28,6 +28,9 @@ const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
 const { default: StaffTaskInbox } = await import('../models/StaffTaskInbox.js');
 const { default: StaffTaskTime } = await import('../models/StaffTaskTime.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const inDays = (n) => new Date(Date.now() + n * 864e5).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const BASE = '/api/v1';
 const PW = 'SecurePass123!';
@@ -45,6 +48,7 @@ async function signIn(email) {
     get: (url) => agent.get(`${BASE}${url}`),
     post: (url, body = {}) => agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
     patch: (url, body = {}) => agent.patch(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
+    put: (url, body = {}) => agent.put(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
     del: (url) => agent.delete(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf),
     postNoCsrf: (url, body = {}) => agent.post(`${BASE}${url}`).send(body),
   };
@@ -73,10 +77,10 @@ describe('Staff task routes', () => {
   });
 
   it('a head gives a task, the member sees it, moves it and comments; a retry is not a second task', async () => {
-    const body = { title: 'Call Bosch about the order', assigneeId: String(member.user._id), priority: 'high', dueOn: '2030-01-15', clientId: 'route-12345678' };
+    const body = { title: 'Call Bosch about the order', assigneeId: String(member.user._id), priority: 'high', dueOn: inDays(1), clientId: 'route-12345678' };
     const created = await head.session.post('/staff/tasks', body);
     expect(created.status).toBe(201);
-    expect(created.body.task).toMatchObject({ title: body.title, priority: 'high', dueOn: '2030-01-15', assignee: { name: 'Arun' } });
+    expect(created.body.task).toMatchObject({ title: body.title, priority: 'high', dueOn: inDays(1), assignee: { name: 'Arun' } });
     const retry = await head.session.post('/staff/tasks', body);
     expect(retry.status).toBe(200);
     expect(retry.body).toMatchObject({ duplicate: true, task: { id: created.body.task.id } });
@@ -102,7 +106,7 @@ describe('Staff task routes', () => {
   });
 
   it('the Inbox: the head gives a task, the member reads it, marks it, and cannot touch anyone else\'s', async () => {
-    const created = await head.session.post('/staff/tasks', { title: 'Ring the courier', assigneeId: String(member.user._id) });
+    const created = await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Ring the courier', assigneeId: String(member.user._id) });
     expect(created.status).toBe(201);
 
     const list = await member.session.get('/staff/tasks/inbox');
@@ -129,10 +133,10 @@ describe('Staff task routes', () => {
 
   it('refuses what the rules refuse, with the right codes', async () => {
     // A member may give a task to their head (anyone in the panel)…
-    expect((await member.session.post('/staff/tasks', { title: 'x', assigneeId: String(head.user._id) })).status).toBe(201);
+    expect((await member.session.post('/staff/tasks', { dueOn: DUE, title: 'x', assigneeId: String(head.user._id) })).status).toBe(201);
     // …and sees the team's tasks, like a chat space.
     expect((await member.session.get('/staff/tasks?view=team')).status).toBe(200);
-    const own = await member.session.post('/staff/tasks', { title: 'My own' });
+    const own = await member.session.post('/staff/tasks', { dueOn: DUE, title: 'My own' });
     expect(own.status).toBe(201);
     // The head of the member's team sees a member's own task; an outsider does not.
     expect((await head.session.get(`/staff/tasks/${own.body.task.id}`)).status).toBe(200);
@@ -142,23 +146,23 @@ describe('Staff task routes', () => {
 
   it('validates input', async () => {
     expect((await head.session.post('/staff/tasks', {})).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'x', priority: 'asap' })).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'x', assigneeId: 'nope' })).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'x', assigneeIds: ['nope'] })).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'x', assigneeIds: 'not-a-list' })).status).toBe(400);
-    const both = await head.session.post('/staff/tasks', { title: 'Both', assigneeIds: [String(head.user._id), String(member.user._id)] });
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', priority: 'asap' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', assigneeId: 'nope' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', assigneeIds: ['nope'] })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', assigneeIds: 'not-a-list' })).status).toBe(400);
+    const both = await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Both', assigneeIds: [String(head.user._id), String(member.user._id)] });
     expect(both.status).toBe(201);
     expect(both.body.tasks.map((t) => t.assignee.name)).toEqual(['Priya', 'Arun']);
     expect((await head.session.get('/staff/tasks?view=everything')).status).toBe(400);
     expect((await head.session.get('/staff/tasks?state=deleted')).status).toBe(400);
     expect((await head.session.get('/staff/tasks/not-an-id')).status).toBe(400);
-    const t = await head.session.post('/staff/tasks', { title: 'x' });
+    const t = await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x' });
     expect((await head.session.patch(`/staff/tasks/${t.body.task.id}`, { title: 'no rev' })).status).toBe(400);
     expect((await head.session.patch(`/staff/tasks/${t.body.task.id}`, { rev: 1, status: 'finished' })).status).toBe(400);
   });
 
   it('checklist steps over HTTP: add, tick, remove; the member may tick but not add', async () => {
-    const t = (await head.session.post('/staff/tasks', { title: 'Ship', assigneeId: String(member.user._id), checklist: ['Pack'] })).body.task;
+    const t = (await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Ship', assigneeId: String(member.user._id), checklist: ['Pack'] })).body.task;
     const step = t.checklistItems[0].id;
     expect((await member.session.post(`/staff/tasks/${t.id}/checklist`, { text: 'Label' })).status).toBe(403);
     const ticked = await member.session.patch(`/staff/tasks/${t.id}/checklist/${step}`, { done: true });
@@ -173,7 +177,7 @@ describe('Staff task routes', () => {
   });
 
   it('header counts, search and filters over HTTP', async () => {
-    await head.session.post('/staff/tasks', { title: 'Late one', assigneeId: String(member.user._id), dueOn: '2020-01-01' });
+    await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Late one', assigneeId: String(member.user._id), dueOn: '2020-01-01' });
     const sum = await member.session.get('/staff/tasks/summary');
     expect(sum.status).toBe(200);
     expect(sum.body).toMatchObject({ late: 1, today: 0 });
@@ -181,28 +185,28 @@ describe('Staff task routes', () => {
     expect((await member.session.get('/staff/tasks?due=week')).status).toBe(200);
     expect((await member.session.get('/staff/tasks?priority=asap')).status).toBe(400);
     expect((await member.session.get(`/staff/tasks?q=${'x'.repeat(101)}`)).status).toBe(400);
-    expect((await member.session.post('/staff/tasks', { title: 'x', status: 'done' })).status).toBe(400);
+    expect((await member.session.post('/staff/tasks', { dueOn: DUE, title: 'x', status: 'done' })).status).toBe(400);
   });
 
   it('tags, start dates, order and bulk changes over HTTP', async () => {
     const a = (await head.session.post('/staff/tasks', {
-      title: 'Count Kochi', assigneeId: String(member.user._id), tags: ['Kochi'], startOn: '2030-01-10', dueOn: '2030-01-15',
+      dueOn: DUE, title: 'Count Kochi', assigneeId: String(member.user._id), tags: ['Kochi'], startOn: inDays(2), dueOn: inDays(5),
     })).body.task;
-    expect(a).toMatchObject({ tags: ['kochi'], startOn: '2030-01-10' });
-    const b = (await head.session.post('/staff/tasks', { title: 'Count Kochi 2', assigneeId: String(member.user._id) })).body.task;
-    expect((await head.session.post('/staff/tasks', { title: 'x', tags: 'kochi' })).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'x', startOn: '2030-01-16', dueOn: '2030-01-15' })).status).toBe(400);
+    expect(a).toMatchObject({ tags: ['kochi'], startOn: inDays(2) });
+    const b = (await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Count Kochi 2', assigneeId: String(member.user._id) })).body.task;
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', tags: 'kochi' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', startOn: inDays(6), dueOn: inDays(5) })).status).toBe(400);
     expect((await member.session.get('/staff/tasks?tag=KOCHI')).body.tasks.map((t) => t.id)).toEqual([a.id]);
     expect((await member.session.get('/staff/tasks?sort=newest')).body.tasks.map((t) => t.id)).toEqual([b.id, a.id]);
     expect((await member.session.get('/staff/tasks?sort=updated')).body.sort).toBe('updated');
 
     const res = await head.session.post('/staff/tasks/bulk', {
-      items: [{ id: a.id, rev: a.rev }, { id: b.id, rev: b.rev }], changes: { status: 'in_progress', priority: 'high' },
+      items: [{ id: a.id, rev: a.rev }, { id: b.id, rev: b.rev }], changes: { status: 'in_progress', priority: 'low' },
     });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ changed: 2, failed: 0 });
     // The doer may move the status but not the priority: per-task refusals, still a 200.
-    const mixed = await member.session.post('/staff/tasks/bulk', { items: [{ id: a.id, rev: a.rev + 1 }], changes: { priority: 'low' } });
+    const mixed = await member.session.post('/staff/tasks/bulk', { items: [{ id: a.id, rev: a.rev + 1 }], changes: { priority: 'normal' } });
     expect(mixed.status).toBe(200);
     expect(mixed.body.results[0]).toMatchObject({ ok: false, status: 403 });
     expect((await head.session.post('/staff/tasks/bulk', { items: [], changes: { priority: 'low' } })).status).toBe(400);
@@ -211,7 +215,7 @@ describe('Staff task routes', () => {
     // 'waiting' is retired (like ClickUp): nobody can pick it any more.
     expect((await head.session.post('/staff/tasks/bulk', { items: [{ id: a.id, rev: 1 }], changes: { status: 'waiting' } })).status).toBe(400);
     expect((await head.session.patch(`/staff/tasks/${a.id}`, { rev: 1, status: 'waiting' })).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'x', status: 'waiting' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', status: 'waiting' })).status).toBe(400);
     expect((await head.session.postNoCsrf('/staff/tasks/bulk', { items: [{ id: a.id, rev: 1 }], changes: { priority: 'low' } })).status).toBe(403);
     expect((await request(app).post(`${BASE}/staff/tasks/bulk`).send({})).status).toBe(403);
   });
@@ -219,7 +223,7 @@ describe('Staff task routes', () => {
   it('one shared task, its people and its followers over HTTP', async () => {
     const other = await makeUser('Sam', 'staff', { team: 'sales', isHead: false, active: true });
     const created = await head.session.post('/staff/tasks', {
-      title: 'Shared', assigneeIds: [String(member.user._id), String(other.user._id)], shared: true,
+      dueOn: DUE, title: 'Shared', assigneeIds: [String(member.user._id), String(other.user._id)], shared: true,
     });
     expect(created.status).toBe(201);
     expect(created.body.tasks).toHaveLength(1);
@@ -243,18 +247,18 @@ describe('Staff task routes', () => {
     expect(off.body.task).toBeNull();
     expect((await head.session.patch(`/staff/tasks/${id}/followers`, { add: ['nope'] })).status).toBe(400);
     expect((await head.session.patch(`/staff/tasks/${id}/followers`, { add: 'not-a-list' })).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'x', shared: 'maybe' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', shared: 'maybe' })).status).toBe(400);
   });
 
   it('sub-tasks over HTTP: make one, list them, turn a step into one, archive with the parent', async () => {
-    const parent = (await head.session.post('/staff/tasks', { title: 'Diwali stock check', checklist: ['Count wipers'] })).body.task;
+    const parent = (await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Diwali stock check', checklist: ['Count wipers'] })).body.task;
     const made = await head.session.post('/staff/tasks', {
-      title: 'Count Bosch pads', parentId: parent.id, assigneeIds: [String(member.user._id)], shared: true, clientId: 'route-sub-0001',
+      dueOn: DUE, title: 'Count Bosch pads', parentId: parent.id, assigneeIds: [String(member.user._id)], shared: true, clientId: 'route-sub-0001',
     });
     expect(made.status).toBe(201);
     expect(made.body.task.parent).toMatchObject({ id: parent.id, code: parent.code });
-    expect((await head.session.post('/staff/tasks', { title: 'x', parentId: 'nope' })).status).toBe(400);
-    expect((await head.session.post('/staff/tasks', { title: 'deeper', parentId: made.body.task.id })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', parentId: 'nope' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'deeper', parentId: made.body.task.id })).status).toBe(400);
 
     const step = (await head.session.get(`/staff/tasks/${parent.id}`)).body.task.checklistItems[0];
     const fromStep = await head.session.post(`/staff/tasks/${parent.id}/checklist/${step.id}/subtask`, { clientId: 'route-sub-0002' });
@@ -276,8 +280,8 @@ describe('Staff task routes', () => {
   });
 
   it('time over HTTP: start, switch, stop, add by hand, correct, delete — with the right codes', async () => {
-    const a = (await head.session.post('/staff/tasks', { title: 'Count pads', assigneeId: String(member.user._id) })).body.task;
-    const b = (await head.session.post('/staff/tasks', { title: 'Ring courier', assigneeId: String(member.user._id) })).body.task;
+    const a = (await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Count pads', assigneeId: String(member.user._id) })).body.task;
+    const b = (await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Ring courier', assigneeId: String(member.user._id) })).body.task;
     expect((await member.session.get('/staff/tasks/time/current')).body).toMatchObject({ timer: null, autoStopped: null });
     expect((await member.session.post('/staff/tasks/time/stop')).body).toMatchObject({ success: true, entry: null });
 
@@ -341,7 +345,7 @@ describe('Staff task routes', () => {
     expect((await head.session.post('/staff/tasks/space/items', { kind: 'list', name: 'Bosch orders', folderId: folder.body.item.id })).status).toBe(409);
     expect((await head.session.post('/staff/tasks/space/items', { kind: 'nope', name: 'x' })).status).toBe(400);
 
-    const task = await head.session.post('/staff/tasks', { title: 'Call Bosch', assigneeId: String(member.user._id), listId: list.body.item.id });
+    const task = await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Call Bosch', assigneeId: String(member.user._id), listId: list.body.item.id });
     expect(task.status).toBe(201);
     expect(task.body.task.list).toBe(list.body.item.id);
 
@@ -372,7 +376,7 @@ describe('Staff task routes', () => {
     expect(again.body.project.id).toBe(made.body.project.id);
     const pid = made.body.project.id;
 
-    const t = await head.session.post('/staff/tasks', { title: 'Order wiper sets', assigneeId: String(member.user._id), projectId: pid });
+    const t = await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Order wiper sets', assigneeId: String(member.user._id), projectId: pid });
     expect(t.status).toBe(201);
     const tid = t.body.task.id;
 
@@ -391,5 +395,35 @@ describe('Staff task routes', () => {
     expect((await outsider.session.get(`/staff/tasks/${tid}`)).status).toBe(404);
     expect((await outsider.session.get('/staff/tasks/projects/pick')).body.projects).toEqual([]);
     expect((await dev.session.get('/staff/tasks?view=project&project=nonsense')).status).toBe(400);
+  });
+
+  it('due dates over HTTP: required, limited by priority, approved by the head; the admin sets the rules', async () => {
+    const owner = await makeUser('Owner', 'admin');
+    expect((await member.session.post('/staff/tasks', { title: 'No date' })).status).toBe(400);
+    expect((await member.session.post('/staff/tasks', { title: 'Too late', priority: 'high', dueOn: inDays(2) })).status).toBe(400);
+    const far = (await member.session.post('/staff/tasks', { title: 'Far', dueOn: inDays(10) })).body.task;
+    expect(far.dueApproval).toMatchObject({ status: 'pending' });
+    // The head's list and count.
+    expect((await head.session.get('/staff/tasks?view=approvals')).body.tasks.map((t) => t.id)).toEqual([far.id]);
+    expect((await member.session.get('/staff/tasks?view=approvals')).status).toBe(403);
+    // Shape checks, then who may decide.
+    expect((await head.session.post(`/staff/tasks/${far.id}/due-approval`, { rev: far.rev, decision: 'maybe' })).status).toBe(400);
+    expect((await head.session.post(`/staff/tasks/${far.id}/due-approval`, { decision: 'approve' })).status).toBe(400);
+    expect((await member.session.post(`/staff/tasks/${far.id}/due-approval`, { rev: far.rev, decision: 'approve' })).status).toBe(403);
+    expect((await head.session.post(`/staff/tasks/${far.id}/due-approval`, { rev: far.rev, decision: 'reject' })).status).toBe(400);
+    const ok = await head.session.post(`/staff/tasks/${far.id}/due-approval`, { rev: far.rev, decision: 'approve' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.task.dueApproval).toMatchObject({ status: 'approved', decidedBy: { name: 'Priya' } });
+    expect((await head.session.post(`/staff/tasks/${far.id}/due-approval`, { rev: far.rev, decision: 'approve' })).status).toBe(409);
+
+    // Everyone reads the rules (the form shows the limits); only the admin changes them.
+    expect((await member.session.get('/staff/tasks/rules')).body.rules).toMatchObject({ approvalAfterDays: 9, maxDays: { high: 1 } });
+    expect((await head.session.put('/staff/tasks/rules', { approvalAfterDays: 5 })).status).toBe(403);
+    expect((await owner.session.put('/staff/tasks/rules', { approvalAfterDays: 'soon' })).status).toBe(400);
+    expect((await owner.session.put('/staff/tasks/rules', { maxDays: { high: 999 } })).status).toBe(400);
+    const changed = await owner.session.put('/staff/tasks/rules', { approvalAfterDays: 5, maxDays: { high: 2 } });
+    expect(changed.status).toBe(200);
+    expect(changed.body.rules).toMatchObject({ approvalAfterDays: 5, maxDays: { urgent: 0, high: 2, normal: 30, low: 60 } });
+    expect((await member.session.post('/staff/tasks', { title: 'Now fine', priority: 'high', dueOn: inDays(2) })).status).toBe(201);
   });
 });

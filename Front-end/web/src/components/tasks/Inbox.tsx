@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AtSign, CheckCheck, Circle, CircleCheck, Lock, MessageSquare, Network, RefreshCw, UserPlus, X } from 'lucide-react';
+import { AtSign, CalendarCheck, CalendarClock, CheckCheck, Circle, CircleCheck, Lock, MessageSquare, Network, RefreshCw, UserPlus, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { notificationKeys, taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -101,6 +101,8 @@ const KIND: Record<InboxKind, { icon: typeof AtSign; tone: string; say: (code: s
   subtask: { icon: Network, tone: 'bg-amber-100 text-amber-700', say: (c) => `added a sub-task to ${c}`, quote: false },
   comment_assigned: { icon: UserPlus, tone: 'bg-violet-100 text-violet-700', say: (c) => `assigned you a comment on ${c}`, quote: true },
   comment_resolved: { icon: CircleCheck, tone: 'bg-emerald-100 text-emerald-700', say: (c) => `resolved a comment on ${c}`, quote: true },
+  approval_requested: { icon: CalendarClock, tone: 'bg-amber-100 text-amber-700', say: (c) => `asks you to approve the due date of ${c}`, quote: false },
+  approval_decided: { icon: CalendarCheck, tone: 'bg-blue-100 text-blue-700', say: (c) => `decided the due date of ${c}`, quote: false },
 };
 
 /** What follows the sentence: the status it moved to, the due day, the words, the sub-task. */

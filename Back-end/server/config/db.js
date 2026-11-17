@@ -802,6 +802,11 @@ export async function ensureCriticalIndexes() {
       { 'parent.task': 1, bucket: 1, rank: 1, _id: 1 },
       { partialFilterExpression: { 'parent.task': { $type: 'objectId' } }, name: 'staff_task_parent', background: true }
     );
+    // Tasks waiting for a manager to approve their due date (partial: only those).
+    await db.collection('stafftasks').createIndex(
+      { 'dueApproval.status': 1, teams: 1, rank: 1, _id: 1 },
+      { partialFilterExpression: { 'dueApproval.status': 'pending' }, name: 'staff_task_due_approval', background: true }
+    );
     await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
     await db.collection('stafftaskcomments').createIndex({ assignedTo: 1, resolvedAt: 1, _id: -1 }, { name: 'staff_task_comment_assigned', background: true });
     await db.collection('stafftaskcomments').createIndex(

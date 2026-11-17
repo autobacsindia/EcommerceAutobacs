@@ -17,6 +17,8 @@ const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskInbox } = await import('../models/StaffTaskInbox.js');
 const { default: staffTaskInboxRepository } = await import('../repositories/staffTaskInboxRepository.js');
 const tasks = await import('../services/staffTaskService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 let n = 0;
@@ -31,7 +33,7 @@ it('a comment that @mentions someone writes all its Inbox lines in one round tri
   const priya = await person('Priya', { team: 'procurement', isHead: true });
   const arun = await person('Arun', { team: 'procurement' });
   const bala = await person('Bala', { team: 'procurement' });
-  const t = (await tasks.createTask(priya, { title: 'Count pads', assigneeIds: [String(arun._id), String(bala._id)], shared: true }, req)).task;
+  const t = (await tasks.createTask(priya, { dueOn: DUE, title: 'Count pads', assigneeIds: [String(arun._id), String(bala._id)], shared: true }, req)).task;
 
   const spy = jest.spyOn(staffTaskInboxRepository, 'insertMany');
   await tasks.addComment(priya, t.id, { text: 'Check the date', clientId: 'cmt-writes-01', mentions: [String(arun._id)] });

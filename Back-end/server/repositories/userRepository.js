@@ -196,6 +196,18 @@ class UserRepository extends BaseRepository {
       .lean();
   }
 
+  /** Active heads of `teams` (the managers of a task's due date). A handful of rows. */
+  async findTeamHeads(teams) {
+    if (!teams?.length) return [];
+    return User.find({ role: 'staff', 'staff.active': true, 'staff.isHead': true, 'staff.team': { $in: teams } })
+      .select('_id name role staff').lean();
+  }
+
+  /** Every admin account. A handful of rows (rides the role index). */
+  async findAdmins() {
+    return User.find({ role: 'admin' }).select('_id name role').lean();
+  }
+
   /** Who can use team chat: admins and active staff. */
   static CHAT_USER_FILTER = { $or: [{ role: 'admin' }, { role: 'staff', 'staff.active': true }] };
 

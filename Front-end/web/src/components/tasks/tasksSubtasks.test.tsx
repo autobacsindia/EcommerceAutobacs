@@ -20,7 +20,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TasksWorkspace from './TasksWorkspace';
 import TaskDetail from './TaskDetail';
-import type { Subtask, Task } from './types';
+import { todayIST, type Subtask, type Task } from './types';
 import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
@@ -222,13 +222,18 @@ describe('sub-tasks under a task', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Who does the sub-task' }));
     fireEvent.click(await screen.findByRole('option', { name: /Arun/ }));
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+    // The parent has no date (made before dates were required): one must be picked.
+    fireEvent.submit(box.closest('form')!);
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Due date/ }));
+    fireEvent.change(screen.getByLabelText('Sub-task due date'), { target: { value: todayIST() } });
     fireEvent.submit(box.closest('form')!);
     expect(await screen.findByText('Try again in a moment.')).toBeInTheDocument();
     expect(box).toHaveValue('Count Bosch pads');
     fireEvent.submit(box.closest('form')!);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     const [first, second] = post.mock.calls.map((c) => c[1]);
-    expect(first).toEqual({ title: 'Count Bosch pads', parentId: 't1', clientId: expect.any(String), shared: true, assigneeIds: ['u2'] });
+    expect(first).toEqual({ title: 'Count Bosch pads', parentId: 't1', clientId: expect.any(String), shared: true, assigneeIds: ['u2'], dueOn: todayIST() });
     expect(second.clientId).toBe(first.clientId);
     await waitFor(() => expect(box).toHaveValue(''));
     fireEvent.change(box, { target: { value: 'Count wipers' } });

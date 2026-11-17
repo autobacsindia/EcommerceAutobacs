@@ -57,7 +57,7 @@ const as = async (u) => {
   return fresh;
 };
 const status = (code, fn, msg) => expect(fn()).rejects.toMatchObject({ statusCode: code, ...(msg && { message: expect.stringMatching(msg) }) });
-const give = async (actor, over = {}) => (await tasks.createTask(await as(actor), { title: 'Job', ...over }, req)).task;
+const give = async (actor, over = {}) => (await tasks.createTask(await as(actor), { title: 'Job', dueOn: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }), ...over }, req)).task;
 const edit = async (actor, t, patch) => tasks.updateTask(await as(actor), t.id, { rev: t.rev, ...patch }, req);
 const start = async (actor, input) => (await projects.createProject(await as(actor), { name: 'Diwali launch', ...input }, req)).project;
 const projectTasks = async (actor, project, state = 'open') => (await tasks.listTasks(await as(actor), { view: 'project', project: project.id, state })).tasks;
