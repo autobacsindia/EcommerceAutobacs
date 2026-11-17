@@ -23,6 +23,7 @@ import cacheService, { CACHE_VERSION } from './cacheService.js';
 import auditLogger from './auditLogger.js';
 import AppError from '../utils/AppError.js';
 import { computeDeliveryFees, DEFAULT_RATE_CARD, isValidPin, haversineKm } from '../utils/deliveryFees.js';
+import { classFromCategorySlugs, slugsWithAncestors } from '../utils/categoryShippingClass.js';
 import { fromPaise } from '../utils/money.js';
 
 /** Snapshotted on orders; follows the event the owner runs (Black Friday 2026). */
@@ -106,6 +107,8 @@ export function toRateCard(doc) {
     insurancePercent: pick(doc?.insurancePercent, d.insurancePercent),
     paymentFeePercent: pick(doc?.paymentFeePercent, d.paymentFeePercent),
     paymentFeeGstPercent: pick(doc?.paymentFeeGstPercent, d.paymentFeeGstPercent),
+    paymentFeeMax: pick(doc?.paymentFeeMax, d.paymentFeeMax),
+    xlBox: group('xlBox'),
     gstOnFees: {
       enabled: Boolean(doc?.gstOnFees?.enabled ?? d.gstOnFees.enabled),
       percent: pick(doc?.gstOnFees?.percent, d.gstOnFees.percent),
@@ -123,6 +126,26 @@ export function normalizePin(raw) {
   const s = String(raw).replace(/\s+/g, '');
   return isValidPin(s) ? s : null;
 }
+
+// Category id → { slug, parent }, for the category size-class guess. Categories change
+// rarely and the guess is only an estimate, so a 5-minute in-process copy is plenty and
+// keeps ~250 rows off every quote. A failed load degrades to "no category signal".
+const CATEGORY_INDEX_TTL_MS = 5 * 60 * 1000;
+let categoryIndexCache = { at: 0, index: null };
+async function getCategoryIndex(now = Date.now()) {
+  if (categoryIndexCache.index && now - categoryIndexCache.at < CATEGORY_INDEX_TTL_MS) return categoryIndexCache.index;
+  try {
+    const rows = await deliveryFeeRepository.findCategoryRefs();
+    const index = new Map(rows.map((c) => [String(c._id), { slug: c.slug, parent: c.parent ? String(c.parent) : null }]));
+    categoryIndexCache = { at: now, index };
+    return index;
+  } catch (err) {
+    console.warn(`[deliveryFees] category index load failed: ${err.message}`);
+    return categoryIndexCache.index || new Map();
+  }
+}
+/** Test seam: forget the cached category index. */
+export function resetCategoryIndexForTests() { categoryIndexCache = { at: 0, index: null }; }
 
 /**
  * The fee block for one quote, or null while fees are switched off (today's
@@ -167,15 +190,20 @@ export async function quoteDeliveryFees({ orderItems, goodsPaise, pin = null, ap
     };
   }
 
-  const [{ boxes }, isRemote, location] = await Promise.all([
+  const [{ boxes }, isRemote, location, categoryIndex] = await Promise.all([
     getClassBoxes(),
     deliveryFeeRepository.isRemotePin(cleanPin, session),
     deliveryFeeRepository.findPinLocation(cleanPin, session),
+    getCategoryIndex(),
   ]);
   const distanceKm = location ? haversineKm(card.origin, location) : null;
 
   const fees = computeDeliveryFees({
-    lines: orderItems.map((i) => ({ quantity: i.quantity, product: i.shipping || {} })),
+    lines: orderItems.map((i) => ({
+      quantity: i.quantity,
+      // categoryClass is only the fallback: resolveBox prefers a real size or stored class.
+      product: { ...(i.shipping || {}), categoryClass: classFromCategorySlugs(slugsWithAncestors(i.categories, categoryIndex)) },
+    })),
     goodsPaise: Math.max(0, Math.round(goodsPaise)),
     isRemote,
     distanceKm,
@@ -265,6 +293,8 @@ const NUMERIC_FIELDS = Object.freeze([
   ['packing.small', 0, 50000], ['packing.medium', 0, 50000], ['packing.large', 0, 50000], ['packing.xl', 0, 50000],
   ['remoteAreaFee', 0, 50000],
   ['insurancePercent', 0, 100], ['paymentFeePercent', 0, 100], ['paymentFeeGstPercent', 0, 100],
+  ['paymentFeeMax', 0, 100000],
+  ['xlBox.weightKg', 0.1, 2000], ['xlBox.lengthCm', 1, 1000], ['xlBox.breadthCm', 1, 1000], ['xlBox.heightCm', 1, 1000],
   ['gstOnFees.percent', 0, 100],
   ['origin.lat', 6, 38], ['origin.lng', 68, 98],
 ]);

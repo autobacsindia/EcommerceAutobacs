@@ -47,6 +47,7 @@ const data: StoreHomeData = {
   newArrivals: [prod('n1'), prod('n2'), prod('n3')],
   featured: [],
   premiumPicks: [],
+  dearest: [],
   categoryRows: [{ category: { name: 'Lighting', slug: 'lighting', href: '/categories/lighting', image: '' }, products: [prod('l1'), prod('l2'), prod('l3'), prod('l4')] }],
   brands: [],
   reviews: [{ quote: 'Great fit.', name: 'Asha', rating: 4, verified: true }],

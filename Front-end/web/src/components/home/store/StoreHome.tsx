@@ -1,13 +1,15 @@
 import HeroBanners, { type BannerSlide } from './HeroBanners';
-import CategoryCards from './CategoryCards';
+import CategoryCards, { TOP_DEAL_TILES } from './CategoryCards';
 import ProductRow from './ProductRow';
 import BrandStrip from './BrandStrip';
 import TrustStrip from './TrustStrip';
 import ReviewStrip from './ReviewStrip';
 import PressStrip from './PressStrip';
-import { discountPct, type StoreHomeData, type StoreProduct } from './storeData';
+import { CATEGORY_ROW_SIZE, MAX_CATEGORY_ROWS, MIN_ROW, discountPct, type StoreCategoryRow, type StoreHomeData, type StoreProduct } from './storeData';
 import { DealsShelf, FestiveHero, FestiveOffers, FestiveScope, FestiveSwitch, FestiveWish, GiftSection, type FestiveHeroPhoto } from './FestiveHome';
-import { buildGiftTiers } from './giftTiers';
+import { buildGiftTiers, type GiftTier } from './giftTiers';
+import { claimShelves } from './uniqueShelves';
+import { buildPremiumPicks } from './shelfOrder';
 import './store.css';
 
 /**
@@ -110,16 +112,48 @@ export function buildSlides(data: StoreHomeData): BannerSlide[] {
   return slides;
 }
 
+/** Photos in the festive hero. */
+const HERO_SHOWCASE = 3;
+
 /**
- * Inputs for the festive hero, from the same live data and the same featured-
- * first photo choice as the normal banners. Photos come from the deals banner
- * when there is one (so a "-X%" tag is always the product's real discount),
- * otherwise from the first banner.
+ * The three products the festive hero shows — the first thing a visitor sees,
+ * so the best AND varied: the most valuable deals that are in stock, on sale
+ * and have a photo, at most one per brand and one per category. Without the
+ * spread the hero showed three near-identical suspension kits of one maker.
+ * Fewer than three such products → the caller falls back to the banner photos.
+ */
+export function pickHeroShowcase(deals: StoreProduct[]): StoreProduct[] {
+  const brands = new Set<string>();
+  const categories = new Set<string>();
+  const picked: StoreProduct[] = [];
+  const candidates = deals
+    .filter((p) => p.image && p.stock === 'in' && discountPct(p) > 0)
+    .sort((a, b) => b.price - a.price);
+  for (const p of candidates) {
+    if (picked.length >= HERO_SHOWCASE) break;
+    const brand = p.brand.trim().toLowerCase();
+    if (brand && brands.has(brand)) continue;
+    if (p.category && categories.has(p.category)) continue;
+    picked.push(p);
+    if (brand) brands.add(brand);
+    if (p.category) categories.add(p.category);
+  }
+  return picked;
+}
+
+/**
+ * Inputs for the festive hero, from the same live data. Photos are the varied
+ * best deals (pickHeroShowcase), each tagged with its own real discount; with
+ * too few such deals they fall back to the deals banner's (or first banner's)
+ * photos.
  */
 export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
-  const source = slides.find((s) => s.id === 'deals') ?? slides[0];
   const offByHref = new Map(data.deals.map((p) => [p.href, discountPct(p)]));
-  const photos: FestiveHeroPhoto[] = (source?.images ?? []).map((img) => ({ ...img, off: offByHref.get(img.href) ?? 0 }));
+  const showcase = pickHeroShowcase(data.deals);
+  const source = slides.find((s) => s.id === 'deals') ?? slides[0];
+  const photos: FestiveHeroPhoto[] = showcase.length >= HERO_SHOWCASE
+    ? showcase.map((p) => ({ src: p.image, href: p.href, name: p.name, off: discountPct(p) }))
+    : (source?.images ?? []).map((img) => ({ ...img, off: offByHref.get(img.href) ?? 0 }));
   return {
     photos,
     maxOff: data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0),
@@ -130,6 +164,49 @@ export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
 }
 
 /**
+ * What each home-page shelf shows, claimed top to bottom in page order so no
+ * product appears on two shelves (uniqueShelves.ts). The festive gift section
+ * draws from the bottom shelves first (new arrivals) so the rows near the top
+ * keep their best products.
+ */
+export function buildShelves(data: StoreHomeData, festive = false, heroHrefs: string[] = []) {
+  const seen = new Set<string>();
+  // Already on screen above the shelves: the festive hero's photos, and the
+  // first few deals in the "Top deals for you" box.
+  const hero = new Set(heroHrefs);
+  for (const list of [data.deals, data.featured, data.bestSellers, data.newArrivals, data.dearest]) {
+    for (const p of list) if (hero.has(p.href)) seen.add(p.id);
+  }
+  if (data.deals.length >= TOP_DEAL_TILES) for (const p of data.deals.slice(0, TOP_DEAL_TILES)) seen.add(p.id);
+
+  const [deals] = claimShelves([{ products: data.deals, min: MIN_ROW, whenShort: 'repeat' }], seen);
+  // Premium Picks is rebuilt from what is still unseen (featured first, then the
+  // dearest buyable products), so it refills to full size instead of shrinking.
+  const unseen = (l: StoreProduct[]) => l.filter((p) => !seen.has(p.id));
+  const fresh = buildPremiumPicks(unseen(data.featured), unseen(data.dearest));
+  const [premiumPicks] = claimShelves([
+    { products: fresh.length >= MIN_ROW ? fresh : data.premiumPicks, min: MIN_ROW, whenShort: 'repeat' },
+  ], seen);
+
+  // Built either way (the visitor's clock may switch the festival on before the
+  // next server render), but it only takes its products off the shelves below
+  // while the server already sees the festival live.
+  const pools = [data.newArrivals, data.featured, data.deals, data.bestSellers];
+  const giftTiers: GiftTier[] = buildGiftTiers(pools.map(unseen));
+  if (festive) for (const t of giftTiers) for (const p of t.products) seen.add(p.id);
+
+  const [bestSellers] = claimShelves([{ products: data.bestSellers, min: MIN_ROW, whenShort: 'repeat' }], seen);
+  const categoryRows: StoreCategoryRow[] = [];
+  for (const row of data.categoryRows) {
+    if (categoryRows.length >= MAX_CATEGORY_ROWS) break;
+    const [products] = claimShelves([{ products: row.products, min: MIN_ROW, whenShort: 'hide', max: CATEGORY_ROW_SIZE }], seen);
+    if (products.length) categoryRows.push({ category: row.category, products });
+  }
+  const [newArrivals] = claimShelves([{ products: data.newArrivals, min: MIN_ROW, whenShort: 'repeat' }], seen);
+  return { deals, premiumPicks, giftTiers, bestSellers, categoryRows, newArrivals };
+}
+
+/**
  * The light, Amazon-style store home page: dark header (for the white logo), green
  * category bar, offers carousel with overlapping category cards, then product
  * shelves — every one from live data, empty shelves skipped.
@@ -137,8 +214,11 @@ export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
 export default function StoreHome({
   data,
   freeDelivery = false,
+  festive = false,
 }: {
   data: StoreHomeData;
+  /** A festival theme is live (server read). Only decides whether the gift section claims products. */
+  festive?: boolean;
   /** Black Friday free-delivery offer live at checkout (server); gates the seal. */
   freeDelivery?: boolean;
 }) {
@@ -149,7 +229,7 @@ export default function StoreHome({
   // page rendered BOTH, so customers saw two headers and two footers.
   const slides = buildSlides(data);
   const festiveHero = buildFestiveHero(data, slides);
-  const giftTiers = buildGiftTiers([data.deals, data.featured, data.bestSellers, data.newArrivals]);
+  const shelves = buildShelves(data, festive, festive ? festiveHero.photos.slice(0, 3).map((p) => p.href) : []);
   return (
     <FestiveScope className="sh sh-theme">
       <main className="sh-main">
@@ -165,25 +245,25 @@ export default function StoreHome({
         <div className="sh-content">
           <CategoryCards categories={data.categories} deals={data.deals} />
           <FestiveOffers maxOff={festiveHero.maxOff} dealsTotal={festiveHero.dealsTotal} freeDelivery={freeDelivery} />
-          <DealsShelf products={data.deals} />
+          <DealsShelf products={shelves.deals} />
           <ProductRow
             id="sh-premium"
             title="Premium Picks"
             subtitle="Our finest upgrades, hand-picked"
             href="/products?sort=price_desc"
-            products={data.premiumPicks}
+            products={shelves.premiumPicks}
           />
-          <GiftSection tiers={giftTiers} />
+          <GiftSection tiers={shelves.giftTiers} />
           <ProductRow
             id="sh-best"
             title="Best Sellers"
             subtitle="Most bought by our customers"
             href="/products?sort=sales_desc"
-            products={data.bestSellers}
+            products={shelves.bestSellers}
             rankBadges={3}
           />
           <TrustStrip />
-          {data.categoryRows.map((row) => (
+          {shelves.categoryRows.map((row) => (
             <ProductRow
               key={row.category.slug}
               id={`sh-cat-${row.category.slug}`}
@@ -197,7 +277,7 @@ export default function StoreHome({
             title="New Arrivals"
             subtitle="Fresh additions to the catalogue"
             href="/products"
-            products={data.newArrivals}
+            products={shelves.newArrivals}
           />
           <BrandStrip brands={data.brands} />
           <ReviewStrip reviews={data.reviews} />

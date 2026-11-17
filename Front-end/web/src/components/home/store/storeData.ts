@@ -47,6 +47,8 @@ export interface StoreProduct {
   festivalOfferSetting?: FestivalOfferSetting | null;
   /** Coarse availability; 'out'/'backorder' tiles sort last on every shelf. */
   stock: StockStatus;
+  /** Slug of the product's first category, when the API sent it (used to vary the hero). */
+  category?: string;
   /**
    * 1-based position in the best-seller ranking. Shelves are shown premium-first, so
    * a tile's position is no longer its sales rank — the "#1 Best seller" badge reads
@@ -105,6 +107,8 @@ export interface StoreHomeData {
   featured: StoreProduct[];
   /** Featured first, topped up with the dearest buyable products (see shelfOrder.ts). */
   premiumPicks: StoreProduct[];
+  /** The dearest buyable products: the pool Premium Picks is topped up from. */
+  dearest: StoreProduct[];
   categoryRows: StoreCategoryRow[];
   brands: StoreBrand[];
   reviews: StoreReview[];
@@ -118,6 +122,8 @@ interface ApiProduct {
   name: string;
   slug?: string;
   brand?: string;
+  /** Populated on the public list routes: `[{ _id, name, slug }]`. */
+  categories?: Array<{ slug?: string } | string>;
   price: number;
   originalPrice?: number | null;
   festivalOfferSetting?: FestivalOfferSetting | null;
@@ -152,7 +158,13 @@ export const toStoreProduct = (p: ApiProduct): StoreProduct => {
     ...(p.productType === 'variable' && { variable: true }),
     ...(p.festivalOfferSetting && { festivalOfferSetting: p.festivalOfferSetting }),
     stock: getStockStatus(p),
+    ...(firstCategorySlug(p) && { category: firstCategorySlug(p) }),
   };
+};
+
+const firstCategorySlug = (p: ApiProduct): string | undefined => {
+  const c = p.categories?.[0];
+  return c && typeof c === 'object' && c.slug ? c.slug : undefined;
 };
 
 /** Whole-number percentage off, or 0 when not on sale. */
@@ -207,7 +219,12 @@ const usable = (p: ApiProduct) => !!p.name && typeof p.price === 'number' && p.p
 
 /** Categories most likely to fill a "Top in …" row, tried in this order. */
 const ROW_CANDIDATES = ['lighting', 'exterior', 'performance', 'accessories', 'interior', 'body-kits', 'suspension', 'audio'];
-const MAX_CATEGORY_ROWS = 3;
+/** How many "Top in …" rows the home page shows. */
+export const MAX_CATEGORY_ROWS = 3;
+/** A product row with fewer than this many products looks broken and is not shown. */
+export const MIN_ROW = 4;
+/** Products shown in one "Top in …" row. */
+export const CATEGORY_ROW_SIZE = 12;
 
 export async function getStoreHomeData(): Promise<StoreHomeData> {
   const categoriesP = safe(async () => {
@@ -322,7 +339,9 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
   const rowsP = Promise.all(candidates.map((c) => safe(async () => ({
     category: c,
     products: orderShelf(
-      (await productList(`category=${encodeURIComponent(c.slug)}&sortBy=salesScore&sortOrder=desc&limit=12`))
+      // 20, not 12: the page shows 12, and the spare ones refill a row whose top
+      // sellers already appear higher up the page (see uniqueShelves.ts).
+      (await productList(`category=${encodeURIComponent(c.slug)}&sortBy=salesScore&sortOrder=desc&limit=20`))
         .filter(usable).map(toStoreProduct),
       HOME_SHELF_ORDER.categoryRows,
     ),
@@ -340,7 +359,10 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     newArrivals: newest.list,
     featured,
     premiumPicks: buildPremiumPicks(featured, dearest),
-    categoryRows: rows.filter((r) => r.products.length >= 4).slice(0, MAX_CATEGORY_ROWS),
+    dearest,
+    // Every candidate with enough products, in preference order; the page picks
+    // the first MAX_CATEGORY_ROWS that still have enough once repeats are removed.
+    categoryRows: rows.filter((r) => r.products.length >= MIN_ROW),
     brands,
     reviews,
     press,

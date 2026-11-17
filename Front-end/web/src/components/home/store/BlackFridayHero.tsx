@@ -70,6 +70,8 @@ export default function BlackFridayHero({
         <span className="bfh-sweep" />
       </div>
 
+      {showSeal && tokens.perks?.length ? <PerksCarousel perks={tokens.perks} /> : null}
+
       <div className="bfh-inner">
         <div className="bfh-copy">
           <p className="bfh-eyebrow">{copy.heroEyebrow}</p>
@@ -133,6 +135,46 @@ export default function BlackFridayHero({
         </div>
       </div>
     </section>
+  );
+}
+
+/** Copies of the list per half: enough to overfill a 2560px-wide hero. */
+const PERK_REPEAT = 2;
+
+/**
+ * The offer perks gliding along the top of the hero ("₹0 Shipping fee · ₹0
+ * Packing fee · ₹0 Platform fee …"). Rendered only while checkout really waives
+ * the fees. Two identical halves slide left by one half and loop seamlessly
+ * (transform only, CSS — no JS timer). Readers get the list once; the copies
+ * are hidden from them. Fixed height in CSS, so it never shifts the page; with
+ * reduced motion it stands still and scrolls sideways by hand instead.
+ */
+function PerksCarousel({ perks }: { perks: { strong: string; text: string }[] }) {
+  const half = Array.from({ length: PERK_REPEAT }, () => perks).flat();
+  return (
+    <div className="bfh-perks" data-testid="offer-perks">
+      <div className="bfh-perks-row">
+        {[0, 1].map((copy) => (
+          <ul key={copy} className="bfh-perks-half" aria-hidden={copy === 1 ? true : undefined} aria-label={copy === 0 ? 'Black Friday delivery offer' : undefined}>
+            {half.map((p, i) => (
+              <li key={i} className="bfh-perk" aria-hidden={copy === 0 && i >= perks.length ? true : undefined}>
+                <CheckIcon />
+                <strong>{p.strong}</strong> {p.text}
+              </li>
+            ))}
+          </ul>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg className="bfh-perk-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
