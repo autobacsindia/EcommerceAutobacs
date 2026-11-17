@@ -1,7 +1,7 @@
-import StaffProject, { PROJECT_STATUSES, PROJECT_COLOURS } from '../models/StaffProject.js';
+import StaffProject, { PROJECT_STATUSES, PROJECT_COLOURS, projectCode, projectNumberIn } from '../models/StaffProject.js';
 import StaffTask from '../models/StaffTask.js';
 
-export { PROJECT_STATUSES, PROJECT_COLOURS };
+export { PROJECT_STATUSES, PROJECT_COLOURS, projectCode, projectNumberIn };
 
 /**
  * Projects of the staff Tasks module (models/StaffProject.js).
@@ -12,6 +12,10 @@ const staffProjectRepository = {
 
   create: async (doc) => (await StaffProject.create(doc)).toObject(),
   findById: (id) => StaffProject.findById(id).lean(),
+  /** PRJ-<number> → the project (archived too: the caller decides), via staff_project_number. */
+  findByNumber: (number) => StaffProject.findOne({ number: { $type: 'number', $eq: number } }).lean(),
+  /** Several projects by id (archived too), at most `ids.length`. */
+  findByIds: (ids) => StaffProject.find({ _id: { $in: ids } }).limit(ids.length).lean(),
   findByClientId: (createdBy, clientId) => StaffProject.findOne({ createdBy, clientId: { $type: 'string', $eq: clientId } }).lean(),
 
   /** The ids of the live projects matching `query` — at most `cap` (one index range per $or branch). */

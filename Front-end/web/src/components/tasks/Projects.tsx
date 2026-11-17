@@ -118,6 +118,7 @@ function ProjectCard({ p, onOpen }: { p: Project; onOpen: (id: string) => void }
         <span className="flex min-w-0 items-start gap-2">
           <span aria-hidden className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-sm ${projectDot(p.colour)}`} />
           <span className="min-w-0 flex-1 truncate font-semibold text-gray-900 group-hover:text-blue-700" title={p.name}>{p.name}</span>
+          {p.code && <ProjectCode code={p.code} />}
           <ProjectStatusPill p={p} />
         </span>
         <ProgressBar p={p} />
@@ -248,6 +249,7 @@ export function ProjectHeader({ p, onBack, isAdmin }: { p: Project; onBack: () =
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span aria-hidden className={`h-3 w-3 shrink-0 rounded-sm ${projectDot(p.colour)}`} />
             <h2 className="min-w-0 truncate text-lg font-semibold text-gray-900" title={p.name}>{p.name}</h2>
+            {p.code && <ProjectCode code={p.code} />}
             <ProjectStatusPill p={p} />
             {p.can.edit && (
               <button onClick={() => setEditing(true)} className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -475,5 +477,14 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
         </button>
       </div>
     </form>
+  );
+}
+
+/** "PRJ-0007": the ID people type on a payment to link it to this project. */
+function ProjectCode({ code }: { code: string }) {
+  return (
+    <span className="shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[11px] font-medium text-gray-600" title="Project ID — type it on a payment to link the payment here">
+      {code}
+    </span>
   );
 }

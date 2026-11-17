@@ -1685,6 +1685,29 @@ class OrderRepository extends BaseRepository {
     }
   }
 
+  /**
+   * Inside a transaction: write this order's `supplierPayGuard` counter. Raising a
+   * supplier payment does this first, so two raised on one order at the same moment
+   * write the same document — MongoDB aborts one transaction (a write conflict),
+   * which retries and then sees the other's request. That is what makes "one open
+   * supplier payment per item" hold under a race. Raw collection write: the
+   * counter means nothing to the order model and is never read.
+   */
+  async bumpSupplierPayGuard(orderId, session) {
+    return Order.collection.updateOne({ _id: orderId }, { $inc: { supplierPayGuard: 1 } }, { session });
+  }
+
+  /**
+   * Orders for the admin's lookup, with their status timeline. Bounded: callers
+   * pass at most a page of ids. No phone, email or address beyond the city.
+   */
+  async findForLookup(ids) {
+    return Order.find({ _id: { $in: ids } })
+      .select('orderNumber wpId status paymentStatus totalAmount createdAt paidAt statusHistory.status statusHistory.timestamp shippingAddress.fullName shippingAddress.city')
+      .limit(ids.length)
+      .lean();
+  }
+
   /** @param {{ withSaleHistory?: boolean }} [opts] also read the seller-credit record (accounts' order panel only) */
   async findForWorkflow(orderId, { withSaleHistory = false } = {}) {
     return Order.findById(orderId)

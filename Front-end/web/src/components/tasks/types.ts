@@ -468,6 +468,8 @@ export type ProjectStatus = 'on_track' | 'at_risk' | 'late' | 'done';
 /** A project (services/staffProjectService.js): tasks from any team, one owner, dates and progress. */
 export type Project = {
   id: string;
+  /** "PRJ-0007" — what people type on a payment to link it. null only before the backfill. */
+  code: string | null;
   name: string;
   description: string;
   colour: string;
@@ -489,4 +491,4 @@ export type Project = {
   can: { edit: boolean; archive: boolean; restore: boolean };
 };
 export type ProjectPage = { projects: Project[]; nextCursor: string | null; canCreate: boolean };
-export type ProjectPick = { id: string; name: string; colour: string };
+export type ProjectPick = { id: string; code?: string | null; name: string; colour: string };

@@ -185,7 +185,7 @@ export default function PaymentRequestList({
                   {r.deal && <DealLine d={r.deal} />}
                   {r.credit && <p className="text-xs text-emerald-800">{money(r.credit.amount, r.currency)} from supplier credit</p>}
                   <p className="truncate text-xs text-gray-500">
-                    {r.teamLabel} · {r.requestedBy} · {formatDateIST(r.createdAt)}{r.order ? ` · ${r.order.number}` : ''}
+                    {r.teamLabel} · {r.requestedBy} · {formatDateIST(r.createdAt)}{r.order ? ` · ${r.order.number}` : ''}{r.project ? ` · ${r.project.code}` : ''}
                     {r.payment?.reference ? ` · Ref ${r.payment.reference}` : ''}
                   </p>
                 </div>

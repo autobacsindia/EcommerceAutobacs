@@ -52,6 +52,7 @@ import * as suppliers from './supplierService.js';
 import * as deals from './supplierDealService.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
 import * as credit from './supplierLedgerService.js';
+import { projectForLink, projectCode } from './staffProjectService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import { cleanRichTextWithin, richTextLength } from '../utils/richText.js';
 
@@ -135,7 +136,7 @@ const mayEdit = (u, r) => EDITABLE.includes(r.status) && (
   || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team)
 );
 
-/** Who may link / unlink an expense to an order: who raised it, their team head, accounts, the admin. */
+/** Who may link / unlink a request to an order, project or reference: who raised it, their team head, accounts, the admin. */
 const mayLinkOrder = (u, r) => seesAll(u)
   || idOf(r.requestedBy) === idOf(u?._id)
   || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team);
@@ -464,6 +465,9 @@ export function shape(r, viewer) {
       accountNumber: full ? r.payee?.accountNumber || '' : maskAccount(r.payee?.accountNumber),
     },
     order: r.order ? { id: idOf(r.order), number: r.orderNumber } : null,
+    // The snapshot taken when it was linked: still reads right after a rename or delete.
+    project: r.project ? { id: idOf(r.project), code: r.projectCode || '', name: r.projectName || '' } : null,
+    reference: r.reference || '',
     // One part of a made-to-order deal (advance / part / balance), or ''.
     dealId: r.deal ? idOf(r.deal) : null,
     part: r.part || '',
@@ -493,9 +497,13 @@ export function shape(r, viewer) {
       edit: mayEdit(viewer, r),
       // Which order an expense was for: any status (no money changes).
       linkOrder: r.kind === 'expense' && mayLinkOrder(viewer, r),
+      // Which project / other ID it belongs to: any kind, any status (no money changes).
+      linkProject: mayLinkOrder(viewer, r),
       // After paying: the admin may correct how it was paid, the reference and the screenshots.
       editPayment: mayPay(viewer) && r.status === 'paid',
     },
+    // Only for whoever pays: sent back with "Pay" (see payVersionOf).
+    ...(mayPay(viewer) ? { payVersion: payVersionOf(r) } : {}),
     // For the requester: until when they may still edit (admins have no limit).
     editableUntil: null, // no time limit any more
   };
@@ -518,23 +526,45 @@ export async function createExpense(actor, input, uploaded, req) {
   const payee = cleanPayee(input.payee);
 
   const link = await expenseOrderLink(input.orderId);
+  const extra = await otherLinks(actor, input);
+  // A double-clicked "Submit" or a replayed request: the first one, unchanged.
+  const clientId = cleanClientId(input.clientId);
+  if (clientId) {
+    const seen = await paymentRequestRepository.findByClientId(actor._id, clientId);
+    if (seen) return shape(seen, actor);
+  }
 
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
   const stored = await storeFiles(files, kinds, actor);
-  const doc = await paymentRequestRepository.create({
-    number: await nextNumber(),
-    kind: 'expense',
-    ...link,
-    status: 'submitted',
-    team,
-    requestedBy: actor._id,
-    requestedByName: actor.name || '',
-    ...money, category, description, payee,
-    files: stored,
-    history: [entry(actor, 'submitted')],
-  });
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency, foreignAmount: money.foreignAmount, ...(link.order ? { orderId: idOf(link.order) } : {}) });
+  let doc;
+  try {
+    doc = await paymentRequestRepository.create({
+      number: await nextNumber(),
+      kind: 'expense',
+      ...link,
+      ...extra,
+      status: 'submitted',
+      team,
+      requestedBy: actor._id,
+      requestedByName: actor.name || '',
+      ...money, category, description, payee,
+      files: stored,
+      ...(clientId ? { clientId } : {}),
+      history: [entry(actor, 'submitted', extra.projectCode ? `for project ${extra.projectCode}` : '')],
+    });
+  } catch (err) {
+    // The same submit twice at the same moment: the unique index kept one. Drop our copies of the files.
+    if (err?.code === 11000 && clientId) {
+      const seen = await paymentRequestRepository.findByClientId(actor._id, clientId);
+      if (seen) {
+        await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+        return shape(seen, actor);
+      }
+    }
+    throw err;
+  }
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency, foreignAmount: money.foreignAmount, ...(link.order ? { orderId: idOf(link.order) } : {}), ...(extra.project ? { projectId: idOf(extra.project) } : {}) });
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[team]}). Accounts: please approve or decline.`);
   return shape(doc, actor);
 }
@@ -551,6 +581,27 @@ async function expenseOrderLink(orderId) {
   if (!order) throw fail('That order was not found.', 400);
   return { order: order._id, orderNumber: orderNumber(order) };
 }
+
+/** The optional project (typed as "PRJ-0007") and other ID on a request: checked, then snapshotted. */
+async function otherLinks(actor, input) {
+  const p = await projectForLink(actor, input.project, { seesAll: seesAll(actor) });
+  return {
+    ...(p ? { project: p._id, projectCode: projectCode(p.number), projectName: p.name || '' } : {}),
+    reference: cleanReference(input.reference),
+  };
+}
+
+const REFERENCE_MAX = 60;
+/** Free text, one line, at most 60 characters; '' for none. */
+function cleanReference(raw) {
+  if (raw == null) return '';
+  if (typeof raw !== 'string') throw fail('The other ID must be text.', 400);
+  // eslint-disable-next-line no-control-regex
+  const text = raw.normalize('NFKC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (text.length > REFERENCE_MAX) throw fail(`Keep the other ID under ${REFERENCE_MAX} characters.`, 400);
+  return text;
+}
+const cleanClientId = (raw) => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(raw) ? raw : undefined);
 
 /**
  * A supplier payment for items on a paid order. Snapshots the order, customer
@@ -591,6 +642,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   }
 
   const bill = supplierMoney(input, deal);
+  const extra = await otherLinks(actor, input);
   const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
   // Supplier credit (services/supplierLedgerService.js): the bill stays the bill (the
   // deal counts it in full); only what is transferred is less. Re-checked under the
@@ -637,6 +689,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     payee,
     order: order._id,
     orderNumber: orderNumber(order),
+    ...extra,
     itemIds: items.map((i) => i._id),
     itemNames: items.map((i) => variantDisplayName(i.name, i.variantLabel)),
     customer: {
@@ -655,15 +708,23 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
       creditPaise ? `bill ${deals.moneyOf(amountPaise, money.currency)} − ${deals.moneyOf(creditPaise, money.currency)} supplier credit` : '',
     ].filter(Boolean).join('; '))],
   };
-  doc = creditPaise
-    // The credit row and the request land together or not at all.
-    ? await paymentRequestRepository.inTransaction(async (session) => {
-      const used = await credit.useCredit(session, { supplierId, currency: money.currency, creditPaise, request: fields, actor });
-      return paymentRequestRepository.create({ ...fields, credit: { amount: fromPaise(creditPaise), entry: used._id } }, session);
-    })
-    : await paymentRequestRepository.create(fields);
+  // One transaction: the order's guard, the "already in flight?" check again, the
+  // credit row and the request — all land, or none. The early check above gives a
+  // quick answer; this one is what holds when two are raised at the same moment
+  // (the guard write makes the second transaction retry and see the first).
+  doc = await paymentRequestRepository.inTransaction(async (session) => {
+    await orderRepository.bumpSupplierPayGuard(order._id, session);
+    const live = await paymentRequestRepository.findOpenForOrder(order._id, session);
+    const clash = live.find((r) => (r.itemIds || []).some((id) => wanted.includes(idOf(id))));
+    if (clash) throw fail(`${clash.number} for this item is already ${STATUS_LABELS[clash.status].toLowerCase()}.`, 409);
+    if (!creditPaise) return paymentRequestRepository.create(fields, session);
+    const used = await credit.useCredit(session, { supplierId, currency: money.currency, creditPaise, request: fields, actor });
+    return paymentRequestRepository.create({ ...fields, credit: { amount: fromPaise(creditPaise), entry: used._id } }, session);
+  });
   } catch (err) {
     if (deal) await deals.release(deal._id, amountPaise, 'request failed to save');
+    // Nothing was saved: the uploaded bill / QR belong to no request.
+    await Promise.all((stored || []).map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     throw err;
   }
   auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, currency: money.currency, foreignAmount: money.foreignAmount, ...(creditPaise ? { creditPaise } : {}), orderId: idOf(order._id), ...(deal ? { dealId: idOf(deal._id), part: doc.part } : {}) });
@@ -782,6 +843,23 @@ async function loadVisible(actor, id) {
 }
 
 const MOVED = 'This request has just been updated by someone else. Refresh to see where it is now.';
+const PAY_CHANGED = 'The amount or who is paid was changed since you opened this request. Check the new details, then pay again.';
+
+const PAYEE_PINNED = Object.freeze(['name', 'method', 'upiId', 'accountNumber', 'ifsc', 'swift']);
+/**
+ * What the admin agrees to when paying: the money and where it goes. `payVersion`
+ * is a fingerprint of it, sent to the payer's screen and back with "Pay", so a
+ * request edited after they opened it (a new amount, a new bank account) is
+ * refused rather than recorded as paid with figures nobody looked at.
+ */
+const payFacts = (r) => [r.amount, r.currency || BASE_CURRENCY, r.foreignAmount ?? null, ...PAYEE_PINNED.map((k) => r.payee?.[k] || '')];
+export const payVersionOf = (r) => crypto.createHash('sha256').update(JSON.stringify(payFacts(r))).digest('hex').slice(0, 20);
+/** The same facts as a compare-and-set filter: the write lands only if none changed since the read. */
+function payPinned(r) {
+  const f = { amount: r.amount, currency: r.currency ? r.currency : { $in: [BASE_CURRENCY, null] }, foreignAmount: r.foreignAmount ?? null };
+  for (const k of PAYEE_PINNED) f[`payee.${k}`] = r.payee?.[k] ? r.payee[k] : { $in: ['', null] };
+  return f;
+}
 
 /**
  * A supplier payment pays for an order's items; once the order (or every item the
@@ -851,7 +929,7 @@ export async function hold(actor, id, { note } = {}, req) {
  * worked out from it. A rupee request's amount is what accounts approved: a
  * different figure is refused, never applied.
  */
-export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees, paidFrom, sentAmount, sentCurrency, accountLabel } = {}, proofFiles = [], req) {
+export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees, paidFrom, sentAmount, sentCurrency, accountLabel, payVersion } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
@@ -860,6 +938,10 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   const now = new Date();
   const txAt = cleanTransactionAt(transactionAt, now.getTime());
   const r0 = await loadVisible(actor, id);
+  // The screen the admin paid from showed other figures: refuse, never record them.
+  // (Optional only so a browser tab opened before this shipped can still pay; the
+  // compare-and-set below pins the same facts either way.)
+  if (filled(payVersion) && String(payVersion) !== payVersionOf(r0)) throw fail(PAY_CHANGED, 409);
   await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   const fromForeign = paidFrom === 'foreign';
@@ -886,10 +968,9 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   // No rupees left the company: an older request's rupee estimate is not what it
   // cost, so it comes out of the rupee totals (the history keeps it).
   const unpriced = fromAccount ? { amount: 0, fxRate: null } : null;
-  // A priced (or foreign-account) payment is also pinned to the bill it checked: an
-  // edit to the bill between reading it and paying makes this a lost race, not a wrong figure.
-  const r = await paymentRequestRepository.transitionInSession(id, from,
-    priced || fromAccount ? { foreignAmount: r0.foreignAmount, amount: r0.amount, currency: r0.currency } : {}, {
+  // Pinned to the money and payee read above: an edit landing between that read and
+  // this write makes it a lost race (409), never a payment recorded with other figures.
+  const r = await paymentRequestRepository.transitionInSession(id, from, payPinned(r0), {
       ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
       ...(priced || unpriced || {}),
       status: 'paid',
@@ -902,7 +983,8 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   if (!r) {
     // Lost the race: the screenshot belongs to no payment.
     await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
-    throw fail(MOVED, 409);
+    const now = await paymentRequestRepository.findById(id);
+    throw fail(now && from.includes(now.status) && payVersionOf(now) !== payVersionOf(r0) ? PAY_CHANGED : MOVED, 409);
   }
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, {
     change: 'paid', method: how, reference: ref,
@@ -1141,6 +1223,7 @@ export const PAID_METHODS = Object.freeze(['razorpay', 'bank', 'upi', 'other']);
 const SEARCH_FIELDS = Object.freeze([
   'number', 'payee.name', 'payee.upiId', 'orderNumber', 'requestedByName', 'description', 'category',
   'payment.reference', 'itemNames', 'customer.name', 'customer.phone', 'customer.city',
+  'projectCode', 'projectName', 'reference',
 ]);
 const SUMMARY_CAP = 1000;
 
@@ -1315,6 +1398,42 @@ export async function linkOrder(actor, id, { orderId } = {}, req) {
   }, entry(actor, 'edited', note), {}, undefined);
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'order', from: was, to: now });
+  return shape(r, actor);
+}
+
+/**
+ * Which project and other ID a request belongs to — set, change or clear each
+ * one present in `input` (`project`: "PRJ-0007" or '' to remove; `reference`:
+ * text or ''). Any kind, any status: no money changes. A deleted project can't
+ * be newly linked, but an existing link to one stays until changed.
+ * Compare-and-set on the version read; logged in the history and the audit log.
+ */
+export async function setLinks(actor, id, input = {}, req) {
+  const r0 = await loadVisible(actor, id);
+  if (!mayLinkOrder(actor, r0)) throw fail('Only whoever raised it, their team head or accounts can change what it is linked to.', 403);
+  const set = {};
+  const notes = [];
+  if ('project' in input) {
+    const p = await projectForLink(actor, input.project, { seesAll: seesAll(actor) });
+    if (String(r0.project || '') !== String(p?._id || '')) {
+      const was = r0.projectCode || '';
+      const now = p ? projectCode(p.number) : '';
+      Object.assign(set, p ? { project: p._id, projectCode: now, projectName: p.name || '' } : { project: null, projectCode: '', projectName: '' });
+      notes.push(!now ? `project ${was} removed` : was ? `project ${was} → ${now}` : `linked to project ${now}`);
+    }
+  }
+  if ('reference' in input) {
+    const ref = cleanReference(input.reference);
+    if (ref !== (r0.reference || '')) {
+      set.reference = ref;
+      notes.push(!ref ? `other ID ${r0.reference} removed` : r0.reference ? `other ID ${r0.reference} → ${ref}` : `other ID ${ref}`);
+    }
+  }
+  if (!notes.length) return shape(r0, actor);
+  const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, set,
+    entry(actor, 'edited', notes.join('; ')), {}, undefined);
+  if (!r) throw fail(MOVED, 409);
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'links', fields: Object.keys(set) });
   return shape(r, actor);
 }
 

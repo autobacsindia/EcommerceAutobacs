@@ -287,6 +287,11 @@ StaffTaskSchema.index(
   in tests/staffProjectIndexUsage.test.js). One small key per task is cheaper.
 */
 StaffTaskSchema.index({ project: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_project' });
+// The tasks linked to one order (the admin's lookup), newest first. Partial: most tasks have no order.
+StaffTaskSchema.index(
+  { 'order.target': 1, _id: -1 },
+  { partialFilterExpression: { 'order.target': { $type: 'objectId' } }, name: 'staff_task_order' },
+);
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
 // The sub-tasks of one task, in list order. Partial: most tasks are not sub-tasks.
