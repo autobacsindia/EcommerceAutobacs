@@ -25,6 +25,8 @@ interface RateCard {
   insurancePercent: number;
   paymentFeePercent: number;
   paymentFeeGstPercent: number;
+  paymentFeeMax: number;
+  xlBox: { weightKg: number; lengthCm: number; breadthCm: number; heightCm: number };
   gstOnFees: { enabled: boolean; percent: number };
   origin: { label: string; pin: string; lat: number; lng: number };
   distanceBands: { upToKm: number | null; ratePerKg: number; slabRate?: number | null }[];
@@ -80,12 +82,22 @@ const FIELDS: { title: string; rows: [string, string, string][] }[] = [
     ],
   },
   {
+    title: 'Standard XL crate (when a body kit has no measured box)',
+    rows: [
+      ['xlBox.lengthCm', 'Length (cm)', 'Hyderabad bill: 208 × 70 × 85 cm → 276 kg.'],
+      ['xlBox.breadthCm', 'Width (cm)', ''],
+      ['xlBox.heightCm', 'Height (cm)', ''],
+      ['xlBox.weightKg', 'Actual weight (kg)', 'The bigger of this and the size weight is charged.'],
+    ],
+  },
+  {
     title: 'Other fees',
     rows: [
       ['remoteAreaFee', 'Remote area fee (₹)', 'Courier ODA charge, only for PINs on the list below.'],
       ['insurancePercent', 'Insurance (% of goods value)', 'VRL freight-on-value: 0.1.'],
       ['paymentFeePercent', 'Razorpay fee (%)', 'Your real Razorpay rate.'],
-      ['paymentFeeGstPercent', 'GST on Razorpay fee (%)', 'Razorpay charges 18% GST on its fee.'],
+      ['paymentFeeGstPercent', 'GST on Razorpay fee (%)', 'Added to the fee only when "GST on delivery fees" is off — otherwise that one GST line covers it (no double GST).'],
+      ['paymentFeeMax', 'Maximum payment fee (₹)', 'The payment fee never goes above this. 0 = no limit.'],
       ['gstOnFees.percent', 'GST on delivery fees (%)', 'Used only if the switch below is on.'],
     ],
   },
