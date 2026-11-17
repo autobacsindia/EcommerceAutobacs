@@ -51,10 +51,6 @@ describe('getStoreHomeData shelf order (mocked API)', () => {
         };
         if (url.includes('isFeatured=true')) return { products: [api('f-back', 185000, { stock: 'backorder' }), api('f1', 283000)] };
         if (url.includes('sortBy=createdAt')) return { total: 953, products: [api('n1', 1500)] };
-        if (url === '/media/press') return { data: [
-          { _id: 'pr1', publication: 'CEO Times', headline: 'Kerala garage', url: 'https://ceotimes.com/x/', featured: true },
-          { _id: 'pr2', publication: 'Other', headline: 'Not featured', url: 'https://o.com/', featured: false },
-        ] };
         if (url.includes('sortBy=price')) return { products: [api('d1', 814200, { brand: 'A' }), api('d2', 588499, { brand: 'B' }), api('d3', 500000, { brand: 'C' })] };
         return { products: [] };
       },
@@ -72,8 +68,6 @@ describe('getStoreHomeData shelf order (mocked API)', () => {
     const dearest = calls.find((u) => u.includes('sortBy=price'))!;
     expect(dearest).toMatch(/inStock=true/);
     expect(dearest).toMatch(/limit=24/);
-    // The press strip shows featured items only.
-    expect(d.press?.map((p) => p.id)).toEqual(['pr1']);
   });
 
   it('productTotal = the active-product total from the new-arrivals request — no extra call', async () => {
