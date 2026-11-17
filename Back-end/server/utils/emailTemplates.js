@@ -7,6 +7,7 @@ import { trackOrderUrl, storefrontOrigin } from './storefrontUrl.js';
 import { describeEmiPlan } from './paymentMethodDetails.js';
 import { buildOrderLines, variantDisplayName } from './orderLines.js';
 import { discountLabel } from './quoteDiscount.js';
+import { deliveryFeeBreakdown } from './deliveryFeeBreakdown.js';
 
 /**
  * The plain-text name of one display line, WITH its variant.
@@ -591,6 +592,22 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
     : fees?.offer?.applied
       ? `${inr(0)} (Black Friday offer — you saved ${inr(fees.offer.saving)})`
       : inr(order.shippingCost);
+  // Every fee line, from the snapshot: struck through as ₹0 when the Black Friday
+  // offer waived them, a normal payable line otherwise.
+  const feeView = deliveryFeeBreakdown(order);
+  const bfZero = `${inr(0)} (Black Friday offer)`;
+  const feeText = feeView
+    ? [
+      ...feeView.lines.map((l) => (feeView.waived
+        ? `${l.label}: ${inr(l.amount)} → ${bfZero}`
+        : `${l.label}: ${inr(l.amount)}`)),
+      ...(feeView.couponSaving > 0 ? [`Free delivery (coupon): -${inr(feeView.couponSaving)}`] : []),
+      ...(feeView.waived ? [`🎉 You saved ${inr(feeView.saving)} with the Black Friday offer`] : []),
+    ].join('\n')
+    : `Shipping: ${shippingValue}`;
+  const payableText = feeView
+    ? `You paid: products ${inr(feeView.payable.products)} (GST ${inr(feeView.payable.gst)} included) + delivery fees ${inr(feeView.payable.fees)}`
+    : '';
   const shippingNote = 'Shipping is not included in this total. You pay it to the courier on delivery, by cash or GPay / UPI.';
 
   const subject = `Order confirmed — ${invNo}`;
@@ -626,8 +643,8 @@ Items:
 ${itemsText}
 
 Subtotal: ${inr(order.subtotal)}
-${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}${order.salesDiscount?.amount ? `${discountLabel(order.salesDiscount.percent)}: -${inr(order.salesDiscount.amount)}\n` : ''}Shipping: ${shippingValue}
-${offer ? `Order total: ${inr(order.totalAmount)}\n${offerLabel}: -${inr(offer.discount)}\n` : ''}${shippingExtra ? 'Total (excl. shipping)' : 'Total Paid'}: ${inr(paidAmount)}${shippingExtra ? `\n\n${shippingNote}` : ''}
+${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}${order.salesDiscount?.amount ? `${discountLabel(order.salesDiscount.percent)}: -${inr(order.salesDiscount.amount)}\n` : ''}${feeText}
+${offer ? `Order total: ${inr(order.totalAmount)}\n${offerLabel}: -${inr(offer.discount)}\n` : ''}${shippingExtra ? 'Total (excl. shipping)' : 'Total Paid'}: ${inr(paidAmount)}${payableText ? `\n${payableText}` : ''}${shippingExtra ? `\n\n${shippingNote}` : ''}
 
 Your tax invoice is attached to this email as a PDF.
 
@@ -655,6 +672,18 @@ ${companyName}
         <td colspan="2" style="padding:4px 0;text-align:right;${bold ? 'font-weight:bold;' : 'color:#555;'}">${label}</td>
         <td style="padding:4px 0;text-align:right;${bold ? 'font-weight:bold;' : 'color:#555;'}">${value}</td>
       </tr>`;
+
+  const feeRowsHtml = feeView
+    ? [
+      ...feeView.lines.map((l) => (feeView.waived
+        ? totalsRow(l.label, `<s style="color:#999;">${inr(l.amount)}</s> <strong style="color:#15803d;">${bfZero}</strong>`)
+        : totalsRow(l.label, inr(l.amount)))),
+      feeView.couponSaving > 0 ? totalsRow('Free delivery (coupon)', `- ${inr(feeView.couponSaving)}`) : '',
+      feeView.waived
+        ? `<tr><td colspan="3" style="padding:6px 8px;text-align:right;background:#f0fdf4;color:#15803d;font-weight:bold;">🎉 You saved ${inr(feeView.saving)} with the Black Friday offer</td></tr>`
+        : '',
+    ].join('')
+    : '';
 
   const html = `
 <!DOCTYPE html>
@@ -688,11 +717,12 @@ ${companyName}
           ${order.couponDiscount ? totalsRow(`Coupon${order.couponCode ? ` (${order.couponCode})` : ''}`, `- ${inr(order.couponDiscount)}`) : ''}
           ${order.karmaDiscount ? totalsRow('Karma points', `- ${inr(order.karmaDiscount)}`) : ''}
           ${order.salesDiscount?.amount ? totalsRow(discountLabel(order.salesDiscount.percent), `- ${inr(order.salesDiscount.amount)}`) : ''}
-          ${totalsRow('Shipping', shippingValue)}
+          ${feeView ? feeRowsHtml : totalsRow('Shipping', shippingValue)}
           ${order.tax ? totalsRow('Tax (incl.)', inr(order.tax)) : ''}
           ${offer ? totalsRow('Order total', inr(order.totalAmount)) : ''}
           ${offer ? totalsRow(offerLabel, `- ${inr(offer.discount)}`) : ''}
           ${totalsRow(shippingExtra ? 'Total (excl. shipping)' : 'Total Paid', inr(paidAmount), true)}
+          ${payableText ? `<tr><td colspan="3" style="padding:4px 0;text-align:right;font-size:12px;color:#555;">${payableText}</td></tr>` : ''}
         </tfoot>
       </table>
       ${shippingExtra ? `<p style="margin-top:12px;font-size:13px;color:#666;">${shippingNote}</p>` : ''}
