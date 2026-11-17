@@ -42,6 +42,7 @@ const data: StoreHomeData = {
   newArrivals: [prod('n1', 14850), prod('n2', 59999)],
   featured: [],
   premiumPicks: [],
+  dearest: [],
   categoryRows: [],
   brands: [],
   reviews: [],
@@ -104,8 +105,10 @@ describe('festive home page switch', () => {
   it('gift prices are shown from the catalogue, formatted in rupees', () => {
     renderHome(liveTheme(), true);
     const gifts = screen.getByTestId('festive-gifts');
-    expect(gifts).toHaveTextContent('Under ₹5,000');
-    expect(gifts).toHaveTextContent('₹1,620');
+    // Products already on the deals shelf are not offered again as gifts.
+    expect(gifts).toHaveTextContent('Under ₹15,000');
+    expect(gifts).toHaveTextContent('₹14,850');
+    expect(gifts).not.toHaveTextContent('₹1,620');
   });
 });
 

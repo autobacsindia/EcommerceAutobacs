@@ -56,6 +56,13 @@ export interface FestivalThemeTokens {
    */
   freeDeliverySeal?: { top: string; middle: string; bottom: string };
   /**
+   * The perks carousel along the top of the hero, shown only while checkout
+   * really waives the delivery fees (same server check as the seal). Each item
+   * names a real fee line from checkout (Back-end/server/utils/deliveryFees.js),
+   * so the carousel never promises a saving checkout does not give.
+   */
+  perks?: { strong: string; text: string }[];
+  /**
    * Words for the festive home page (components/home/store/FestiveHome.tsx).
    * Every number on that page comes from the live catalogue; only words live here.
    */
@@ -146,6 +153,20 @@ export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
     },
     ticker: ['Black Friday Blowout', 'Biggest auto upgrade event', 'Limited time only', 'Shop by your car'],
     freeDeliverySeal: { top: 'Without', middle: 'Shipping, packing, delivery', bottom: 'charges' },
+    // "₹0 <fee name>": the names match checkout's fee lines
+    // word for word, and "free …" delivery wording is barred by the site-wide
+    // guard in app/shippingWording.test.ts.
+    perks: [
+      { strong: '₹0', text: 'Shipping fee' },
+      { strong: '₹0', text: 'Packing fee' },
+      { strong: '₹0', text: 'Handling fee' },
+      { strong: '₹0', text: 'Insurance fee' },
+      { strong: '₹0', text: 'Platform fee' },
+      { strong: '₹0', text: 'Fuel surcharge' },
+      { strong: '₹0', text: 'Docket / processing fee' },
+      { strong: '₹0', text: 'Remote area fee' },
+      { strong: '₹0', text: 'GST on fees' },
+    ],
     home: {
       navLabel: 'Black Friday',
       heroEyebrow: 'The biggest auto upgrade event',
