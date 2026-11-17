@@ -454,32 +454,6 @@
   .sp-help-actions > * { flex: 1; }
 }
 
-/* "As featured in" press strip (PressStrip.tsx). One featured item lays out
-   side by side (photo | text); two or three sit in columns. */
-.sh-press { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-.sh-press-link { display: flex; flex-direction: column; height: 100%; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; color: inherit; text-decoration: none; transition: box-shadow 0.15s ease; }
-.sh-press-link:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1); }
-.sh-press-link:focus-visible { outline: 2px solid var(--g); outline-offset: 2px; }
-.sh-press-photo { display: block; aspect-ratio: 2 / 1; background: var(--g-100); overflow: hidden; }
-.sh-press-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sh-press-body { display: flex; flex-direction: column; gap: 8px; padding: 16px; flex: 1; }
-.sh-press-pub { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--g); }
-.sh-press-date { font-weight: 600; color: var(--muted); }
-.sh-press-headline { font-family: var(--font-montserrat), sans-serif; font-size: 17px; font-weight: 700; line-height: 1.35; color: var(--ink); }
-.sh-press-excerpt { font-size: 14px; line-height: 1.55; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.sh-press-cta { margin-top: auto; font-size: 14px; font-weight: 600; color: var(--link); }
-.sh-press-link:hover .sh-press-cta { color: var(--red-ink); text-decoration: underline; }
-.sh-press-card:only-child .sh-press-link { flex-direction: row; }
-.sh-press-card:only-child .sh-press-photo { flex: 0 0 48%; aspect-ratio: auto; min-height: 240px; }
-.sh-press-card:only-child .sh-press-body { padding: 22px 24px; justify-content: center; }
-.sh-press-card:only-child .sh-press-headline { font-size: 21px; }
-@media (max-width: 768px) {
-  .sh-press-card:only-child .sh-press-link { flex-direction: column; }
-  .sh-press-card:only-child .sh-press-photo { flex: none; aspect-ratio: 2 / 1; min-height: 0; }
-  .sh-press-card:only-child .sh-press-body { padding: 16px; }
-  .sh-press-card:only-child .sh-press-headline { font-size: 17px; }
-}
-
 /* ── responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 1200px) {
   .sh-quads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
