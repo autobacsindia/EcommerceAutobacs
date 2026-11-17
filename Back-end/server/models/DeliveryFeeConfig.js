@@ -61,6 +61,14 @@ const DeliveryFeeConfigSchema = new mongoose.Schema({
   insurancePercent: percent(D.insurancePercent),
   paymentFeePercent: percent(D.paymentFeePercent),
   paymentFeeGstPercent: percent(D.paymentFeeGstPercent),
+  paymentFeeMax: money(D.paymentFeeMax, 100000),
+  // Standard crate for an XL product with no measured box (see utils/deliveryFees.js).
+  xlBox: {
+    weightKg: { type: Number, min: 0.1, max: 2000, default: D.xlBox.weightKg },
+    lengthCm: { type: Number, min: 1, max: 1000, default: D.xlBox.lengthCm },
+    breadthCm: { type: Number, min: 1, max: 1000, default: D.xlBox.breadthCm },
+    heightCm: { type: Number, min: 1, max: 1000, default: D.xlBox.heightCm },
+  },
   gstOnFees: {
     enabled: { type: Boolean, default: D.gstOnFees.enabled },
     percent: percent(D.gstOnFees.percent),
