@@ -501,7 +501,61 @@ export type Project = {
   archivedAt: string | null;
   createdBy: { id: string; name: string };
   rev: number;
-  can: { edit: boolean; archive: boolean; restore: boolean };
+  /** The job's details on its form (Back-end config/projectTemplates.js); null until filled in. */
+  details?: ProjectDetails | null;
+  /** One project's "Create slip" menu (only on GET of one project): stored templates, then the summary. */
+  slips?: ProjectSlip[];
+  can: { edit: boolean; archive: boolean; restore: boolean; editDetails?: boolean; fillFromOrder?: boolean };
+};
+
+export type ProjectFieldType = 'text' | 'textarea' | 'phone' | 'date' | 'number' | 'money';
+export type SlipFieldType = ProjectFieldType | 'items';
+export type SlipField = { key: string; label: string; type: SlipFieldType; max?: number; upper?: boolean; placeholder?: string; notBefore?: string };
+export type SlipItem = { name: string; qty: number | string; rate: number | string };
+export type ProjectSlip = {
+  key: string;
+  label: string;
+  /** What will print blank (labels). */
+  missing: string[];
+  /** The slip's own boxes, asked when it is made; empty = one click. */
+  fields: SlipField[];
+  /** What was filled in last time, kept on the project. */
+  values: Record<string, string | number | SlipItem[]>;
+};
+export type ProjectField = {
+  key: string; label: string; type: ProjectFieldType; group: string;
+  max?: number; upper?: boolean; placeholder?: string;
+};
+export type ProjectTemplate = {
+  key: string; label: string; hint: string;
+  groups: Record<string, string>;
+  fields: ProjectField[];
+};
+export type ProjectTemplates = {
+  templates: ProjectTemplate[];
+  limits: { customFields: number; customLabel: number; customValue: number };
+};
+export type ProjectDetails = {
+  template: string;
+  templateLabel: string;
+  values: Record<string, string | number>;
+  custom: { label: string; value: string }[];
+  order: { id: string; number: string } | null;
+  /** Quoted − advance, worked out by the server. null when nothing was quoted. */
+  balance: number | null;
+  updatedAt: string | null;
+  updatedByName: string;
+};
+export type ProjectReminder = {
+  day: string;
+  projects: {
+    id: string; name: string; colour: string; dueOn: string | null;
+    projectLate: boolean; projectDueToday: boolean;
+    open: number; late: number; dueToday: number;
+    lateTasks: { id: string; title: string; dueOn: string | null }[];
+    dueTodayTasks: { id: string; title: string; dueOn: string | null }[];
+  }[];
+  totals: { open: number; late: number; dueToday: number };
 };
 export type ProjectList = { id: string; name: string };
 /** One of a project's own statuses; `type` is what it counts as everywhere else. */

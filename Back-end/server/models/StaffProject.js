@@ -45,6 +45,31 @@ const PersonSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/**
+ * The job's own facts (config/projectTemplates.js): which form it uses, the
+ * values of that form's fields, extra "label: value" rows, and the order the
+ * customer details came from. Validated by services/staffProjectDetailsService.js;
+ * stored as plain values (strings, numbers) keyed by field.
+ */
+const ProjectDetailsSchema = new mongoose.Schema(
+  {
+    template: { type: String, required: true },
+    values: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+    custom: {
+      type: [new mongoose.Schema({ label: { type: String, required: true }, value: { type: String, default: '' } }, { _id: false })],
+      default: [],
+    },
+    /** The order the customer details were filled from (a snapshot, not a live link). */
+    order: {
+      type: new mongoose.Schema({ id: { type: mongoose.Schema.Types.ObjectId }, number: { type: String } }, { _id: false }),
+      default: null,
+    },
+    updatedAt: { type: Date, default: null },
+    updatedByName: { type: String, default: '' },
+  },
+  { _id: false, minimize: false },
+);
+
 /** The kinds a project's own status can be: what it counts as everywhere else. */
 export const PROJECT_STAGE_TYPES = Object.freeze(['todo', 'in_progress', 'done']);
 
@@ -89,6 +114,14 @@ const StaffProjectSchema = new mongoose.Schema(
     importKey: { type: String, default: undefined, maxlength: 100 },
     /** Set by the owner to say how it stands; null lets the tasks decide. */
     statusOverride: { type: String, enum: [...PROJECT_STATUSES, null], default: null },
+    /**
+     * Each slip's own boxes (models/SlipTemplate.js `fields`), by slip key:
+     * { values, updatedAt, updatedByName }. Kept so the next print of the same
+     * slip is one click.
+     */
+    slipValues: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    /** The job's details and template; null until someone fills them in. */
+    details: { type: ProjectDetailsSchema, default: null },
     rev: { type: Number, default: 1 },
     archivedAt: { type: Date, default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

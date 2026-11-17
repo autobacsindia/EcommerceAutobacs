@@ -31,6 +31,8 @@ import staffProjectRepository, { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAG
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
+import { shapeDetails, canEditDetails, canReadOrders } from './staffProjectDetailsService.js';
+import { liveTemplates, slipsForProject } from './slipTemplateService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -261,6 +263,7 @@ function shape(p, viewer, counts = NO_COUNTS, today = todayIST()) {
       overdue: counts.overdue,
       percent: counts.total ? Math.round((counts.done * 100) / counts.total) : 0,
     },
+    details: shapeDetails(p.details),
     archivedAt: p.archivedAt || null,
     createdBy: { id: idOf(p.createdBy), name: p.createdByName || '' },
     createdAt: p.createdAt,
@@ -270,6 +273,8 @@ function shape(p, viewer, counts = NO_COUNTS, today = todayIST()) {
       edit: !archived && canManageProject(viewer, p),
       archive: !archived && canManageProject(viewer, p),
       restore: archived && canManageProject(viewer, p),
+      editDetails: canEditDetails(viewer, p),
+      fillFromOrder: canEditDetails(viewer, p) && canReadOrders(viewer),
     },
   };
 }
@@ -336,8 +341,9 @@ export async function pickableProjects(actor) {
 export async function getProject(actor, id) {
   const p = await loadVisibleProject(actor, id, { archived: true });
   const today = todayIST();
-  const counts = await countsFor([p], today);
-  return shape(p, actor, counts.get(idOf(p._id)), today);
+  const [counts, templates] = await Promise.all([countsFor([p], today), liveTemplates()]);
+  // One project's page also carries its "Create slip" menu (services/slipTemplateService.js).
+  return { ...shape(p, actor, counts.get(idOf(p._id)), today), slips: slipsForProject(p, templates) };
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────

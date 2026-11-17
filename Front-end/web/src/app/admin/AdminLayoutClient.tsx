@@ -7,7 +7,7 @@ import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ScanSearch, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
-  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp } from 'lucide-react';
+  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
@@ -18,6 +18,7 @@ import NotificationBell from '@/components/notifications/NotificationBell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
 import { splitMore } from '@/components/panel/navMore';
 import CallProvider from '@/components/calls/CallProvider';
+import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
 
 interface NavItem {
   href: string;
@@ -123,6 +124,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'System',
     items: [
       { href: '/admin/staff', label: 'Staff & Teams', icon: IdCard },
+      // The printable slips a project offers in "Create slip" (delivery slip, driver authorisation…).
+      { href: '/admin/slip-templates', label: 'Slip templates', icon: Printer },
       { href: '/admin/team-activity', label: 'Team activity', icon: Timer },
       { href: '/admin/pop-ups', label: 'Pop-up check', icon: BellRing },
       { href: '/admin/payments', label: 'Payments', icon: CreditCard },
@@ -319,6 +322,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         }
       >
         {children}
+        <ProjectReminderPopup tasksHref="/admin/tasks" />
       </PanelShell>
     </CallProvider>
   );

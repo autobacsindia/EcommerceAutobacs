@@ -22,6 +22,7 @@ import { Avatar, AvatarStack } from './ui';
 import { Dialog } from './Overlays';
 import { STAGE_TYPES, formatDueDay, isConflict, newClientId, type Project, type ProjectPage, type ProjectStatus, type TaskStatus } from './types';
 import { PROJECT_COLOURS, projectDot } from './ProjectPicker';
+import { ProjectDetailsPanel } from './ProjectDetails';
 
 export { PROJECT_COLOURS, projectDot, ProjectPicker, useProjectPick } from './ProjectPicker';
 
@@ -381,6 +382,7 @@ export function ProjectHeader({ p, onBack, isAdmin }: { p: Project; onBack: () =
           </div>
         </div>
       </div>
+      <ProjectDetailsPanel p={p} />
       <Dialog open={editing} onClose={() => setEditing(false)} label="Edit project">
         {editing && <ProjectForm project={p} isAdmin={isAdmin} onCancel={() => setEditing(false)} onDone={() => setEditing(false)} onDeleted={() => { setEditing(false); onBack(); }} />}
       </Dialog>

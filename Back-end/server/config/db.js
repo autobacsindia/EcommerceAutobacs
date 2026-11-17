@@ -776,6 +776,14 @@ export async function ensureCriticalIndexes() {
       { createdBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_project_client_id', background: true }
     );
+    // Printable slip templates (models/SlipTemplate.js): one per key.
+    await db.collection('sliptemplates').createIndex({ key: 1 }, { unique: true, name: 'slip_template_key', background: true });
+    // The daily project-owner reminder (models/StaffProjectReminder.js): once per person per day.
+    await db.collection('staffprojectreminders').createIndex({ user: 1, day: 1 }, { unique: true, name: 'staff_project_reminder_user_day', background: true });
+    await db.collection('staffprojectreminders').createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: 'date' } }, name: 'staff_project_reminder_ttl', background: true }
+    );
     // PRJ-0007: one project per number (models/StaffProject.js). Partial, so the
     // projects not yet backfilled (no number) do not collide on null.
     await db.collection('staffprojects').createIndex(
