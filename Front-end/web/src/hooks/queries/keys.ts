@@ -316,6 +316,8 @@ export const taskKeys = {
   assignees: () => [...taskKeys.all, 'assignees'] as const,
   /** The page header's late / due-today counts. */
   summary: () => [...taskKeys.all, 'summary'] as const,
+  /** The admin's due-date rules (how far ahead each priority may be due). */
+  rules: () => [...taskKeys.all, 'rules'] as const,
   /** The Inbox: what happened on your tasks. `state` is 'all' or 'unread'. */
   inboxes: () => [...taskKeys.all, 'inbox'] as const,
   inbox: (state: string) => [...taskKeys.inboxes(), state] as const,
@@ -417,4 +419,12 @@ export const googleReviewKeys = {
   mine: (status: string) => ['google-reviews', 'mine', status] as const,
   queue: (status: string) => ['google-reviews', 'queue', status] as const,
   detail: (id: string) => ['google-reviews', 'detail', id] as const,
+};
+
+/** Delivery fees (`/delivery-fees/*`) — public on/off + offer flag, admin rate card, remote PINs. */
+export const deliveryFeeKeys = {
+  all: ['delivery-fees'] as const,
+  public: () => ['delivery-fees', 'public'] as const,
+  admin: () => ['delivery-fees', 'admin'] as const,
+  remotePins: (prefix: string) => ['delivery-fees', 'remote-pins', prefix] as const,
 };

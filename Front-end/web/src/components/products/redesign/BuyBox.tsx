@@ -5,6 +5,7 @@ import { useFestivalOfferPrice, useFestivalPriceRange } from '@/components/festi
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { resolveFestivalSetting, type FestivalOfferSetting, type FestivalVariantSetting } from '@/lib/festival/festivalOffer';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
+import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard, Star } from 'lucide-react';
@@ -17,7 +18,8 @@ import { useCurrency } from '@/context/CurrencyContext';
 import CampaignRateBadge from '@/components/campaign/CampaignRateBadge';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
-import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
+import { trustBadges, shippingStatement, type TrustIcon } from '@/lib/storePolicies';
+import { useDeliveryFeesPublic } from '@/hooks/queries/useDeliveryFeesPublic';
 import { UNBOXING_VIDEO_NOTE } from '@/lib/constants';
 import Eyebrow from '@/components/ui/Eyebrow';
 import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCountdown';
@@ -97,6 +99,9 @@ export default function BuyBox({
   const { isAuthenticated } = useAuth();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   const { formatPrice } = useCurrency();
+  // Display only: how delivery is charged right now (the checkout quote prices it).
+  const { chargeAtCheckout, offerLive: deliveryOfferLive } = useDeliveryFeesPublic();
+  const badges = trustBadges(chargeAtCheckout);
   // For the add-to-cart congratulation. A cached read the badge below already needs,
   // so this costs nothing extra.
   const { data: campaignRates } = useCampaignProductRates([product._id]);
@@ -144,6 +149,7 @@ export default function BuyBox({
   */
   const unitFestivalSetting = resolveFestivalSetting(product, selectedVariant?._id ?? null);
   const saleExpired = !isVariable && !!product.saleEndsAt && !saleLive && !!activeOriginal && activeOriginal > activePrice;
+  const offerLabel = useFestivalOfferLabel();
   const festivalOffer = useFestivalOfferPrice(
     needsSelection ? null : saleExpired ? activeOriginal : activePrice,
     unitFestivalSetting,
@@ -275,12 +281,15 @@ export default function BuyBox({
         />
         {needsSelection && festivalRange?.anyOffer && (
           <span className="w-full text-[13px] font-semibold text-[#b4231a] dark:text-[#ff8a7a]">
-            🪔 Diwali offer prices — pick a model to see its saving
+            {offerLabel.icon} {offerLabel.name} prices — pick a model to see its saving
           </span>
         )}
       </div>
       <p className="mt-2 text-[13px] text-ink-muted">
-        {needsSelection ? 'Select a model to see its price · ' : ''}Inclusive of all taxes · shipping extra, paid on delivery
+        {needsSelection ? 'Select a model to see its price · ' : ''}Inclusive of all taxes · {shippingStatement(chargeAtCheckout).toLowerCase()}
+        {deliveryOfferLive && (
+          <span className="ml-1 font-semibold text-[#E3132C]">· Black Friday: apply the offer at checkout for ₹0 delivery fees</span>
+        )}
       </p>
 
       {/* The campaign, made visible where the buying decision is actually made. Hidden
@@ -442,7 +451,7 @@ export default function BuyBox({
 
       {/* Trust badges */}
       <div className="mt-7 grid grid-cols-3 gap-3 rounded-xl bg-gold-soft p-4">
-        {TRUST_BADGES.map(({ icon, label }) => {
+        {badges.map(({ icon, label }) => {
           const Icon = TRUST_ICONS[icon];
           return (
             <div key={label} className="flex flex-col items-center gap-2 text-center">

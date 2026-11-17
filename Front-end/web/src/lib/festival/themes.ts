@@ -10,6 +10,12 @@
 export interface FestivalThemeTokens {
   key: string;
   name: string;
+  /**
+   * Which artwork set draws the decoration. 'diwali' = toran, lanterns and diyas;
+   * 'neon' = the Black Friday night stage (neon ticker strip, red light beams,
+   * neon price tag). Colours and words still come from the tokens below.
+   */
+  style: 'diwali' | 'neon';
   colors: {
     /** Strip / badge background. */
     primary: string;
@@ -33,7 +39,22 @@ export interface FestivalThemeTokens {
     orderConfirmed: string;
     /** Followed by the live countdown, e.g. "Diwali offers end in 04:10:03". */
     countdownLabel: string;
+    /** Name of the extra price offer on price lines, e.g. "Diwali offer −3%". */
+    offerName: string;
+    /** Label for the price before the offer, e.g. "Before Diwali ₹1,12,500". */
+    offerBefore: string;
   };
+  /**
+   * Words for the neon ticker strip at the top of every storefront page
+   * (style 'neon' only). Repeated across the strip.
+   */
+  ticker?: string[];
+  /**
+   * The round "Without shipping, packing, delivery charges" seal. Only themes
+   * whose event really waives those charges at checkout may set this — it is a
+   * promise about money, so it must match what the checkout charges.
+   */
+  freeDeliverySeal?: { top: string; middle: string; bottom: string };
   /**
    * Words for the festive home page (components/home/store/FestiveHome.tsx).
    * Every number on that page comes from the live catalogue; only words live here.
@@ -61,6 +82,7 @@ export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
   diwali: {
     key: 'diwali',
     name: 'Diwali',
+    style: 'diwali',
     colors: {
       primary: '#7a1f0f',
       onPrimary: '#fff6dc',
@@ -76,6 +98,8 @@ export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
       dealBadge: 'Diwali Deal',
       orderConfirmed: 'Happy Diwali! Your order is confirmed 🪔',
       countdownLabel: 'Diwali offers end in',
+      offerName: 'Diwali offer',
+      offerBefore: 'Before Diwali',
     },
     home: {
       navLabel: 'Diwali Sale',
@@ -91,6 +115,51 @@ export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
       giftTiers: ['Little sparkles', 'Festive upgrades', 'The grand gift'],
       wishTitle: 'Happy Diwali from Team Autobacs',
       wishSubtitle: 'May your roads be bright and every drive be safe.',
+    },
+  },
+  /*
+   * Black Friday — night stage, neon red, chrome-white headline, gold highlights
+   * (the owner's two posters). `primary` is the deal red used on badges and the
+   * countdown strip; `accent` is the gold of the highlight words.
+   */
+  blackfriday: {
+    key: 'blackfriday',
+    name: 'Black Friday',
+    style: 'neon',
+    colors: {
+      primary: '#c8102e',
+      onPrimary: '#ffffff',
+      accent: '#ffd23f',
+      glow: 'rgba(255, 45, 70, 0.85)',
+    },
+    particles: ['#ff2d46', '#ff5c70', '#ffffff', '#ffd23f', '#e0102f', '#ff8fa0'],
+    icons: {
+      lamp: '🏷️',
+      garland: ['🏷️'],
+    },
+    copy: {
+      dealBadge: 'Black Friday Deal',
+      orderConfirmed: 'Black Friday win! Your order is confirmed 🎉',
+      countdownLabel: 'Black Friday deals end in',
+      offerName: 'Black Friday offer',
+      offerBefore: 'Before Black Friday',
+    },
+    ticker: ['Black Friday Blowout', 'Biggest auto upgrade event', 'Limited time only', 'Shop by your car'],
+    freeDeliverySeal: { top: 'Without', middle: 'Shipping, packing, delivery', bottom: 'charges' },
+    home: {
+      navLabel: 'Black Friday',
+      heroEyebrow: 'The biggest auto upgrade event',
+      heroTitle: ['Black', 'Friday', 'Blowout'],
+      heroSubtitle:
+        'Massive deals on premium automotive upgrades & accessories — body kits, lighting, suspension and more. Shop by your car and see only what fits.',
+      heroCta: 'Shop Black Friday Deals',
+      dealsTitle: 'Black Friday Deals',
+      dealsSubtitle: 'Our biggest savings of the year — M.R.P. shown on every deal',
+      giftTitle: 'Black Friday picks for every budget',
+      giftSubtitle: 'Premium upgrades for your own car, or for someone who loves theirs',
+      giftTiers: ['Quick wins', 'Serious upgrades', 'The big upgrade'],
+      wishTitle: 'Black Friday Blowout — limited time only',
+      wishSubtitle: 'Prices this low don\u2019t wait. Upgrade your ride before the clock runs out.',
     },
   },
 };

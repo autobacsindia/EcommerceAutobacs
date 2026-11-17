@@ -45,6 +45,7 @@ import {
 import { GatewayOfferRows, PaymentStatusTag } from '@/components/orders/PaymentSummary';
 import type { GatewayOffer } from '@/components/orders/PaymentSummary';
 import type { ItemFulfilmentState } from '@/lib/orderFulfilment';
+import OrderDeliveryFees, { type OrderDeliveryFeesSnapshot } from '@/components/orders/OrderDeliveryFees';
 import { formatRupees } from '@/lib/formatRupees';
 import CustomerExtraCharges, { type CustomerExtra, type CustomerExtraTotals } from '@/components/orders/CustomerExtraCharges';
 import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
@@ -59,6 +60,7 @@ interface OrderDetail {
   /** Server-derived from the order's snapshot: subtotal minus the GST inside it. */
   subtotalBeforeTax?: number;
   shippingCost: number;
+  deliveryFees?: OrderDeliveryFeesSnapshot | null;
   tax: number;
   discount: number;
   paymentStatus?: string;
@@ -813,8 +815,10 @@ export default function OrderDetailPage() {
             <div className="font-display text-sm space-y-2">
               {/* Before GST, so Subtotal + Tax − Discount (+ Shipping) = Total. */}
               <div className="flex justify-between"><span className="text-ink-muted">Subtotal (before GST)</span><span className="text-ink/70">{order.subtotalBeforeTax != null ? formatRupees(order.subtotalBeforeTax, { exact: true }) : '—'}</span></div>
-              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? formatRupees(order.shippingCost, { exact: true }) : 'Extra — paid on delivery'}</span></div>
               <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">{formatRupees((order.tax || 0), { exact: true })}</span></div>
+              {/* Itemised delivery fees from the order's own snapshot (older orders: one
+                  Shipping row, "paid on delivery" when nothing was charged online). */}
+              <OrderDeliveryFees fees={order.deliveryFees} shippingCost={order.shippingCost} />
               {(order.discount || 0) > 0 && (
                 <div className="flex justify-between"><span className="text-ink-muted">{order.salesDiscount?.percent ? `Discount (${order.salesDiscount.percent}%)` : 'Discount'}</span><span className="text-green-700">-{formatRupees((order.discount || 0), { exact: true })}</span></div>
               )}

@@ -24,6 +24,8 @@ const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
 const { default: StaffTaskInbox } = await import('../models/StaffTaskInbox.js');
 const tasks = await import('../services/staffTaskService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 let n = 0;
 const person = (role, staff, name) => {
@@ -46,7 +48,7 @@ beforeEach(async () => {
   other = await person('staff', { team: 'accounts' }, 'Other');
 });
 
-const makeTask = async (by = head, extra = {}) => (await tasks.createTask(by, { title: 'Call', assigneeIds: [String(arun._id)], ...extra }, req)).task;
+const makeTask = async (by = head, extra = {}) => (await tasks.createTask(by, { dueOn: DUE, title: 'Call', assigneeIds: [String(arun._id)], ...extra }, req)).task;
 const say = async (t, by = arun, text = 'Please check') => (await tasks.addComment(by, t.id, { text })).comment;
 
 describe('assigning a comment', () => {
@@ -92,7 +94,7 @@ describe('assigning a comment', () => {
   });
 
   it('personal tasks: only to their owner', async () => {
-    const t = (await tasks.createTask(arun, { title: 'Mine', personal: true }, req)).task;
+    const t = (await tasks.createTask(arun, { dueOn: DUE, title: 'Mine', personal: true }, req)).task;
     const c = await say(t);
     await refused(tasks.assignComment(arun, t.id, c.id, String(priya._id)), 400);
     await refused(tasks.assignComment(admin, t.id, c.id, String(admin._id)), 404);
@@ -208,11 +210,13 @@ describe('team overview', () => {
   const shift = (d) => { const x = new Date(`${today}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
 
   it('counts late, today, the week, no date, unassigned, status and people', async () => {
-    await tasks.createTask(head, { title: 'Late', assigneeIds: [String(arun._id)], dueOn: shift(-3) }, req);
-    await tasks.createTask(head, { title: 'Today', assigneeIds: [String(arun._id)], dueOn: today }, req);
-    await tasks.createTask(head, { title: 'Soon', assigneeIds: [String(priya._id)], dueOn: shift(3) }, req);
-    await tasks.createTask(head, { title: 'Far', assigneeIds: [String(priya._id)], dueOn: shift(30) }, req);
-    await tasks.createTask(head, { title: 'Nodate', assigneeIds: [String(priya._id)] }, req);
+    await tasks.createTask(head, { dueOn: DUE, title: 'Late', assigneeIds: [String(arun._id)], dueOn: shift(-3) }, req);
+    await tasks.createTask(head, { dueOn: DUE, title: 'Today', assigneeIds: [String(arun._id)], dueOn: today }, req);
+    await tasks.createTask(head, { dueOn: DUE, title: 'Soon', assigneeIds: [String(priya._id)], dueOn: shift(3) }, req);
+    await tasks.createTask(head, { dueOn: DUE, title: 'Far', assigneeIds: [String(priya._id)], dueOn: shift(30) }, req);
+    // Saved before due dates were required.
+    const nodate = (await tasks.createTask(head, { dueOn: DUE, title: 'Nodate', assigneeIds: [String(priya._id)] }, req)).task;
+    await StaffTask.updateOne({ _id: nodate.id }, { $set: { dueOn: null, rank: '9999-12-31' } });
     const r = await tasks.teamOverview(arun, {});
     expect(r.counts).toMatchObject({ open: 5, late: 1, today: 1, nextWeek: 1, noDate: 1, unassigned: 0, doneWeek: 0 });
     expect(r.byStatus).toEqual([{ status: 'todo', label: expect.any(String), count: 5 }]);
@@ -223,8 +227,8 @@ describe('team overview', () => {
   });
 
   it('never counts personal tasks or another team', async () => {
-    await tasks.createTask(arun, { title: 'Mine', personal: true }, req);
-    await tasks.createTask(other, { title: 'Theirs', assigneeIds: [String(other._id)] }, req);
+    await tasks.createTask(arun, { dueOn: DUE, title: 'Mine', personal: true }, req);
+    await tasks.createTask(other, { dueOn: DUE, title: 'Theirs', assigneeIds: [String(other._id)] }, req);
     expect((await tasks.teamOverview(arun, {})).counts.open).toBe(0);
     expect((await tasks.teamOverview(admin, { team: 'admin' })).counts.open).toBe(0);
   });

@@ -9,6 +9,7 @@ import AssigneePicker from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
+import { DueApprovalBadge, DueRuleHint } from './dueRules';
 import TaskMenu from './TaskMenu';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
@@ -52,6 +53,7 @@ export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task
   const subs = t.subtasks?.total ?? 0;
   return (
     <>
+      {t.bucket === 'open' && <DueApprovalBadge task={t} />}
       {t.parent && (
         <Chip title={`A sub-task of ${t.parent.code} ${t.parent.title}`}>
           <CornerLeftUp aria-hidden className="h-3 w-3 shrink-0" /><span className="max-w-[11rem] truncate">in {t.parent.code} {t.parent.title}</span>
@@ -329,7 +331,7 @@ export function QuickAdd({ status, assigneeId, listId, projectId, projectListId,
       onSubmit={(e) => {
         e.preventDefault();
         const text = title.trim();
-        if (!text || nobody) return;
+        if (!text || nobody || !extras.dueOn) return;
         add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(board && !personal && chosen.length ? { assigneeIds: chosen } : {}), ...(listId ? { listId } : {}), ...(projectId ? { projectId } : {}), ...(projectId && projectListId ? { projectListId } : {}), ...(projectId && stageId ? { stageId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
           // Ready for the next one; the people and the chips stay, the name clears.
           onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
@@ -344,7 +346,7 @@ export function QuickAdd({ status, assigneeId, listId, projectId, projectListId,
       }}
       className={board
         ? 'tk-card space-y-2 rounded-lg bg-white p-2'
-        : 'flex items-center gap-2 border-t border-gray-100 px-3 py-1.5 lg:pl-[52px]'}
+        : 'flex flex-wrap items-center gap-2 border-t border-gray-100 px-3 py-1.5 lg:pl-[52px]'}
     >
       <div className="flex items-center gap-2">
         <input
@@ -356,7 +358,23 @@ export function QuickAdd({ status, assigneeId, listId, projectId, projectListId,
           aria-label={`New task in ${STATUS_STYLE[status].label}`}
           className="min-w-0 flex-1 rounded-md border border-blue-500! px-2 py-1 text-sm outline-none ring-2 ring-blue-100"
         />
-        {!board && <button type="submit" disabled={add.isPending || !title.trim()} className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-40">Save</button>}
+        {!board && (
+          // Every task needs a due date: the list's quick add asks for it beside the name.
+          <input
+            type="date"
+            value={extras.dueOn || ''}
+            onChange={(e) => setExtras((x) => ({ ...x, dueOn: e.target.value || null }))}
+            aria-label="Due date"
+            title="Due date (required)"
+            required
+            className="h-7 rounded-md border border-gray-300 px-1.5 text-xs"
+          />
+        )}
+        {!board && <button type="submit" disabled={add.isPending || !title.trim() || !extras.dueOn} className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-40">Save</button>}
+      </div>
+      <div className="basis-full space-y-1 empty:hidden">
+        {title.trim() && !extras.dueOn && <p className="text-xs text-gray-500">Pick a due date — every task needs one.</p>}
+        <DueRuleHint dueOn={extras.dueOn} priority={extras.priority ?? 'normal'} personal={personal} />
       </div>
       {board && (
         <>
@@ -364,7 +382,7 @@ export function QuickAdd({ status, assigneeId, listId, projectId, projectListId,
           {nobody && <p className="text-xs text-red-600">Pick at least one person.</p>}
           <div className="flex justify-end gap-1.5">
             <button type="button" onClick={stop} className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">Cancel</button>
-            <button type="submit" disabled={add.isPending || !title.trim() || nobody} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
+            <button type="submit" disabled={add.isPending || !title.trim() || nobody || !extras.dueOn} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
           </div>
         </>
       )}

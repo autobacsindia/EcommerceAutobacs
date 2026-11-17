@@ -71,6 +71,7 @@ import pageSeoRoutes from './pageSeo.js';
 import promoBannerRoutes from './promoBanners.js';
 import festivalThemeRoutes from './festivalTheme.js';
 import festivalOfferRoutes from './festivalOffer.js';
+import deliveryFeeRoutes from './deliveryFees.js';
 import spinRoutes from './spin.js';
 import scheduledTasksRoutes from './scheduledTasks.js';
 
@@ -200,6 +201,8 @@ apiRouter.use('/page-seo', publicBrowsingRateLimit, pageSeoRoutes); // Public re
 apiRouter.use('/promo-banners', publicBrowsingRateLimit, promoBannerRoutes);
 apiRouter.use('/festival-theme', publicBrowsingRateLimit, festivalThemeRoutes);
 apiRouter.use('/festival-offer', publicBrowsingRateLimit, festivalOfferRoutes);
+// Delivery fees: /public is the storefront's cached display read; admin guarded in-route.
+apiRouter.use('/delivery-fees', publicBrowsingRateLimit, deliveryFeeRoutes);
 
 // Spin-to-Win. Almost every route is authenticated and per-order or per-admin, so the
 // router gets no blanket public browsing limit; the spin itself carries its own limiter

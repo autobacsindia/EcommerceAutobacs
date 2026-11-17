@@ -11,6 +11,9 @@ import ShippingPage from '../shipping/page';
 import { ALL_FAQS, FAQ_CATEGORIES } from '@/lib/help/faq';
 
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a> }));
+jest.mock('@/hooks/queries/useDeliveryFeesPublic', () => ({
+  useDeliveryFeesPublic: () => ({ chargeAtCheckout: false, offerLive: false, isLoading: false }),
+}));
 jest.mock('@/components/store/StorePageHeader', () => ({ __esModule: true, default: () => null }));
 
 const APP = path.join(__dirname, '..');
@@ -67,9 +70,9 @@ it('the chat button opens WhatsApp in a new tab', () => {
 });
 
 /*
-  Checkout charges no shipping (it sends shippingCost: 0): the customer pays the
-  courier on delivery, by cash or GPay / UPI, and the amount depends on the parcel
-  and the address. The FAQ and the Shipping page used to quote ₹199 / ₹399 / ₹599
+  Delivery fees depend on the parcel and the PIN, so they are either itemised by the
+  server at checkout (fees switched on) or paid to the courier on delivery (off) —
+  never a fixed ₹ figure in the FAQ. The FAQ and the Shipping page used to quote ₹199 / ₹399 / ₹599
   fees nobody could be charged, then told customers delivery was free — it is not.
 */
 it('neither the FAQ nor the Shipping page quotes a delivery fee', () => {
@@ -81,7 +84,8 @@ it('neither the FAQ nor the Shipping page quotes a delivery fee', () => {
 
 it('the FAQ and the Shipping page say shipping is extra and paid on delivery, never free', () => {
   const delivery = FAQ_CATEGORIES.find((c) => c.id === 'shipping')!.faqs.map((f) => f.answer).join(' ');
-  expect(delivery).toMatch(/pay it on delivery by cash or GPay \/ UPI/);
+  expect(delivery).toMatch(/listed in your cart and at checkout before you pay/);
+  expect(delivery).toMatch(/pay the courier on delivery by cash or GPay \/ UPI/);
   expect(delivery).not.toMatch(/\bfree\b/i);
 
   const { container } = render(<ShippingPage />);

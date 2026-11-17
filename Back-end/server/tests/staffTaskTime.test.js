@@ -33,6 +33,8 @@ const { default: StaffTaskTime } = await import('../models/StaffTaskTime.js');
 const { default: staffTaskTimeRepository } = await import('../repositories/staffTaskTimeRepository.js');
 const tasks = await import('../services/staffTaskService.js');
 const time = await import('../services/staffTaskTimeService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 const HOUR = 3600 * 1000;
@@ -64,6 +66,7 @@ beforeEach(async () => {
 afterEach(() => { jest.restoreAllMocks(); });
 
 const give = async (who = arun, extra = {}) => (await tasks.createTask(priya, {
+ dueOn: DUE,  dueOn: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
   title: 'Count the Bosch pads', assigneeId: String(who._id), ...extra,
 }, req)).task;
 

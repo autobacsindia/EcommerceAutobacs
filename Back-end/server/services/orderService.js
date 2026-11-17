@@ -9,6 +9,8 @@ import campaignMemberRepository from '../repositories/campaignMemberRepository.j
 import karmaLedgerRepository from '../repositories/karmaLedgerRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import pricingService from './pricingService.js';
+import deliveryFeeService from './deliveryFeeService.js';
+import { toPaise } from '../utils/money.js';
 import { resolveAttribution } from './affiliateAttributionService.js';
 import AppError from '../utils/AppError.js';
 import { getOrderQueue } from '../queue/queues.js';
@@ -126,13 +128,18 @@ class OrderService {
    * @param {string} [paymentMethod]
    */
   async createOrder(userId, items, shippingAddress, orderData, paymentMethod) {
-    const shippingCost = Math.max(0, Number(orderData.shippingCost) || 0);
+    // Delivery fees are computed by the server from the rate card — never from a
+    // client-sent `shippingCost` (that field is ignored). The PIN comes from the
+    // shipping address being saved on this order, so the remote-area fee always
+    // matches where the parcel actually goes.
+    const deliveryPin = shippingAddress?.postalCode ? String(shippingAddress.postalCode) : null;
+    const applyDeliveryFeeOffer = orderData.applyDeliveryFeeOffer === true;
     const couponCode = orderData.couponCode ? String(orderData.couponCode).trim().toUpperCase() : null;
     const redeemKarmaPoints = Math.max(0, parseInt(orderData.redeemKarmaPoints, 10) || 0);
 
     // Authoritative price breakdown — client-sent amounts are ignored entirely.
     const quote = await pricingService.computeQuote({
-      items, couponCode, redeemKarmaPoints, userId, shippingCost,
+      items, couponCode, redeemKarmaPoints, userId, deliveryPin, applyDeliveryFeeOffer,
       // Self-referral keys for an affiliate coupon. A guest has no userId, so the
       // email/phone on the order are the only things that identify them.
       buyer: { email: orderData.guestEmail || orderData.email, phone: orderData.phone },
@@ -141,6 +148,24 @@ class OrderService {
     pricingService.assertCouponApplied(quote, couponCode);
 
     if (quote.totalAmount <= 0) throw new AppError('Order total must be greater than zero', 400);
+
+    /*
+      The customer tapped "Apply Black Friday offer" but it is no longer live (the event
+      ended or was switched off while they were checking out). Never silently charge
+      the fees they were told were waived: refuse with 409 and the new total, so the
+      checkout re-quotes and shows them the change before they pay.
+    */
+    if (quote.deliveryFeeBlock?.offer.error) {
+      throw new AppError(
+        `The Black Friday offer has ended. Delivery fees of ₹${quote.deliveryFeeBlock.total} now apply — please review your new total.`,
+        409,
+        { expose: true },
+      );
+    }
+    // A fee block computed without a PIN would miss the remote-area fee.
+    if (quote.deliveryFeeBlock && !quote.deliveryFeeBlock.pin) {
+      throw new AppError('Please enter a valid 6-digit PIN code for delivery', 400, { expose: true });
+    }
 
     const appliedCode = quote.appliedCoupon?.code || null;
 
@@ -201,6 +226,9 @@ class OrderService {
             shippingAddress,
             subtotal: quote.subtotal,
             shippingCost: quote.shippingCost,
+            ...(quote.deliveryFeeBlock && {
+              deliveryFees: deliveryFeeService.toOrderSnapshot(quote.deliveryFeeBlock, toPaise(quote.shippingCost)),
+            }),
             tax: quote.tax,
             discount: quote.discount,
             couponCode: appliedCode,

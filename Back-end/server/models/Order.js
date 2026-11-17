@@ -549,6 +549,49 @@ const OrderSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  /*
+    Itemised delivery fees, snapshotted at order time (services/deliveryFeeService.js).
+    `shippingCost` above is what was CHARGED (0 when the Black Friday offer or a
+    free-shipping coupon waived them); this block says what each fee was and whether
+    the offer was used, so the invoice, order page and admin view never re-derive it
+    from the live rate card. Absent on orders placed while fees were switched off
+    ("shipping paid on delivery") and on every older order.
+  */
+  deliveryFees: {
+    type: new mongoose.Schema({
+      pin: { type: String, default: null },
+      remote: { type: Boolean, default: false },
+      distanceKm: { type: Number, min: 0, default: null },       // straight-line from origin; null = PIN not located
+      place: {
+        type: new mongoose.Schema({ district: String, state: String }, { _id: false }),
+        default: undefined,
+      },
+      band: {                                                   // freight distance band used
+        type: new mongoose.Schema({ upToKm: { type: Number, default: null }, ratePerKg: Number, slabRate: Number }, { _id: false }),
+        default: undefined,
+      },
+      mode: { type: String, enum: ['courier', 'freight'], required: true },
+      chargedKg: { type: Number, min: 0, required: true },
+      estimated: { type: Boolean, default: false },   // a box size was not measured
+      gstOnFeesPercent: { type: Number, min: 0, max: 100, default: 0 },
+      lines: [new mongoose.Schema({
+        code: { type: String, required: true },
+        label: { type: String, required: true },
+        amount: { type: Number, min: 0, required: true },
+      }, { _id: false })],
+      total: { type: Number, min: 0, required: true },   // all fees before any waiver
+      charged: { type: Number, min: 0, required: true }, // == shippingCost
+      offer: {
+        type: new mongoose.Schema({
+          code: { type: String, required: true },        // 'blackfriday'
+          applied: { type: Boolean, required: true },
+          saving: { type: Number, min: 0, required: true },
+        }, { _id: false }),
+        required: true,
+      },
+    }, { _id: false }),
+    default: undefined,
+  },
   tax: {
     type: Number,
     default: 0

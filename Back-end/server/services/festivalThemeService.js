@@ -11,6 +11,7 @@
 
 import festivalThemeRepository from '../repositories/festivalThemeRepository.js';
 import cacheService, { CACHE_VERSION } from './cacheService.js';
+import { BLACK_FRIDAY_THEME_KEY } from '../config/festivalThemes.js';
 
 export const FESTIVAL_THEME_CACHE_TAG = 'public:festival-theme';
 const CACHE_KEY = `${CACHE_VERSION}:${FESTIVAL_THEME_CACHE_TAG}`;
@@ -62,6 +63,40 @@ export async function resolvePublicFestivalTheme() {
   return theme;
 }
 
+/**
+ * Pure: the named events the rest of the platform can switch on, derived from
+ * the public theme. Re-evaluated against `now` rather than trusting the cached
+ * `live`, so a 60-second-old cache entry cannot report an event that has ended.
+ *
+ * Shape (stable — the checkout reads it):
+ *   { blackFriday: { active: boolean, startsAt: ISO|null, endsAt: ISO|null } }
+ */
+export function toPublicEvents(theme, now = new Date()) {
+  const isBf = !!theme && theme.themeKey === BLACK_FRIDAY_THEME_KEY;
+  return {
+    blackFriday: {
+      active: isBf && isFestivalThemeLive({ enabled: true, startsAt: theme.startsAt, endsAt: theme.endsAt }, now),
+      startsAt: isBf ? theme.startsAt : null,
+      endsAt: isBf ? theme.endsAt : null,
+    },
+  };
+}
+
+/**
+ * Server-side answer to "is Black Friday on right now?" — for any code that must
+ * act on it (e.g. a checkout fee rule). Same cached read the storefront gets
+ * (purged on every admin save), re-checked against the clock. Never throws: a
+ * cache or database failure answers false, so an outage can only turn an event
+ * OFF, never leave it on.
+ */
+export async function isBlackFridayActive(now = new Date()) {
+  try {
+    return toPublicEvents(await resolvePublicFestivalTheme(), now).blackFriday.active;
+  } catch {
+    return false;
+  }
+}
+
 /** Uncached admin read — an admin who just saved must see their own edit. */
 export async function getFestivalThemeConfig() {
   return festivalThemeRepository.getSingleton();
@@ -74,6 +109,8 @@ export async function updateFestivalThemeConfig(set) {
 export default {
   isFestivalThemeLive,
   toPublicTheme,
+  toPublicEvents,
+  isBlackFridayActive,
   resolvePublicFestivalTheme,
   getFestivalThemeConfig,
   updateFestivalThemeConfig,

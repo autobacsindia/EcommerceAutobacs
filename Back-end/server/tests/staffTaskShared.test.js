@@ -41,6 +41,8 @@ const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
 const tasks = await import('../services/staffTaskService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 const settle = () => new Promise((r) => setTimeout(r, 40)); // pop-ups are fire-and-forget
@@ -73,7 +75,7 @@ beforeEach(async () => {
 /** Priya gives one shared task to Arun (procurement) and Sam (sales). */
 const sharedTask = async (extra = {}) => {
   const { task } = await tasks.createTask(procHead, {
-    title: 'Count the Diwali stock', assigneeIds: [String(procA._id), String(salesA._id)], shared: true, ...extra,
+    dueOn: DUE, title: 'Count the Diwali stock', assigneeIds: [String(procA._id), String(salesA._id)], shared: true, ...extra,
   }, req);
   await settle();
   pushes.length = 0;
@@ -83,7 +85,7 @@ const sharedTask = async (extra = {}) => {
 describe('creating one shared task', () => {
   it('is one task with everyone on it, each with their team; each new person hears once', async () => {
     const { tasks: made, task } = await tasks.createTask(procHead, {
-      title: 'Count the Diwali stock', assigneeIds: [String(procA._id), String(salesA._id)], shared: true, clientId: 'shared-0001',
+      dueOn: DUE, title: 'Count the Diwali stock', assigneeIds: [String(procA._id), String(salesA._id)], shared: true, clientId: 'shared-0001',
     }, req);
     expect(made).toHaveLength(1);
     expect(task.group).toBeNull();
@@ -99,7 +101,7 @@ describe('creating one shared task', () => {
   });
 
   it('a retry is the same task, and sends nothing more', async () => {
-    const input = { title: 'Ring the courier', assigneeIds: [String(procA._id), String(salesA._id)], shared: true, clientId: 'shared-0002' };
+    const input = { dueOn: DUE, title: 'Ring the courier', assigneeIds: [String(procA._id), String(salesA._id)], shared: true, clientId: 'shared-0002' };
     const first = await tasks.createTask(procHead, input, req);
     await settle();
     const again = await tasks.createTask(procHead, input, req);
@@ -111,20 +113,20 @@ describe('creating one shared task', () => {
   });
 
   it('the giver on their own task hears nothing about it', async () => {
-    await tasks.createTask(procHead, { title: 'Mine and Arun\'s', assigneeIds: [String(procHead._id), String(procA._id)], shared: true }, req);
+    await tasks.createTask(procHead, { dueOn: DUE, title: 'Mine and Arun\'s', assigneeIds: [String(procHead._id), String(procA._id)], shared: true }, req);
     await settle();
     expect(pushes.map((p) => p.to)).toEqual([ids(procA)]);
   });
 
   it('without `shared` several people still get a copy each', async () => {
-    const { tasks: made } = await tasks.createTask(procHead, { title: 'Read the policy', assigneeIds: [String(procA._id), String(salesA._id)] }, req);
+    const { tasks: made } = await tasks.createTask(procHead, { dueOn: DUE, title: 'Read the policy', assigneeIds: [String(procA._id), String(salesA._id)] }, req);
     expect(made).toHaveLength(2);
     expect(made.map((t) => t.assignees.length)).toEqual([1, 1]);
   });
 
   it('someone no longer in the panel stops the whole create', async () => {
     await User.updateOne({ _id: salesA._id }, { $set: { 'staff.active': false } });
-    await refused(tasks.createTask(procHead, { title: 'x', assigneeIds: [String(procA._id), String(salesA._id)], shared: true }, req), 400);
+    await refused(tasks.createTask(procHead, { dueOn: DUE, title: 'x', assigneeIds: [String(procA._id), String(salesA._id)], shared: true }, req), 400);
     expect(await StaffTask.countDocuments()).toBe(0);
   });
 });

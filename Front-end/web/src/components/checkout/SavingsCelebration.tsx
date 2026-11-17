@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X, PartyPopper } from 'lucide-react';
 import { useCurrency } from '@/context/CurrencyContext';
 import type { CheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 
 /**
  * The "congrats, here's what you saved" moment, shown once when a coupon lands.
@@ -39,6 +40,7 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
   // The cart's own formatter, so a saving is written the same way as every other figure
   // on the page — a celebration that formatted money differently would read as a mock-up.
   const { formatPrice } = useCurrency();
+  const offerLabel = useFestivalOfferLabel();
   const [shown, setShown] = useState(false);
   /**
    * The applied code already celebrated; `null` means "none yet". A ref rather than
@@ -144,7 +146,7 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
           )}
           {(savings.festival ?? 0) > 0 && (
             <div className="flex justify-between text-ink-muted">
-              <dt>🪔 Diwali offer</dt>
+              <dt>{offerLabel.icon} {offerLabel.name}</dt>
               <dd>{formatPrice(savings.festival!)}</dd>
             </div>
           )}

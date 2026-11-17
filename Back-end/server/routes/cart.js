@@ -2,7 +2,7 @@ import express from "express";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import pricingService, { effectivePrice, resolveVariant, REJECTED_AFFILIATE_NO_DISCOUNT } from "../services/pricingService.js";
+import pricingService, { effectivePrice, resolveVariant, REJECTED_AFFILIATE_NO_DISCOUNT, toPublicQuote } from "../services/pricingService.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
 import { serializeCart } from "../utils/cartSerializer.js";
@@ -648,7 +648,7 @@ router.put("/coupon", asyncHandler(async (req, res) => {
     discountApplied: !noDiscountForAffiliate,
     couponErrorCode: quote.couponErrorCode ?? null,
     cart: serializeCart(cart),
-    quote,
+    quote: toPublicQuote(quote),
   });
 }));
 

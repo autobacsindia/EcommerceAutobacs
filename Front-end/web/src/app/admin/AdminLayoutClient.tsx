@@ -129,6 +129,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
       { href: '/admin/price-calculator', label: 'Price calculator', icon: Calculator },
       { href: '/admin/shipping-calculator', label: 'Shipping calculator', icon: Truck },
+      // Rates for the itemised delivery fees charged at checkout + remote (ODA) PINs.
+      { href: '/admin/delivery-fees', label: 'Delivery fees', icon: Truck },
       { href: '/admin/bank-transfers', label: 'Bank transfers', icon: Landmark },
       { href: '/admin/extra-charges', label: 'Extra charges', icon: Coins },
       // GTM discounts above 10% waiting for approval (the GTM head approves them too).

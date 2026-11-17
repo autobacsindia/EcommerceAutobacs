@@ -51,7 +51,9 @@ const as = async (u) => {
   return fresh;
 };
 const status = (code, fn, msg) => expect(fn()).rejects.toMatchObject({ statusCode: code, ...(msg && { message: expect.stringMatching(msg) }) });
-const give = async (actor, over = {}) => (await tasks.createTask(await as(actor), { title: 'Job', ...over }, req)).task;
+// The IST day `n` days from today. Every task needs a due date; today's is the default.
+const d = (n = 0) => tasks.todayIST(new Date(Date.now() + n * 86400000));
+const give = async (actor, over = {}) => (await tasks.createTask(await as(actor), { title: 'Job', dueOn: d(), ...over }, req)).task;
 const edit = async (actor, t, patch) => tasks.updateTask(await as(actor), t.id, { rev: t.rev, ...patch }, req);
 const fresh = async (actor, t) => tasks.getTask(await as(actor), t.id);
 const start = async (actor, input) => (await projects.createProject(await as(actor), { name: 'Black Friday 2026', ...input }, req)).project;
@@ -261,16 +263,15 @@ describe('a project’s own statuses', () => {
 describe('the calendar’s days', () => {
   it('returns open tasks due within the days asked, and refuses a backwards or too-long range', async () => {
     const mine = async (dueFrom, dueTo) => (await tasks.listTasks(await as(member), { view: 'mine', dueFrom, dueTo })).tasks.map((t) => t.title);
-    await give(head, { title: 'Before', assigneeId: String(member._id), dueOn: '2026-11-15' });
-    await give(head, { title: 'First', assigneeId: String(member._id), dueOn: '2026-11-16', dueTime: '09:30' });
-    await give(head, { title: 'Last', assigneeId: String(member._id), dueOn: '2026-11-30' });
-    await give(head, { title: 'After', assigneeId: String(member._id), dueOn: '2026-12-01' });
-    await give(head, { title: 'No date', assigneeId: String(member._id) });
-    const finished = await give(head, { title: 'Done one', assigneeId: String(member._id), dueOn: '2026-11-20' });
+    await give(head, { title: 'Before', assigneeId: String(member._id), dueOn: d(0) });
+    await give(head, { title: 'First', assigneeId: String(member._id), dueOn: d(1), dueTime: '09:30' });
+    await give(head, { title: 'Last', assigneeId: String(member._id), dueOn: d(10) });
+    await give(head, { title: 'After', assigneeId: String(member._id), dueOn: d(11) });
+    const finished = await give(head, { title: 'Done one', assigneeId: String(member._id), dueOn: d(5) });
     await edit(member, finished, { status: 'done' });
-    expect(await mine('2026-11-16', '2026-11-30')).toEqual(['First', 'Last']);
-    await status(400, () => mine('2026-11-30', '2026-11-16'), /days/);
-    await status(400, () => mine('2026-11-01', '2026-12-31'), /at most 45/);
-    await status(400, () => mine('2026-11-01', undefined), /days/);
+    expect(await mine(d(1), d(10))).toEqual(['First', 'Last']);
+    await status(400, () => mine(d(10), d(1)), /days/);
+    await status(400, () => mine(d(0), d(60)), /at most 45/);
+    await status(400, () => mine(d(0), undefined), /days/);
   });
 });

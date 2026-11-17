@@ -1,4 +1,7 @@
+'use client';
+
 import { totalSavingFromMrp, type FestivalOfferResult } from '@/lib/festival/festivalOffer';
+import { useFestivalOfferLabel } from './FestivalThemeContext';
 
 /**
  * "🪔 Diwali offer −3% · Before Diwali ₹1,12,500 · You save ₹3,375" — the line every
@@ -29,6 +32,7 @@ export default function FestivalOfferTag({
    */
   mrp?: number | null;
 }) {
+  const label = useFestivalOfferLabel();
   if (!offer) return null;
   return (
     <span
@@ -36,11 +40,11 @@ export default function FestivalOfferTag({
       data-testid="festival-offer-tag"
     >
       <span className="rounded bg-[#b4231a] px-1.5 py-0.5 text-[#fff]">
-        <span aria-hidden="true">🪔 </span>Diwali offer −{offer.percent}%
+        <span aria-hidden="true">{label.icon} </span>{label.name} −{offer.percent}%
       </span>
       {!compact && (
         <span className="font-normal text-ink-muted">
-          Before Diwali <s>{formatMoney(offer.basePrice)}</s>
+          {label.before} <s>{formatMoney(offer.basePrice)}</s>
           {' · '}
           <span className="font-semibold text-emerald-600">You save {formatMoney(totalSavingFromMrp(offer, mrp))}</span>
         </span>

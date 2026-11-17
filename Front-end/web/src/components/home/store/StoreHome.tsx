@@ -5,7 +5,7 @@ import BrandStrip from './BrandStrip';
 import TrustStrip from './TrustStrip';
 import ReviewStrip from './ReviewStrip';
 import { discountPct, type StoreHomeData, type StoreProduct } from './storeData';
-import { DealsShelf, FestiveHero, FestiveSwitch, FestiveWish, GiftSection, type FestiveHeroPhoto } from './FestiveHome';
+import { DealsShelf, FestiveHero, FestiveOffers, FestiveScope, FestiveSwitch, FestiveWish, GiftSection, type FestiveHeroPhoto } from './FestiveHome';
 import { buildGiftTiers } from './giftTiers';
 import './store.css';
 
@@ -123,6 +123,7 @@ export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
     photos,
     maxOff: data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0),
     dealsTotal: data.deals.length ? data.dealsTotal : 0,
+    productTotal: data.productTotal,
     categoryCount: data.categories.length,
   };
 }
@@ -132,16 +133,24 @@ export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
  * category bar, offers carousel with overlapping category cards, then product
  * shelves — every one from live data, empty shelves skipped.
  */
-export default function StoreHome({ data }: { data: StoreHomeData }) {
+export default function StoreHome({
+  data,
+  freeDelivery = false,
+}: {
+  data: StoreHomeData;
+  /** Black Friday free-delivery offer live at checkout (server); gates the seal. */
+  freeDelivery?: boolean;
+}) {
   // The header, the admin promo strip and the footer come from the root layout
   // (ConditionalHeader / ConditionalPromoBanner / ConditionalFooter), exactly as on
   // every other page. The home page used to render its own copies and rely on
   // the layout hiding its versions on '/'; on Vercel the ISR-regenerated home
   // page rendered BOTH, so customers saw two headers and two footers.
   const slides = buildSlides(data);
+  const festiveHero = buildFestiveHero(data, slides);
   const giftTiers = buildGiftTiers([data.deals, data.featured, data.bestSellers, data.newArrivals]);
   return (
-    <div className="sh sh-theme">
+    <FestiveScope className="sh sh-theme">
       <main className="sh-main">
         {/* The page's one H1, for search engines and screen readers; the banner
             titles below are the visible headlines. */}
@@ -149,11 +158,12 @@ export default function StoreHome({ data }: { data: StoreHomeData }) {
         {/* While the admin festival theme is live the banner carousel gives way to
             the festive hero; everything else stays where customers expect it. */}
         <FestiveSwitch
-          festive={<FestiveHero {...buildFestiveHero(data, slides)} />}
+          festive={<FestiveHero {...festiveHero} freeDelivery={freeDelivery} />}
           normal={<HeroBanners slides={slides} />}
         />
         <div className="sh-content">
           <CategoryCards categories={data.categories} deals={data.deals} />
+          <FestiveOffers maxOff={festiveHero.maxOff} dealsTotal={festiveHero.dealsTotal} freeDelivery={freeDelivery} />
           <DealsShelf products={data.deals} />
           <ProductRow
             id="sh-premium"
@@ -193,6 +203,6 @@ export default function StoreHome({ data }: { data: StoreHomeData }) {
           <FestiveWish />
         </div>
       </main>
-    </div>
+    </FestiveScope>
   );
 }

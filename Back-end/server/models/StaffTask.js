@@ -112,6 +112,30 @@ const PersonSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/**
+ * A manager's approval for a due date more than the admin's limit away (9 days by
+ * default; services/taskDueRules.js). It is for that exact `dueOn`: changing the
+ * date drops it and the rules run again, and moving it within the limit clears it.
+ * Who may decide lives in services/staffTaskService.js (mayApproveDue).
+ */
+const DueApprovalSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], required: true },
+    /** The date asked for — the task's `dueOn` when it was asked. */
+    dueOn: { type: String, required: true },
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    requestedByName: { type: String, default: '' },
+    requestedAt: { type: Date, required: true },
+    decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    decidedByName: { type: String, default: '' },
+    decidedAt: { type: Date, default: null },
+    /** "Auto": approved because whoever set the date is a manager of it. */
+    auto: { type: Boolean, default: undefined },
+    note: { type: String, default: '', maxlength: 500 },
+  },
+  { _id: false },
+);
+
 export const TASK_STATUSES = Object.freeze(['todo', 'in_progress', 'waiting', 'done']);
 /** What anyone may pick. 'waiting' stays in TASK_STATUSES only so old rows still validate. */
 export const TASK_PICKABLE_STATUSES = Object.freeze(['todo', 'in_progress', 'done']);
@@ -228,6 +252,8 @@ const StaffTaskSchema = new mongoose.Schema(
      * can never be given to anyone (services/staffTaskService.js).
      */
     personal: { type: Boolean, default: undefined },
+    /** Set only for a date that needed a manager's approval (DueApprovalSchema above). */
+    dueApproval: { type: DueApprovalSchema, default: undefined },
     /** How long it should take, in whole minutes (null: not planned). */
     estimateMinutes: { type: Number, default: null, min: 1, max: 60000 },
     bucket: { type: String, enum: TASK_BUCKETS, default: 'open', required: true },
@@ -293,6 +319,15 @@ StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type:
 StaffTaskSchema.index(
   { 'parent.task': 1, bucket: 1, rank: 1, _id: 1 },
   { partialFilterExpression: { 'parent.task': { $type: 'objectId' } }, name: 'staff_task_parent' },
+);
+/*
+  "Waiting for my approval": the pending ones of a team (a head) or of all teams
+  (the admin). Partial on the equality the query always states, so the index
+  holds only the handful of tasks waiting right now.
+*/
+StaffTaskSchema.index(
+  { 'dueApproval.status': 1, teams: 1, rank: 1, _id: 1 },
+  { partialFilterExpression: { 'dueApproval.status': 'pending' }, name: 'staff_task_due_approval' },
 );
 // `$type`, not `$ne`/`$exists: true` on null — MongoDB rejects `$ne` in a partialFilterExpression.
 StaffTaskSchema.index(

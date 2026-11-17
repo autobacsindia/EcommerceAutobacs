@@ -86,6 +86,8 @@ export interface StoreHomeData {
   deals: StoreProduct[];
   /** How many products are on sale in total (the deals row shows a slice). */
   dealsTotal: number;
+  /** Every active product in the catalogue (0 when unknown). */
+  productTotal: number;
   bestSellers: StoreProduct[];
   newArrivals: StoreProduct[];
   /** Admin-picked products. The hero banners prefer these for their photos. */
@@ -153,12 +155,13 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-const productList = async (query: string): Promise<ApiProduct[]> => {
-  const res = await serverFetch<{ products?: ApiProduct[] }>(`/products?${query}`, {
+const productPage = async (query: string): Promise<{ products: ApiProduct[]; total: number }> => {
+  const res = await serverFetch<{ products?: ApiProduct[]; total?: number }>(`/products?${query}`, {
     next: { revalidate: REVALIDATE, tags: [TAGS.products] },
   });
-  return res.products ?? [];
+  return { products: res.products ?? [], total: typeof res.total === 'number' && res.total > 0 ? res.total : 0 };
 };
+const productList = async (query: string): Promise<ApiProduct[]> => (await productPage(query)).products;
 
 const usable = (p: ApiProduct) => !!p.name && typeof p.price === 'number' && p.price > 0 && !!primaryImage(p.images);
 
@@ -197,10 +200,16 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     HOME_SHELF_ORDER.bestSellers,
   ), [] as StoreProduct[]);
 
-  const newP = safe(async () => orderShelf(
-    (await productList('sortBy=createdAt&sortOrder=desc&limit=16')).filter(usable).map(toStoreProduct),
-    HOME_SHELF_ORDER.newArrivals,
-  ), [] as StoreProduct[]);
+  // The unfiltered public list: its `total` is every ACTIVE product (the public
+  // route never lifts the active filter), so the Black Friday hero's catalogue-
+  // wide count comes from this same request — no extra call.
+  const newP = safe(async () => {
+    const page = await productPage('sortBy=createdAt&sortOrder=desc&limit=16');
+    return {
+      list: orderShelf(page.products.filter(usable).map(toStoreProduct), HOME_SHELF_ORDER.newArrivals),
+      total: page.total,
+    };
+  }, { list: [] as StoreProduct[], total: 0 });
 
   /*
     The dearest BUYABLE products, for topping up "Premium Picks". Sorted by the
@@ -271,15 +280,16 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     ),
   }), { category: c, products: [] as StoreProduct[] })));
 
-  const [deals, bestSellers, newArrivals, featured, dearest, brands, reviews, rows] = await Promise.all([
+  const [deals, bestSellers, newest, featured, dearest, brands, reviews, rows] = await Promise.all([
     dealsP, bestP, newP, featuredP, dearestP, brandsP, reviewsP, rowsP,
   ]);
   return {
     categories,
     deals: deals.list,
     dealsTotal: deals.total,
+    productTotal: newest.total,
     bestSellers,
-    newArrivals,
+    newArrivals: newest.list,
     featured,
     premiumPicks: buildPremiumPicks(featured, dearest),
     categoryRows: rows.filter((r) => r.products.length >= 4).slice(0, MAX_CATEGORY_ROWS),

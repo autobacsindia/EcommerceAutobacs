@@ -80,7 +80,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         question: 'How much does shipping cost?',
-        answer: "Shipping is not included in the website total. The charge depends on the parcel's size and your location, and you pay it on delivery by cash or GPay / UPI.",
+        answer: "Delivery depends on the parcel's size and weight and your PIN code. When delivery fees are charged online, each fee is listed in your cart and at checkout before you pay; otherwise you pay the courier on delivery by cash or GPay / UPI.",
       },
       {
         question: 'Do you ship internationally?',

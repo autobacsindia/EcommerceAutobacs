@@ -103,3 +103,19 @@ it('catches up once the new code has actually been priced', async () => {
   await waitFor(() => expect(result.current.quotedCouponCode).toBe('MYOWNCODE'));
   expect(result.current.quote?.couponErrorCode).toBeNull();
 });
+
+it('sends the PIN + offer intent and never a client shipping amount', async () => {
+  (apiClient.post as jest.Mock).mockResolvedValue(campaignRefusal());
+  renderHook(() => useCheckoutQuote(ITEMS, undefined, 0, { deliveryPin: '500001', applyDeliveryFeeOffer: true }));
+  await act(async () => { jest.advanceTimersByTime(400); });
+  const body = (apiClient.post as jest.Mock).mock.calls[0][1];
+  expect(body).toMatchObject({ deliveryPin: '500001', applyDeliveryFeeOffer: true });
+  expect(body).not.toHaveProperty('shippingCost');
+});
+
+it('drops an invalid PIN instead of sending it', async () => {
+  (apiClient.post as jest.Mock).mockResolvedValue(campaignRefusal());
+  renderHook(() => useCheckoutQuote(ITEMS, undefined, 0, { deliveryPin: '12' }));
+  await act(async () => { jest.advanceTimersByTime(400); });
+  expect((apiClient.post as jest.Mock).mock.calls[0][1]).not.toHaveProperty('deliveryPin');
+});

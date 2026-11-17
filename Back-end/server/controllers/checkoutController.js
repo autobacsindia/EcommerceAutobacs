@@ -1,5 +1,5 @@
 import { asyncHandler } from '../middleware/errorMiddleware.js';
-import pricingService from '../services/pricingService.js';
+import pricingService, { toPublicQuote } from '../services/pricingService.js';
 import { extractAffiliateRef } from '../utils/affiliateAttribution.js';
 
 // @desc    Live price breakdown for a cart, with optional coupon + karma redemption.
@@ -7,13 +7,17 @@ import { extractAffiliateRef } from '../utils/affiliateAttribution.js';
 // @route   POST /checkout/quote
 // @access  Public (optionalAuth — coupon/karma personalised when logged in)
 export const getCheckoutQuote = asyncHandler(async (req, res) => {
-  const { items, couponCode, redeemKarmaPoints, shippingCost } = req.body;
+  // `shippingCost` is no longer read from the body: delivery fees are server-computed
+  // from the rate card. The client sends only the PIN and whether the customer tapped
+  // "Apply Black Friday offer" — both re-checked when the order is created.
+  const { items, couponCode, redeemKarmaPoints, deliveryPin, applyDeliveryFeeOffer } = req.body;
 
   const quote = await pricingService.computeQuote({
     items,
     couponCode,
     redeemKarmaPoints,
-    shippingCost,
+    deliveryPin,
+    applyDeliveryFeeOffer: applyDeliveryFeeOffer === true,
     userId: req.user?.id || req.user?._id?.toString() || null,
     /*
       The `ab_ref` cookie, read server-side. Used ONLY to compute the advisory
@@ -25,8 +29,6 @@ export const getCheckoutQuote = asyncHandler(async (req, res) => {
     referralCode: extractAffiliateRef(req),
   });
 
-  // orderItems carries internal pricing/scoping fields — not for the client.
-  const { orderItems: _orderItems, ...publicQuote } = quote;
-
-  res.json({ success: true, quote: publicQuote });
+  // orderItems + the raw fee block are internal — not for the client.
+  res.json({ success: true, quote: toPublicQuote(quote) });
 });

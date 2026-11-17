@@ -33,6 +33,8 @@ const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
 const tasks = await import('../services/staffTaskService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 const DAY = 24 * 60 * 60 * 1000;
@@ -47,7 +49,7 @@ const person = (role, staff, name) => {
     ...(staff && { staff: { active: true, isHead: false, ...staff } }),
   });
 };
-const make = (actor, over = {}) => tasks.createTask(actor, { title: 'Call the supplier', ...over }, req).then((r) => r.task);
+const make = (actor, over = {}) => tasks.createTask(actor, { dueOn: DUE, title: 'Call the supplier', ...over }, req).then((r) => r.task);
 const status = (code, fn) => expect(fn()).rejects.toMatchObject({ statusCode: code });
 const reload = (actor, t) => tasks.getTask(actor, t.id);
 
@@ -109,7 +111,8 @@ describe('start dates', () => {
   it('may be the due day or before it, never after; a bad day is refused', async () => {
     expect(await make(procA, { startOn: day(1), dueOn: day(3) })).toMatchObject({ startOn: day(1), dueOn: day(3) });
     expect(await make(procA, { startOn: day(3), dueOn: day(3) })).toMatchObject({ startOn: day(3) });
-    expect(await make(procA, { startOn: day(3) })).toMatchObject({ startOn: day(3), dueOn: null });
+    // A start date alone is not enough: every task needs a due date (services/taskDueRules.js).
+    await status(400, () => make(procA, { startOn: day(3), dueOn: null }));
     await status(400, () => make(procA, { startOn: day(4), dueOn: day(3) }));
     await status(400, () => make(procA, { startOn: '2026-02-30' }));
   });

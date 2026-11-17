@@ -8,6 +8,8 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowRight, AlertTriangle } from 'luc
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import SavingsCelebration from '@/components/checkout/SavingsCelebration';
+import DeliveryFeeBreakdown from '@/components/checkout/DeliveryFeeBreakdown';
+import { useDeliveryFeeOffer, useDeliveryPin } from '@/hooks/useDeliveryFeeOffer';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { ProductImage, productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
@@ -21,6 +23,7 @@ import Reveal from '@/components/ui/Reveal';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
 import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
+import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { useCampaign } from '@/hooks/queries/useCampaign';
 import CampaignMeter from '@/components/campaign/CampaignMeter';
 import CampaignCartNotice from '@/components/campaign/CampaignCartNotice';
@@ -69,7 +72,13 @@ function CartPageContent() {
     })),
     [cart?.items]
   );
-  const { quote, quotedCouponCode, loading: quoteLoading, error: quoteError } = useCheckoutQuote(quoteItems, cart?.couponCode || undefined, 0);
+  // "Apply Black Friday offer" intent (carried into checkout). The server decides.
+  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer();
+  // Delivery fees depend on the PIN (distance + remote area): none are shown before it.
+  const [deliveryPin, setDeliveryPin] = useDeliveryPin();
+  const { quote, quotedCouponCode, loading: quoteLoading, error: quoteError } = useCheckoutQuote(
+    quoteItems, cart?.couponCode || undefined, 0, { applyDeliveryFeeOffer: offerRequested, deliveryPin },
+  );
 
   // ── Campaign reward ────────────────────────────────────────────────────────
   // An invited customer never types the code — the card tells them the reward is
@@ -210,6 +219,7 @@ function CartPageContent() {
   };
   const { isAuthenticated } = useAuth();
   const { formatPrice } = useCurrency();
+  const offerLabel = useFestivalOfferLabel();
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
   const [recentChanges, setRecentChanges] = useState<any[]>([]);
   const [hasShownChanges, setHasShownChanges] = useState(false);
@@ -550,7 +560,7 @@ function CartPageContent() {
                   // Already inside the line prices (and so inside the subtotal above) —
                   // shown so the shopper can see what Diwali took off. Server figure.
                   <div className="flex justify-between text-[#b4231a] dark:text-[#ff8a7a] font-display text-sm">
-                    <span>🪔 Diwali offer saving (already in prices)</span>
+                    <span>{offerLabel.icon} {offerLabel.name} saving (already in prices)</span>
                     <span>{formatPrice(quote.savings.festival!, { exact: true })}</span>
                   </div>
                 )}
@@ -562,12 +572,6 @@ function CartPageContent() {
                     <span>{formatPrice(quote.savings.total, { exact: true })}</span>
                   </div>
                 )}
-                {/* Shipping is never in the website total: the customer pays the courier
-                    on delivery, by cash or GPay / UPI. Same wording as checkout. */}
-                <div className="flex justify-between text-ink/70 font-display text-sm">
-                  <span>Shipping</span>
-                  <span className="text-ink-muted text-xs">Extra — paid on delivery</span>
-                </div>
                 <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Tax (18% GST)</span>
                   {/* Never print a confident ₹0. Tax is inclusive and always non-zero on a
@@ -575,6 +579,17 @@ function CartPageContent() {
                       as "no tax charged" rather than "not calculated yet". */}
                   <span>{quote ? formatPrice(quote.tax, { exact: true }) : '—'}</span>
                 </div>
+                {/* Delivery fees, itemised and server-computed, with the Black Friday
+                    button. While the shop has fees off this prints the old "Extra —
+                    paid on delivery" row instead. Fees appear once a PIN is entered. */}
+                <DeliveryFeeBreakdown
+                  fees={quote ? (quote.deliveryFees ?? null) : undefined}
+                  loading={quoteLoading}
+                  requested={offerRequested}
+                  onRequestChange={setOfferRequested}
+                  pinInput={{ value: deliveryPin, onChange: setDeliveryPin }}
+                  format={(n) => formatPrice(n, { exact: true })}
+                />
                 <div className="border-t border-hairline pt-3 flex justify-between">
                   <span className="font-display text-ink tracking-[-0.01em]">Total</span>
                   <span className="text-xl font-display font-bold text-gold">

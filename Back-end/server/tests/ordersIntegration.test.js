@@ -150,7 +150,8 @@ describe('Orders Integration API', () => {
       expect(res.body.order).toHaveProperty('_id');
       expect(res.body.order.items).toHaveLength(1);
       expect(res.body.order.items[0].product).toBe(productId.toString());
-      expect(res.body.order.totalAmount).toBe(1050); // 500*2 + 50
+      // Client shippingCost is ignored: delivery fees are server-computed (off here).
+      expect(res.body.order.totalAmount).toBe(1000); // 500*2
     });
 
     it('should reject a junk phone that would normalize away (regression: phone-less lead)', async () => {

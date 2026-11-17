@@ -86,7 +86,7 @@ describe('Past team members', () => {
     const { bucket, rank } = tasks.placeOf({ status: 'done', completedAt });
     await StaffTask.updateOne({ _id: id }, { $set: { status: 'done', completedAt, bucket, rank } });
   };
-  const give = (actor, body) => tasks.createTask(actor, body, req).then((r) => r.task ?? r);
+  const give = (actor, body) => tasks.createTask(actor, { dueOn: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }), ...body }, req).then((r) => r.task ?? r);
 
   describe('who can see the list', () => {
     test('teammates of any role see their team’s past members, and only after access is removed', async () => {

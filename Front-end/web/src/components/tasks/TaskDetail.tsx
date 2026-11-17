@@ -24,6 +24,7 @@ import Subtasks from './Subtasks';
 import Links, { WaitingWarning } from './TaskLinks';
 import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
+import { DueApprovalPanel } from './dueRules';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
 import { useProject } from './Projects';
@@ -73,6 +74,15 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   check_to_subtask: (h) => `made the step "${h.from}" into the sub-task ${h.to}`,
   file_added: (h) => `added the file "${h.to}"`,
   file_removed: (h) => `removed the file "${h.from}"`,
+  // Due-date approval (services/taskDueRules.js): asked, approved, not approved, or no longer needed.
+  due_approval: (h) => {
+    if (h.to.startsWith('asked: due ')) return `asked a manager to approve the due date ${formatDueDay(h.to.slice('asked: due '.length))}`;
+    if (h.to === 'not needed') return 'moved the due date within the limit, so no approval is needed';
+    if (h.to.startsWith('approved (set by a manager)')) return 'set the due date as a manager, so it is approved';
+    if (h.to.startsWith('approved')) return 'approved the due date';
+    if (h.to.startsWith('not approved')) return `did not approve the due date${h.to.slice('not approved'.length)}`;
+    return `due date: ${h.to}`;
+  },
 };
 
 /** Kept here too: older imports read it from this file. */
@@ -619,7 +629,9 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
     ? <button type="button" onClick={() => onOpen(task.parent!.id)} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></button>
     : <Link href={`${base}/${task.parent.id}`} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></Link>);
   const setDue = (value: string) => {
-    if (value && isPastDue(value, task.dueTime) && !window.confirm('This date has already passed, so the task will show as late. Use it anyway?')) return;
+    // A date can be moved, never taken off: every task needs one (the server refuses it too).
+    if (!value) return;
+    if (isPastDue(value, task.dueTime) && !window.confirm('This date has already passed, so the task will show as late. Use it anyway?')) return;
     save.mutate({ dueOn: value || null });
   };
   const setDueTime = (value: string | null) => {
@@ -653,6 +665,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       </header>
 
       <WaitingWarning task={task} onOpen={onOpen} />
+      <DueApprovalPanel task={task} />
       {task.personal && (
         <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500"><Lock aria-hidden className="h-3.5 w-3.5" /> Private — only you can see this task.</p>
       )}

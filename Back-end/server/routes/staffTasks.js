@@ -40,7 +40,10 @@ import {
   validateProjectId,
   validateProjectCreate,
   validateProjectUpdate,
+  validateDueApproval,
+  validateTaskRules,
 } from '../validators/staffTask.validator.js';
+import { readTaskRules, updateTaskRules } from '../services/taskDueRules.js';
 import {
   loadProjectAccess, listProjects, pickableProjects, getProject, createProject, updateProject,
 } from '../services/staffProjectService.js';
@@ -77,6 +80,7 @@ import {
   changeFollowers,
   listSubtasks,
   subtaskFromStep,
+  decideDueApproval,
 } from '../services/staffTaskService.js';
 import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
 import { attachmentSizeGuard } from '../middleware/uploadMiddleware.js';
@@ -195,6 +199,16 @@ router.patch('/projects/:projectId', validateProjectUpdate, validateRequest, asy
   res.json({ success: true, project: await updateProject(req.user, req.params.projectId, req.body, req) });
 }));
 
+// @route  GET /staff/tasks/rules — the due-date rules (everyone: the form shows the limits)
+router.get('/rules', asyncHandler(async (req, res) => {
+  res.json({ success: true, rules: await readTaskRules() });
+}));
+
+// @route  PUT /staff/tasks/rules { approvalAfterDays?, maxDays?: { urgent?, high?, normal?, low? } } — admin only
+router.put('/rules', validateTaskRules, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, rules: await updateTaskRules(req.user, req.body, req) });
+}));
+
 // @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, orderId?, clientId? }
 // Several people → one copy each; `tasks` lists them all, `task` is the first.
 router.post('/', validateTaskCreate, validateRequest, asyncHandler(async (req, res) => {
@@ -216,6 +230,11 @@ router.get('/:id', validateTaskId, validateRequest, asyncHandler(async (req, res
 // @route  PATCH /staff/tasks/:id { rev, ...changes }
 router.patch('/:id', validateTaskUpdate, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, task: await updateTask(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/tasks/:id/due-approval { rev, decision: approve|reject, note? } — a manager decides a far due date
+router.post('/:id/due-approval', validateDueApproval, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await decideDueApproval(req.user, req.params.id, req.body, req) });
 }));
 
 // @route  POST /staff/tasks/:id/checklist { text, clientId? } — add a step

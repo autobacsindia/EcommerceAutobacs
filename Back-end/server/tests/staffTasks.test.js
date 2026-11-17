@@ -48,6 +48,8 @@ const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
 const tasks = await import('../services/staffTaskService.js');
 const { summaryFor } = await import('../services/notificationService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 const DAY = 24 * 60 * 60 * 1000;
@@ -63,7 +65,13 @@ const person = (role, staff, name) => {
   });
 };
 
-const make = (actor, over = {}) => tasks.createTask(actor, { title: 'Call the supplier', ...over }, req).then((r) => r.task);
+const make = (actor, over = {}) => tasks.createTask(actor, { dueOn: DUE, title: 'Call the supplier', ...over }, req).then((r) => r.task);
+// A task as saved before due dates were required: no date, sorted last.
+const makeUndated = async (actor, over = {}) => {
+  const t = await make(actor, over);
+  await StaffTask.updateOne({ _id: t.id }, { $set: { dueOn: null, dueTime: null, rank: '9999-12-31' } });
+  return t;
+};
 const status = (code, fn) => expect(fn()).rejects.toMatchObject({ statusCode: code });
 
 let admin, procHead, procA, procB, salesHead, salesA, gone;
@@ -243,12 +251,12 @@ describe('changing a task', () => {
 
   it('records who changed what, newest first', async () => {
     const t = await make(procHead, { assigneeId: String(procA._id) });
-    const a = await tasks.updateTask(procHead, t.id, { rev: t.rev, priority: 'urgent', dueOn: day(1) }, req);
+    const a = await tasks.updateTask(procHead, t.id, { rev: t.rev, priority: 'high', dueOn: day(1) }, req);
     const b = await tasks.updateTask(procA, t.id, { rev: a.rev, status: 'in_progress' }, req);
     expect(b.history.map((h) => [h.action, h.by])).toEqual([
       ['status', 'Arun'], ['due', 'Priya'], ['priority', 'Priya'], ['created', 'Priya'],
     ]);
-    expect(b.history[2]).toMatchObject({ from: 'Normal', to: 'Urgent' });
+    expect(b.history[2]).toMatchObject({ from: 'Normal', to: 'High' });
   });
 
   it('an old "waiting" task reads as in progress and becomes in progress on its next change', async () => {
@@ -280,7 +288,7 @@ describe('changing a task', () => {
   it('nobody can pick "waiting" any more', async () => {
     const t = await make(procHead, { assigneeId: String(procA._id) });
     await status(400, () => tasks.updateTask(procA, t.id, { rev: t.rev, status: 'waiting' }, req));
-    await status(400, () => tasks.createTask(procHead, { title: 'x', status: 'waiting' }, req));
+    await status(400, () => tasks.createTask(procHead, { dueOn: DUE, title: 'x', status: 'waiting' }, req));
   });
 
   it('an unchanged save is a no-op, not a new revision', async () => {
@@ -304,7 +312,7 @@ describe('changing a task', () => {
 
 describe('duplicates', () => {
   it('a double-clicked create makes one task and one pop-up', async () => {
-    const input = { title: 'Pack order', assigneeId: String(procA._id), clientId: 'click-1234567' };
+    const input = { dueOn: DUE, title: 'Pack order', assigneeId: String(procA._id), clientId: 'click-1234567' };
     const first = await tasks.createTask(procHead, input, req);
     const again = await tasks.createTask(procHead, input, req);
     expect(first.duplicate).toBe(false);
@@ -314,15 +322,15 @@ describe('duplicates', () => {
   });
 
   it('the same create arriving twice at the same moment still makes one', async () => {
-    const input = { title: 'Pack order', clientId: 'race-12345678' };
+    const input = { dueOn: DUE, title: 'Pack order', clientId: 'race-12345678' };
     const both = await Promise.all([tasks.createTask(procA, input, req), tasks.createTask(procA, input, req)]);
     expect(new Set(both.map((r) => r.task.id)).size).toBe(1);
     expect(await StaffTask.countDocuments({ createdBy: procA._id })).toBe(1);
   });
 
   it('the same clientId from two different people is two tasks', async () => {
-    await tasks.createTask(procA, { title: 'a', clientId: 'shared-12345' }, req);
-    await tasks.createTask(procB, { title: 'b', clientId: 'shared-12345' }, req);
+    await tasks.createTask(procA, { dueOn: DUE, title: 'a', clientId: 'shared-12345' }, req);
+    await tasks.createTask(procB, { dueOn: DUE, title: 'b', clientId: 'shared-12345' }, req);
     expect(await StaffTask.countDocuments({ clientId: 'shared-12345' })).toBe(2);
   });
 });
@@ -356,7 +364,7 @@ describe('pop-ups', () => {
 describe('lists', () => {
   it('my tasks: by due day, undated last, with overdue / today flags and filters', async () => {
     const later = await make(procHead, { assigneeId: String(procA._id), title: 'later', dueOn: day(5) });
-    const none = await make(procHead, { assigneeId: String(procA._id), title: 'none' });
+    const none = await makeUndated(procHead, { assigneeId: String(procA._id), title: 'none' });
     const late = await make(procHead, { assigneeId: String(procA._id), title: 'late', dueOn: day(-3) });
     const today = await make(procHead, { assigneeId: String(procA._id), title: 'today', dueOn: day(0) });
     await make(procHead, { assigneeId: String(procB._id), title: 'not mine', dueOn: day(-1) });
@@ -483,7 +491,7 @@ describe('the bell', () => {
     await make(procHead, { assigneeId: String(procA._id), dueOn: day(-2) });
     await make(procHead, { assigneeId: String(procA._id), dueOn: day(0) });
     await make(procHead, { assigneeId: String(procA._id), dueOn: day(3) });
-    await make(procHead, { assigneeId: String(procA._id) });
+    await makeUndated(procHead, { assigneeId: String(procA._id) });
     const done = await make(procHead, { assigneeId: String(procA._id), dueOn: day(-1) });
     await tasks.updateTask(procA, done.id, { rev: done.rev, status: 'done' }, req);
     await make(procHead, { assigneeId: String(procB._id), dueOn: day(-1) });
@@ -495,7 +503,7 @@ describe('the bell', () => {
 
   it('shows unread task updates, without adding them to the work total that rings the alarm', async () => {
     await make(procHead, { assigneeId: String(procA._id), dueOn: day(0) });
-    await make(procHead, { assigneeId: String(procA._id) });
+    await make(procHead, { assigneeId: String(procA._id), dueOn: day(3) });
     const sum = await summaryFor(procA);
     expect(sum.items.find((i) => i.key === 'tasks_inbox')).toEqual({
       key: 'tasks_inbox', label: 'Unread task updates', count: 2, href: '/team/tasks?view=inbox', quiet: true,
@@ -517,7 +525,7 @@ describe('one task for several people', () => {
   const ids = (...people) => people.map((p) => String(p._id));
 
   it('each person gets their own copy, numbered, in one group, and their own pop-up', async () => {
-    const r = await tasks.createTask(admin, { title: 'Stock count', assigneeIds: ids(procA, salesA, admin), dueOn: day(1) }, req);
+    const r = await tasks.createTask(admin, { dueOn: DUE, title: 'Stock count', assigneeIds: ids(procA, salesA, admin), dueOn: day(1) }, req);
     expect(r.duplicate).toBe(false);
     expect(r.tasks.map((t) => t.assignee.name)).toEqual(['Arun', 'Sam', 'Owner']);
     expect(new Set(r.tasks.map((t) => t.number)).size).toBe(3);
@@ -532,31 +540,31 @@ describe('one task for several people', () => {
   });
 
   it('a single person is still a plain task, with no group', async () => {
-    const r = await tasks.createTask(procHead, { title: 'x', assigneeIds: ids(procA) }, req);
+    const r = await tasks.createTask(procHead, { dueOn: DUE, title: 'x', assigneeIds: ids(procA) }, req);
     expect(r.tasks).toHaveLength(1);
     expect(r.task.group).toBeNull();
   });
 
   it('anyone picks several people across teams; one who has left and nothing is made', async () => {
-    const mixed = await tasks.createTask(procHead, { title: 'Mixed', assigneeIds: ids(procA, salesA) }, req);
+    const mixed = await tasks.createTask(procHead, { dueOn: DUE, title: 'Mixed', assigneeIds: ids(procA, salesA) }, req);
     expect(mixed.tasks.map((t) => t.team).sort()).toEqual(['procurement', 'sales']);
-    const mine = await tasks.createTask(procA, { title: 'Me and Bala', assigneeIds: ids(procA, procB, salesHead) }, req);
+    const mine = await tasks.createTask(procA, { dueOn: DUE, title: 'Me and Bala', assigneeIds: ids(procA, procB, salesHead) }, req);
     expect(mine.tasks).toHaveLength(3);
     const customer = await person('customer', null, 'Shopper');
-    await status(400, () => tasks.createTask(admin, { title: 'Gone', assigneeIds: ids(procA, gone) }, req));
-    await status(400, () => tasks.createTask(procA, { title: 'Shop', assigneeIds: ids(procB, customer) }, req));
+    await status(400, () => tasks.createTask(admin, { dueOn: DUE, title: 'Gone', assigneeIds: ids(procA, gone) }, req));
+    await status(400, () => tasks.createTask(procA, { dueOn: DUE, title: 'Shop', assigneeIds: ids(procB, customer) }, req));
     expect(await StaffTask.countDocuments({ title: { $in: ['Gone', 'Shop'] } })).toBe(0);
   });
 
   it('the same person picked twice gets one copy; more than the limit is refused', async () => {
-    const r = await tasks.createTask(admin, { title: 'x', assigneeIds: [...ids(procA, procA), String(procB._id)] }, req);
+    const r = await tasks.createTask(admin, { dueOn: DUE, title: 'x', assigneeIds: [...ids(procA, procA), String(procB._id)] }, req);
     expect(r.tasks.map((t) => t.assignee.name)).toEqual(['Arun', 'Bala']);
     const many = Array.from({ length: tasks.MAX_ASSIGNEES + 1 }, () => String(new mongoose.Types.ObjectId()));
-    await status(400, () => tasks.createTask(admin, { title: 'y', assigneeIds: many }, req));
+    await status(400, () => tasks.createTask(admin, { dueOn: DUE, title: 'y', assigneeIds: many }, req));
   });
 
   it('a retried create makes no extra copies and no extra pop-ups', async () => {
-    const input = { title: 'Audit', assigneeIds: ids(procA, procB), clientId: 'group-12345678' };
+    const input = { dueOn: DUE, title: 'Audit', assigneeIds: ids(procA, procB), clientId: 'group-12345678' };
     const first = await tasks.createTask(procHead, input, req);
     await settle();
     const again = await tasks.createTask(procHead, input, req);
@@ -568,7 +576,7 @@ describe('one task for several people', () => {
   });
 
   it('a retry after a half-finished create makes only the missing copy, in the same group', async () => {
-    const input = { title: 'Half', assigneeIds: ids(procA, procB, procHead), clientId: 'half-12345678' };
+    const input = { dueOn: DUE, title: 'Half', assigneeIds: ids(procA, procB, procHead), clientId: 'half-12345678' };
     const first = await tasks.createTask(procHead, input, req);
     await StaffTask.deleteOne({ _id: first.tasks[1].id }); // as if the request died after the first copy
     const again = await tasks.createTask(procHead, input, req);
@@ -580,13 +588,13 @@ describe('one task for several people', () => {
   });
 
   it('the same several-people create twice at the same moment still makes one copy each', async () => {
-    const input = { title: 'Race', assigneeIds: ids(procA, procB), clientId: 'race-group-1234' };
+    const input = { dueOn: DUE, title: 'Race', assigneeIds: ids(procA, procB), clientId: 'race-group-1234' };
     await Promise.all([tasks.createTask(procHead, input, req), tasks.createTask(procHead, input, req)]);
     expect(await StaffTask.countDocuments({ title: 'Race' })).toBe(2);
   });
 
   it('the task page shows the other copies — to whoever may see them', async () => {
-    const r = await tasks.createTask(admin, { title: 'Count', assigneeIds: ids(procA, procB, salesA) }, req);
+    const r = await tasks.createTask(admin, { dueOn: DUE, title: 'Count', assigneeIds: ids(procA, procB, salesA) }, req);
     const [a, b] = r.tasks;
     await tasks.updateTask(procB, b.id, { rev: b.rev, status: 'done' }, req);
 
@@ -633,14 +641,14 @@ describe('checklists', () => {
 
   it('steps typed at creation go on every copy, blanks dropped; cards show "x of y"', async () => {
     const r = await tasks.createTask(procHead, {
-      title: 'Ship order', assigneeIds: [String(procA._id), String(procB._id)], checklist: ['Pack', '  ', 'Label', 'Book courier'],
+      dueOn: DUE, title: 'Ship order', assigneeIds: [String(procA._id), String(procB._id)], checklist: ['Pack', '  ', 'Label', 'Book courier'],
     }, req);
     for (const t of r.tasks) expect(steps(t)).toEqual([['Pack', false], ['Label', false], ['Book courier', false]]);
     const row = (await tasks.listTasks(procA, { view: 'mine' })).tasks[0];
     expect(row.checklist).toEqual({ done: 0, total: 3 });
     expect(row.checklistItems).toBeUndefined();
-    await status(400, () => tasks.createTask(procA, { title: 'x', checklist: Array.from({ length: 31 }, (_, i) => `s${i}`) }, req));
-    await status(400, () => tasks.createTask(procA, { title: 'x', checklist: 'Pack' }, req));
+    await status(400, () => tasks.createTask(procA, { dueOn: DUE, title: 'x', checklist: Array.from({ length: 31 }, (_, i) => `s${i}`) }, req));
+    await status(400, () => tasks.createTask(procA, { dueOn: DUE, title: 'x', checklist: 'Pack' }, req));
   });
 
   it('the doer ticks steps; only the giver, head or admin adds, renames or removes them', async () => {
@@ -746,7 +754,7 @@ describe('search, filters, counters and quick add', () => {
   });
 
   it('filters by priority and by "this week"', async () => {
-    await make(procA, { title: 'urgent soon', priority: 'urgent', dueOn: day(2) });
+    await make(procA, { title: 'urgent soon', priority: 'urgent', dueOn: day(0) });
     await make(procA, { title: 'normal soon', dueOn: day(6) });
     await make(procA, { title: 'later', dueOn: day(8) });
     await make(procA, { title: 'late', dueOn: day(-1) });

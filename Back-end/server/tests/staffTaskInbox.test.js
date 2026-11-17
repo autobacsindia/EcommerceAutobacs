@@ -40,6 +40,8 @@ const { default: StaffTaskInbox } = await import('../models/StaffTaskInbox.js');
 const { default: staffTaskInboxRepository } = await import('../repositories/staffTaskInboxRepository.js');
 const tasks = await import('../services/staffTaskService.js');
 const inbox = await import('../services/staffTaskInboxService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 const settle = () => new Promise((r) => setTimeout(r, 40));
@@ -75,6 +77,7 @@ beforeEach(async () => {
 afterEach(() => { jest.restoreAllMocks(); });
 
 const give = async (who, extra = {}, actor = priya) => (await tasks.createTask(actor, {
+ dueOn: DUE,  dueOn: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
   title: 'Count the Bosch pads', assigneeIds: who.map((u) => String(u._id)), shared: true, ...extra,
 }, req)).task;
 
@@ -99,7 +102,7 @@ describe('what lands in the Inbox', () => {
 
     await StaffTaskInbox.deleteMany({});
     await patch(priya, t.id, { status: 'done', assigneeIds: [String(arun._id), String(bala._id)] });
-    expect(await lines()).toEqual(['Arun:status:Done', 'Bala:assigned:']);
+    expect(await lines()).toEqual(['Arun:status:Done', `Bala:assigned:due ${DUE}`]);
   });
 
   it('a comment: "mentioned you" to those named, "commented" to the rest, nothing to the writer', async () => {
@@ -113,9 +116,10 @@ describe('what lands in the Inbox', () => {
     const parent = await give([arun, bala]);
     await StaffTaskInbox.deleteMany({});
     const child = (await tasks.createTask(priya, {
+     dueOn: DUE,  dueOn: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
       title: 'Wiper blades', parentId: parent.id, assigneeIds: [String(arun._id)], shared: true,
     }, req)).task;
-    expect(await lines()).toEqual(['Arun:assigned:', `Bala:subtask:${child.code} · Wiper blades`]);
+    expect(await lines()).toEqual([`Arun:assigned:due ${DUE}`, `Bala:subtask:${child.code} · Wiper blades`]);
     const [line] = await linesOf(bala);
     expect(String(line.task)).toBe(parent.id);
   });
@@ -129,7 +133,7 @@ describe('what lands in the Inbox', () => {
     const got = await lines();
     expect(got).toHaveLength(2);
     expect(got[0]).toMatch(/^Arun:subtask:T-\d+ · Count filters$/);
-    expect(got[1]).toBe('Bala:assigned:');
+    expect(got[1]).toBe(`Bala:assigned:due ${DUE}`);
   });
 });
 
@@ -138,7 +142,7 @@ describe('one event, one line', () => {
     await give([arun], { clientId: 'task-0000001' });
     await give([arun], { clientId: 'task-0000001' });
     await settle();
-    expect(await lines()).toEqual(['Arun:assigned:']);
+    expect(await lines()).toEqual([`Arun:assigned:due ${DUE}`]);
     expect(pushes.filter((p) => p.title.startsWith('New task'))).toHaveLength(1);
   });
 
@@ -150,7 +154,7 @@ describe('one event, one line', () => {
 
     await give([arun], { clientId: 'task-0000002' });
     await settle();
-    expect(await lines()).toEqual(['Arun:assigned:']);
+    expect(await lines()).toEqual([`Arun:assigned:due ${DUE}`]);
     expect(pushes.filter((p) => p.title.startsWith('New task'))).toHaveLength(1);
   });
 

@@ -60,7 +60,7 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <header className="sh-header">
+    <header className="sh-header" data-fx-style={festival?.tokens.style}>
       <div className="sh-top">
         <button type="button" className="sh-burger" aria-label="Open menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>
           <span /><span /><span />
@@ -99,7 +99,7 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
         </button>
         <span className="sh-bar-sep" aria-hidden="true" />
         {festival && (
-          <Link href="/offers" className="sh-bar-fx" style={festivalVars(festival.tokens)} data-testid="festive-nav">
+          <Link href="/offers" className="sh-bar-fx" data-fx-style={festival.tokens.style} style={festivalVars(festival.tokens)} data-testid="festive-nav">
             <span aria-hidden="true">{festival.tokens.icons.lamp}</span> {festival.tokens.home.navLabel}
           </Link>
         )}
