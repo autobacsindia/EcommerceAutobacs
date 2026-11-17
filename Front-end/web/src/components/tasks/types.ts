@@ -10,7 +10,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
-export type TaskView = 'mine' | 'following' | 'created' | 'team' | 'personal' | 'project';
+export type TaskView = 'mine' | 'following' | 'created' | 'team' | 'personal' | 'project' | 'approvals';
 export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
 /** How a list is ordered (server-side, keyset-paged). Open tasks only; done and archived keep "most recently finished first". */
 export type TaskSort = 'due' | 'newest' | 'oldest' | 'updated';
@@ -108,7 +108,11 @@ export type Task = {
     subtask?: boolean;
     /** Start a timer or add time on it (anyone who sees it, while it is not archived). */
     time?: boolean;
+    /** Approve or refuse the due date it waits on (a head of its team or the admin — never whoever asked). */
+    approveDue?: boolean;
   };
+  /** Set only when the due date needed a manager's approval (more than 9 days away). */
+  dueApproval?: DueApproval | null;
   /** In its maker's private Personal list: nobody else can see it. */
   personal?: boolean;
   /** How long it should take, in whole minutes; null when not planned. */
@@ -174,8 +178,28 @@ export type CommentPage = { comments: TaskComment[]; nextBefore: string | null }
 
 export type Person = { id: string; name: string };
 
+/** A manager's approval for a far due date. `auto`: set by a manager, so approved there and then. */
+export type DueApproval = {
+  status: 'pending' | 'approved' | 'rejected';
+  dueOn: string;
+  auto: boolean;
+  requestedBy: Person;
+  requestedAt: string | null;
+  decidedBy: Person | null;
+  decidedAt: string | null;
+  note: string;
+};
+
+/** The admin's due-date rules (GET /staff/tasks/rules). */
+export type TaskRules = {
+  approvalAfterDays: number;
+  maxDays: Record<TaskPriority, number>;
+  updatedAt?: string | null;
+  updatedByName?: string;
+};
+
 /** One line in the Inbox (GET /staff/tasks/inbox). */
-export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved';
+export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided';
 export type InboxItem = {
   id: string;
   kind: InboxKind;

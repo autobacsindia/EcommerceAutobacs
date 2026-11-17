@@ -68,6 +68,7 @@ import staffTaskInboxRepository, { INBOX_UNREAD_CAP } from '../repositories/staf
 import orderRepository from '../repositories/orderRepository.js';
 import staffTaskTimeRepository from '../repositories/staffTaskTimeRepository.js';
 import { sendToUsers } from './pushService.js';
+import { getTaskRules, checkDue } from './taskDueRules.js';
 import { listForTask, liveList } from './staffTaskListService.js';
 import { inProjectAccess, loadVisibleProject, projectForTask, projectName } from './staffProjectService.js';
 import { orderNumber } from './invoiceService.js';
@@ -172,6 +173,35 @@ export const canSee = (u, t) => (t.personal ? ownPersonal(u, t) : isAdmin(u) || 
 export const canEdit = (u, t) => (t.personal ? ownPersonal(u, t) : isAdmin(u) || same(u?._id, t.createdBy) || headOnTask(u, t));
 const canSetStatus = (u, t) => canEdit(u, t) || isDoing(u, t);
 const canReassign = (u, t) => !t.personal && canEdit(u, t);
+
+/*
+  ── Due-date approval (services/taskDueRules.js has the rules themselves) ──
+  The manager of a task's date is a head of a team on the task, or the admin.
+  Nobody approves their own request — a head's date for their own task goes to
+  the admin. A personal task is seen by its maker alone, so it never waits.
+*/
+const realTeams = (t) => teamsOf(t).filter(Boolean);
+/** May `u` approve or refuse the date `t` is waiting on? */
+export const mayApproveDue = (u, t) => !t.personal
+  && !same(u?._id, t.dueApproval?.requestedBy)
+  && (isAdmin(u) || headOnTask(u, t));
+/**
+ * Is whoever sets this date already its manager, so it needs no one else? The
+ * admin; or a head of every team on the task, when it isn't only for themselves.
+ */
+const managesDue = (u, t) => isAdmin(u) || (
+  realTeams(t).length > 0
+  && teamsOf(t).every((team) => headOf(u, team))
+  && !peopleOf(t).every((p) => same(u?._id, p.user))
+);
+/** The approval record for `dueOn` set by `actor` on (what will be) task `t`. */
+function approvalFor(actor, t, dueOn, now) {
+  const base = { dueOn, requestedBy: actor._id, requestedByName: actor.name || '', requestedAt: now };
+  return managesDue(actor, t)
+    ? { ...base, status: 'approved', auto: true, decidedBy: actor._id, decidedByName: actor.name || '', decidedAt: now }
+    : { ...base, status: 'pending' };
+}
+const APPROVAL_LABELS = Object.freeze({ pending: 'waiting for approval', approved: 'approved', rejected: 'not approved' });
 
 /** The bucket a task lives in, and its sort key inside it. */
 export function placeOf({ status, dueOn, dueTime, completedAt, archivedAt }) {
@@ -372,6 +402,16 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     team: t.team || null,
     teamLabel: t.personal ? 'Personal' : t.team ? STAFF_TEAM_LABELS[t.team] || t.team : 'Admin',
     personal: !!t.personal,
+    dueApproval: t.dueApproval?.status ? {
+      status: t.dueApproval.status,
+      dueOn: t.dueApproval.dueOn,
+      auto: !!t.dueApproval.auto,
+      requestedBy: { id: idOf(t.dueApproval.requestedBy), name: t.dueApproval.requestedByName || '' },
+      requestedAt: t.dueApproval.requestedAt || null,
+      decidedBy: t.dueApproval.decidedBy ? { id: idOf(t.dueApproval.decidedBy), name: t.dueApproval.decidedByName || '' } : null,
+      decidedAt: t.dueApproval.decidedAt || null,
+      note: t.dueApproval.note || '',
+    } : null,
     estimateMinutes: t.estimateMinutes ?? null,
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
@@ -411,6 +451,7 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
       subtask: !archived && !t.parent && canEdit(viewer, t),
       // Anyone who sees a task may track time on it (services/staffTaskTimeService.js).
       time: !archived && canSee(viewer, t),
+      approveDue: !archived && t.dueApproval?.status === 'pending' && mayApproveDue(viewer, t),
     },
     ...(full && {
       files: (t.files || []).map((f) => ({
@@ -559,6 +600,39 @@ async function notifyStatus(t, actor, skip = []) {
   });
 }
 
+/**
+ * "Please approve this date": the heads of the task's teams, or — when there is
+ * no such head other than whoever asked — the admins. Inbox, then a pop-up.
+ */
+async function notifyApprovers(t, actor) {
+  try {
+    const a = t.dueApproval;
+    const heads = realTeams(t).length ? await userRepository.findTeamHeads(realTeams(t)) : [];
+    let ids = heads.map((u) => u._id).filter((x) => !same(x, a.requestedBy));
+    if (!ids.length) ids = (await userRepository.findAdmins()).map((u) => u._id).filter((x) => !same(x, a.requestedBy));
+    const key = revKey(t, 'approval_requested');
+    await toInbox(t, actor, ids, { kind: 'approval_requested', key, text: `due ${a.dueOn}` });
+    void notifyPeople(t, actor, ids, {
+      title: `${actor.name || 'Someone'} asks you to approve a due date`,
+      body: `T-${t.number} · ${t.title} · due ${a.dueOn}`,
+    });
+  } catch (err) {
+    console.error('[StaffTask] approval request notice failed (ignored):', err.message);
+  }
+}
+
+/** "Your date was approved / not approved": whoever asked, the people on it and whoever gave it. */
+async function notifyDueDecision(t, actor) {
+  const a = t.dueApproval;
+  const ids = [a.requestedBy, ...audienceOf(t)];
+  const text = `${APPROVAL_LABELS[a.status]}: due ${a.dueOn}${a.note ? ` — ${a.note}` : ''}`;
+  await toInbox(t, actor, ids, { kind: 'approval_decided', key: revKey(t, 'approval_decided'), text });
+  void notifyPeople(t, actor, ids, {
+    title: `${actor.name || 'Your manager'} ${a.status === 'approved' ? 'approved' : 'did not approve'} the due date of T-${t.number}`,
+    body: `${t.title} · due ${a.dueOn}${a.note ? ` · ${a.note}` : ''}`,
+  });
+}
+
 /** "A sub-task was added" to everyone on the parent — Inbox only; its own people heard "new task". */
 const noteSubtaskInInbox = (parent, actor, child) => toInbox(
   parent,
@@ -688,6 +762,17 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
       if (!mongoose.isValidObjectId(assignee)) throw fail('Invalid person.', 400);
       query['assignees.user'] = new mongoose.Types.ObjectId(assignee);
     }
+  } else if (view === 'approvals') {
+    // Dates waiting for this person to approve: their team's (a head), or every team's (the admin).
+    query['dueApproval.status'] = 'pending';
+    query['dueApproval.requestedBy'] = { $ne: actor._id };
+    if (isAdmin(actor)) {
+      if (team) query.teams = team === 'admin' ? null : team;
+    } else if (isHead(actor)) {
+      query.teams = actor.staff.team;
+    } else {
+      throw fail('Only team heads and the admin approve due dates.', 403);
+    }
   } else if (view === 'project') {
     // Every task of one project — to whoever sees the project (and so may open each of them).
     const p = await loadVisibleProject(actor, project);
@@ -810,7 +895,16 @@ export async function summaryFor(user) {
     staffTaskRepository.countUpTo({ 'assignees.user': user._id, bucket: 'open', status: { $in: ['in_progress', 'waiting'] } }, 999),
     staffTaskRepository.countUpTo({ 'assignees.user': user._id, bucket: 'done', rank: { $lte: `d${String(TIME_MAX - since).padStart(13, '0')}` } }, 999),
   ]);
-  return { late: before + lateToday, today: allToday - lateToday, inbox, assignedComments, inProgress: inProgress.count, doneWeek: doneWeek.count };
+  const approvals = await countApprovalsFor(user);
+  return { late: before + lateToday, today: allToday - lateToday, inbox, assignedComments, inProgress: inProgress.count, doneWeek: doneWeek.count, approvals };
+}
+
+/** How many due dates wait for `user` to approve (0 for anyone who approves none). */
+async function countApprovalsFor(user) {
+  if (!isAdmin(user) && !isHead(user)) return 0;
+  const query = { bucket: 'open', 'dueApproval.status': 'pending', 'dueApproval.requestedBy': { $ne: user._id } };
+  if (!isAdmin(user)) query.teams = user.staff.team;
+  return (await staffTaskRepository.countUpTo(query, 99)).count;
 }
 
 /** The bell: open tasks given to `user` that are overdue or due today. */
@@ -875,8 +969,11 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const dueOn = cleanDueOn(input.dueOn);
   const dueTime = cleanDueTime(input.dueTime);
   if (dueTime && !dueOn) throw fail('Pick a due date before a time.', 400);
+  if (!dueOn) throw fail('Pick a due date. Every task needs one.', 400);
   const startOn = cleanStartOn(input.startOn);
   checkDates(startOn, dueOn);
+  // Too late for its priority → refused here, before anything is written.
+  const { needsApproval } = checkDue({ dueOn, priority, today: todayIST(), rules: await getTaskRules() });
   const tags = cleanTags(input.tags);
   const checklist = cleanChecklist(input.checklist);
   const estimateMinutes = cleanEstimate(input.estimateMinutes);
@@ -921,6 +1018,10 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
     const existing = key && madeFor.get(key);
     if (existing) { results.push({ doc: existing, created: false }); continue; }
     const number = await counterRepository.next(COUNTER);
+    // Each copy has its own people and teams, so its own manager.
+    const dueApproval = needsApproval && !personal ? approvalFor(actor, { ...peopleFields(who), personal }, dueOn, now) : undefined;
+    const history = [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }];
+    if (dueApproval) history.push({ at: now, by: actor._id, byName: actor.name || '', action: 'due_approval', from: '', to: dueApproval.auto ? 'approved (set by a manager)' : `asked: due ${dueOn}` });
     try {
       const doc = await staffTaskRepository.create({
         number,
@@ -944,9 +1045,10 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         groupSize: many ? people.length : undefined,
         list: list?._id ?? null,
         ...(project ? { project: project._id } : {}),
+        ...(dueApproval ? { dueApproval } : {}),
         ...placeOf({ status, dueOn, dueTime }),
         clientId: key,
-        history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }],
+        history,
       });
       results.push({ doc, created: true });
     } catch (err) {
@@ -974,6 +1076,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
       ...(group && { group: idOf(group), people: people.length }),
     });
     await notifyAssigned(doc, actor, peopleOf(doc).map((p) => p.user), createdKey(doc));
+    if (doc.dueApproval?.status === 'pending') await notifyApprovers(doc, actor);
   }
   if (parent) {
     const made = results.filter((r) => r.created).map((r) => r.doc);
@@ -1083,6 +1186,7 @@ async function applyUpdate(actor, t, input, req) {
     const next = dueKey(dueOn, dueTime);
     if (next !== was) {
       needEdit();
+      if (!dueOn) throw fail('A task needs a due date. Pick another date instead of taking it off.', 400);
       if (dueOn !== (t.dueOn || null)) set.dueOn = dueOn;
       if (dueTime !== (t.dueTime || null)) set.dueTime = dueTime;
       note('due', was || 'none', next || 'none');
@@ -1094,6 +1198,25 @@ async function applyUpdate(actor, t, input, req) {
   }
   if (set.dueOn !== undefined || set.startOn !== undefined) {
     checkDates(set.startOn !== undefined ? set.startOn : t.startOn, set.dueOn !== undefined ? set.dueOn : t.dueOn);
+  }
+  /*
+    The due-date rules run when the date or the priority changes — never over a
+    task left as it was, so an older task with no date (or a far one) is fine
+    until someone changes it. The limit is checked for the new pair; approval
+    only when the day itself moves (a new time on the same day asks nothing).
+  */
+  const dayMoved = set.dueOn !== undefined;
+  const nextDue = dayMoved ? set.dueOn : t.dueOn;
+  if ((dayMoved || set.priority !== undefined) && nextDue) {
+    const { needsApproval } = checkDue({ dueOn: nextDue, priority: set.priority ?? t.priority, today: todayIST(), rules: await getTaskRules() });
+    if (dayMoved && needsApproval && !t.personal) {
+      set.dueApproval = approvalFor(actor, t, nextDue, now);
+      note('due_approval', t.dueApproval?.status ? APPROVAL_LABELS[t.dueApproval.status] : '', set.dueApproval.auto ? 'approved (set by a manager)' : `asked: due ${nextDue}`);
+    } else if (dayMoved && t.dueApproval?.status) {
+      // Within the limit now: nothing to approve any more.
+      set.dueApproval = null;
+      note('due_approval', APPROVAL_LABELS[t.dueApproval.status], 'not needed');
+    }
   }
   if (has('estimateMinutes')) {
     const estimate = cleanEstimate(input.estimateMinutes);
@@ -1190,6 +1313,45 @@ async function applyUpdate(actor, t, input, req) {
   // rev) or changes nothing, so it never sends these twice.
   if (added.length) await notifyAssigned(next, actor, added);
   if (set.status !== undefined) await notifyStatus(next, actor, added);
+  if (set.dueApproval?.status === 'pending') await notifyApprovers(next, actor);
+  return shape(next, actor, { full: true });
+}
+
+export const APPROVAL_NOTE_MAX = 500;
+
+/**
+ * Approve or refuse the due date `id` is waiting on. Named against the task's
+ * `rev`, like every edit: a second click, or two managers at once, decides it
+ * once and the other is told it changed (409).
+ *
+ * @param {{ rev: number, decision: 'approve'|'reject', note?: string }} input
+ *   A refusal needs a note, so the person knows what date would do.
+ */
+export async function decideDueApproval(actor, id, { rev: rawRev, decision, note: rawNote } = {}, req) {
+  const t = await loadVisible(actor, id);
+  const rev = Number(rawRev);
+  if (!Number.isInteger(rev)) throw fail('Reload the task and try again.', 400);
+  if (!['approve', 'reject'].includes(decision)) throw fail('Pick approve or reject.', 400);
+  if (t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  if (rev !== t.rev) throw fail('Someone changed this task just now. It has been reloaded — check it and try again.', 409);
+  const a = t.dueApproval;
+  if (a?.status !== 'pending') throw fail('This due date isn’t waiting for approval any more.', 409);
+  if (same(actor._id, a.requestedBy)) throw fail('You asked for this date, so someone else must approve it.', 403);
+  if (!mayApproveDue(actor, t)) throw fail('Only a head of this task’s team or the admin can approve its due date.', 403);
+  const note = String(rawNote ?? '').replace(/\s+/g, ' ').trim();
+  if (note.length > APPROVAL_NOTE_MAX) throw fail(`Keep the note under ${APPROVAL_NOTE_MAX} characters.`, 400);
+  if (decision === 'reject' && !note) throw fail('Say why, or which date would do.', 400);
+
+  const now = new Date();
+  const status = decision === 'approve' ? 'approved' : 'rejected';
+  const set = {
+    dueApproval: { ...a, status, decidedBy: actor._id, decidedByName: actor.name || '', decidedAt: now, note },
+  };
+  const entry = { at: now, by: actor._id, byName: actor.name || '', action: 'due_approval', from: APPROVAL_LABELS.pending, to: `${APPROVAL_LABELS[status]}${note ? ` — ${note}` : ''}` };
+  const next = await staffTaskRepository.updateIfRev(t._id, rev, set, [entry]);
+  if (!next) throw fail('Someone changed this task just now. It has been reloaded — check it and try again.', 409);
+  auditLogger.logAction(req, 'UPDATE', 'StaffTask', t._id, { number: t.number, dueApproval: status, dueOn: a.dueOn });
+  await notifyDueDecision(next, actor);
   return shape(next, actor, { full: true });
 }
 
@@ -1419,8 +1581,13 @@ export async function subtaskFromStep(actor, id, itemId, { clientId, assigneeIds
     if (made && same(made.parent?.task, t._id)) return { task: await getTask(actor, id), subtask: shape(made, actor, { full: true }) };
     throw fail('That step is no longer on the checklist.', 404);
   }
+  // Due with its parent, at its parent's priority (both passed the rules when set);
+  // a parent from before dates were required gives it today.
   const { task: subtask } = await createTask(actor, {
     title: item.text, parentId: id, clientId: key, shared: true,
+    priority: t.priority,
+    dueOn: t.dueOn || todayIST(),
+    ...(t.dueOn && t.dueTime ? { dueTime: t.dueTime } : {}),
     ...(Array.isArray(assigneeIds) && assigneeIds.length ? { assigneeIds } : {}),
   }, req, { note: false });
   await staffTaskRepository.pullChecklistItem(t._id, item._id, {

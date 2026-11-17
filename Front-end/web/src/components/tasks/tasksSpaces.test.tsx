@@ -7,7 +7,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TasksWorkspace from './TasksWorkspace';
 import TaskDetail from './TaskDetail';
-import { type Task } from './types';
+import { todayIST, type Task } from './types';
 import { type Space } from './spaces';
 import { addressBar } from '@/test-utils/addressBarMock';
 
@@ -238,6 +238,7 @@ describe('a task\'s list', () => {
     fireEvent.click(await screen.findByRole('button', { name: /New task/ }));
     fireEvent.change(await screen.findByPlaceholderText(/What needs doing/i), { target: { value: 'Ask Bosch for prices' } });
     await waitFor(() => expect(screen.getAllByLabelText('List').at(-1)).toHaveValue('l1'));
+    fireEvent.change(within(screen.getByRole('dialog', { name: 'New task' })).getByLabelText('Due date'), { target: { value: todayIST() } });
     fireEvent.click(screen.getByRole('button', { name: /^Create/ }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ title: 'Ask Bosch for prices', listId: 'l1' })));
   });

@@ -41,6 +41,8 @@ const { default: SalesRep } = await import('../models/SalesRep.js');
 const { default: Lead } = await import('../models/Lead.js');
 const { default: SalesQuotation } = await import('../models/SalesQuotation.js');
 const tasks = await import('../services/staffTaskService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const BASE = '/api/v1/staff/departures';
 const PW = 'SecurePass123!';
@@ -101,7 +103,7 @@ describe('Start handover', () => {
     q = { open: r.insertedIds[0], accepted: r.insertedIds[1] };
   });
 
-  const give = (who, over = {}) => tasks.createTask(admin.user, { title: 'Call the supplier', assigneeIds: who, ...over }, req).then((r) => r.task ?? r);
+  const give = (who, over = {}) => tasks.createTask(admin.user, { dueOn: DUE, title: 'Call the supplier', assigneeIds: who, ...over }, req).then((r) => r.task ?? r);
   const record = async (over = {}) => {
     const r = await admin.s.post('', { userId: leaver.id, lastDay, successorId: next.id, ...over });
     expect(r.status).toBe(201);
@@ -149,7 +151,7 @@ describe('Start handover', () => {
   });
 
   test('a personal task stays and a shared task keeps the others', async () => {
-    const mine = await tasks.createTask(leaver.user, { title: 'Dentist', personal: true }, req).then((r) => r.task ?? r);
+    const mine = await tasks.createTask(leaver.user, { dueOn: DUE, title: 'Dentist', personal: true }, req).then((r) => r.task ?? r);
     const shared = await give([leaver.id, peer.id], { shared: true });
     const d = await record();
     await admin.s.post(`/${d.id}/handover`);

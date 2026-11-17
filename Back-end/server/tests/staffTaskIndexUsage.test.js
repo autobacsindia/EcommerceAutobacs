@@ -239,3 +239,37 @@ describe('the side menu counts', () => {
     expect(s.keys).toBeLessThanOrEqual(open + 3);
   });
 });
+
+describe('due dates waiting for approval (services/taskDueRules.js)', () => {
+  // A few of the 4,000 tasks wait for a manager: the list and the header count
+  // must read those few, never walk every open task.
+  const pendingQuery = (extra = {}) => ({
+    bucket: 'open', 'dueApproval.status': 'pending', 'dueApproval.requestedBy': { $ne: people[0] }, ...extra,
+  });
+  beforeEach(async () => {
+    const open = await StaffTask.find({ bucket: 'open' }).select('_id assignee').limit(4000).lean();
+    const waiting = open.filter((_, i) => i % 100 === 0);
+    await StaffTask.updateMany({ _id: { $in: waiting.map((t) => t._id) } }, {
+      $set: { dueApproval: { status: 'pending', dueOn: TODAY, requestedBy: people[1], requestedAt: new Date() } },
+    });
+  });
+
+  it('a head\'s list reads only their team\'s waiting tasks', async () => {
+    const s = stats(await listExplain(pendingQuery({ teams: 'procurement' })));
+    expect(s.index).toBe('staff_task_due_approval');
+    expect(s.docs).toBeLessThanOrEqual(s.returned + 1);
+  });
+
+  it('the admin\'s list (every team) reads only waiting tasks', async () => {
+    const s = stats(await listExplain(pendingQuery()));
+    expect(s.index).toBe('staff_task_due_approval');
+    expect(s.keys).toBeLessThan(60);
+    expect(s.returned).toBeGreaterThan(0);
+  });
+
+  it('the header count is covered by the same index', async () => {
+    const ex = await StaffTask.find(pendingQuery({ teams: 'procurement' })).limit(100).explain('executionStats');
+    expect(stats(ex).index).toBe('staff_task_due_approval');
+    expect(stats(ex).keys).toBeLessThan(30);
+  });
+});

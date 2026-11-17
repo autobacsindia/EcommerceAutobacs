@@ -10,7 +10,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TasksWorkspace from './TasksWorkspace';
 import TaskDetail from './TaskDetail';
 import { dueBucket, groupTasks } from './grouping';
-import { cleanTag, type Task } from './types';
+import { cleanTag, todayIST, type Task } from './types';
+import { addDays } from './dueRules';
 import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
@@ -222,6 +223,8 @@ describe('tags and start dates on a task', () => {
     fireEvent.keyDown(window, { key: 'n' });
     const dialog = await screen.findByRole('dialog', { name: 'New task' });
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Stock count' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     const tags = within(dialog).getByLabelText('Tags');
     fireEvent.change(tags, { target: { value: '#Kochi' } });
     fireEvent.keyDown(tags, { key: 'Enter' });
@@ -229,14 +232,14 @@ describe('tags and start dates on a task', () => {
     fireEvent.change(tags, { target: { value: 'kochi' } });
     fireEvent.keyDown(tags, { key: 'Enter' });
     expect(within(dialog).getByRole('button', { name: 'Remove tag kochi' })).toBeInTheDocument();
-    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: '2099-11-10' } });
-    fireEvent.change(within(dialog).getByLabelText('Start date'), { target: { value: '2099-11-12' } });
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: addDays(todayIST(), 5) } });
+    fireEvent.change(within(dialog).getByLabelText('Start date'), { target: { value: addDays(todayIST(), 7) } });
     expect(within(dialog).getByRole('alert')).toHaveTextContent('The start date is after the due date.');
     expect(within(dialog).getByRole('button', { name: 'Create task' })).toBeDisabled();
-    fireEvent.change(within(dialog).getByLabelText('Start date'), { target: { value: '2099-11-08' } });
+    fireEvent.change(within(dialog).getByLabelText('Start date'), { target: { value: addDays(todayIST(), 3) } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({
-      tags: ['kochi', 'supplier'], startOn: '2099-11-08', dueOn: '2099-11-10',
+      tags: ['kochi', 'supplier'], startOn: addDays(todayIST(), 3), dueOn: addDays(todayIST(), 5),
     })));
   });
 

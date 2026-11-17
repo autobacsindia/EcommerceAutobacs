@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, BellDot, ChevronRight, CircleCheck, CircleHelp, Columns3, Eye, Flag, FolderKanban, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, TriangleAlert, User, Users, X, Zap } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, BellDot, CalendarClock, SlidersHorizontal, ChevronRight, CircleCheck, CircleHelp, Columns3, Eye, Flag, FolderKanban, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, TriangleAlert, User, Users, X, Zap } from 'lucide-react';
 import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -26,6 +26,7 @@ import { teamColour } from '@/components/chat/chatUi';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import { SpaceTree, allLists, dotOf, useSpace } from './spaces';
 import { ProjectHeader, ProjectsView, useProject } from './Projects';
+import { TaskRulesEditor } from './dueRules';
 import {
   TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, listOf, personLabel, projectOf, unreadLabel,
   type InboxFilter, type Task, type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
@@ -94,6 +95,7 @@ function EmptyState({ view, narrowed, onNew }: { view: TaskView; narrowed: boole
         : view === 'personal' ? ['Your private list is empty', 'Add reminders and to-dos only you can see. Nobody else can open them, not even the admin.']
         : view === 'following' ? ['You aren’t following any tasks', 'Open a task and press Follow to hear about it without doing it.']
         : view === 'project' ? ['No open tasks in this project', 'Add one here, or open any task and pick this project in its Project field.']
+        : view === 'approvals' ? ['No dates to approve', 'When someone sets a due date more than 9 days away, it waits here for you.']
         : ['No open tasks in the team', 'Everyone is up to date.'];
   return (
     <div className="flex flex-col items-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
@@ -125,6 +127,9 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   base: string; canSeeTeam: boolean; myTeam?: string | null; myTeamLabel?: string; isHead?: boolean;
 }) {
   const isAdmin = base.startsWith('/admin');
+  // Heads and the admin approve far due dates (services/taskDueRules.js).
+  const approver = isAdmin || isHead;
+  const [editingRules, setEditingRules] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -155,7 +160,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const inOther = inInbox || inTrash || inAssigned || inOverview || inProjects;
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>('all');
   // A view this person cannot see (an old or shared link) falls back to "My tasks".
-  const view: TaskView = inTrash ? (isAdmin || isHead ? 'team' : 'created') : lp.view === 'project' && lp.project ? 'project' : lp.view === 'created' || lp.view === 'following' || lp.view === 'personal' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
+  const view: TaskView = inTrash ? (isAdmin || isHead ? 'team' : 'created') : lp.view === 'project' && lp.project ? 'project' : lp.view === 'created' || lp.view === 'following' || lp.view === 'personal' || (lp.view === 'team' && canSeeTeam) || (lp.view === 'approvals' && approver) ? lp.view : 'mine';
   // The admin's team view: one team, or '' for all of them.
   const team = view === 'team' && isAdmin && SPACES.some((sp) => sp.value === lp.team) ? lp.team : '';
   // The space on screen (whose folders and lists apply), and one list of it: an id, or 'none' = Other tasks.
@@ -217,7 +222,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
 
   const summary = useQuery({
     queryKey: taskKeys.summary(),
-    queryFn: () => apiClient.get<{ late: number; today: number; inbox?: number; assignedComments?: number; inProgress?: number; doneWeek?: number }>('/staff/tasks/summary'),
+    queryFn: () => apiClient.get<{ late: number; today: number; inbox?: number; assignedComments?: number; inProgress?: number; doneWeek?: number; approvals?: number }>('/staff/tasks/summary'),
     refetchInterval: 60_000,
   });
   const people = useAssignees();
@@ -227,6 +232,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     { value: 'following', label: 'Following' },
     { value: 'created', label: 'Assigned by me' },
     { value: 'personal', label: 'Personal' },
+    ...(approver ? [{ value: 'approvals' as const, label: 'Approve dates' }] : []),
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
   const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team, list, project: projectId };
@@ -263,7 +269,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     return [...new Set(rows.map((t) => t.id))];
   }, [inInbox, inAssigned, inOverview, inboxPages.data, inTrash, trashPages.data, openPages.data, donePages.data, layout, groupBy, filters.due]);
   // Quick add in the team list with one person picked gives it to them; otherwise to me.
-  const quickAddFor = (view === 'team' || view === 'project') && assignee ? assignee : undefined;
+  // Not in "Approve dates": that list is other people's requests.
+  const quickAddFor = view === 'approvals' ? null : (view === 'team' || view === 'project') && assignee ? assignee : undefined;
   // Whose tasks (and which team), and the order, are where you are — not filters.
   const clear = () => { clearList(['view', 'team', 'list', 'project', 'sort']); setSearch(''); };
   const showDueNow = () => setList({ view: 'mine', team: '', list: '', due: dueNow ? '' : 'late' });
@@ -304,7 +311,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const late = summary.data?.late ?? 0;
   const assignedCount = summary.data?.assignedComments ?? 0;
   const today = summary.data?.today ?? 0;
-  const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, following: Eye, created: Send, team: Users, personal: Lock, project: FolderKanban };
+  const approvals = summary.data?.approvals ?? 0;
+  const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, following: Eye, created: Send, team: Users, personal: Lock, project: FolderKanban, approvals: CalendarClock };
   const shortcutGroups: ShortcutGroup[] = [
     { title: 'Tasks', items: [
       { keys: ['N'], label: 'New task' },
@@ -328,6 +336,11 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     return (
       <button key={v.value} aria-pressed={active} onClick={() => setView(v.value)} className={navItem}>
         <Icon aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />{v.label}
+        {v.value === 'approvals' && approvals > 0 && (
+          <span className="ml-auto rounded-full bg-amber-100 px-1.5 text-[11px] font-bold leading-[18px] text-amber-800">
+            {unreadLabel(approvals)}<span className="sr-only"> waiting</span>
+          </span>
+        )}
       </button>
     );
   };
@@ -412,6 +425,11 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
         <button aria-pressed={inTrash} onClick={() => setList({ view: 'trash', team: '', list: '', due: '', priority: '', assignee: '', tag: '' })} className={navItem}>
           <Trash2 aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />Trash
         </button>
+        {isAdmin && (
+          <button onClick={() => setEditingRules(true)} className={navItem}>
+            <SlidersHorizontal aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />Due date rules
+          </button>
+        )}
         <button
           onClick={() => setShortcuts(true)}
           aria-label="Keyboard shortcuts"
@@ -625,6 +643,14 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
           personal={view === 'personal'}
         />
       </Dialog>
+      {isAdmin && (
+        <Dialog open={editingRules} onClose={() => setEditingRules(false)} label="Due date rules">
+          <div className="rounded-2xl bg-white p-5 shadow-2xl">
+            <h2 className="mb-3 text-sm font-semibold text-gray-900">Due date rules</h2>
+            {editingRules && <TaskRulesEditor onDone={() => setEditingRules(false)} />}
+          </div>
+        </Dialog>
+      )}
       {shortcuts && <ShortcutsDialog groups={shortcutGroups} onClose={() => setShortcuts(false)} />}
     </div>
   );

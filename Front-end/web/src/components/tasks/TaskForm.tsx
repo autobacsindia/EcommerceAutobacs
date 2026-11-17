@@ -9,6 +9,7 @@ import AssigneePicker from './AssigneePicker';
 import { AvatarStack, DueTimeSelect } from './ui';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
+import { DueRuleHint, dueCheck, managesDue, useTaskRules, DEFAULT_TASK_RULES } from './dueRules';
 import apiClient from '@/lib/api-client';
 import RichTextBox from '@/components/ui/RichTextBox';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -182,6 +183,10 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
   const estimateError = estimateMinutes === undefined ? '' : estimateProblem(estimateMinutes);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const datesBackwards = !!form.startOn && !!form.dueOn && form.startOn > form.dueOn;
+  // Every task needs a due date, within its priority's limit (dueRules.tsx; the server checks again).
+  const rules = useTaskRules().data ?? DEFAULT_TASK_RULES;
+  const dueProblem = !form.dueOn || !!dueCheck(form.dueOn, form.priority, rules).tooLate;
+  const manager = managesDue(me, chosen.map((id) => choices.find((p) => p.id === id)));
 
   const create = useMutation({
     mutationFn: () => apiClient.post<{ task: Task; tasks: Task[] }>('/staff/tasks', {
@@ -211,7 +216,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && (personal || chosen.length) && !datesBackwards && !estimateError) create.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && (personal || chosen.length) && !datesBackwards && !dueProblem && !estimateError) create.mutate(); }}
       className="flex max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
     >
       <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
@@ -245,8 +250,8 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
             </select>
           </label>
           <label className="text-xs font-medium text-gray-500">
-            <span className="mb-1 flex items-center gap-1"><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date</span>
-            <input type="date" aria-label="Due date" value={form.dueOn} min={form.startOn || undefined} onChange={(e) => set({ dueOn: e.target.value, ...(e.target.value ? {} : { dueTime: null }) })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            <span className="mb-1 flex items-center gap-1"><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date <span className="text-red-600" aria-hidden>*</span></span>
+            <input type="date" aria-label="Due date" required value={form.dueOn} min={form.startOn || undefined} onChange={(e) => set({ dueOn: e.target.value, ...(e.target.value ? {} : { dueTime: null }) })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
             {form.dueOn && (
               <DueTimeSelect value={form.dueTime} onChange={(dueTime) => set({ dueTime })} className="mt-1.5 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
             )}
@@ -257,6 +262,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
           </label>
         </div>
         <PastDueWarning dueOn={form.dueOn} dueTime={form.dueTime} />
+        <DueRuleHint dueOn={form.dueOn} priority={form.priority} manager={manager} personal={personal} />
         {datesBackwards && <p role="alert" className="text-xs font-medium text-red-700">The start date is after the due date.</p>}
         <label className="block text-xs font-medium text-gray-500">
           <span className="mb-1 flex items-center gap-1"><Tag aria-hidden className="h-3.5 w-3.5" /> Tags (optional)</span>
@@ -304,7 +310,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
         <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
         <button
           type="submit"
-          disabled={create.isPending || !form.title.trim() || (!personal && chosen.length === 0) || datesBackwards || !!estimateError}
+          disabled={create.isPending || !form.title.trim() || (!personal && chosen.length === 0) || datesBackwards || dueProblem || !!estimateError}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

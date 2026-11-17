@@ -181,8 +181,13 @@ describe('the Tasks page', () => {
     fireEvent.click(within(group).getByRole('button', { name: /Add task/ }));
     const input = screen.getByLabelText('New task in In progress');
     fireEvent.change(input, { target: { value: 'Ring the courier' } });
+    // No date yet: nothing is sent, and it says why.
     fireEvent.submit(input.closest('form')!);
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ title: 'Ring the courier', status: 'in_progress', clientId: expect.any(String) })));
+    expect(within(input.closest('form')!).getByText(/every task needs one/)).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(within(input.closest('form')!).getByLabelText('Due date'), { target: { value: todayIST() } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ title: 'Ring the courier', status: 'in_progress', dueOn: todayIST(), clientId: expect.any(String) })));
     fireEvent.keyDown(screen.getByLabelText('New task in In progress'), { key: 'Escape' });
     expect(screen.queryByLabelText('New task in In progress')).toBeNull();
   });
@@ -396,6 +401,8 @@ describe('new task', () => {
     post.mockRejectedValueOnce({ status: 503, rawData: { message: 'Try again' } }).mockResolvedValue({ task: task(), tasks: [task()] });
     const dialog = await openForm({ canSeeTeam: true });
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Pack order 51234' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     const list = await picker(dialog);
     // You are at the top, already picked.
     const [first] = within(list).getAllByRole('option');
@@ -403,13 +410,13 @@ describe('new task', () => {
     expect(first).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(first);
     fireEvent.click(within(list).getByRole('option', { name: /Arun/ }));
-    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: '2099-10-30' } });
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Try again');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     const [sent, again] = post.mock.calls.map((c) => c[1]);
-    expect(sent).toMatchObject({ title: 'Pack order 51234', assigneeIds: ['u2'], shared: true, dueOn: '2099-10-30', priority: 'normal', orderId: null });
+    expect(sent).toMatchObject({ title: 'Pack order 51234', assigneeIds: ['u2'], shared: true, dueOn: todayIST(), priority: 'normal', orderId: null });
     expect(again.clientId).toBe(sent.clientId);
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Task created'));
     // The new task opens in the side panel.
@@ -421,6 +428,8 @@ describe('new task', () => {
     post.mockResolvedValue({ task: task(), tasks: [task()] });
     const dialog = await openForm({ base: '/admin/tasks', canSeeTeam: true });
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Stock count' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     const list = await picker(dialog);
     expect(within(list).getByRole('option', { name: /Priya · Procurement head/ })).toBeInTheDocument();
     fireEvent.click(within(list).getByRole('option', { name: /Bala/ }));
@@ -436,6 +445,8 @@ describe('new task', () => {
     post.mockResolvedValue({ task: task(), tasks: [task(), task(), task()] });
     const dialog = await openForm({ canSeeTeam: true });
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Read the policy' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     const list = await picker(dialog);
     fireEvent.click(within(list).getByRole('option', { name: /Bala/ }));
     fireEvent.click(within(list).getByRole('option', { name: /Arun/ }));
@@ -474,6 +485,8 @@ describe('new task', () => {
     post.mockResolvedValue({ task: task(), tasks: [task()] });
     const dialog = await openForm();
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Quote for 4512' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     fireEvent.click(within(await picker(dialog)).getByRole('option', { name: /Bala/ }));
     fireEvent.click(within(dialog).getByRole('button', { name: /^Create/ }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: expect.arrayContaining(['u3']) })));
@@ -486,6 +499,8 @@ describe('new task', () => {
     expect(await within(dialog).findByText(/This task is for you/)).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Who does it' })).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Mine' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     fireEvent.change(within(dialog).getByLabelText('Checklist steps'), { target: { value: 'Pack\n\n  Label  \n' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u2'], checklist: ['Pack', 'Label'] })));
@@ -495,6 +510,8 @@ describe('new task', () => {
     serve({ list: [] });
     const dialog = await openForm({ canSeeTeam: true });
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'x' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     fireEvent.click(within(await picker(dialog)).getByRole('option', { name: /Priya/ }));
     expect(within(dialog).getByText('Pick at least one person.')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Create task' })).toBeDisabled();
@@ -759,14 +776,14 @@ describe('the board card quick buttons', () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it('due date: a new day saves it; clearing it saves no date', async () => {
+  it('due date: a new day saves it; clearing it is ignored (every task keeps a date)', async () => {
     patch.mockResolvedValue({ task: task({ rev: 4 }) });
     const card = await board([task()]);
     const field = within(card).getByLabelText('Due date for T-7');
     fireEvent.change(field, { target: { value: '2026-11-20' } });
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, dueOn: '2026-11-20' }));
     fireEvent.change(field, { target: { value: '' } });
-    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, dueOn: null }));
+    expect(patch).toHaveBeenCalledTimes(1);
     expect(opened()).toBe(false);
   });
 
@@ -1042,6 +1059,9 @@ describe('shared tasks and followers (phase 4)', () => {
       const column = await screen.findByRole('region', { name: 'In progress' });
       fireEvent.click(within(column).getByRole('button', { name: /Add task/ }));
       fireEvent.change(within(column).getByLabelText('New task in In progress'), { target: { value: 'Ring Bosch' } });
+      // Every task needs a due date.
+      fireEvent.click(within(column).getByRole('button', { name: /Add dates/ }));
+      fireEvent.change(within(column).getByLabelText('Due date'), { target: { value: todayIST() } });
       fireEvent.click(await within(column).findByRole('button', { name: 'Assignees: Priya' }));
       return column;
     };
@@ -1208,6 +1228,8 @@ describe('estimate, empty fields and the Personal list', () => {
     expect(within(dialog).getByText(/Only you will see this task/)).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Who does it' })).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Renew licence' } });
+    // Every task needs a due date.
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
     fireEvent.change(within(dialog).getByLabelText(/Time estimate/), { target: { value: '2h' } });
     fireEvent.click(within(dialog).getByRole('button', { name: /Create/ }));
     await waitFor(() => expect(post).toHaveBeenCalled());

@@ -32,6 +32,8 @@ const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskList } = await import('../models/StaffTaskList.js');
 const tasks = await import('../services/staffTaskService.js');
 const lists = await import('../services/staffTaskListService.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 let n = 0;
@@ -44,7 +46,7 @@ const person = (role, staff, name) => {
 };
 const status = (code, fn, msg) => expect(fn()).rejects.toMatchObject({ statusCode: code, ...(msg && { message: expect.stringMatching(msg) }) });
 const add = (actor, input) => lists.createListItem(actor, { team: 'procurement', kind: 'list', ...input }, req);
-const give = (actor, over = {}) => tasks.createTask(actor, { title: 'Call Bosch', ...over }, req).then((r) => r.task);
+const give = (actor, over = {}) => tasks.createTask(actor, { dueOn: DUE, title: 'Call Bosch', ...over }, req).then((r) => r.task);
 const edit = (actor, t, patch) => tasks.updateTask(actor, t.id, { rev: t.rev, ...patch }, req);
 const raw = (id) => StaffTask.findById(id).lean();
 
@@ -157,10 +159,10 @@ describe('filing a task', () => {
     const bosch = await add(priya, { name: 'Bosch orders' });
     const t = await give(priya, { assigneeId: String(arun._id), listId: bosch.id });
     expect(t.list).toBe(bosch.id);
-    const { tasks: copies } = await tasks.createTask(priya, { title: 'Each', assigneeIds: [String(arun._id), String(bala._id)], listId: bosch.id }, req);
+    const { tasks: copies } = await tasks.createTask(priya, { dueOn: DUE, title: 'Each', assigneeIds: [String(arun._id), String(bala._id)], listId: bosch.id }, req);
     expect(copies.map((c) => c.list)).toEqual([bosch.id, bosch.id]);
     await status(400, () => give(priya, { assigneeId: String(sam._id), listId: bosch.id }), /in Procurement/);
-    await status(400, () => tasks.createTask(priya, { title: 'Each', assigneeIds: [String(arun._id), String(sam._id)], listId: bosch.id }, req));
+    await status(400, () => tasks.createTask(priya, { dueOn: DUE, title: 'Each', assigneeIds: [String(arun._id), String(sam._id)], listId: bosch.id }, req));
     // A shared task with someone from procurement on it is in the space.
     expect((await give(priya, { assigneeIds: [String(arun._id), String(sam._id)], shared: true, listId: bosch.id })).list).toBe(bosch.id);
     // A folder is not a list.

@@ -55,6 +55,8 @@ const dbHandler = await import('./db-handler.js');
 const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const BASE = '/api/v1';
 const PW = 'SecurePass123!';
@@ -114,7 +116,7 @@ describe('Task comments: mentions, edit/delete, reactions, files, pop-ups', () =
     head = await makeUser('Priya', 'staff', { team: 'procurement', isHead: true, active: true });
     member = await makeUser('Arun', 'staff', { team: 'procurement', isHead: false, active: true });
     outsider = await makeUser('Bala', 'staff', { team: 'sales', isHead: false, active: true });
-    const res = await head.session.post('/staff/tasks', { title: 'Call Bosch', assigneeId: member.id });
+    const res = await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Call Bosch', assigneeId: member.id });
     expect(res.status).toBe(201);
     taskId = res.body.task.id;
     pushes.length = 0; // the "new task" pop-up is not what these tests are about
@@ -156,7 +158,7 @@ describe('Task comments: mentions, edit/delete, reactions, files, pop-ups', () =
     });
 
     it('someone who gave themselves the task gets no pop-up for their own comment', async () => {
-      const own = await head.session.post('/staff/tasks', { title: 'Note to self' });
+      const own = await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Note to self' });
       pushes.length = 0;
       await head.session.post(`/staff/tasks/${own.body.task.id}/comments`, { text: 'reminder' });
       expect(pushes).toHaveLength(0);

@@ -19,7 +19,7 @@ const optionalId = (field) => body(field).optional({ values: 'null' })
 export const validateTaskId = [param('id').custom(isObjectId).withMessage('Invalid task id')];
 
 export const validateTaskList = [
-  query('view').optional().isIn(['mine', 'following', 'created', 'team', 'personal', 'project']).withMessage('Invalid view'),
+  query('view').optional().isIn(['mine', 'following', 'created', 'team', 'personal', 'project', 'approvals']).withMessage('Invalid view'),
   query('project').optional().custom(isObjectId).withMessage('Invalid project'),
   query('state').optional().isIn(['open', 'done', 'archived']).withMessage('Invalid state'),
   query('due').optional().isIn(['overdue', 'today', 'late', 'week']).withMessage('Invalid due filter'),
@@ -264,4 +264,17 @@ export const validateProjectUpdate = [
   body('statusOverride').optional({ values: 'null' }).isIn(['auto', 'on_track', 'at_risk', 'late', 'done']).withMessage('Invalid status'),
   body('archived').optional().isBoolean().withMessage('Invalid value'),
   ...projectFields,
+];
+
+export const validateDueApproval = [
+  ...validateTaskId,
+  body('rev').isInt().withMessage('Reload the task and try again'),
+  body('decision').isIn(['approve', 'reject']).withMessage('Pick approve or reject'),
+  body('note').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('Keep the note under 500 characters'),
+];
+
+export const validateTaskRules = [
+  body('approvalAfterDays').optional().isInt({ min: 0, max: 365 }).withMessage('Days must be 0 to 365'),
+  body('maxDays').optional().isObject().withMessage('Pick the limits for each priority'),
+  ...TASK_PRIORITIES.map((p) => body(`maxDays.${p}`).optional().isInt({ min: 0, max: 365 }).withMessage('Days must be 0 to 365')),
 ];

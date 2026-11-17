@@ -50,6 +50,8 @@ const dbHandler = await import('./db-handler.js');
 const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
+// Every task needs a due date (services/taskDueRules.js): today, unless a test picks one.
+const DUE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 const BASE = '/api/v1';
 const PW = 'SecurePass123!';
@@ -103,7 +105,7 @@ describe('Formatted task notes and comments', () => {
     member = await makeUser('Arun', 'staff', { team: 'procurement', isHead: false, active: true });
     outsider = await makeUser('Bala', 'staff', { team: 'sales', isHead: false, active: true });
   });
-  const create = (description, who = head) => who.session.post('/staff/tasks', { title: 'Call Bosch', assigneeId: member.id, description });
+  const create = (description, who = head) => who.session.post('/staff/tasks', { dueOn: DUE, title: 'Call Bosch', assigneeId: member.id, description });
 
   describe('notes (description)', () => {
     it('formatted notes are stored cleaned: scripts, handlers and javascript: links never reach the database or a browser', async () => {
