@@ -16,6 +16,7 @@ import { storageProvider } from '../config/storage.js';
 import { postStuckDigests } from './chatStuckDigest.js';
 import { sweepCalls } from './chatCallService.js';
 import { sendOverdueReport } from './overdueReportService.js';
+import { runDailyReminders } from './projectReminderService.js';
 import { postEtaReminders } from './parcelEtaReminders.js';
 import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
 import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthService.js';
@@ -73,6 +74,7 @@ class CronService {
     this.scheduleVariantSweep();
     this.scheduleChatStuckDigest();
     this.scheduleOverdueReport();
+    this.scheduleProjectReminders();
     this.scheduleEtaReminders();
     this.schedulePushCleanup();
     this.scheduleIncentives();
@@ -391,6 +393,37 @@ class CronService {
       { scheduled: true, timezone: 'Asia/Kolkata' }
     );
     this.scheduledTasks.push({ name: 'chatCallSweep', task, schedule: '* * * * *', description: 'Team chat: end unanswered and abandoned calls' });
+  }
+
+  /**
+   * Project owners' morning reminder (services/projectReminderService.js):
+   * 10:00 IST every day. Once per owner per day by construction — the unique
+   * (user, day) row and its pending → sending claim — so the lock only saves a
+   * second replica the work; a doubled or restarted run sends nothing more.
+   */
+  scheduleProjectReminders() {
+    const schedule = process.env.PROJECT_REMINDER_CRON || '0 10 * * *';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid PROJECT_REMINDER_CRON "${schedule}" — project reminders NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:projectReminders', 15 * 60, () =>
+        runDailyReminders()
+          .then((r) => console.log(`[CronService] Project reminders ${r.day}: ${r.withWork} owners with work, ${r.sent} notified, ${r.skipped} already saw it, ${r.failed} failed`))
+          .catch(err => console.error('[CronService] Project reminders failed:', err.message))
+      ),
+      { scheduled: true, timezone: 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({
+      name: 'projectReminders',
+      task,
+      schedule,
+      description: 'Pop-up + notification: each project owner\'s open, due and late work',
+    });
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Project reminders scheduled: "${schedule}"`);
+    }
   }
 
   scheduleChatStuckDigest() {

@@ -334,6 +334,11 @@ export const taskKeys = {
   projectList: (state: string) => [...taskKeys.projects(), 'list', state] as const,
   project: (id: string) => [...taskKeys.projects(), 'one', id] as const,
   projectPick: () => [...taskKeys.projects(), 'pick'] as const,
+  /** The Details forms (static per deploy) and the owner's daily reminder. */
+  projectTemplates: () => [...taskKeys.all, 'projectTemplates'] as const,
+  projectReminder: () => [...taskKeys.all, 'projectReminder'] as const,
+  /** Admin → Slip templates (every template, deleted ones too). */
+  slipTemplates: () => [...taskKeys.all, 'slipTemplates'] as const,
 };
 
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */

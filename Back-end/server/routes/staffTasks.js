@@ -47,6 +47,10 @@ import { readTaskRules, updateTaskRules } from '../services/taskDueRules.js';
 import {
   loadProjectAccess, listProjects, pickableProjects, getProject, createProject, updateProject,
 } from '../services/staffProjectService.js';
+import { templatesForPanel, updateDetails, previewFromOrder } from '../services/staffProjectDetailsService.js';
+import { loadSlip, saveSlipValues } from '../services/slipTemplateService.js';
+import { renderProjectSlip } from '../services/projectSlipService.js';
+import { getReminder, dismissReminder } from '../services/projectReminderService.js';
 import { listLinks, linkOptions, addLink, removeLink } from '../services/staffTaskLinkService.js';
 import { getSpace, createListItem, updateListItem, deleteListItem } from '../services/staffTaskListService.js';
 import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
@@ -183,6 +187,22 @@ router.get('/projects/pick', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await pickableProjects(req.user)) });
 }));
 
+// @route  GET /staff/tasks/projects/templates — the Details forms and the slips each offers
+router.get('/projects/templates', (req, res) => {
+  res.json({ success: true, ...templatesForPanel() });
+});
+
+// @route  GET /staff/tasks/projects/reminder — today's "your projects" pop-up for the owner, or null
+router.get('/projects/reminder', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ success: true, reminder: await getReminder(req.user) });
+}));
+
+// @route  POST /staff/tasks/projects/reminder/dismiss { day } — "Got it"
+router.post('/projects/reminder/dismiss', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await dismissReminder(req.user, req.body?.day)) });
+}));
+
 // @route  POST /staff/tasks/projects { name, description?, colour?, startOn?, dueOn?, ownerId?, memberIds?, clientId? } — admin or a team head
 router.post('/projects', validateProjectCreate, validateRequest, asyncHandler(async (req, res) => {
   const { project, duplicate } = await createProject(req.user, req.body, req);
@@ -192,6 +212,38 @@ router.post('/projects', validateProjectCreate, validateRequest, asyncHandler(as
 // @route  GET /staff/tasks/projects/:projectId
 router.get('/projects/:projectId', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, project: await getProject(req.user, req.params.projectId) });
+}));
+
+// @route  PUT /staff/tasks/projects/:projectId/details { rev, template, values, custom, orderId? } — the project's people
+router.put('/projects/:projectId/details', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
+  const next = await updateDetails(req.user, req.params.projectId, req.body, req);
+  res.json({ success: true, project: await getProject(req.user, next._id) });
+}));
+
+// @route  GET /staff/tasks/projects/:projectId/details/from-order?q= — what an order fills in (nothing saved)
+router.get('/projects/:projectId/details/from-order', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ success: true, ...(await previewFromOrder(req.user, req.params.projectId, req.query.q)) });
+}));
+
+// @route  PUT /staff/tasks/projects/:projectId/slips/:key { rev, values } — a slip's own boxes (driver, items…)
+router.put('/projects/:projectId/slips/:key', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
+  const next = await saveSlipValues(req.user, req.params.projectId, String(req.params.key), req.body, req);
+  res.json({ success: true, project: await getProject(req.user, next._id) });
+}));
+
+// @route  GET /staff/tasks/projects/:projectId/slip/:key — the slip PDF, from its stored template (or the summary)
+router.get('/projects/:projectId/slip/:type', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
+  const slip = await loadSlip(req.user, req.params.projectId, String(req.params.type));
+  const buffer = await renderProjectSlip(slip);
+  const safe = (t) => String(t).replace(/[^\w.-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `inline; filename="${safe(slip.label)}-${safe(slip.ref)}-${safe(slip.projectName)}.pdf"`,
+    'Content-Length': buffer.length,
+    'Cache-Control': 'private, no-store',
+  });
+  res.send(buffer);
 }));
 
 // @route  PATCH /staff/tasks/projects/:projectId { rev, ...changes, archived? } — its owner or the admin
