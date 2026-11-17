@@ -34,12 +34,16 @@ export type TaskFilters = {
   list?: string;
   /** The project view only: the project's id. */
   project?: string;
+  /** The project view only: one of its lists (its id), or 'none' for tasks in no list. */
+  projectList?: string;
 };
 
 /** The list a new task made in this view goes in: the one being shown, if any. */
 export const listOf = (filters: TaskFilters) => (filters.view === 'team' && filters.list && filters.list !== 'none' ? filters.list : undefined);
 /** The project a new task made in this view goes in: the one being shown, if any. */
 export const projectOf = (filters: TaskFilters) => (filters.view === 'project' && filters.project ? filters.project : undefined);
+/** The project list a new task made in this view goes in: the one being shown, if any. */
+export const projectListOf = (filters: TaskFilters) => (filters.view === 'project' && filters.projectList && filters.projectList !== 'none' ? filters.projectList : undefined);
 
 export type Task = {
   id: string;
@@ -50,7 +54,12 @@ export type Task = {
   summary?: string;
   description?: string;
   status: TaskStatus;
+  /** What the status is called: the project's own name ("Review") when it has its own statuses. */
   statusLabel: string;
+  /** Its project's own status (Project.statuses[].id), or null; `status` is that status's kind. */
+  stage?: string | null;
+  /** Which of its project's lists it is in (Project.lists[].id), or null. */
+  projectList?: string | null;
   priority: TaskPriority;
   priorityLabel: string;
   /** IST calendar day, YYYY-MM-DD. */
@@ -477,6 +486,10 @@ export type Project = {
   teams: { value: string; label: string }[];
   startOn: string | null;
   dueOn: string | null;
+  /** Lists inside the project ("Ads", "Website"), in order. */
+  lists: ProjectList[];
+  /** Its own statuses in board order; empty = To do / In progress / Done. */
+  statuses: ProjectStage[];
   status: ProjectStatus;
   statusLabel: string;
   /** Set when the owner chose the status by hand; null lets the tasks decide. */
@@ -488,5 +501,19 @@ export type Project = {
   rev: number;
   can: { edit: boolean; archive: boolean; restore: boolean };
 };
+export type ProjectList = { id: string; name: string };
+/** One of a project's own statuses; `type` is what it counts as everywhere else. */
+export type ProjectStage = { id: string; name: string; colour: string; type: TaskStatus };
+/** The kinds a project status can be, as the owner picks them. */
+export const STAGE_TYPES: { value: TaskStatus; label: string }[] = [
+  { value: 'todo', label: 'Not started' },
+  { value: 'in_progress', label: 'Active' },
+  { value: 'done', label: 'Done' },
+];
+/** The project status a task shows in: its own, else the first of its kind (the server's rule). */
+export const stageOf = (stages: ProjectStage[], t: Pick<Task, 'stage' | 'status'>): ProjectStage | undefined =>
+  stages.find((s) => s.id === t.stage)
+  ?? stages.find((s) => s.type === t.status)
+  ?? (t.status === 'in_progress' ? stages.find((s) => s.type === 'todo') : undefined);
 export type ProjectPage = { projects: Project[]; nextCursor: string | null; canCreate: boolean };
 export type ProjectPick = { id: string; name: string; colour: string };

@@ -118,3 +118,6 @@ migration-manifests/
 
 # Careers retention audit reports (contain applicant PII)
 retention-reports/
+
+# ClickUp import snapshots hold a workspace's private task data (scripts/import-clickup.js).
+clickup-snapshot*.json

@@ -6,7 +6,7 @@
  * A group's `addStatus` is where "+ Add task" in it starts a task — only status
  * groups have one; `key` is stable so folding a group survives a reload.
  */
-import { formatDueDay, peopleOf, todayIST, type Task, type TaskGroupBy, type TaskPriority, type TaskStatus } from './types';
+import { formatDueDay, peopleOf, stageOf, todayIST, type ProjectStage, type Task, type TaskGroupBy, type TaskPriority, type TaskStatus } from './types';
 
 export type TaskGroup = {
   key: string;
@@ -16,6 +16,10 @@ export type TaskGroup = {
   value: string;
   tasks: Task[];
   addStatus?: Exclude<TaskStatus, 'done'>;
+  /** A project's own status group: "+ Add task" starts the task in it. */
+  addStage?: string;
+  /** That status's colour, for its header. */
+  colour?: string;
 };
 
 /** Active work first, not started next. Done is its own, folded list. */
@@ -46,8 +50,19 @@ const DUE_ORDER = ['late', 'today', 'tomorrow', 'week', 'later', 'none'];
  * (empty ones too, for their "+ Add task") unless `hideEmpty`; the others only
  * exist when they have rows.
  */
-export function groupTasks(tasks: Task[], by: TaskGroupBy, { today = todayIST(), hideEmpty = false } = {}): TaskGroup[] {
+export function groupTasks(tasks: Task[], by: TaskGroupBy, { today = todayIST(), hideEmpty = false, stages = [] as ProjectStage[] } = {}): TaskGroup[] {
   if (by === 'none') return [{ key: 'all', label: 'All tasks', kind: 'all', value: 'all', tasks }];
+  if (by === 'status' && stages.length) {
+    // A project's own open statuses: active ones first, then not started — each in the owner's order.
+    const open = STATUS_ORDER.flatMap((kind) => stages.filter((s) => s.type === kind));
+    return open
+      .map((s) => ({
+        key: `stage:${s.id}`, label: s.name, kind: 'status' as const, value: s.type,
+        addStatus: s.type as Exclude<TaskStatus, 'done'>, addStage: s.id, colour: s.colour,
+        tasks: tasks.filter((t) => stageOf(stages, t)?.id === s.id),
+      }))
+      .filter((g) => !hideEmpty || g.tasks.length);
+  }
   if (by === 'status') {
     return STATUS_ORDER
       .map((s) => ({ key: `status:${s}`, label: STATUS_LABEL[s], kind: 'status' as const, value: s, addStatus: s, tasks: tasks.filter((t) => t.status === s) }))

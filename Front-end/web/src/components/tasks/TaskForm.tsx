@@ -154,10 +154,12 @@ export function PeopleField({ people, selected, onChange, copies, onCopies }: {
  * `listTeam` is the space whose lists the form offers (the team being shown, or
  * the person's own); `defaultListId` starts it in the list on screen.
  */
-export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, defaultProjectId, personal = false }: {
+export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, defaultProjectId, defaultProjectListId, personal = false }: {
   onDone: (task: Task) => void; onCancel: () => void; listTeam?: string | null; defaultListId?: string;
   /** Made inside a project: starts in it. */
   defaultProjectId?: string;
+  /** Made inside one list of that project: starts in it too (while the project stays the same). */
+  defaultProjectListId?: string;
   /** Made in the Personal list: private, so there is nobody to give it to and no team list. */
   personal?: boolean;
 }) {
@@ -203,6 +205,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
       orderId: order?.id || null,
       ...(listId && !personal ? { listId } : {}),
       ...(projectId && !personal ? { projectId } : {}),
+      ...(projectId && !personal && defaultProjectListId && projectId === defaultProjectId ? { projectListId: defaultProjectListId } : {}),
       clientId: clientId.current,
     }),
     onSuccess: (res) => {
