@@ -32,6 +32,8 @@ jest.mock('@/lib/utils/navigation', () => ({
 jest.mock('lucide-react', () => ({
   Loader2: () => <span data-testid="loader">Loading...</span>,
   AlertCircle: () => <span data-testid="alert-icon">!</span>,
+  Eye: () => <span data-testid="eye-icon" />,
+  EyeOff: () => <span data-testid="eye-off-icon" />,
 }));
 
 jest.mock('react-icons/fc', () => ({
@@ -68,7 +70,7 @@ describe('LoginPage', () => {
     
     expect(screen.getByRole('heading', { name: 'Sign In' })).toBeInTheDocument();
     expect(screen.getByLabelText(/Email or username/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Password$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Continue/i })).toBeInTheDocument();
     expect(screen.getByText('Google')).toBeInTheDocument();
     expect(screen.getByText('Facebook')).toBeInTheDocument();
@@ -110,7 +112,7 @@ describe('LoginPage', () => {
     render(<LoginPage />);
     
     const emailInput = screen.getByLabelText(/Email or username/i);
-    const passwordInput = screen.getByLabelText(/Password/i);
+    const passwordInput = screen.getByLabelText(/^Password$/i);
     
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
     fireEvent.change(passwordInput, { target: { value: 'password123' } });

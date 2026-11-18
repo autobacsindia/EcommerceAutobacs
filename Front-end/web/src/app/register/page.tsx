@@ -14,6 +14,7 @@ import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
 import OfferStrip from '@/components/offer/OfferStrip';
 import { getOffer } from '@/lib/offers';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 function RegisterPageInner() {
   const router = useRouter();
@@ -181,10 +182,10 @@ function RegisterPageInner() {
               <label htmlFor="password" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-[0.12em] mb-1">
                 Password
               </label>
-              <input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
+                autoComplete="new-password"
                 placeholder="At least 6 characters"
                 value={formData.password}
                 onChange={handleChange}
@@ -203,10 +204,10 @@ function RegisterPageInner() {
               <label htmlFor="confirmPassword" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-[0.12em] mb-1">
                 Re-enter password
               </label>
-              <input
+              <PasswordInput
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
+                autoComplete="new-password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 className={inputClass('confirmPassword')}
