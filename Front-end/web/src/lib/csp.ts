@@ -157,7 +157,9 @@ function buildPolicy(scriptSrc: string): string {
     // Training videos in the staff Lesson Library play straight from the private
     // bucket by a short-lived link. Without this they fall back to default-src and
     // the player silently shows nothing.
-    `media-src 'self' ${R2_UPLOAD_ORIGIN}`,
+    // res.cloudinary.com: shoppable reels (admin review queue) stream their MP4
+    // from Cloudinary. Without it the <video> silently stays black.
+    `media-src 'self' ${R2_UPLOAD_ORIGIN} https://res.cloudinary.com`,
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
