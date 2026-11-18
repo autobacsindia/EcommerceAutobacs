@@ -131,6 +131,8 @@ export interface PaginatedReviews {
 export interface ReviewProduct {
   id: string;
   name: string;
+  /** For the product link; absent on responses that predate it. */
+  slug?: string;
   image: ProductImage | null;
 }
 

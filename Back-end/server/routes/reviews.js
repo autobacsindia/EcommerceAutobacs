@@ -206,21 +206,26 @@ router.get("/testimonials", httpCache('TESTIMONIALS'), asyncHandler(async (req, 
 // @desc    Get all reviews submitted by the current user
 // @access  Private
 router.get("/user", protect, asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, sortBy = "createdAt", order = "desc" } = req.query;
+  // Bounded: `limit` and `page` come from the query string, and `sortBy` used to be
+  // any field name the caller chose. A customer has few reviews, so page/skip is
+  // kept for the existing callers, but never unbounded.
+  const page = Math.max(1, Math.min(1000, parseInt(req.query.page, 10) || 1));
+  const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 10));
+  const sortBy = ["createdAt", "updatedAt", "rating"].includes(req.query.sortBy) ? req.query.sortBy : "createdAt";
+  const order = req.query.order === "asc" ? "asc" : "desc";
   const userId = req.user._id;
 
   // Build filter
   const filter = { user: userId };
 
-  // Build sort
-  const sort = {};
-  sort[sortBy] = order === "asc" ? 1 : -1;
+  // Build sort (newest-first ties broken by _id so pages are stable)
+  const sort = { [sortBy]: order === "asc" ? 1 : -1, _id: order === "asc" ? 1 : -1 };
 
   // Execute query with pagination
   const reviews = await reviewRepository.find(filter)
-    .populate("product", "name images")
+    .populate("product", "name images slug")
     .sort(sort)
-    .limit(limit * 1)
+    .limit(limit)
     .skip((page - 1) * limit)
     .lean();
 
@@ -233,6 +238,7 @@ router.get("/user", protect, asyncHandler(async (req, res) => {
     product: review.product ? {
       id: review.product._id,
       name: review.product.name,
+      slug: review.product.slug,
       image: review.product.images && review.product.images.length > 0 ? review.product.images[0] : null
     } : null,
     rating: review.rating,
@@ -374,7 +380,9 @@ router.put("/:reviewId", protect, validateReviewUpdate, asyncHandler(async (req,
   review.rating = rating;
   review.title = safeTitle;
   review.comment = safeComment;
-  review.images = images;
+  // Only when sent: an edit that leaves the photos alone (the profile "My reviews"
+  // form) must not wipe them.
+  if (images !== undefined) review.images = images;
   // Reset approval status when updating
   review.isApproved = false;
 
