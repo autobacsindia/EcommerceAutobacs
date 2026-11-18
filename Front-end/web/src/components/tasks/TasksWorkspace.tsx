@@ -354,14 +354,27 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     );
   };
 
+  // The board on a wide screen fills exactly the screen under the panel bar: the
+  // page itself does not scroll, each column scrolls inside itself, and the search
+  // and filters stay in view. (List and calendar keep the normal page scroll.)
+  const fillScreen = layout === 'board' && !inOther && !projectGone;
+
   return (
     // Edge to edge: cancels the panel's padding (PanelShell `tightPage`), so the
     // side menu and the board use the whole width, the way ClickUp does.
-    <div className="tk-theme tk-edge -m-3 md:-m-5 lg:flex lg:min-h-[calc(100dvh-3.5rem)] lg:items-stretch">
+    <div
+      data-fill={fillScreen || undefined}
+      className={`tk-theme tk-edge -m-3 md:-m-5 lg:flex lg:items-stretch ${
+        // Sticky as well as screen-high: a banner above (e.g. "pop-ups are blocked")
+        // can only scroll itself away — it never drags the board up under the bar.
+        // The bar is 3.5rem plus its 1px bottom line.
+        fillScreen ? 'lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem-1px)]' : 'lg:min-h-[calc(100dvh-3.5rem)]'
+      }`}
+    >
       {/* Which tasks: a menu flush down the side on a wide screen, a row of chips on a phone. */}
       <nav
         aria-label="Task lists"
-        className="tk-side relative flex gap-1.5 overflow-x-auto border-b px-3 py-2.5 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] lg:[mask-image:none] md:px-5 lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-2 lg:py-3"
+        className={`tk-side relative flex gap-1.5 overflow-x-auto border-b px-3 py-2.5 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] lg:[mask-image:none] md:px-5 ${fillScreen ? '' : 'lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem)]'} lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-2 lg:py-3`}
       >
         <div className="flex gap-1.5 lg:flex-col lg:gap-px" role="group" aria-label="Whose tasks">
           <button aria-pressed={inInbox} onClick={() => setList({ view: 'inbox', team: '', list: '' })} className={navItem}>
@@ -448,7 +461,10 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
         </button>
       </nav>
 
-      <div className="min-w-0 flex-1 space-y-2 px-3 py-2 md:px-4 lg:px-5 lg:py-2">
+      <div className={`min-w-0 flex-1 space-y-2 px-3 py-2 md:px-4 lg:px-5 lg:py-2 ${
+        // A board too squeezed (a project's header above it) scrolls this pane, never the page.
+        fillScreen ? 'lg:flex lg:min-h-0 lg:flex-col lg:overflow-y-auto' : ''
+      }`}>
         {listTitle && spaceTeam && (
           <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs font-medium text-gray-600">
             <button onClick={() => pickList(spaceTeam, '')} className="rounded px-0.5 hover:text-gray-900 hover:underline">{spaceLabel || 'Team'}</button>
