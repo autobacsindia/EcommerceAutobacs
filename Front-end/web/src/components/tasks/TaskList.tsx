@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Ban, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Tag, Timer as TimerIcon, UserPlus, Users, X } from 'lucide-react';
+import { Ban, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Repeat, Tag, Timer as TimerIcon, UserPlus, Users, X } from 'lucide-react';
 import { errorMessage } from '@/components/staff/sales/types';
 import { useQuickAdd, useQuickEdit, useSetStatus, useTaskPages, type QuickEdit, type QuickExtras } from './hooks';
 import { QuickDate, QuickPeople, QuickPriority } from './CardActions';
@@ -47,7 +47,7 @@ const STATUS_RING: Record<TaskStatus, string> = {
 
 /**
  * Small facts beside a title: the parent it belongs to, its sub-tasks, shared,
- * checklist, comments, start date (and, on cards, the order).
+ * repeats, checklist, comments, start date (and, on cards, the order).
  */
 export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task; withOrder?: boolean; withComments?: boolean }) {
   const subs = t.subtasks?.total ?? 0;
@@ -67,6 +67,11 @@ export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task
       {subs > 0 && (
         <Chip tone={t.subtasks!.done === subs ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'} title={`${t.subtasks!.done} of ${subs} sub-tasks done`}>
           <Network aria-hidden className="h-3 w-3" />{t.subtasks!.done}/{subs}
+        </Chip>
+      )}
+      {t.repeat && (
+        <Chip tone="bg-indigo-50 text-indigo-700" title={`Repeats: ${t.repeat.label}`}>
+          <Repeat aria-hidden className="h-3 w-3" /><span className="sr-only">Repeats: {t.repeat.label}</span>
         </Chip>
       )}
       {t.group && <Chip tone="bg-purple-100 text-purple-800" title={`Given to ${t.group.size} people`}><Users aria-hidden className="h-3 w-3" />{t.group.size}</Chip>}

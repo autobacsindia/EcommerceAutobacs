@@ -6,7 +6,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import toast from 'react-hot-toast';
 import {
   AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, Clock, CornerLeftUp, Eye, Flag, FolderKanban, Hourglass, Link2,
-  ListChecks, ListTree, Lock, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
+  ListChecks, ListTree, Lock, Maximize2, MessageSquare, Network, Package, Pencil, Repeat, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -27,22 +27,26 @@ import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, 
 import { DueApprovalPanel } from './dueRules';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
+import { RepeatField } from './RepeatPicker';
 import { useProject } from './Projects';
 import {
   FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, stageOf, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
-  type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
+  type Assignee, type ChecklistItem, type CommentPage, type Person, type RepeatInput, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
 type Patch = Partial<{
   title: string; description: string; priority: TaskPriority; dueOn: string | null; dueTime: string | null; startOn: string | null; tags: string[];
   orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null; projectId: string | null; projectListId: string | null; stageId: string; estimateMinutes: number | null;
+  /** null or 'never' stops it repeating. */
+  repeat: RepeatInput | 'never';
 }>;
 
 const LINK_WORDS: Record<string, string> = { waiting_on: 'waiting on', blocking: 'blocking', related: 'related to' };
 const estimateWords = (v: string) => (v === 'none' ? 'none' : minutesText(Number(v)));
 
 const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => string> = {
-  created: (h) => `created this task for ${h.to}`,
+  created: (h) => (h.from ? `created this task for ${h.to} (${h.from})` : `created this task for ${h.to}`),
+  repeat: (h) => (h.to === 'Never' ? `stopped it repeating (was ${h.from.toLowerCase()})` : `set it to repeat: ${h.to.toLowerCase()}`),
   status: (h) => `moved it from ${h.from} to ${h.to}`,
   comment_assigned: (h) => `assigned a comment to ${h.to}`,
   comment_unassigned: () => 'removed a comment assignment',
@@ -603,10 +607,10 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
   const reassignTo = people.data?.people ?? [];
   const archived = task.bucket === 'archived';
   const emptyFields = {
-    estimate: task.estimateMinutes == null, due: !task.dueOn, start: !task.startOn, followers: !task.followers?.length,
+    estimate: task.estimateMinutes == null, repeat: !task.repeat, due: !task.dueOn, start: !task.startOn, followers: !task.followers?.length,
     tags: !task.tags.length, order: !task.order, list: !task.list, project: !task.project,
   };
-  const emptyCount = Object.values(emptyFields).filter(Boolean).length - (task.team ? 0 : Number(emptyFields.list)) - (task.personal ? Number(emptyFields.followers) + Number(emptyFields.project) : 0);
+  const emptyCount = Object.values(emptyFields).filter(Boolean).length - (task.team ? 0 : Number(emptyFields.list)) - (task.personal ? Number(emptyFields.followers) + Number(emptyFields.project) : 0) - (task.parent ? Number(emptyFields.repeat) : 0);
   const blank = (empty: boolean) => hideEmpty && empty;
   const copyLink = async () => {
     try {
@@ -699,6 +703,20 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
           </Field>
           <Field label="Assignees" icon={UserRound}>
             <AssigneesField task={task} choices={reassignTo} saving={save.isPending} onSave={(assigneeIds) => save.mutate({ assigneeIds })} />
+          </Field>
+          <Field label="Repeats" icon={Repeat} hidden={blank(emptyFields.repeat) || (!!task.parent && !task.repeat)}>
+            <span className="flex flex-wrap items-center gap-x-2">
+              <RepeatField
+                value={task.repeat ?? null}
+                dueOn={task.dueOn}
+                canEdit={!!task.can.repeat}
+                saving={save.isPending}
+                onSave={(repeat) => save.mutate({ repeat: repeat ?? 'never' })}
+              />
+              {task.repeatNext && (onOpen
+                ? <button type="button" onClick={() => onOpen(task.repeatNext!.id)} className="text-xs text-blue-700 hover:underline">Next: <span className="font-mono">{task.repeatNext.code}</span></button>
+                : <Link href={`${base}/${task.repeatNext.id}`} className="text-xs text-blue-700 hover:underline">Next: <span className="font-mono">{task.repeatNext.code}</span></Link>)}
+            </span>
           </Field>
           <Field label="Estimate" icon={Hourglass} hidden={blank(emptyFields.estimate)}>
             <EstimateField task={task} saving={save.isPending} onSave={(estimateMinutes) => save.mutate({ estimateMinutes })} />

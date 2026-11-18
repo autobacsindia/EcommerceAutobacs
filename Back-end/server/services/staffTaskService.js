@@ -72,6 +72,7 @@ import { getTaskRules, checkDue } from './taskDueRules.js';
 import { listForTask, liveList } from './staffTaskListService.js';
 import { inProjectAccess, loadVisibleProject, projectForTask, projectName, projectById, stageFor } from './staffProjectService.js';
 import { orderNumber } from './invoiceService.js';
+import { cleanRepeat, nextDueOn, shiftStart, repeatLabel, sameRepeat } from './taskRepeat.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { TASK_PICKABLE_STATUSES, TASK_PRIORITIES, shownStatus } from '../models/StaffTask.js';
@@ -415,6 +416,9 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
       note: t.dueApproval.note || '',
     } : null,
     estimateMinutes: t.estimateMinutes ?? null,
+    repeat: t.repeat?.unit ? { every: t.repeat.every, unit: t.repeat.unit, day: t.repeat.day ?? null, label: repeatLabel(t.repeat) } : null,
+    repeatOf: t.repeatOf ? idOf(t.repeatOf) : null,
+    repeatNext: t.repeatNext?.task ? { id: idOf(t.repeatNext.task), code: `T-${t.repeatNext.number}` } : null,
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
@@ -452,6 +456,8 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
       followers: !archived && !t.personal && canEdit(viewer, t),
       // One level only: a sub-task has no sub-tasks of its own.
       subtask: !archived && !t.parent && canEdit(viewer, t),
+      // A sub-task never repeats: its copies would pile up under the parent.
+      repeat: !archived && !t.parent && canEdit(viewer, t),
       // Anyone who sees a task may track time on it (services/staffTaskTimeService.js).
       time: !archived && canSee(viewer, t),
       approveDue: !archived && t.dueApproval?.status === 'pending' && mayApproveDue(viewer, t),
@@ -1009,6 +1015,8 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const status = input.status == null || input.status === '' ? 'todo' : cleanEnum(input.status, ['todo', 'in_progress'], 'status');
   const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
   const parent = input.parentId ? await loadParent(actor, input.parentId) : null;
+  const repeat = cleanRepeat(input.repeat, dueOn);
+  if (repeat && parent) throw fail('A sub-task can’t repeat. Make the main task repeat instead.', 400);
   const askedPersonal = input.personal === true || input.personal === 'true';
   if (askedPersonal && parent && !parent.personal) throw fail('A sub-task of a shared task can’t be personal.', 400);
   // Everything under a personal task stays personal, or its title would reach others.
@@ -1077,6 +1085,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         ...peopleFields(who),
         ...(personal ? { personal: true, team: null, teams: [] } : {}),
         ...(estimateMinutes ? { estimateMinutes } : {}),
+        ...(repeat ? { repeat } : {}),
         createdBy: actor._id,
         createdByName: actor.name || '',
         order,
@@ -1197,7 +1206,7 @@ async function applyUpdate(actor, t, input, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId', 'projectId', 'projectListId', 'stageId', 'estimateMinutes'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId', 'projectId', 'projectListId', 'stageId', 'estimateMinutes', 'repeat'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -1262,6 +1271,16 @@ async function applyUpdate(actor, t, input, req) {
   if (has('estimateMinutes')) {
     const estimate = cleanEstimate(input.estimateMinutes);
     if (estimate !== (t.estimateMinutes ?? null)) { needEdit(); set.estimateMinutes = estimate; note('estimate', t.estimateMinutes ?? 'none', estimate ?? 'none'); }
+  }
+  if (has('repeat')) {
+    // A monthly repeat with no day picked takes the day of the (new) due date.
+    const repeat = cleanRepeat(input.repeat, set.dueOn !== undefined ? set.dueOn : t.dueOn);
+    if (!sameRepeat(repeat, t.repeat)) {
+      needEdit();
+      if (repeat && t.parent) throw fail('A sub-task can’t repeat. Make the main task repeat instead.', 400);
+      set.repeat = repeat;
+      note('repeat', repeatLabel(t.repeat), repeatLabel(repeat));
+    }
   }
   if (has('tags')) {
     const tags = cleanTags(input.tags);
@@ -1371,7 +1390,11 @@ async function applyUpdate(actor, t, input, req) {
     set.stageName = null;
   }
 
-  if (!entries.length) return shape(t, actor, { full: true });
+  if (!entries.length) {
+    // A retried "done" whose next copy was never made (the first attempt died after its write) makes it now.
+    const copy = (has('status') || has('stageId')) && t.bucket === 'done' ? await makeNextRepeat(actor, t, req) : null;
+    return shape(withNext(t, copy), actor, { full: true });
+  }
   // A retired 'waiting' becomes what it was already shown as, on its next change.
   if (t.status === 'waiting' && !set.status) set.status = 'in_progress';
 
@@ -1399,7 +1422,96 @@ async function applyUpdate(actor, t, input, req) {
   if (added.length) await notifyAssigned(next, actor, added);
   if (set.status !== undefined) await notifyStatus(next, actor, added);
   if (set.dueApproval?.status === 'pending') await notifyApprovers(next, actor);
-  return shape(next, actor, { full: true });
+  const copy = next.bucket === 'done' && t.bucket !== 'done' ? await makeNextRepeat(actor, next, req) : null;
+  return shape(withNext(next, copy), actor, { full: true });
+}
+
+/** The task as just saved, pointing at the repeat copy made after the save (so "Next: T-…" shows at once). */
+const withNext = (t, copy) => (copy && !t.repeatNext ? { ...t, repeatNext: { task: copy._id, number: copy.number } } : t);
+
+/**
+ * A repeating task was just marked done: make its next copy, due on the next
+ * repeat date (services/taskRepeat.js). Keyed on the task it is made from (the
+ * unique staff_task_repeat_of index), so done twice, a retried request, two
+ * people ticking it at once, or reopen-then-done all end with ONE copy.
+ *
+ * The copy keeps the title, notes, people, followers, team list, project (with
+ * its list, in the project's first not-started status), priority, tags,
+ * estimate and checklist (ticks cleared) — and the repeat, so the chain goes on.
+ * Not comments, time, files, sub-tasks or a linked order. The due-date limits
+ * and approval do not apply (owner's call, 2026-11): whoever set the repeat was
+ * allowed to; the rules still run when a person picks a date by hand.
+ *
+ * Archiving a task or setting its repeat to "Never" ends the chain: an archived
+ * task cannot be completed, and one with no repeat makes no copy.
+ *
+ * @returns {Promise<object|null>} the copy (new or already there), or null when it doesn't repeat
+ */
+export async function makeNextRepeat(actor, src, req) {
+  if (!src?.repeat?.unit || src.bucket !== 'done' || src.parent) return null;
+  const earlier = await staffTaskRepository.findRepeatCopy(src._id);
+  if (earlier) {
+    if (!src.repeatNext) await staffTaskRepository.setRepeatNext(src._id, earlier);
+    return earlier;
+  }
+  const today = todayIST();
+  const fromDue = src.dueOn || today;
+  const dueOn = nextDueOn(src.repeat, fromDue, today);
+  const startOn = shiftStart(src.startOn, src.dueOn, dueOn);
+  // Its project and list only while they still exist: a closed one is not refilled.
+  const project = src.project ? await projectById(src.project) : null;
+  const liveProject = project && !project.archivedAt ? project : null;
+  const stage = liveProject ? stageFor(liveProject.statuses || [], 'todo') : null;
+  const projectList = liveProject && src.projectList ? (liveProject.lists || []).find((l) => same(l._id, src.projectList)) : null;
+  const list = src.list ? await liveList(src.list) : null;
+  const status = stage ? stage.type : 'todo';
+  const now = new Date();
+  const number = await counterRepository.next(COUNTER);
+  let copy;
+  try {
+    copy = await staffTaskRepository.create({
+      number,
+      title: src.title,
+      description: src.description || '',
+      priority: src.priority,
+      status,
+      dueOn,
+      dueTime: src.dueTime || null,
+      startOn,
+      ...(src.tags?.length ? { tags: src.tags } : {}),
+      ...(stage ? { stage: stage._id, stageName: stage.name } : {}),
+      ...(projectList ? { projectList: projectList._id } : {}),
+      assignee: src.assignee,
+      assigneeName: src.assigneeName || '',
+      team: src.team ?? null,
+      ...(src.assignees ? { assignees: src.assignees } : {}),
+      ...(src.teams ? { teams: src.teams } : {}),
+      ...(src.followers?.length ? { followers: src.followers } : {}),
+      ...(src.personal ? { personal: true } : {}),
+      ...(src.estimateMinutes ? { estimateMinutes: src.estimateMinutes } : {}),
+      createdBy: src.createdBy,
+      createdByName: src.createdByName || '',
+      checklist: (src.checklist || []).map((c) => ({ text: c.text, done: false })),
+      list: list?._id ?? null,
+      ...(liveProject ? { project: liveProject._id } : {}),
+      repeat: { every: src.repeat.every, unit: src.repeat.unit, ...(src.repeat.day ? { day: src.repeat.day } : {}) },
+      repeatOf: src._id,
+      ...placeOf({ status, dueOn, dueTime: src.dueTime || null }),
+      history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', from: `repeat of T-${src.number}`, to: namesOf(peopleOf(src)) }],
+    });
+  } catch (err) {
+    // Two "done"s at the same moment: the unique index let one copy through.
+    if (err?.code !== 11000) throw err;
+    copy = await staffTaskRepository.findRepeatCopy(src._id);
+    if (!copy) throw err;
+    if (!src.repeatNext) await staffTaskRepository.setRepeatNext(src._id, copy);
+    return copy;
+  }
+  await staffTaskRepository.setRepeatNext(src._id, copy);
+  auditLogger.logAction(req, 'CREATE', 'StaffTask', copy._id, { number: copy.number, repeatOf: idOf(src._id), dueOn });
+  // Keyed on the copy, so it reaches each person once.
+  await notifyAssigned(copy, actor, peopleOf(copy).map((p) => p.user), createdKey(copy));
+  return copy;
 }
 
 export const APPROVAL_NOTE_MAX = 500;
@@ -1535,6 +1647,8 @@ export async function bulkUpdate(actor, { items, changes } = {}, req) {
       if (changesNothing(t, input)) {
         // A retried archive or restore still finishes moving the task's sub-tasks.
         if (input.archived !== undefined && canEdit(actor, t)) await moveSubtasksWith(actor, t, input.archived, req);
+        // A retried "done" finishes a repeat's next copy the first attempt didn't make.
+        if (input.status === 'done' && t.bucket === 'done') await makeNextRepeat(actor, t, req);
         results.push({ id, ok: true, changed: false });
         continue;
       }

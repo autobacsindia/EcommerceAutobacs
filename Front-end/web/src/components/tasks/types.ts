@@ -115,6 +115,8 @@ export type Task = {
     follow: boolean; followers: boolean;
     /** Add sub-tasks (never on a sub-task: one level only). */
     subtask?: boolean;
+    /** Make it repeat, or stop it (whoever may edit it; never on a sub-task). */
+    repeat?: boolean;
     /** Start a timer or add time on it (anyone who sees it, while it is not archived). */
     time?: boolean;
     /** Approve or refuse the due date it waits on (a head of its team or the admin — never whoever asked). */
@@ -126,6 +128,12 @@ export type Task = {
   personal?: boolean;
   /** How long it should take, in whole minutes; null when not planned. */
   estimateMinutes?: number | null;
+  /** How often it comes back by itself; null for a one-off task. `label`: "Every month on the 1st". */
+  repeat?: TaskRepeat | null;
+  /** On a repeat's copy: the task it was made from. */
+  repeatOf?: string | null;
+  /** The next copy this one made when it was done. */
+  repeatNext?: { id: string; code: string } | null;
   /** The lists only: how many unfinished tasks this one is waiting on. */
   waitingOn?: number;
   /** The lists only: all the time logged on it, everyone's, in seconds. */
@@ -134,6 +142,25 @@ export type Task = {
   /** The task page only: the other people's copies the viewer may see. */
   siblings?: TaskSibling[];
 };
+
+export type RepeatUnit = 'day' | 'week' | 'month';
+/** A repeat rule as sent: every N days / weeks / months; `day` (1-31) for months only. */
+export type RepeatInput = { unit: RepeatUnit; every: number; day?: number | null };
+export type TaskRepeat = RepeatInput & { label: string };
+/** The most a task may wait between repeats (the server checks too). */
+export const REPEAT_EVERY_MAX = 99;
+
+const ordinal = (n: number) => {
+  const rem = n % 100;
+  if (rem >= 11 && rem <= 13) return `${n}th`;
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
+};
+/** "Every month on the 1st", "Every 2 weeks" — the same words the server puts in `label`. */
+export function repeatText(r: RepeatInput | null | undefined): string {
+  if (!r) return 'Never';
+  const base = r.every === 1 ? `Every ${r.unit}` : `Every ${r.every} ${r.unit}s`;
+  return r.unit === 'month' && r.day ? `${base} on the ${ordinal(r.day)}` : base;
+}
 
 /** A row under "Sub-tasks": every sub-task is listed to whoever sees the parent; `canOpen` says which they may open. */
 export type Subtask = Task & { canOpen: boolean };
