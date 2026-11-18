@@ -81,6 +81,12 @@ export const seesProject = (u, p) => !!p && !p.archivedAt && (isAdmin(u) || isIn
 /** An archived project is still the admin's and its owner's to restore. */
 const seesArchived = (u, p) => !!p && (isAdmin(u) || same(p.owner?.user, u?._id));
 export const canManageProject = (u, p) => !!p && (isAdmin(u) || same(p.owner?.user, u?._id));
+/**
+ * Board columns: the owner and the admin, and also every active member of the
+ * project — they add, rename, recolour and reorder columns. Deleting a column
+ * (it moves tasks) and changing what one counts as stay with the owner/admin.
+ */
+export const canEditColumns = (u, p) => !!p && !p.archivedAt && (canManageProject(u, p) || (isActiveStaff(u) && isInProject(u, p)));
 
 /** The projects `actor` may see, as a query (the same rule as seesProject). */
 function visibleQuery(actor) {
@@ -195,6 +201,47 @@ function cleanStatuses(raw, before = []) {
 }
 
 /**
+ * What a member (not the owner or admin) may not do to the columns: delete one
+ * (its tasks would move) or change what an existing one counts as (its tasks
+ * would change kind). Adding, renaming, recolouring and reordering are theirs.
+ */
+function memberColumnLimits(before, after) {
+  const kept = new Map(after.map((x) => [idOf(x._id), x]));
+  for (const x of before) {
+    const now = kept.get(idOf(x._id));
+    if (!now) throw fail('Only the project owner or the admin can delete a column.', 403);
+    if (now.type !== x.type) throw fail(`Only the project owner or the admin can change what “${x.name}” counts as.`, 403);
+  }
+}
+
+/**
+ * Where the tasks of each deleted status go: [{ from, to }] by status id. `from`
+ * must be a status being deleted, `to` one that stays. Open and done never mix —
+ * a done task moved to an open status would reopen with nobody saying so — so
+ * `to` must be open (not started / active) exactly when `from` was. A deleted
+ * status with no move falls to the usual clean-up: the first status of its kind.
+ */
+function cleanStatusMoves(raw, before, after) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) throw fail('Say where each removed status’s tasks go.', 400);
+  const old = new Map(before.map((x) => [idOf(x._id), x]));
+  const kept = new Map(after.map((x) => [idOf(x._id), x]));
+  const seen = new Set();
+  return raw.map((m) => {
+    const from = old.get(String(m?.from ?? ''));
+    if (!from || kept.has(idOf(from._id))) throw fail('Only a status being removed can move its tasks.', 400);
+    if (seen.has(idOf(from._id))) throw fail(`Say once where “${from.name}” tasks go.`, 400);
+    seen.add(idOf(from._id));
+    const to = kept.get(String(m?.to ?? ''));
+    if (!to || !old.has(idOf(to._id))) throw fail(`Pick a status that stays for the “${from.name}” tasks.`, 400);
+    if ((from.type === 'done') !== (to.type === 'done')) {
+      throw fail(`“${from.name}” tasks are ${from.type === 'done' ? 'finished' : 'not finished'}: move them to a status that is ${from.type === 'done' ? 'Done' : 'not Done'}.`, 400);
+    }
+    return { from: from._id, to };
+  });
+}
+
+/**
  * The status of `stages` a task of kind `status` goes into: the first of that
  * kind, or — for an active task when the project has no active status — the
  * first not-started one. null when the project uses the usual three.
@@ -271,6 +318,7 @@ function shape(p, viewer, counts = NO_COUNTS, today = todayIST()) {
     rev: p.rev,
     can: {
       edit: !archived && canManageProject(viewer, p),
+      columns: !archived && canEditColumns(viewer, p),
       archive: !archived && canManageProject(viewer, p),
       restore: archived && canManageProject(viewer, p),
       editDetails: canEditDetails(viewer, p),
@@ -390,7 +438,11 @@ export async function createProject(actor, input = {}, req) {
 /** Change a project. Only the fields present change; `rev` is required. */
 export async function updateProject(actor, id, input = {}, req) {
   const p = await loadVisibleProject(actor, id, { archived: true });
-  if (!canManageProject(actor, p)) throw fail('Only the project owner or the admin can change this project.', 403);
+  const manager = canManageProject(actor, p);
+  const columnsOnly = Object.keys(input).every((k) => ['rev', 'statuses', 'statusMoves'].includes(k) || input[k] === undefined);
+  if (!manager && !(columnsOnly && input.statuses !== undefined && canEditColumns(actor, p))) {
+    throw fail('Only the project owner or the admin can change this project.', 403);
+  }
   const rev = Number(input.rev);
   if (!Number.isInteger(rev)) throw fail('Reload and try again.', 400);
   if (rev !== p.rev) throw fail('Someone changed this project just now. It has been reloaded — try again.', 409);
@@ -424,11 +476,14 @@ export async function updateProject(actor, id, input = {}, req) {
     const was = (p.lists || []).map((l) => `${idOf(l._id)}:${l.name}`).join('|');
     if (lists.map((l) => `${idOf(l._id)}:${l.name}`).join('|') !== was) set.lists = lists;
   }
+  let moves = [];
   if (has('statuses')) {
     const statuses = cleanStatuses(input.statuses, p.statuses || []);
+    if (!manager) memberColumnLimits(p.statuses || [], statuses);
     const was = (p.statuses || []).map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|');
     if (statuses.map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|') !== was) set.statuses = statuses;
-  }
+    moves = cleanStatusMoves(input.statusMoves, p.statuses || [], statuses);
+  } else if (has('statusMoves')) throw fail('Send the statuses with where their tasks go.', 400);
   if (has('ownerId') || has('memberIds')) {
     const ownerId = has('ownerId') ? input.ownerId : idOf(p.owner.user);
     const memberIds = has('memberIds') ? input.memberIds : (p.people || []).map((x) => idOf(x.user));
@@ -445,8 +500,18 @@ export async function updateProject(actor, id, input = {}, req) {
   const next = await staffProjectRepository.updateIfRev(p._id, rev, set);
   if (!next) throw fail('Someone changed this project just now. It has been reloaded — try again.', 409);
   // After the project landed: move its tasks onto lists and statuses it still has.
+  // A deleted status's tasks go where the owner chose first; the clean-up places anything left.
+  for (const m of moves) {
+    await staffProjectRepository.updateTasks(
+      { project: next._id, stage: m.from },
+      { $set: { stage: m.to._id, stageName: m.to.name, status: m.to.type } },
+    );
+  }
   if (set.lists || set.statuses) await reconcileProjectTasks(next);
-  auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffProject', p._id, { changes: Object.keys(set) });
+  auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffProject', p._id, {
+    changes: Object.keys(set),
+    ...(set.statuses && { columns: set.statuses.map((x) => x.name), by: { id: idOf(actor._id), name: actor.name, role: manager ? 'manager' : 'member' } }),
+  });
   return getProject(actor, next._id);
 }
 

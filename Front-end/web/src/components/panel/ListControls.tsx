@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Search, X } from 'lucide-react';
 
 /**
@@ -12,7 +12,16 @@ import { Search, X } from 'lucide-react';
 
 export const listField = 'max-w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
-/** The search box. Typing is local; the list reloads once the person pauses (not on every key). */
+/**
+ * The search box. Typing is local; the list reloads once the person pauses (not on every key).
+ *
+ * It reports the TRIMMED text and remembers what it reported. The list stores
+ * that trimmed text and passes it back as `value`; if the box copied `value`
+ * back over what is being typed, a pause right after a space ("brake ") would
+ * wipe the space and the next word would run on ("brakepad"). So `value` only
+ * replaces the box when it is something the box did not send — Clear all, Back,
+ * a link.
+ */
 export function ListSearch({ value, onChange, placeholder, label }: {
   value: string;
   onChange: (q: string) => void;
@@ -20,12 +29,21 @@ export function ListSearch({ value, onChange, placeholder, label }: {
   label: string;
 }) {
   const [text, setText] = useState(value);
-  useEffect(() => { setText(value); }, [value]);
+  const sent = useRef(value);
   useEffect(() => {
-    if (text === value) return undefined;
-    const t = setTimeout(() => onChange(text), 350);
+    if (value !== sent.current) { sent.current = value; setText(value); }
+  }, [value]);
+  const report = useCallback((raw: string) => {
+    const next = raw.trim();
+    if (next === sent.current) return;
+    sent.current = next;
+    onChange(next);
+  }, [onChange]);
+  useEffect(() => {
+    if (text.trim() === sent.current) return undefined;
+    const t = setTimeout(() => report(text), 350);
     return () => clearTimeout(t);
-  }, [text, value, onChange]);
+  }, [text, report]);
   return (
     <label className="relative block min-w-[12rem] flex-1">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
@@ -33,7 +51,7 @@ export function ListSearch({ value, onChange, placeholder, label }: {
         type="search"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') onChange(text); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') report(text); }}
         placeholder={placeholder}
         aria-label={label}
         maxLength={60}

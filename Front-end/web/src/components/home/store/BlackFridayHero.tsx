@@ -149,22 +149,32 @@ const PERK_REPEAT = 2;
  * (transform only, CSS — no JS timer). Readers get the list once; the copies
  * are hidden from them. Fixed height in CSS, so it never shifts the page; with
  * reduced motion it stands still and scrolls sideways by hand instead.
+ * A fixed lead label ("Zero hidden fees") sits at the left; only the chips move.
+ * Motion pauses on hover and while a keyboard user is inside the strip.
  */
 function PerksCarousel({ perks }: { perks: { strong: string; text: string }[] }) {
   const half = Array.from({ length: PERK_REPEAT }, () => perks).flat();
   return (
     <div className="bfh-perks" data-testid="offer-perks">
-      <div className="bfh-perks-row">
-        {[0, 1].map((copy) => (
-          <ul key={copy} className="bfh-perks-half" aria-hidden={copy === 1 ? true : undefined} aria-label={copy === 0 ? 'Black Friday delivery offer' : undefined}>
-            {half.map((p, i) => (
-              <li key={i} className="bfh-perk" aria-hidden={copy === 0 && i >= perks.length ? true : undefined}>
-                <CheckIcon />
-                <strong>{p.strong}</strong> {p.text}
-              </li>
-            ))}
-          </ul>
-        ))}
+      <p className="bfh-perks-lead">
+        <ShieldIcon />
+        <span>
+          Zero <b>hidden fees</b>
+        </span>
+      </p>
+      <div className="bfh-perks-track">
+        <div className="bfh-perks-row">
+          {[0, 1].map((copy) => (
+            <ul key={copy} className="bfh-perks-half" aria-hidden={copy === 1 ? true : undefined} aria-label={copy === 0 ? 'Black Friday delivery offer' : undefined}>
+              {half.map((p, i) => (
+                <li key={i} className="bfh-perk" aria-hidden={copy === 0 && i >= perks.length ? true : undefined}>
+                  <CheckIcon />
+                  <strong>{p.strong}</strong> <span className="bfh-perk-text">{p.text}</span>
+                </li>
+              ))}
+            </ul>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -172,9 +182,18 @@ function PerksCarousel({ perks }: { perks: { strong: string; text: string }[] })
 
 function CheckIcon() {
   return (
-    <svg className="bfh-perk-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-      <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M4.8 8.3l2.1 2.1 4.3-4.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <svg className="bfh-perk-icon" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+      <circle cx="10" cy="10" r="10" fill="currentColor" />
+      <path d="M5.8 10.4l2.8 2.8 5.6-6" fill="none" stroke="#14070a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg className="bfh-perks-lead-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5l8-3z" fill="currentColor" />
+      <path d="M8 8h8M8 11h8M13.5 8c0 3-2 3.5-5 3.5l5 5" fill="none" stroke="#c8102e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

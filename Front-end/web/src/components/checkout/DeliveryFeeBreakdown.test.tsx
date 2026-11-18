@@ -3,6 +3,7 @@
  * fees off → "paid on delivery"; no PIN → no fees; the ₹0 + celebration appear only
  * once the SERVER says the offer is applied; a pending tap cannot be tapped again.
  */
+import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import DeliveryFeeBreakdown from './DeliveryFeeBreakdown';
 import type { DeliveryFeesQuote } from '@/hooks/useCheckoutQuote';
@@ -105,4 +106,19 @@ it('PIN box reports only a complete valid PIN', () => {
   expect(onChange).toHaveBeenLastCalledWith('500001');
   act(() => { fireEvent.change(box, { target: { value: '012345' } }); });
   expect(screen.getByText('Please enter a valid 6-digit PIN code.')).toBeInTheDocument();
+});
+
+it('PIN box keeps what is being typed when the parent stores the cleared PIN', () => {
+  // Regression: the box copied the parent's value back over the draft, so
+  // deleting one digit of a full PIN (parent now holds '') wiped all of it.
+  function Parent() {
+    const [pin, setPin] = React.useState('500001');
+    return <DeliveryFeeBreakdown {...props} fees={fees({ needsPin: true, lines: [], total: 0 })} pinInput={{ value: pin, onChange: setPin }} />;
+  }
+  render(<Parent />);
+  const box = screen.getByLabelText('Delivery PIN code') as HTMLInputElement;
+  act(() => { fireEvent.change(box, { target: { value: '50000' } }); });
+  expect(box.value).toBe('50000');
+  act(() => { fireEvent.change(box, { target: { value: '500002' } }); });
+  expect(box.value).toBe('500002');
 });

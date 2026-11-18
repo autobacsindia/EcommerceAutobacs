@@ -151,13 +151,13 @@ describe('lists inside a project', () => {
 });
 
 describe('a project’s own statuses', () => {
-  it('needs a "not started" and a "done" kind; names unique; only the owner sets them', async () => {
+  it('needs a "not started" and a "done" kind; names unique; only people in the project set them', async () => {
     const p = await start(head, { memberIds: [String(member._id)] });
     await status(400, () => change(head, p, { statuses: [{ name: 'Ideas', type: 'todo' }] }), /Done/);
     await status(400, () => change(head, p, { statuses: [{ name: 'Live', type: 'done' }] }), /Not started/);
     await status(400, () => change(head, p, { statuses: [{ name: 'A', type: 'todo' }, { name: 'a', type: 'done' }] }), /two statuses/);
     await status(400, () => change(head, p, { statuses: [{ name: 'A', type: 'todo' }, { name: 'B', type: 'blocked' }] }), /not started, active or done/);
-    await status(403, () => change(member, p, { statuses: STAGES }));
+    await status(404, () => change(other, p, { statuses: STAGES }));
     const set = await change(head, p, { statuses: STAGES });
     expect(set.statuses.map((x) => [x.name, x.type])).toEqual(STAGES.map((x) => [x.name, x.type]));
   });
@@ -246,6 +246,68 @@ describe('a project’s own statuses', () => {
     await change(head, p2, { statuses: [] });
     expect(await fresh(head, inReview)).toMatchObject({ stage: null, statusLabel: 'In progress', status: 'in_progress' });
     expect((await raw(shipped)).stage).toBeUndefined();
+  });
+
+  it('deleting a status moves its tasks where the owner says, never between open and done', async () => {
+    const p = await change(head, await start(head, { memberIds: [String(member._id)] }), { statuses: STAGES });
+    const [ideas, designing, review, live] = p.statuses;
+    const a = await edit(member, await give(head, { assigneeId: String(member._id), projectId: p.id }), { stageId: review.id });
+    const b = await edit(member, await give(head, { assigneeId: String(member._id), projectId: p.id }), { stageId: review.id });
+    const kept = [ideas, designing, live];
+    // Open tasks cannot be sent to a done status, nor the other way round.
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: live.id }] }), /not Done/);
+    // Only a status being removed, to one that stays; once each.
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: designing.id, to: ideas.id }] }), /being removed/);
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: review.id }] }), /stays/);
+    await status(400, () => change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: ideas.id }, { from: review.id, to: ideas.id }] }), /once/);
+    await status(400, () => change(head, p, { statusMoves: [] }), /Send the statuses/);
+    await status(403, () => change(member, p, { statuses: kept, statusMoves: [{ from: review.id, to: ideas.id }] }));
+    // Nothing moved by any refusal.
+    expect(await fresh(head, a)).toMatchObject({ stage: review.id });
+    // Review → Ideas (not started), though the clean-up alone would pick Designing.
+    await change(head, p, { statuses: kept, statusMoves: [{ from: review.id, to: ideas.id }] });
+    for (const t of [a, b]) expect(await fresh(head, t)).toMatchObject({ stage: ideas.id, statusLabel: 'Ideas', status: 'todo', bucket: 'open' });
+  });
+
+  it('every member adds, renames, recolours and reorders columns; only the owner/admin deletes or changes a kind', async () => {
+    const p = await change(head, await start(head, { memberIds: [String(member._id)] }), { statuses: STAGES });
+    const [ideas, designing, review, live] = p.statuses;
+    // A member adds "Garage 1" and renames Review, moving it first among the active ones.
+    const p2 = await change(member, p, { statuses: [ideas, { id: review.id, name: 'Garage 2', type: 'in_progress', colour: 'teal' }, designing, { name: 'Garage 1', type: 'in_progress' }, live] });
+    expect(p2.statuses.map((x) => x.name)).toEqual(['Ideas', 'Garage 2', 'Designing', 'Garage 1', 'Live']);
+    expect(p2.statuses[1]).toMatchObject({ id: review.id, colour: 'teal' });
+    expect(p2.can).toMatchObject({ edit: false, columns: true });
+    expect((await projects.getProject(await as(member), p.id)).can).toMatchObject({ edit: false, columns: true });
+    // …but not delete one (its tasks would move), nor change what one counts as.
+    const kept = p2.statuses.filter((x) => x.id !== designing.id);
+    await status(403, () => change(member, p2, { statuses: kept }), /delete a column/);
+    await status(403, () => change(member, p2, { statuses: kept, statusMoves: [{ from: designing.id, to: ideas.id }] }), /delete a column/);
+    await status(403, () => change(member, p2, { statuses: p2.statuses.map((x) => (x.id === designing.id ? { ...x, type: 'done' } : x)) }), /counts as/);
+    await status(403, () => change(member, p2, { statuses: [] }), /delete a column/);
+    // Columns only: the rest of the project stays the owner's.
+    await status(403, () => change(member, p2, { name: 'Mine now' }));
+    await status(403, () => change(member, p2, { statuses: p2.statuses, dueOn: d(30) }));
+    await status(403, () => change(member, p2, { lists: [{ name: 'Ads' }] }));
+    // The owner still deletes.
+    const p3 = await change(head, p2, { statuses: kept, statusMoves: [{ from: designing.id, to: ideas.id }] });
+    expect(p3.statuses).toHaveLength(4);
+  });
+
+  it('someone outside the project, or taken off it, can’t change its columns', async () => {
+    const outsiderHead = await person('staff', { team: 'marketing', isHead: true }, 'Asha');
+    const p = await start(head, { memberIds: [String(member._id)] });
+    // A team head sees the project (their team is in it) but is not in it.
+    expect((await projects.getProject(await as(outsiderHead), p.id)).can.columns).toBe(false);
+    await status(403, () => change(outsiderHead, p, { statuses: STAGES }));
+    await status(404, () => change(other, p, { statuses: STAGES }));
+    // Taken off the project: the right goes with it.
+    const p2 = await change(member, p, { statuses: STAGES });
+    const p3 = await change(head, p2, { memberIds: [] });
+    await status(404, () => change(member, p3, { statuses: [...p3.statuses, { name: 'Garage 1', type: 'in_progress' }] }));
+    // A member who left the panel loses it too.
+    const p4 = await change(head, p3, { memberIds: [String(member._id)] });
+    await User.updateOne({ _id: member._id }, { $set: { 'staff.active': false } });
+    await expect(change(member, p4, { statuses: [...p4.statuses, { name: 'Garage 1', type: 'in_progress' }] })).rejects.toMatchObject({ statusCode: expect.any(Number) });
   });
 
   it('moving a task to another project re-places it in that project’s statuses, or none', async () => {

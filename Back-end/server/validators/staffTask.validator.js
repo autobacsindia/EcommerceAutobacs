@@ -272,6 +272,7 @@ const projectFields = [
 export const validateProjectCreate = [
   body('name').isString().withMessage('Give the project a name'),
   body('clientId').optional().isString().isLength({ max: 64 }),
+  optionalId('templateId'),
   ...projectFields,
 ];
 export const validateProjectUpdate = [
@@ -281,6 +282,12 @@ export const validateProjectUpdate = [
   body('statusOverride').optional({ values: 'null' }).isIn(['auto', 'on_track', 'at_risk', 'late', 'done']).withMessage('Invalid status'),
   body('archived').optional().isBoolean().withMessage('Invalid value'),
   ...projectFields,
+];
+
+export const validateJobTemplateId = [param('templateId').custom(isObjectId).withMessage('Invalid template')];
+export const validateJobTemplateSave = [
+  ...validateProjectId,
+  body('name').isString().isLength({ max: 200 }).withMessage('Give the template a name'),
 ];
 
 export const validateDueApproval = [

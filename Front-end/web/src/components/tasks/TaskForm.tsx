@@ -3,18 +3,19 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, CalendarRange, Flag, FolderKanban, ListChecks, ListTree, Loader2, Lock, Tag, Timer, UserPlus, Users, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Flag, FolderKanban, ListChecks, ListTree, Loader2, Lock, Repeat, Tag, Timer, UserPlus, Users, X } from 'lucide-react';
 import TagInput from './TagInput';
 import AssigneePicker from './AssigneePicker';
 import { AvatarStack, DueTimeSelect } from './ui';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
+import { RepeatPicker } from './RepeatPicker';
 import { DueRuleHint, dueCheck, managesDue, useTaskRules, DEFAULT_TASK_RULES } from './dueRules';
 import apiClient from '@/lib/api-client';
 import RichTextBox from '@/components/ui/RichTextBox';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { MAX_ASSIGNEES, TASK_PRIORITIES, estimateProblem, isPastDue, newClientId, parseDuration, type Assignee, type Task, type TaskPriority } from './types';
+import { MAX_ASSIGNEES, TASK_PRIORITIES, estimateProblem, isPastDue, newClientId, parseDuration, type Assignee, type RepeatInput, type Task, type TaskPriority } from './types';
 
 /** Shown under a due date that has already passed. */
 export function PastDueWarning({ dueOn, dueTime }: { dueOn: string; dueTime?: string | null }) {
@@ -181,6 +182,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
   const [projectId, setProjectId] = useState<string | null>(defaultProjectId ?? null);
   const [error, setError] = useState('');
   const [estimate, setEstimate] = useState('');
+  const [repeat, setRepeat] = useState<RepeatInput | null>(null);
   const estimateMinutes = estimate.trim() ? parseDuration(estimate) : undefined;
   const estimateError = estimateMinutes === undefined ? '' : estimateProblem(estimateMinutes);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
@@ -196,6 +198,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
       description: form.description.trim(),
       ...(personal ? { personal: true } : { assigneeIds: chosen, shared: !copies }),
       ...(estimateMinutes ? { estimateMinutes } : {}),
+      ...(repeat ? { repeat } : {}),
       checklist: form.steps.split('\n').map((l) => l.trim()).filter(Boolean),
       priority: form.priority,
       dueOn: form.dueOn || null,
@@ -276,6 +279,11 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
           <input value={estimate} onChange={(e) => setEstimate(e.target.value)} maxLength={12} placeholder="e.g. 45, 2h or 1h 30m" className="w-40 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-900" />
           {estimateError && <span role="alert" className="mt-1 block text-red-700">{estimateError}</span>}
         </label>
+        <div className="text-xs font-medium text-gray-500">
+          <span className="mb-1 flex items-center gap-1"><Repeat aria-hidden className="h-3.5 w-3.5" /> Repeats</span>
+          <RepeatPicker value={repeat} onChange={setRepeat} dueOn={form.dueOn} idPrefix="new-task-repeat" />
+          {repeat && <span className="mt-1 block font-normal text-gray-500">When it is marked done, the next one is made by itself.</span>}
+        </div>
         {personal && (
           <p className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600"><Lock aria-hidden className="h-3.5 w-3.5" /> Only you will see this task.</p>
         )}
