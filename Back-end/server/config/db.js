@@ -799,6 +799,8 @@ export async function ensureCriticalIndexes() {
       { importKey: 1 },
       { unique: true, partialFilterExpression: { importKey: { $type: 'string' } }, name: 'staff_project_import_key', background: true }
     );
+    // Job templates: one per name (services/staffJobTemplateService.js).
+    await db.collection('staffjobtemplates').createIndex({ nameKey: 1 }, { unique: true, name: 'staff_job_template_name', background: true });
     await db.collection('stafftasklinks').createIndex({ pair: 1 }, { unique: true, name: 'staff_task_link_pair', background: true });
     await db.collection('stafftasklinks').createIndex({ from: 1, kind: 1 }, { name: 'staff_task_link_from', background: true });
     await db.collection('stafftasklinks').createIndex({ to: 1, kind: 1 }, { name: 'staff_task_link_to', background: true });

@@ -23,6 +23,7 @@ import { Dialog } from './Overlays';
 import { STAGE_TYPES, formatDueDay, isConflict, newClientId, type Project, type ProjectPage, type ProjectStatus, type TaskStatus } from './types';
 import { PROJECT_COLOURS, projectDot } from './ProjectPicker';
 import { ProjectDetailsPanel } from './ProjectDetails';
+import { SaveAsTemplate, TemplatePicker, fromTemplateMessage, type FromTemplate } from './JobTemplates';
 
 export { PROJECT_COLOURS, projectDot, ProjectPicker, useProjectPick } from './ProjectPicker';
 
@@ -338,9 +339,12 @@ export function ProjectHeader({ p, onBack, isAdmin }: { p: Project; onBack: () =
             {p.code && <ProjectCode code={p.code} />}
             <ProjectStatusPill p={p} />
             {p.can.edit && (
-              <button onClick={() => setEditing(true)} className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                <Pencil aria-hidden className="h-3.5 w-3.5" /> Edit
-              </button>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <SaveAsTemplate p={p} />
+                <button onClick={() => setEditing(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  <Pencil aria-hidden className="h-3.5 w-3.5" /> Edit
+                </button>
+              </div>
             )}
           </div>
           {p.description && <p className="whitespace-pre-line text-sm text-gray-700">{p.description}</p>}
@@ -520,6 +524,9 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
   const [stages, setStages] = useState<StageDraft[]>(() => (project?.statuses ?? []).map((x) => ({ key: draftKey(), id: x.id, name: x.name, colour: x.colour, type: x.type })));
   const [error, setError] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
+  // New project only: start from a job template (its columns, lists and tasks) instead of blank.
+  const [templateId, setTemplateId] = useState('');
+  const fromTemplate = !project && !!templateId;
   const datesBackwards = !!startOn && !!dueOn && startOn > dueOn;
   const nameMissing = !name.trim();
   // Shown once they leave the box, try to save, or start typing elsewhere —
@@ -534,7 +541,7 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
         : !stages.some((x) => x.type === 'todo') ? 'Keep at least one status that counts as “Not started”.'
           : !stages.some((x) => x.type === 'done') ? 'Keep at least one status that counts as “Done”.' : '';
   const blockedBecause = nameMissing ? 'Add a project name to continue.' : datesBackwards ? 'Fix the dates to continue.' : !owner ? 'Pick an owner to continue.'
-    : listProblem || stageProblem;
+    : fromTemplate ? '' : listProblem || stageProblem;
   const members = memberIds.filter((x) => x !== owner);
   const byId = new Map(choices.map((p) => [p.id, p]));
   const picked = members.map((x) => byId.get(x)).filter((p): p is NonNullable<typeof p> => !!p);
@@ -548,14 +555,24 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
       const fields = {
         name: name.trim(), description: description.trim(), colour, startOn: startOn || null, dueOn: dueOn || null,
         ...(isAdmin || !project ? { ownerId: owner } : {}), memberIds: members,
-        lists: lists.map((l) => ({ ...(l.id ? { id: l.id } : {}), name: l.name.trim() })),
-        statuses: stages.map((x) => ({ ...(x.id ? { id: x.id } : {}), name: x.name.trim(), colour: x.colour, type: x.type })),
+        // A template brings its own lists and columns.
+        ...(fromTemplate ? { templateId } : {
+          lists: lists.map((l) => ({ ...(l.id ? { id: l.id } : {}), name: l.name.trim() })),
+          statuses: stages.map((x) => ({ ...(x.id ? { id: x.id } : {}), name: x.name.trim(), colour: x.colour, type: x.type })),
+        }),
       };
       return project
-        ? apiClient.patch<{ project: Project }>(`/staff/tasks/projects/${encodeURIComponent(project.id)}`, { rev: project.rev, ...fields, statusOverride })
-        : apiClient.post<{ project: Project }>('/staff/tasks/projects', { ...fields, clientId: clientId.current });
+        ? apiClient.patch<{ project: Project; fromTemplate?: FromTemplate }>(`/staff/tasks/projects/${encodeURIComponent(project.id)}`, { rev: project.rev, ...fields, statusOverride })
+        : apiClient.post<{ project: Project; fromTemplate?: FromTemplate }>('/staff/tasks/projects', { ...fields, clientId: clientId.current });
     },
-    onSuccess: (res) => { toast.success(project ? 'Project saved' : 'Project created'); done(res.project); },
+    onSuccess: (res) => {
+      if (res.fromTemplate) {
+        // Longer on screen when something was moved or left out, so it can be read.
+        const notable = res.fromTemplate.failed.length > 0 || res.fromTemplate.movedEarlier > 0;
+        toast.success(fromTemplateMessage(res.fromTemplate), notable ? { duration: 10_000 } : undefined);
+      } else toast.success(project ? 'Project saved' : 'Project created');
+      done(res.project);
+    },
     onError: (e) => {
       if (isConflict(e)) queryClient.invalidateQueries({ queryKey: taskKeys.projects() });
       setError(isConflict(e) ? 'Someone changed this project just now. Close and open it again to see their change.' : errorMessage(e, 'Could not save the project.'));
@@ -663,8 +680,15 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
             ))}
           </div>
         </fieldset>
-        <ListsEditor lists={lists} onChange={setLists} />
-        <StatusesEditor stages={stages} onChange={setStages} />
+        {!project && <TemplatePicker value={templateId} onChange={setTemplateId} />}
+        {fromTemplate ? (
+          <p className="text-xs text-gray-500">The lists and columns come from the template. You can change them after the project is made.</p>
+        ) : (
+          <>
+            <ListsEditor lists={lists} onChange={setLists} />
+            <StatusesEditor stages={stages} onChange={setStages} />
+          </>
+        )}
         {project && (
           <label className="block text-xs font-medium text-gray-500">
             <span className="mb-1 block">Project status</span>

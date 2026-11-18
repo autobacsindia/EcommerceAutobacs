@@ -397,6 +397,28 @@ describe('Staff task routes', () => {
     expect((await dev.session.get('/staff/tasks?view=project&project=nonsense')).status).toBe(400);
   });
 
+  it('job templates over HTTP: saved from a project, listed for heads, used by New project, deleted', async () => {
+    const made = await head.session.post('/staff/tasks/projects', { name: 'Vicky’s Hilux', dueOn: '2030-10-25', clientId: 'route-proj-jt01', statuses: [{ name: 'To do', type: 'todo' }, { name: 'Garage 1', type: 'in_progress' }, { name: 'Delivered', type: 'done' }] });
+    const pid = made.body.project.id;
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'Fit roof rack', assigneeId: String(member.user._id), projectId: pid })).status).toBe(201);
+    expect((await member.session.post(`/staff/tasks/projects/${pid}/template`, { name: 'Fitting job' })).status).toBe(404);
+    const saved = await head.session.post(`/staff/tasks/projects/${pid}/template`, { name: 'Fitting job' });
+    expect(saved.status).toBe(201);
+    // Its own path: the job-details forms keep /projects/templates.
+    const listed = await head.session.get('/staff/tasks/projects/job-templates');
+    expect(listed.status).toBe(200);
+    expect(listed.body.templates).toEqual([expect.objectContaining({ id: saved.body.template.id, name: 'Fitting job', taskCount: 1, columns: ['To do', 'Garage 1', 'Delivered'] })]);
+    expect((await head.session.get('/staff/tasks/projects/templates')).body.templates.some((x) => x.key === 'sales')).toBe(true);
+    expect((await member.session.get('/staff/tasks/projects/job-templates')).body.templates).toEqual([]);
+    const fromIt = await head.session.post('/staff/tasks/projects', { name: 'Arun’s Thar', templateId: saved.body.template.id, clientId: 'route-proj-jt02' });
+    expect(fromIt.status).toBe(201);
+    expect(fromIt.body.fromTemplate).toMatchObject({ name: 'Fitting job', tasks: 1, failed: [] });
+    expect(fromIt.body.project.statuses.map((x) => x.name)).toEqual(['To do', 'Garage 1', 'Delivered']);
+    expect((await head.session.post('/staff/tasks/projects', { name: 'X', templateId: 'nonsense', clientId: 'route-proj-jt03' })).status).toBe(400);
+    expect((await head.session.del(`/staff/tasks/projects/job-templates/${saved.body.template.id}`)).status).toBe(200);
+    expect((await head.session.get('/staff/tasks/projects/job-templates')).body.templates).toEqual([]);
+  });
+
   it('due dates over HTTP: required, limited by priority, approved by the head; the admin sets the rules', async () => {
     const owner = await makeUser('Owner', 'admin');
     expect((await member.session.post('/staff/tasks', { title: 'No date' })).status).toBe(400);
