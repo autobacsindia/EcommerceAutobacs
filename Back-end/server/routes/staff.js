@@ -124,6 +124,7 @@ import {
   getSalesOrder,
 } from '../services/salesOrderService.js';
 import { getQuotationPdf } from '../services/quotationService.js';
+import deliveryFeeService from '../services/deliveryFeeService.js';
 import { getBankAccount, saveBankAccount, removeBankAccount } from '../services/customerBankService.js';
 import {
   createQuotation, updateQuotation, cancelQuotation, acceptQuotation, holdQuotation, resumeQuotation,
@@ -133,7 +134,7 @@ import { requestApproval, decideApproval, canDecide } from '../services/quotatio
 import { loadReadable } from '../services/salesQuotationService.js';
 import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/salesPaymentService.js';
 import { setPayDetails, readPayDetailsQr } from '../services/salesPayDetailsService.js';
-import { canSell } from '../config/staff.js';
+import { canSell, STAFF_TEAMS } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller, getProofFile } from '../services/orderAttributionService.js';
 import { listPins, pinOrder, unpinOrder } from '../services/orderPinService.js';
 import {
@@ -759,6 +760,26 @@ router.put('/customer-bank/:kind/:id', validateCustomerBankSave, validateRequest
 }));
 router.delete('/customer-bank/:kind/:id', validateCustomerBankRemove, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await removeBankAccount(req.user, req.params.kind, req.params.id, req)) });
+}));
+
+// ── Delivery-fee rate card (procurement keeps the courier rates) ────────────────
+// Same service, validator, cache purge and audit log as Admin → Delivery fees.
+// Procurement may change rates only; the on/off switches stay admin-only.
+const procurementOrAdmin = (req, res, next) => {
+  const u = req.user;
+  if (u?.role === 'admin' || (u?.role === 'staff' && u.staff?.active === true && u.staff.team === STAFF_TEAMS.PROCUREMENT)) return next();
+  return res.status(403).json({ success: false, message: 'Delivery fees are kept by procurement.' });
+};
+
+// @route  GET /staff/delivery-fees — procurement / admin
+router.get('/delivery-fees', procurementOrAdmin, asyncHandler(async (_req, res) => {
+  res.json({ success: true, config: await deliveryFeeService.getAdminDeliveryFeeConfig() });
+}));
+
+// @route  PUT /staff/delivery-fees  { …rate card without the switches } — procurement / admin
+router.put('/delivery-fees', procurementOrAdmin, asyncHandler(async (req, res) => {
+  const config = await deliveryFeeService.updateRateCard(req, req.body, { allowSwitches: req.user.role === 'admin' });
+  res.json({ success: true, config });
 }));
 
 export default router;

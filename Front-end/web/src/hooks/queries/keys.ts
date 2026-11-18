@@ -435,6 +435,7 @@ export const deliveryFeeKeys = {
   all: ['delivery-fees'] as const,
   public: () => ['delivery-fees', 'public'] as const,
   admin: () => ['delivery-fees', 'admin'] as const,
+  staff: () => ['delivery-fees', 'staff'] as const,
   remotePins: (prefix: string) => ['delivery-fees', 'remote-pins', prefix] as const,
 };
 

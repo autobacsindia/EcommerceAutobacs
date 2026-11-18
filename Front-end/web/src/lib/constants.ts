@@ -226,6 +226,7 @@ export const API_ENDPOINTS = {
   DELIVERY_FEES_ADMIN: '/delivery-fees/admin',            // admin rate card
   DELIVERY_FEES_REMOTE_PINS: '/delivery-fees/admin/remote-pins',
   DELIVERY_FEES_REMOTE_PINS_REMOVE: '/delivery-fees/admin/remote-pins/remove',
+  STAFF_DELIVERY_FEES: '/staff/delivery-fees',             // procurement: rate card, rates only (no switches)
   FESTIVAL_OFFER_ADMIN: '/festival-offer/admin',          // admin read/update
   PROMO_BANNER_ACTIVE: '/promo-banners/active',           // public: the live banner
   PROMO_BANNERS_ADMIN: '/promo-banners/admin',            // admin list/create
