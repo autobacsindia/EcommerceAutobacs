@@ -31,3 +31,36 @@ export const orderRatingRateLimit = rateLimit({
   message: 'Too many rating attempts. Please wait a few minutes and try again.',
   keyGenerator: (req) => `rate_limit:order_rating:${getClientIp(req)}`
 });
+
+// ── Shoppable reels (routes/reels.js) ──────────────────────────────────────────
+// Upload signature + submit: a person posts a few reels, not hundreds. Keyed on the
+// account (these routes require auth) so one person cannot spread across IPs.
+export const reelUploadRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: 'Too many reel uploads. Please try again later.',
+  keyGenerator: (req) => `rate_limit:reel_upload:${req.user?._id || getClientIp(req)}`
+});
+
+// Like / unlike / report: generous for real swiping, closed to scripts.
+export const reelEngageRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: 'Too many actions. Please slow down.',
+  keyGenerator: (req) => `rate_limit:reel_engage:${req.user?._id || getClientIp(req)}`
+});
+
+// Views + attribution are public — keyed on the real client IP (cf-connecting-ip).
+export const reelViewRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: 'Too many requests. Please slow down.',
+  keyGenerator: (req) => `rate_limit:reel_view:${getClientIp(req)}`
+});
+
+export const reelAttributeRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: 'Too many requests. Please slow down.',
+  keyGenerator: (req) => `rate_limit:reel_attr:${getClientIp(req)}`
+});

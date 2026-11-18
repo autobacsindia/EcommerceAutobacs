@@ -277,6 +277,22 @@ class ProductRepository {
   }
 
   /**
+   * The LIVE, publicly visible products among `ids`, with only what a reel's product
+   * block shows (services/reelService.js). Inactive and soft-deleted products are
+   * absent from the result — that absence is what hides their reels from the feed.
+   * Lean, projected, bounded by `ids`.
+   * @returns {Promise<Map<string, object>>}
+   */
+  async findReelCardsByIds(ids) {
+    if (!ids?.length) return new Map();
+    const rows = await Product.find({ _id: { $in: ids }, isActive: true, deletedAt: null })
+      .select('name slug images price originalPrice saleEndsAt averageRating totalReviews stock productType priceMin priceMax festivalOfferSetting')
+      .limit(ids.length)
+      .lean();
+    return new Map(rows.map((p) => [String(p._id), p]));
+  }
+
+  /**
    * Name and return policy of the given products (deleted ones included — an order line
    * keeps pointing at a product after it leaves the catalogue). Lean, bounded by `ids`.
    * @returns {Promise<Map<string, {name: string, returnPolicy?: object}>>}
