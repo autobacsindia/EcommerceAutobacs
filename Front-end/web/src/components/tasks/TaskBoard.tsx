@@ -46,7 +46,11 @@ function BoardCard({ t, base, column, columns, onOpen, onMove, onMoveTo, moving,
       aria-label={`Open ${t.code}: ${t.title}`}
       data-late={late || undefined}
       data-dragging={dragging || undefined}
-      className={`tk-card tk-more-host group rounded-lg bg-white px-3 py-2.5 focus:outline-none ${
+      // `relative` keeps the card's hidden bits (screen-reader labels, the invisible
+      // date picker) inside the card. Without it they are placed against the board row,
+      // outside the column's scroll box, and stretch the row so it scrolls up and down
+      // and cuts the column tops off.
+      className={`tk-card tk-more-host group relative rounded-lg bg-white px-3 py-2.5 focus:outline-none ${
         t.can.status ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       } ${busy ? 'opacity-60' : ''}`}
     >
@@ -176,8 +180,10 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
   const columns = allColumns.filter((c) => !(filters.due && c.kind === 'done'));
   const firstDone = columns.find((c) => c.kind === 'done')?.key;
   return (
-    <div className="space-y-3">
-      <div className="relative -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:snap-none">
+    // Wide screens: the board takes whatever height its pane gives it (TasksWorkspace
+    // makes that the screen under the filters), and the columns fill it.
+    <div className="space-y-3 lg:flex lg:min-h-[22rem] lg:flex-1 lg:flex-col">
+      <div data-board-row className="relative -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:snap-none lg:min-h-0 lg:flex-1">
         {columns.map((col) => {
           const cards = tasks.filter((t) => columnOf(t).key === col.key);
           return (
@@ -196,7 +202,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
               data-status={col.kind}
               data-over={over === col.key}
               // A wide screen: each column scrolls on its own under its heading, ClickUp-style.
-              className="tk-col flex w-[272px] shrink-0 snap-start flex-col rounded-xl transition-[background-color,box-shadow] md:w-auto md:min-w-[236px] md:flex-1 lg:max-h-[calc(100dvh-11rem)] lg:min-h-64"
+              className="tk-col flex w-[272px] shrink-0 snap-start flex-col rounded-xl transition-[background-color,box-shadow] md:w-auto md:min-w-[236px] md:flex-1 lg:min-h-0"
             >
               <h3 className="flex items-center gap-2 px-2.5 pb-2 pt-2.5">
                 <GroupPill status={col.kind} colour={col.colour}>{col.label}</GroupPill>
@@ -204,7 +210,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
                 {project && col.stageId && <ColumnMenu project={project} stageId={col.stageId} shownTasks={cards.length} />}
               </h3>
               {cards.length === 0 && <p className="px-3 py-2 text-center text-xs text-gray-500">No tasks here</p>}
-              <ul className="min-h-4 flex-1 space-y-1.5 overflow-y-auto px-2 pb-1 [scrollbar-width:thin]">
+              <ul className="min-h-4 flex-1 space-y-1.5 overflow-y-auto lg:flex-initial px-2 pb-1 [scrollbar-width:thin]">
                 {cards.map((t) => (
                   <BoardCard
                     key={t.id} t={t} base={base} column={columnOf(t)} columns={allColumns} onOpen={onOpen} onMove={onMove} onMoveTo={onMoveTo}
