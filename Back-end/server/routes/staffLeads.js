@@ -16,7 +16,7 @@ import {
   validateTeamLeadList, validateTeamLeadId, validateTeamLeadReassign, validateTeamLeadFollowUp,
 } from '../validators/staffLeads.validator.js';
 import {
-  listTeamLeads, teamLeadPeople, getTeamLead, followUp, releaseLead, reassignLead, recordFollowUp,
+  listTeamLeads, teamLeadPeople, getTeamLead, followUp, releaseLead, reassignLead, recordFollowUp, updateLeadDetails,
 } from '../services/teamLeadService.js';
 
 const router = express.Router();
@@ -81,6 +81,16 @@ router.post('/:id/follow-ups', validateTeamLeadFollowUp, validateRequest, asyncH
     return res.status(409).json({ success: false, outcome, message: FOLLOW_UP_CONFLICT[outcome], lead });
   }
   res.json({ success: true, outcome, lead, ...(warning && { warning }) });
+}));
+
+// @route  PATCH /staff/leads/:id { name?, phone?, email?, seen? }
+// The person following up, the GTM head or admin. Someone saved in between → 409 with their version.
+router.patch('/:id', validateTeamLeadId, validateRequest, asyncHandler(async (req, res) => {
+  const { outcome, lead } = await updateLeadDetails(req.user, req.params.id, req.body || {});
+  if (outcome === 'changed') {
+    return res.status(409).json({ success: false, outcome, message: 'Someone changed this lead just now. Check it and try again.', lead });
+  }
+  res.json({ success: true, outcome, lead });
 }));
 
 export default router;
