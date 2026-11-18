@@ -144,6 +144,20 @@ export const shownStatus = (status) => (status === 'waiting' ? 'in_progress' : s
 export const TASK_PRIORITIES = Object.freeze(['urgent', 'high', 'normal', 'low']);
 export const TASK_BUCKETS = Object.freeze(['open', 'done', 'archived']);
 
+/**
+ * How often a task comes back (services/taskRepeat.js). When it is marked done,
+ * the next copy is made with the next due date (services/staffTaskService.js
+ * makeNextRepeat). `day` is the day of the month, for months only.
+ */
+const RepeatSchema = new mongoose.Schema(
+  {
+    every: { type: Number, required: true, min: 1, max: 99 },
+    unit: { type: String, enum: ['day', 'week', 'month'], required: true },
+    day: { type: Number, default: undefined, min: 1, max: 31 },
+  },
+  { _id: false },
+);
+
 const StaffTaskSchema = new mongoose.Schema(
   {
     number: { type: Number, required: true },
@@ -252,6 +266,18 @@ const StaffTaskSchema = new mongoose.Schema(
      * can never be given to anyone (services/staffTaskService.js).
      */
     personal: { type: Boolean, default: undefined },
+    /** How often it repeats; none for a one-off task. Never on a sub-task. */
+    repeat: { type: RepeatSchema, default: undefined },
+    /**
+     * On a repeat's copy: the task it was made from. Unique (staff_task_repeat_of),
+     * so completing a task twice, a retry, or reopen-and-complete makes ONE next copy.
+     */
+    repeatOf: { type: mongoose.Schema.Types.ObjectId, default: undefined },
+    /** On the task a copy was made from: that copy, for the "Next: T-1050" link. */
+    repeatNext: {
+      type: new mongoose.Schema({ task: { type: mongoose.Schema.Types.ObjectId, required: true }, number: { type: Number, required: true } }, { _id: false }),
+      default: undefined,
+    },
     /** Set only for a date that needed a manager's approval (DueApprovalSchema above). */
     dueApproval: { type: DueApprovalSchema, default: undefined },
     /** How long it should take, in whole minutes (null: not planned). */
@@ -317,6 +343,11 @@ StaffTaskSchema.index(
 StaffTaskSchema.index(
   { importKey: 1 },
   { unique: true, partialFilterExpression: { importKey: { $type: 'string' } }, name: 'staff_task_import_key' },
+);
+// One next copy per repeating task: what makes "done" twice safe. Partial: most tasks are not copies.
+StaffTaskSchema.index(
+  { repeatOf: 1 },
+  { unique: true, partialFilterExpression: { repeatOf: { $type: 'objectId' } }, name: 'staff_task_repeat_of' },
 );
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
