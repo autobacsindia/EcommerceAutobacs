@@ -57,11 +57,11 @@ const task = (over: Partial<Task> = {}): Task => ({
 const me = { id: 'u1', name: 'Meera', team: 'marketing', teamLabel: 'Marketing', isHead: true, me: true };
 const arun = { id: 'u2', name: 'Arun', team: 'procurement', teamLabel: 'Procurement', isHead: false, me: false };
 
-function serve({ projects = [project()], canCreate = true, one = project(), oneFails = false, t = task() }: {
-  projects?: Project[]; canCreate?: boolean; one?: Project; oneFails?: boolean; t?: Task;
+function serve({ projects = [project()], canCreate = true, canPickOwner = true, one = project(), oneFails = false, t = task() }: {
+  projects?: Project[]; canCreate?: boolean; canPickOwner?: boolean; one?: Project; oneFails?: boolean; t?: Task;
 } = {}) {
   get.mockImplementation((url: string) => {
-    if (url.startsWith('/staff/tasks/projects?')) return Promise.resolve({ projects, nextCursor: null, canCreate });
+    if (url.startsWith('/staff/tasks/projects?')) return Promise.resolve({ projects, nextCursor: null, canCreate, canPickOwner });
     if (url === '/staff/tasks/projects/pick') return Promise.resolve({ projects: projects.map((p) => ({ id: p.id, name: p.name, colour: p.colour })) });
     if (url.startsWith('/staff/tasks/projects/')) return oneFails ? Promise.reject(Object.assign(new Error('Project not found.'), { status: 404 })) : Promise.resolve({ project: one });
     if (url.startsWith('/staff/tasks/space')) return Promise.resolve({ space: { team: 'marketing', teamLabel: 'Marketing', canManage: false, folders: [], lists: [], other: 0, colours: [] } });
@@ -102,13 +102,29 @@ describe('the Projects page', () => {
     expect(within(card).getByText('PRJ-0007')).toBeInTheDocument();
   });
 
-  it('a member who cannot start projects sees no New project button, and a plain empty message', async () => {
+  it('someone who cannot start projects sees no New project button, and a plain empty message', async () => {
     serve({ projects: [], canCreate: false });
     addressBar.reset('/team/tasks', 'view=projects');
     head();
     expect(await screen.findByText('No projects yet')).toBeInTheDocument();
-    expect(screen.getByText(/admin and team heads start projects/)).toBeInTheDocument();
+    expect(screen.getByText('When you are added to a project, it shows up here.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /New project/ })).toBeNull();
+  });
+
+  it('a plain member sees New project and owns what they start: no owner picker', async () => {
+    serve({ projects: [], canPickOwner: false });
+    post.mockResolvedValue({ project: project({ id: 'p9', name: 'Shop display' }) });
+    addressBar.reset('/team/tasks', 'view=projects');
+    wrap(<TasksWorkspace base="/team/tasks" myTeam="marketing" myTeamLabel="Marketing" />);
+    fireEvent.click((await screen.findAllByRole('button', { name: /New project/ }))[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'New project' });
+    expect(within(dialog).queryByRole('combobox', { name: 'Owner' })).toBeNull();
+    expect(within(dialog).getByText('(you own the projects you start)')).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Project name'), { target: { value: 'Shop display' } });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Create project' })).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0][1]).toMatchObject({ name: 'Shop display', ownerId: 'u1' });
   });
 
   it('a head starts a project with members and dates; one id per form so a double click makes one', async () => {

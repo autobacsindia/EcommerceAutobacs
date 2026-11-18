@@ -3,7 +3,8 @@
  * (services/staffTaskService.js). Mongo is real; push is a double.
  *
  * What must hold:
- *   - only the admin and team heads start projects; only the owner and the admin change one
+ *   - anyone in the staff panel starts a project and owns it; only the admin and heads
+ *     start one for someone else; only the owner and the admin change one
  *   - a project is seen by the admin, its people, and heads of its people's teams — nobody else
  *   - whoever sees a project reads and comments on every task in it, but edits none
  *     they could not edit before
@@ -80,7 +81,7 @@ beforeEach(async () => {
 });
 
 describe('starting and changing a project', () => {
-  it('the admin and heads start projects; members may not', async () => {
+  it('the admin and heads start projects, for themselves or someone else', async () => {
     const p = await start(mkHead, { memberIds: [String(prMember._id)], dueOn: '2030-10-25', startOn: '2030-10-01' });
     expect(p).toMatchObject({
       name: 'Diwali launch', owner: { name: 'Meera' }, startOn: '2030-10-01', dueOn: '2030-10-25',
@@ -89,7 +90,35 @@ describe('starting and changing a project', () => {
     expect(p.people.map((x) => x.name)).toEqual(['Meera', 'Arun']);
     expect(p.teams.map((t) => t.value).sort()).toEqual(['marketing', 'procurement']);
     await start(admin, { name: 'Website relaunch', ownerId: String(devMember._id) });
-    await status(403, () => start(mkMember), /admin and team heads/);
+    const forArun = await start(mkHead, { name: 'Stock count', ownerId: String(prMember._id) });
+    expect(forArun.owner.name).toBe('Arun');
+  });
+
+  it('a plain member starts a project and owns it, but not one for someone else', async () => {
+    const p = await start(mkMember, { name: 'Shop display', memberIds: [String(devMember._id)] });
+    expect(p).toMatchObject({ owner: { name: 'Kiran' }, can: { edit: true } });
+    expect(p.people.map((x) => x.name)).toEqual(['Kiran', 'Dev']);
+    // Naming themselves is the same as naming no one.
+    expect((await start(mkMember, { name: 'Banner', ownerId: String(mkMember._id) })).owner.name).toBe('Kiran');
+    await status(403, () => start(mkMember, { name: 'For Arun', ownerId: String(prMember._id) }), /admin and team heads/);
+    expect(await StaffProject.countDocuments({ name: 'For Arun' })).toBe(0);
+    // They see and change what they started.
+    expect((await myProjects(mkMember)).map((x) => x.name).sort()).toEqual(['Banner', 'Shop display']);
+    const page = await projects.listProjects(await as(mkMember));
+    expect(page).toMatchObject({ canCreate: true, canPickOwner: false });
+    expect(await projects.listProjects(await as(mkHead))).toMatchObject({ canCreate: true, canPickOwner: true });
+    await projects.updateProject(await as(mkMember), p.id, { rev: p.rev, name: 'Shop display v2' }, req);
+  });
+
+  it('inactive or former staff and customers cannot start a project', async () => {
+    const former = await person('staff', { team: 'sales', active: false }, 'Gone');
+    const customer = await person('customer', null, 'Cust');
+    await status(403, () => start(former), /staff in the panel/);
+    await status(403, () => start(customer), /staff in the panel/);
+    // A member let go between page load and save is refused too.
+    await User.updateOne({ _id: salesMember._id }, { 'staff.active': false });
+    await status(403, () => start(salesMember), /staff in the panel/);
+    expect(await StaffProject.countDocuments({})).toBe(0);
   });
 
   it('refuses a bad name, a start after the deadline, and people outside the panel', async () => {

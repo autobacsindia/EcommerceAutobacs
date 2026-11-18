@@ -238,6 +238,8 @@ export function ProjectsView({ onOpen, isAdmin }: { onOpen: (id: string) => void
   const pages = useProjectPages(state);
   const rows = (pages.data?.pages ?? []).flatMap((pg) => pg.projects);
   const canCreate = pages.data?.pages[0]?.canCreate ?? false;
+  // A plain member owns what they start; the admin and heads may start one for someone else.
+  const canPickOwner = isAdmin || (pages.data?.pages[0]?.canPickOwner ?? true);
   return (
     <section aria-label="Projects" className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -275,7 +277,7 @@ export function ProjectsView({ onOpen, isAdmin }: { onOpen: (id: string) => void
               ? 'Projects you delete land here, ready to restore.'
               : canCreate
                 ? 'A project groups tasks from any team — for example a Diwali launch with Marketing, Procurement and Developer tasks — with an owner, a deadline and a progress bar.'
-                : 'When you are added to a project, it shows up here. The admin and team heads start projects.'}
+                : 'When you are added to a project, it shows up here.'}
           </p>
           {state === 'active' && canCreate && (
             <button onClick={() => setCreating(true)} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
@@ -297,7 +299,7 @@ export function ProjectsView({ onOpen, isAdmin }: { onOpen: (id: string) => void
       )}
 
       <Dialog open={creating} onClose={() => setCreating(false)} label="New project">
-        {creating && <ProjectForm isAdmin={isAdmin} onCancel={() => setCreating(false)} onDone={(p) => { setCreating(false); onOpen(p.id); }} />}
+        {creating && <ProjectForm isAdmin={isAdmin} pickOwner={canPickOwner} onCancel={() => setCreating(false)} onDone={(p) => { setCreating(false); onOpen(p.id); }} />}
       </Dialog>
     </section>
   );
@@ -499,8 +501,11 @@ function StatusesEditor({ stages, onChange }: { stages: StageDraft[]; onChange: 
   );
 }
 
-export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
-  project?: Project; isAdmin: boolean; onDone: (p: Project) => void; onCancel: () => void; onDeleted?: () => void;
+export function ProjectForm({ project, isAdmin, pickOwner = true, onDone, onCancel, onDeleted }: {
+  project?: Project; isAdmin: boolean;
+  /** New project only: false for a plain member, who owns what they start. */
+  pickOwner?: boolean;
+  onDone: (p: Project) => void; onCancel: () => void; onDeleted?: () => void;
 }) {
   const queryClient = useQueryClient();
   const people = useAssignees();
@@ -513,7 +518,7 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
   const [startOn, setStartOn] = useState(project?.startOn ?? '');
   const [dueOn, setDueOn] = useState(project?.dueOn ?? '');
   const [ownerId, setOwnerId] = useState<string>(project?.owner.id ?? '');
-  const owner = ownerId || me?.id || '';
+  const owner = (!project && !pickOwner ? '' : ownerId) || me?.id || '';
   const [memberIds, setMemberIds] = useState<string[]>(project ? project.people.map((x) => x.id).filter((x) => x !== project.owner.id) : []);
   const [statusOverride, setStatusOverride] = useState<string>(project?.statusOverride ?? 'auto');
   const [lists, setLists] = useState<ListDraft[]>(() => (project?.lists ?? []).map((l) => ({ key: draftKey(), id: l.id, name: l.name })));
@@ -621,7 +626,9 @@ export function ProjectForm({ project, isAdmin, onDone, onCancel, onDeleted }: {
         {datesBackwards && <p role="alert" className="text-xs font-medium text-red-700">The start date is after the deadline.</p>}
         <label className="block text-xs font-medium text-gray-500">
           <span className="mb-1 block">Owner</span>
-          {isAdmin || !project ? (
+          {!project && !pickOwner ? (
+            <span className="flex items-center gap-1.5 text-sm text-gray-900">{me && <Avatar name={me.name} id={me.id} size="xs" />}You<span className="text-xs font-normal text-gray-500">(you own the projects you start)</span></span>
+          ) : isAdmin || !project ? (
             <select value={owner} onChange={(e) => setOwnerId(e.target.value)} aria-label="Owner" className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm text-gray-900">
               {!owner && <option value="">Pick the owner</option>}
               {choices.map((p) => <option key={p.id} value={p.id}>{p.me ? `Me (${p.name})` : `${p.name}${p.teamLabel ? ` · ${p.teamLabel}` : ''}`}</option>)}

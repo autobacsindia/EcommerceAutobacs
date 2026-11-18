@@ -2,7 +2,7 @@
  * Projects in the staff Tasks module (models/StaffProject.js).
  *
  * ── Who does what ───────────────────────────────────────────────────────────
- *   create   the admin and team heads
+ *   create   anyone in the staff panel (they own it; the admin and heads may name another owner)
  *   see      the admin; the owner and members; the head of any member's team
  *   change   the admin and the owner (name, notes, dates, people, status, delete)
  *   tasks    whoever sees a project may read and comment on every task in it
@@ -74,7 +74,10 @@ const addDays = (ymd, days) => {
 
 // ── Rules ───────────────────────────────────────────────────────────────────
 
-export const canCreateProject = (u) => isAdmin(u) || isHead(u);
+/** Anyone in the staff panel starts a project; they own it unless they are the admin or a head. */
+export const canCreateProject = (u) => inPanel(u);
+/** Who may start a project for someone else (name another owner). */
+export const canPickProjectOwner = (u) => isAdmin(u) || isHead(u);
 const isInProject = (u, p) => (p.people || []).some((x) => same(x.user, u?._id));
 const headOfProjectTeam = (u, p) => isHead(u) && (p.teams || []).includes(teamOf(u));
 export const seesProject = (u, p) => !!p && !p.archivedAt && (isAdmin(u) || isInProject(u, p) || headOfProjectTeam(u, p));
@@ -355,6 +358,7 @@ export async function listProjects(actor, { state = 'active', cursor } = {}) {
     projects: page.map((p) => shape(p, actor, counts.get(idOf(p._id)), today)),
     nextCursor: more ? encodeCursor(page[page.length - 1]) : null,
     canCreate: canCreateProject(actor),
+    canPickOwner: canPickProjectOwner(actor),
   };
 }
 
@@ -376,7 +380,11 @@ export async function getProject(actor, id) {
 // ── Write ───────────────────────────────────────────────────────────────────
 
 export async function createProject(actor, input = {}, req) {
-  if (!canCreateProject(actor)) throw fail('Only the admin and team heads can start a project.', 403);
+  if (!canCreateProject(actor)) throw fail('Only staff in the panel can start a project.', 403);
+  // A member who is not a head owns what they start: naming someone else would leave them a project they cannot change.
+  if (input.ownerId && !same(input.ownerId, actor._id) && !canPickProjectOwner(actor)) {
+    throw fail('Only the admin and team heads can start a project for someone else. Leave yourself as the owner.', 403);
+  }
   const clientId = cleanClientId(input.clientId);
   if (clientId) {
     const seen = await staffProjectRepository.findByClientId(actor._id, clientId);
@@ -390,7 +398,7 @@ export async function createProject(actor, input = {}, req) {
   checkDates(startOn, dueOn);
   const lists = input.lists == null ? [] : cleanLists(input.lists);
   const statuses = input.statuses == null ? [] : cleanStatuses(input.statuses);
-  // A head who names no owner owns it; the admin may hand it to anyone.
+  // Whoever names no owner owns it; the admin and heads may hand it to anyone.
   const { owner, people, teams } = await loadPeople(input.ownerId || actor._id, input.memberIds);
   let doc;
   try {
