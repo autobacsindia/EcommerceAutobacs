@@ -6,6 +6,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import { Loader2, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 function ResetPasswordPageInner() {
   const router = useRouter();
@@ -137,10 +138,9 @@ function ResetPasswordPageInner() {
             <label htmlFor="password" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
               New Password
             </label>
-            <input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               autoComplete="new-password"
               required
               value={password}
@@ -154,10 +154,9 @@ function ResetPasswordPageInner() {
             <label htmlFor="confirmPassword" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
               Confirm Password
             </label>
-            <input
+            <PasswordInput
               id="confirmPassword"
               name="confirmPassword"
-              type="password"
               autoComplete="new-password"
               required
               value={confirmPassword}

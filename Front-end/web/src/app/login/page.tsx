@@ -15,6 +15,7 @@ import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
 import OfferStrip from '@/components/offer/OfferStrip';
 import { getOffer } from '@/lib/offers';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 function LoginPageInner() {
   const router = useRouter();
@@ -184,10 +185,10 @@ function LoginPageInner() {
                   Forgot Password
                 </Link>
               </div>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 name="password"
+                autoComplete="current-password"
                 value={formData.password}
                 onChange={handleChange}
                 className={`w-full px-3 py-2 bg-obsidian-raised text-ink border rounded-sm focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold transition-colors font-display placeholder:text-ink-muted

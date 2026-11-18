@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 /**
  * Change my password — for staff who sign in with their own email. A company
@@ -44,8 +45,7 @@ export default function ChangePasswordPage() {
   const field = (key: keyof typeof form, label: string, autoComplete: string) => (
     <label className="block">
       <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
-      <input
-        type="password"
+      <PasswordInput
         required
         minLength={key === 'current' ? 1 : 8}
         maxLength={72}

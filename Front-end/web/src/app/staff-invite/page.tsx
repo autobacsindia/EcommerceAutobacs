@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { brand } from '@/components/home/redesign/homeContent';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 type InviteInfo = { name: string; email: string; teamLabel: string; isHead: boolean; existingAccount: boolean };
 
@@ -101,12 +102,12 @@ function StaffInviteInner() {
             </div>
             <div>
               <label htmlFor="pw" className={labelClass}>New password</label>
-              <input id="pw" type="password" autoComplete="new-password" minLength={8} maxLength={72} required
+              <PasswordInput id="pw" autoComplete="new-password" minLength={8} maxLength={72} required
                 value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
             </div>
             <div>
               <label htmlFor="pw2" className={labelClass}>Confirm password</label>
-              <input id="pw2" type="password" autoComplete="new-password" minLength={8} maxLength={72} required
+              <PasswordInput id="pw2" autoComplete="new-password" minLength={8} maxLength={72} required
                 value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputClass} />
             </div>
 
