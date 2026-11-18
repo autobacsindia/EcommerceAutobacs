@@ -99,6 +99,8 @@ import supplierEnquiryRoutes from './supplierEnquiries.js';
 import pushRoutes from './push.js';
 import notificationRoutes from './notifications.js';
 import redirectRoutes from './redirects.js';
+import reelRoutes from './reels.js';
+import adminReelRoutes from './adminReels.js';
 
 const apiRouter = express.Router();
 
@@ -174,6 +176,9 @@ apiRouter.use('/campaigns', publicBrowsingRateLimit, optionalAuth, campaignRoute
 // a signed-in applicant is linked to their account automatically — which is what makes
 // the self-referral check possible later — while a logged-out visitor can still apply.
 apiRouter.use('/affiliates', publicBrowsingRateLimit, optionalAuth, affiliateRoutes);
+// Shoppable reels: the feed is public (optionalAuth personalises `viewerLiked`);
+// upload/like/report need an account and carry their own limiters in-route.
+apiRouter.use('/reels', publicBrowsingRateLimit, optionalAuth, reelRoutes);
 
 // ============================================================================
 // ADMIN DOMAIN
@@ -227,6 +232,8 @@ apiRouter.use('/admin/team-activity', adminTeamActivityRoutes);
 apiRouter.use('/admin/overview', adminOverviewRoutes);
 apiRouter.use('/admin/slip-templates', adminSlipTemplateRoutes);
 apiRouter.use('/admin/lookup', adminLookupRoutes);
+// Reels moderation + team upload: admins and active marketing staff (guarded in-route).
+apiRouter.use('/admin/reels', adminRouteRateLimit, adminReelRoutes);
 apiRouter.use('/payment-requests', paymentRequestRoutes);
 apiRouter.use('/subscription-dues', subscriptionDueRoutes);
 apiRouter.use('/incentives', incentiveRoutes);

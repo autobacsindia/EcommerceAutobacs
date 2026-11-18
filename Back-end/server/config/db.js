@@ -708,6 +708,17 @@ export async function ensureCriticalIndexes() {
     await db.collection('orderpins').createIndex({ user: 1, pinnedAt: -1 }, { name: 'order_pin_user_recent', background: true });
     console.log('✓ OrderPin indexes confirmed');
 
+    // Shoppable reels (models/Reel.js, ReelLike.js, ReelReport.js) — same names as the
+    // schemas. reel_feed serves the public keyset feed; reel_public_id is what makes
+    // POST /reels idempotent; the two unique pairs are what make like/report idempotent.
+    await db.collection('reels').createIndex({ status: 1, approvedAt: -1, _id: -1 }, { name: 'reel_feed', background: true });
+    await db.collection('reels').createIndex({ status: 1, createdAt: -1, _id: -1 }, { name: 'reel_status_queue', background: true });
+    await db.collection('reels').createIndex({ creator: 1, createdAt: -1, _id: -1 }, { name: 'reel_creator_recent', background: true });
+    await db.collection('reels').createIndex({ 'media.publicId': 1 }, { unique: true, name: 'reel_public_id', background: true });
+    await db.collection('reellikes').createIndex({ reel: 1, user: 1 }, { unique: true, name: 'reel_like_reel_user', background: true });
+    await db.collection('reelreports').createIndex({ reel: 1, user: 1 }, { unique: true, name: 'reel_report_reel_user', background: true });
+    console.log('✓ Reel indexes confirmed');
+
     // Supplier deals (models/SupplierDeal.js) and their part payments — same names
     // as the schemas. supplier_deal_open_item is what stops two open deals sharing
     // an item when two people set one up at once; payment_request_deal serves the
