@@ -161,6 +161,8 @@ function ColumnEditor({ project, stage, shownTasks, onDone }: { project: Project
   const [colour, setColour] = useState(stage.colour);
   const [type, setType] = useState<TaskStatus>(stage.type);
   const [deleting, setDeleting] = useState(false);
+  // Members add, rename, recolour and move columns; deleting one or changing what it counts as is the owner's/admin's.
+  const manages = project.can.edit;
   // Where its tasks go: a column that stays and is open/done the same way.
   const targets = others.filter((x) => isDone(x.type) === isDone(stage.type));
   const [picked, setTarget] = useState('');
@@ -226,10 +228,10 @@ function ColumnEditor({ project, stage, shownTasks, onDone }: { project: Project
           </fieldset>
           <label className="block text-sm font-medium text-gray-700">
             Tasks here count as
-            <select value={type} onChange={(e) => setType(e.target.value as TaskStatus)} className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-2 text-sm text-gray-900">
+            <select value={type} onChange={(e) => setType(e.target.value as TaskStatus)} disabled={!manages} className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-2 text-sm text-gray-900 disabled:bg-gray-50 disabled:text-gray-500">
               {STAGE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-            <span className="mt-1 block text-xs font-normal text-gray-500">“Done” finishes a task when it is moved here. The others keep it open.</span>
+            <span className="mt-1 block text-xs font-normal text-gray-500">{manages ? '“Done” finishes a task when it is moved here. The others keep it open.' : 'Only the project owner or the admin can change this.'}</span>
           </label>
           {kindProblem && <p role="alert" className="text-xs text-red-700">{kindProblem}</p>}
           <div className="flex flex-wrap items-center gap-2">
@@ -245,9 +247,13 @@ function ColumnEditor({ project, stage, shownTasks, onDone }: { project: Project
             <button type="button" onClick={() => shift(1)} disabled={index === all.length - 1 || save.isPending} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40">
               Move right <ArrowRight aria-hidden className="h-4 w-4" />
             </button>
-            <button type="button" onClick={() => setDeleting(true)} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
-              <Trash2 aria-hidden className="h-4 w-4" /> Delete column
-            </button>
+            {manages ? (
+              <button type="button" onClick={() => setDeleting(true)} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
+                <Trash2 aria-hidden className="h-4 w-4" /> Delete column
+              </button>
+            ) : (
+              <p className="ml-auto text-xs text-gray-500">Only the project owner or the admin can delete a column.</p>
+            )}
           </div>
         </form>
       ) : (
