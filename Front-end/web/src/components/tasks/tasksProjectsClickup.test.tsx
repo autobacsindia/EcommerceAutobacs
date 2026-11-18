@@ -300,8 +300,22 @@ describe('columns changed from the board', () => {
     expect(screen.getByRole('button', { name: /Delete and move tasks/ })).toBeDisabled();
   });
 
+  it('a member (not the owner) adds and renames columns, but can’t delete one or change what it counts as', async () => {
+    board(project({ statuses: STAGES, can: { edit: false, archive: false, restore: false, columns: true } }));
+    expect(await screen.findByRole('button', { name: /Add column/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Change column Review' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Column Review' });
+    expect(within(dialog).queryByRole('button', { name: /Delete column/ })).not.toBeInTheDocument();
+    expect(within(dialog).getByText('Only the project owner or the admin can delete a column.')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/Tasks here count as/)).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Garage 2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect((patch.mock.calls[0][1] as { statuses: { name: string }[] }).statuses.map((x) => x.name)).toEqual(['Ideas', 'Designing', 'Garage 2', 'Live']);
+  });
+
   it('someone who can’t change the project sees no column controls', async () => {
-    board(project({ statuses: STAGES, can: { edit: false, archive: false, restore: false } }));
+    board(project({ statuses: STAGES, can: { edit: false, archive: false, restore: false, columns: false } }));
     expect(await screen.findByRole('region', { name: 'Review' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Add column/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Change column/ })).not.toBeInTheDocument();

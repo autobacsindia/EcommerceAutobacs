@@ -81,6 +81,12 @@ export const seesProject = (u, p) => !!p && !p.archivedAt && (isAdmin(u) || isIn
 /** An archived project is still the admin's and its owner's to restore. */
 const seesArchived = (u, p) => !!p && (isAdmin(u) || same(p.owner?.user, u?._id));
 export const canManageProject = (u, p) => !!p && (isAdmin(u) || same(p.owner?.user, u?._id));
+/**
+ * Board columns: the owner and the admin, and also every active member of the
+ * project — they add, rename, recolour and reorder columns. Deleting a column
+ * (it moves tasks) and changing what one counts as stay with the owner/admin.
+ */
+export const canEditColumns = (u, p) => !!p && !p.archivedAt && (canManageProject(u, p) || (isActiveStaff(u) && isInProject(u, p)));
 
 /** The projects `actor` may see, as a query (the same rule as seesProject). */
 function visibleQuery(actor) {
@@ -195,6 +201,20 @@ function cleanStatuses(raw, before = []) {
 }
 
 /**
+ * What a member (not the owner or admin) may not do to the columns: delete one
+ * (its tasks would move) or change what an existing one counts as (its tasks
+ * would change kind). Adding, renaming, recolouring and reordering are theirs.
+ */
+function memberColumnLimits(before, after) {
+  const kept = new Map(after.map((x) => [idOf(x._id), x]));
+  for (const x of before) {
+    const now = kept.get(idOf(x._id));
+    if (!now) throw fail('Only the project owner or the admin can delete a column.', 403);
+    if (now.type !== x.type) throw fail(`Only the project owner or the admin can change what “${x.name}” counts as.`, 403);
+  }
+}
+
+/**
  * Where the tasks of each deleted status go: [{ from, to }] by status id. `from`
  * must be a status being deleted, `to` one that stays. Open and done never mix —
  * a done task moved to an open status would reopen with nobody saying so — so
@@ -298,6 +318,7 @@ function shape(p, viewer, counts = NO_COUNTS, today = todayIST()) {
     rev: p.rev,
     can: {
       edit: !archived && canManageProject(viewer, p),
+      columns: !archived && canEditColumns(viewer, p),
       archive: !archived && canManageProject(viewer, p),
       restore: archived && canManageProject(viewer, p),
       editDetails: canEditDetails(viewer, p),
@@ -417,7 +438,11 @@ export async function createProject(actor, input = {}, req) {
 /** Change a project. Only the fields present change; `rev` is required. */
 export async function updateProject(actor, id, input = {}, req) {
   const p = await loadVisibleProject(actor, id, { archived: true });
-  if (!canManageProject(actor, p)) throw fail('Only the project owner or the admin can change this project.', 403);
+  const manager = canManageProject(actor, p);
+  const columnsOnly = Object.keys(input).every((k) => ['rev', 'statuses', 'statusMoves'].includes(k) || input[k] === undefined);
+  if (!manager && !(columnsOnly && input.statuses !== undefined && canEditColumns(actor, p))) {
+    throw fail('Only the project owner or the admin can change this project.', 403);
+  }
   const rev = Number(input.rev);
   if (!Number.isInteger(rev)) throw fail('Reload and try again.', 400);
   if (rev !== p.rev) throw fail('Someone changed this project just now. It has been reloaded — try again.', 409);
@@ -454,6 +479,7 @@ export async function updateProject(actor, id, input = {}, req) {
   let moves = [];
   if (has('statuses')) {
     const statuses = cleanStatuses(input.statuses, p.statuses || []);
+    if (!manager) memberColumnLimits(p.statuses || [], statuses);
     const was = (p.statuses || []).map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|');
     if (statuses.map((x) => `${idOf(x._id)}:${x.name}:${x.colour}:${x.type}`).join('|') !== was) set.statuses = statuses;
     moves = cleanStatusMoves(input.statusMoves, p.statuses || [], statuses);
@@ -482,7 +508,10 @@ export async function updateProject(actor, id, input = {}, req) {
     );
   }
   if (set.lists || set.statuses) await reconcileProjectTasks(next);
-  auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffProject', p._id, { changes: Object.keys(set) });
+  auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffProject', p._id, {
+    changes: Object.keys(set),
+    ...(set.statuses && { columns: set.statuses.map((x) => x.name), by: { id: idOf(actor._id), name: actor.name, role: manager ? 'manager' : 'member' } }),
+  });
   return getProject(actor, next._id);
 }
 

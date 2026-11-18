@@ -117,7 +117,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
   base?: string;
   /** A project's own statuses: they become the columns. Empty: To do · In progress · Complete. */
   stages?: ProjectStage[];
-  /** The project shown, when this person may change it: its columns get "+ Add column" and a ⋯ menu. */
+  /** The project shown, when this person may change its columns (owner, admin, members): "+ Add column" and a ⋯ menu. */
   project?: Project;
 }) {
   const refresh = useRefreshTasks();

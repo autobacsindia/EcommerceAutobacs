@@ -532,7 +532,7 @@ export type Project = {
   details?: ProjectDetails | null;
   /** One project's "Create slip" menu (only on GET of one project): stored templates, then the summary. */
   slips?: ProjectSlip[];
-  can: { edit: boolean; archive: boolean; restore: boolean; editDetails?: boolean; fillFromOrder?: boolean };
+  can: { edit: boolean; archive: boolean; restore: boolean; editDetails?: boolean; fillFromOrder?: boolean; /** Add, rename, recolour, reorder board columns (every member). */ columns?: boolean };
 };
 
 export type ProjectFieldType = 'text' | 'textarea' | 'phone' | 'date' | 'number' | 'money';
