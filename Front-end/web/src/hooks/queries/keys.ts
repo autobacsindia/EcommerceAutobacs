@@ -437,3 +437,11 @@ export const deliveryFeeKeys = {
   admin: () => ['delivery-fees', 'admin'] as const,
   remotePins: (prefix: string) => ['delivery-fees', 'remote-pins', prefix] as const,
 };
+
+/** Shoppable reels (`/reels/*`, `/admin/reels/*`) — the staff review queue by status tab. */
+export const reelKeys = {
+  all: ['reels'] as const,
+  /** Prefix for every admin list — approve/reject/remove/upload invalidate all tabs at once. */
+  admin: () => ['reels', 'admin'] as const,
+  adminList: (status: string) => ['reels', 'admin', status] as const,
+};

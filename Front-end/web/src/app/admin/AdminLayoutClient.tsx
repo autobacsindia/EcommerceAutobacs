@@ -7,7 +7,7 @@ import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ScanSearch, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
-  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer } from 'lucide-react';
+  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer, Clapperboard } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
@@ -112,6 +112,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Content',
     items: [
+      // Shoppable product videos for the mobile app — review queue + team upload.
+      { href: '/admin/reels', label: 'Reels', icon: Clapperboard },
       { href: '/admin/blog', label: 'Blog', icon: SquarePen },
       { href: '/admin/promo-banners', label: 'Promo Banner', icon: Megaphone },
       { href: '/admin/festival-theme', label: 'Festival Theme', icon: Sparkles },
