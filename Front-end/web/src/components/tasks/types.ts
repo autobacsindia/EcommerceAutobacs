@@ -598,5 +598,5 @@ export const stageOf = (stages: ProjectStage[], t: Pick<Task, 'stage' | 'status'
   stages.find((s) => s.id === t.stage)
   ?? stages.find((s) => s.type === t.status)
   ?? (t.status === 'in_progress' ? stages.find((s) => s.type === 'todo') : undefined);
-export type ProjectPage = { projects: Project[]; nextCursor: string | null; canCreate: boolean };
+export type ProjectPage = { projects: Project[]; nextCursor: string | null; canCreate: boolean; canPickOwner?: boolean };
 export type ProjectPick = { id: string; code?: string | null; name: string; colour: string };

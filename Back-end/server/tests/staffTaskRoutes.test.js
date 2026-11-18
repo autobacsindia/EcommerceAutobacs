@@ -368,7 +368,12 @@ describe('Staff task routes', () => {
   it('projects: a head starts one, a member of another team reads its task over HTTP, an outsider gets 404', async () => {
     const dev = await makeUser('Dev', 'staff', { team: 'developer', isHead: false, active: true });
     const outsider = await makeUser('Sita', 'staff', { team: 'sales', isHead: false, active: true });
-    expect((await member.session.post('/staff/tasks/projects', { name: 'Nope' })).status).toBe(403);
+    // A plain member starts their own project, but not one for someone else.
+    expect((await member.session.post('/staff/tasks/projects', { name: 'Nope', ownerId: String(head.user._id) })).status).toBe(403);
+    const own = await member.session.post('/staff/tasks/projects', { name: 'Shelf labels', clientId: 'route-proj-mine' });
+    expect(own.status).toBe(201);
+    expect(own.body.project.owner.id).toBe(String(member.user._id));
+    expect((await member.session.get('/staff/tasks/projects')).body).toMatchObject({ canCreate: true, canPickOwner: false });
     const made = await head.session.post('/staff/tasks/projects', { name: 'Diwali launch', memberIds: [String(dev.user._id)], dueOn: '2030-10-25', clientId: 'route-proj-0001' });
     expect(made.status).toBe(201);
     const again = await head.session.post('/staff/tasks/projects', { name: 'Diwali launch', clientId: 'route-proj-0001' });
