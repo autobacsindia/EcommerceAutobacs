@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp } from 'lucide-react';
+import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -107,6 +107,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
       { href: '/team/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
       { href: '/team/price-calculator', label: 'Price calculator', icon: Calculator },
       { href: '/team/shipping-calculator', label: 'Shipping calculator', icon: Truck },
+      // The courier rates customers are charged at checkout (rates only; switches stay admin).
+      { href: '/team/delivery-fees', label: 'Delivery fees', icon: IndianRupee },
     );
   }
   // GTM head only: customers' ratings of the salespeople (read only). The API refuses other heads.
