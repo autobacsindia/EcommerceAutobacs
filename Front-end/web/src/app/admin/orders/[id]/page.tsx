@@ -35,6 +35,7 @@ import AdminOrderJourney from '@/components/orders/AdminOrderJourney';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderOverview from '@/components/admin/OrderOverview';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
+import EditOrderAddress from '@/components/admin/EditOrderAddress';
 import OrderDeliveryFees, { type OrderDeliveryFeesSnapshot } from '@/components/orders/OrderDeliveryFees';
 
 /** What the gateway holds — and so the most a refund can send back. */
@@ -157,6 +158,10 @@ interface Order {
   gatewayOffer?: GatewayOffer | null;
   /** An accepted GTM quotation's % discount (inside `discount`): who gave it and why. */
   salesDiscount?: { percent: number; amount: number; reason?: string; byName?: string; at?: string } | null;
+  /** Admin only: may the delivery address still be corrected (nothing shipped yet)? */
+  addressEditable?: boolean;
+  /** Admin only: earlier address corrections, newest last. */
+  addressChanges?: Array<{ at: string; byName?: string; reason?: string }>;
   trackingNumber?: string;
   carrier?: {
     name?: string;
@@ -212,6 +217,7 @@ function AdminOrderDetailPageInner() {
   // so reconciling a dashboard refund does not mean copying the id across by hand.
   const [offlineReference, setOfflineReference] = useState('');
   const [packingReward, setPackingReward] = useState(false);
+  const [editingAddress, setEditingAddress] = useState(false);
   // Set when the admin picks "Shipped": scrolls to the Parcels panel and opens its
   // create-parcel form, so they choose what goes in the box.
   const [openParcelForm, setOpenParcelForm] = useState(0);
@@ -842,12 +848,27 @@ function AdminOrderDetailPageInner() {
           {/* Shipping Address */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Shipping Address
-              </h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Shipping Address
+                </h2>
+                {canManage && order.addressEditable && !editingAddress && (
+                  <button type="button" onClick={() => setEditingAddress(true)} className="rounded border px-3 py-1 text-sm text-blue-700 hover:bg-blue-50">
+                    Edit address
+                  </button>
+                )}
+              </div>
             </div>
             <div className="p-6">
+              {editingAddress ? (
+                <EditOrderAddress
+                  orderId={order._id}
+                  address={order.shippingAddress}
+                  onCancel={() => setEditingAddress(false)}
+                  onSaved={() => { setEditingAddress(false); toast.success('Address updated'); fetchOrder(); }}
+                />
+              ) : (<>
               <p className="font-medium">{order.shippingAddress.fullName}</p>
               <p className="text-gray-600">{order.shippingAddress.phone}</p>
               {order.shippingAddress.alternatePhone && (
@@ -861,6 +882,17 @@ function AdminOrderDetailPageInner() {
                 {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}
               </p>
               <p className="text-gray-600">{order.shippingAddress.country}</p>
+              {canManage && (order.addressChanges?.length ?? 0) > 0 && (
+                <details className="mt-3 text-sm text-gray-600">
+                  <summary className="cursor-pointer">Address changed {order.addressChanges!.length} time{order.addressChanges!.length === 1 ? '' : 's'}</summary>
+                  <ul className="mt-2 space-y-1">
+                    {[...order.addressChanges!].reverse().map((c, i) => (
+                      <li key={`${c.at}-${i}`}>{formatLongDateTimeIST(c.at)} · {c.byName || 'Admin'} · {c.reason}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+              </>)}
             </div>
           </div>
         </div>
