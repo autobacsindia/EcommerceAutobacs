@@ -207,7 +207,8 @@ const STATUS_ICON: Record<TaskStatus, LucideIcon> = {
 };
 
 /** A project status's own colour (the owner picks it), solid so it reads the same in light and dark. */
-const STAGE_PILL: Record<string, string> = {
+/** A column / status colour, as a solid pill. Also the colour swatches on the board. */
+export const STAGE_PILL: Record<string, string> = {
   gray: 'bg-gray-500 text-white', red: 'bg-red-600 text-white', orange: 'bg-orange-600 text-white', amber: 'bg-amber-500 text-gray-950',
   green: 'bg-green-600 text-white', teal: 'bg-teal-600 text-white', blue: 'bg-blue-600 text-white', violet: 'bg-violet-600 text-white', pink: 'bg-pink-600 text-white',
 };

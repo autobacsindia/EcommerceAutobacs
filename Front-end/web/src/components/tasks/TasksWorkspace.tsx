@@ -624,7 +624,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
         ) : layout === 'calendar' ? (
           <TaskCalendar filters={filters} onOpen={setOpenId} />
         ) : layout === 'board' ? (
-          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} onTag={filterTag} base={base} stages={stages} />
+          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} onTag={filterTag} base={base} stages={stages} project={view === 'project' && project.data?.can.edit ? project.data : undefined} />
         ) : (
           <TaskListView
             // A new list is a new selection: ticks never carry over to tasks no longer shown.

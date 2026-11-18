@@ -11,9 +11,10 @@ import { Kbd } from '@/components/panel/shortcuts';
 import { useQuickEdit, useRefreshTasks, useTaskPages, type QuickEdit } from './hooks';
 import { QuickDate, QuickMove, QuickPeople, QuickPriority } from './CardActions';
 import TaskMenu from './TaskMenu';
+import { AddColumn, ColumnMenu } from './BoardColumns';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { Chip, GroupCount, GroupPill, SkeletonRows } from './ui';
-import { TASK_STATUSES, confirmComplete, isConflict, listOf, orderHrefFor, projectListOf, projectOf, stageOf, type ProjectStage, type Task, type TaskFilters, type TaskStatus } from './types';
+import { TASK_STATUSES, confirmComplete, isConflict, listOf, orderHrefFor, projectListOf, projectOf, stageOf, type Project, type ProjectStage, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** One board column: a status, or one of the project's own statuses (`stageId`). */
 type Column = { key: string; label: string; kind: TaskStatus; stageId?: string; colour?: string };
@@ -110,12 +111,14 @@ function BoardCard({ t, base, column, columns, onOpen, onMove, onMoveTo, moving,
  * (someone changed the task first, no permission) the card goes back and a
  * message says why.
  */
-export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, stages = [] }: {
+export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, stages = [], project }: {
   filters: TaskFilters; onOpen: (id: string) => void; quickAddFor?: string | null; onTag?: (tag: string) => void;
   /** Where the panel's pages live (/team or /admin), for the order link on a card. */
   base?: string;
   /** A project's own statuses: they become the columns. Empty: To do · In progress · Complete. */
   stages?: ProjectStage[];
+  /** The project shown, when this person may change it: its columns get "+ Add column" and a ⋯ menu. */
+  project?: Project;
 }) {
   const refresh = useRefreshTasks();
   const open = useTaskPages(filters, 'open');
@@ -198,6 +201,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
               <h3 className="flex items-center gap-2 px-2.5 pb-2 pt-2.5">
                 <GroupPill status={col.kind} colour={col.colour}>{col.label}</GroupPill>
                 <GroupCount status={col.kind}>{cards.length}</GroupCount>
+                {project && col.stageId && <ColumnMenu project={project} stageId={col.stageId} shownTasks={cards.length} />}
               </h3>
               {cards.length === 0 && <p className="px-3 py-2 text-center text-xs text-gray-500">No tasks here</p>}
               <ul className="min-h-4 flex-1 space-y-1.5 overflow-y-auto px-2 pb-1 [scrollbar-width:thin]">
@@ -218,6 +222,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
             </section>
           );
         })}
+        {project && <AddColumn project={project} />}
       </div>
       {open.hasNextPage && (
         <button onClick={() => open.fetchNextPage()} disabled={open.isFetchingNextPage} className="w-full rounded-lg py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">

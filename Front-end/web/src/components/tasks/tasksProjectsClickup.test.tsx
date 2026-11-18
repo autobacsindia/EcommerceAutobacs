@@ -209,6 +209,105 @@ describe('a project’s own statuses', () => {
   });
 });
 
+describe('columns changed from the board', () => {
+  const board = (one: Project) => {
+    localStorage.setItem('tasks-view-mode', 'board');
+    serve({ one });
+    get.mockImplementation(((orig) => (url: string) => (url.startsWith('/staff/tasks?')
+      ? Promise.resolve({ tasks: url.includes('state=done') ? [] : [task({ project: 'p1', stage: 's3', status: 'in_progress', statusLabel: 'Review' })], nextCursor: null })
+      : orig(url)))(get.getMockImplementation()!));
+    patch.mockResolvedValue({ project: one });
+    openProject();
+    head();
+  };
+
+  it('"Add column" on a board with the usual three keeps them and adds the new one before Complete', async () => {
+    board(project());
+    fireEvent.click(await screen.findByRole('button', { name: /Add column/ }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Garage 1'), { target: { value: 'Garage 1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/projects/p1', {
+      rev: 2,
+      statuses: [
+        { name: 'To do', colour: 'gray', type: 'todo' },
+        { name: 'In progress', colour: 'blue', type: 'in_progress' },
+        { name: 'Garage 1', colour: 'gray', type: 'in_progress' },
+        { name: 'Complete', colour: 'green', type: 'done' },
+      ],
+    }));
+  });
+
+  it('a name another column has is refused before saving', async () => {
+    board(project({ statuses: STAGES }));
+    fireEvent.click(await screen.findByRole('button', { name: /Add column/ }));
+    fireEvent.change(screen.getByPlaceholderText('e.g. Garage 1'), { target: { value: ' review ' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('Another column already has that name.');
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+  });
+
+  it('renames and recolours a column, keeping every other column by its id', async () => {
+    board(project({ statuses: STAGES }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change column Review' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Column Review' });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Garage 2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'teal' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/projects/p1', {
+      rev: 2,
+      statuses: [
+        { id: 's1', name: 'Ideas', colour: 'gray', type: 'todo' },
+        { id: 's2', name: 'Designing', colour: 'blue', type: 'in_progress' },
+        { id: 's3', name: 'Garage 2', colour: 'teal', type: 'in_progress' },
+        { id: 's4', name: 'Live', colour: 'green', type: 'done' },
+      ],
+    }));
+  });
+
+  it('moves a column left', async () => {
+    board(project({ statuses: STAGES }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change column Review' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Move left/ }));
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect((patch.mock.calls[0][1] as { statuses: { id: string }[] }).statuses.map((x) => x.id)).toEqual(['s1', 's3', 's2', 's4']);
+  });
+
+  it('deleting asks where its tasks go, offering only columns that are open the same way', async () => {
+    board(project({ statuses: STAGES }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change column Review' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Delete column/ }));
+    const where = screen.getByLabelText('Move its tasks to');
+    // Live is a Done column: open tasks can't go there.
+    expect(within(where).getAllByRole('option').map((o) => o.textContent)).toEqual(['Ideas', 'Designing']);
+    expect(screen.getByText(/Its task will move to/)).toBeInTheDocument();
+    fireEvent.change(where, { target: { value: 's1' } });
+    fireEvent.click(screen.getByRole('button', { name: /Delete and move tasks/ }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/projects/p1', {
+      rev: 2,
+      statuses: [
+        { id: 's1', name: 'Ideas', colour: 'gray', type: 'todo' },
+        { id: 's2', name: 'Designing', colour: 'blue', type: 'in_progress' },
+        { id: 's4', name: 'Live', colour: 'green', type: 'done' },
+      ],
+      statusMoves: [{ from: 's3', to: 's1' }],
+    }));
+  });
+
+  it('the last Done column can’t be deleted, and says why', async () => {
+    board(project({ statuses: STAGES }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change column Live' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Delete column/ }));
+    expect(screen.getByRole('alert')).toHaveTextContent('is the last “Done” column');
+    expect(screen.getByRole('button', { name: /Delete and move tasks/ })).toBeDisabled();
+  });
+
+  it('someone who can’t change the project sees no column controls', async () => {
+    board(project({ statuses: STAGES, can: { edit: false, archive: false, restore: false } }));
+    expect(await screen.findByRole('region', { name: 'Review' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Add column/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Change column/ })).not.toBeInTheDocument();
+  });
+});
+
 describe('the Calendar view', () => {
   it('a month is whole weeks, Monday first', () => {
     const nov = monthGrid('2026-11-01');
