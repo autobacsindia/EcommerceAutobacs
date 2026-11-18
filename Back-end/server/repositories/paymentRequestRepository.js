@@ -19,6 +19,25 @@ export const sumByCurrency = (rows = []) => {
  * Payment requests (models/PaymentRequest.js). Data access only — who may do
  * what lives in services/paymentRequestService.js.
  */
+const LINKED_FIELDS = 'number kind status team category amount currency foreignAmount payee.name order orderNumber project projectCode projectName reference requestedByName payment.paidAt payment.transactionAt createdAt'
+  .split(' ');
+/** At most this many item names ride along as a supplier payment's "what for". */
+const PURPOSE_ITEMS_MAX = 10;
+/**
+ * What a linked-payments page reads. With `purposeChars`, also what each payment
+ * was for — cut in the database (`purpose`), so a 12,000-character description
+ * never leaves it for a one-line label (measured: a page of long notes read
+ * ~137 KB instead of ~7.5 KB).
+ */
+const linkedFields = (purposeChars) => {
+  const fields = Object.fromEntries(LINKED_FIELDS.map((f) => [f, 1]));
+  if (purposeChars > 0) {
+    fields.purpose = { $substrCP: [{ $ifNull: ['$description', ''] }, 0, purposeChars] };
+    fields.itemNames = { $slice: [{ $ifNull: ['$itemNames', []] }, PURPOSE_ITEMS_MAX] };
+  }
+  return fields;
+};
+
 const paymentRequestRepository = {
   create: async (doc, session = null) => (await PaymentRequest.create([doc], { session }))[0].toObject(),
   findById: (id) => PaymentRequest.findById(id).lean(),
@@ -30,7 +49,7 @@ const paymentRequestRepository = {
    * or carrying an other ID (payment_request_reference), newest first. `after` is the last
    * row's { createdAt, _id }; `limit` bounds the read.
    */
-  pageLinked: (by, { after = null, limit }) => {
+  pageLinked: (by, { after = null, limit, purposeChars = 0 }) => {
     // One order's rows ride payment_request_order and are sorted in memory: an order has a handful.
     // Plain equality on the project (an ObjectId from our own read): payment_request_project is a sorted range.
     const base = by.project ? { project: by.project }
@@ -44,7 +63,7 @@ const paymentRequestRepository = {
     return PaymentRequest.find({ ...base, ...keyset })
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit)
-      .select('number kind status team category amount currency foreignAmount payee.name order orderNumber project projectCode projectName reference requestedByName payment.paidAt payment.transactionAt createdAt')
+      .select(linkedFields(purposeChars))
       .lean();
   },
   /** The orders of a project's payments, each once (payment_request_project; at most `cap` rows read). */

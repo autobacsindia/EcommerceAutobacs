@@ -27,6 +27,7 @@ import { teamColour } from '@/components/chat/chatUi';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import { SpaceTree, allLists, dotOf, useSpace } from './spaces';
 import { ProjectHeader, ProjectListTabs, ProjectsView, useProject } from './Projects';
+import { ProjectMoney } from './ProjectMoney';
 import { TaskRulesEditor } from './dueRules';
 import {
   TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, listOf, personLabel, projectListOf, projectOf, unreadLabel,
@@ -533,6 +534,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
         {view === 'project' && (project.data
           ? <>
             <ProjectHeader p={project.data} onBack={showProjects} isAdmin={isAdmin} />
+            <ProjectMoney p={project.data} isAdmin={isAdmin} />
             <ProjectListTabs p={project.data} value={projectList} onChange={(plist) => setList({ plist })} />
           </>
           : project.isError ? (

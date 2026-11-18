@@ -63,7 +63,7 @@ const taskRow = (t) => ({
   order: t.order ? { id: idOf(t.order.target), number: t.order.code } : null,
 });
 
-const paymentRow = (r) => ({
+export const paymentRow = (r) => ({
   id: idOf(r._id),
   number: r.number,
   kind: r.kind,
@@ -119,7 +119,12 @@ async function orderTaskPage(orderId, cursor) {
   return { items: page.map(taskRow), nextCursor: more ? enc({ i: idOf(page[page.length - 1]._id) }) : null };
 }
 
-async function paymentPage(by, cursor) {
+/**
+ * One page of the payments linked to a project / order / ID, newest first.
+ * `shape` turns a row into what the screen gets; `purposeChars` also reads what
+ * each payment was for, cut to that length in the database (the project's Money box).
+ */
+export async function paymentPage(by, cursor, { shape = paymentRow, purposeChars = 0 } = {}) {
   const c = dec(cursor);
   let after = null;
   if (c) {
@@ -127,15 +132,15 @@ async function paymentPage(by, cursor) {
     if (Number.isNaN(at.getTime())) throw fail('Invalid page cursor.', 400);
     after = { createdAt: at, id: oid(c.i) };
   }
-  const rows = await paymentRequestRepository.pageLinked(by, { after, limit: LOOKUP_PAGE_SIZE + 1 });
+  const rows = await paymentRequestRepository.pageLinked(by, { after, limit: LOOKUP_PAGE_SIZE + 1, purposeChars });
   const more = rows.length > LOOKUP_PAGE_SIZE;
   const page = more ? rows.slice(0, LOOKUP_PAGE_SIZE) : rows;
   const last = page[page.length - 1];
-  return { items: page.map(paymentRow), nextCursor: more ? enc({ c: last.createdAt.toISOString(), i: idOf(last._id) }) : null };
+  return { items: page.map(shape), nextCursor: more ? enc({ c: last.createdAt.toISOString(), i: idOf(last._id) }) : null };
 }
 
 /** Paid / waiting / declined… for a project, in rupees. Foreign bills not yet priced count as 0. */
-async function paymentTotals(projectId) {
+export async function paymentTotals(projectId) {
   const rows = await paymentRequestRepository.totalsForProject(projectId);
   const by = Object.fromEntries(rows.map((r) => [r._id, { count: r.n, amount: Math.round(r.amount * 100) / 100 }]));
   const sum = (ks) => ks.reduce((s, k) => s + (by[k]?.amount || 0), 0);
