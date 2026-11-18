@@ -333,6 +333,8 @@ export const taskKeys = {
   projects: () => [...taskKeys.all, 'projects'] as const,
   projectList: (state: string) => [...taskKeys.projects(), 'list', state] as const,
   project: (id: string) => [...taskKeys.projects(), 'one', id] as const,
+  /** Job templates for the New project form (saved from a project). */
+  jobTemplates: () => [...taskKeys.projects(), 'templates'] as const,
   projectPick: () => [...taskKeys.projects(), 'pick'] as const,
   /** The Details forms (static per deploy) and the owner's daily reminder. */
   projectTemplates: () => [...taskKeys.all, 'projectTemplates'] as const,

@@ -40,6 +40,8 @@ import {
   validateProjectId,
   validateProjectCreate,
   validateProjectUpdate,
+  validateJobTemplateId,
+  validateJobTemplateSave,
   validateDueApproval,
   validateTaskRules,
 } from '../validators/staffTask.validator.js';
@@ -51,6 +53,9 @@ import { templatesForPanel, updateDetails, previewFromOrder } from '../services/
 import { loadSlip, saveSlipValues } from '../services/slipTemplateService.js';
 import { renderProjectSlip } from '../services/projectSlipService.js';
 import { getReminder, dismissReminder } from '../services/projectReminderService.js';
+import {
+  listJobTemplates, saveJobTemplate, deleteJobTemplate, createProjectFromTemplate,
+} from '../services/staffJobTemplateService.js';
 import { listLinks, linkOptions, addLink, removeLink } from '../services/staffTaskLinkService.js';
 import { getSpace, createListItem, updateListItem, deleteListItem } from '../services/staffTaskListService.js';
 import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
@@ -203,8 +208,29 @@ router.post('/projects/reminder/dismiss', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await dismissReminder(req.user, req.body?.day)) });
 }));
 
-// @route  POST /staff/tasks/projects { name, description?, colour?, startOn?, dueOn?, ownerId?, memberIds?, clientId? } — admin or a team head
+// @route  GET /staff/tasks/projects/job-templates — the job templates, for the New project form (admin, team heads)
+router.get('/projects/job-templates', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ success: true, ...(await listJobTemplates(req.user)) });
+}));
+
+// @route  DELETE /staff/tasks/projects/job-templates/:templateId — the admin or whoever saved it
+router.delete('/projects/job-templates/:templateId', validateJobTemplateId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await deleteJobTemplate(req.user, req.params.templateId, req)) });
+}));
+
+// @route  POST /staff/tasks/projects/:projectId/template { name } — save the project as a job template (owner or admin)
+router.post('/projects/:projectId/template', validateJobTemplateSave, validateRequest, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, template: await saveJobTemplate(req.user, req.params.projectId, req.body, req) });
+}));
+
+// @route  POST /staff/tasks/projects { name, description?, colour?, startOn?, dueOn?, ownerId?, memberIds?, clientId?, templateId? } — admin or a team head
 router.post('/projects', validateProjectCreate, validateRequest, asyncHandler(async (req, res) => {
+  if (req.body.templateId) {
+    const { project, duplicate, fromTemplate } = await createProjectFromTemplate(req.user, req.body, req);
+    res.status(duplicate ? 200 : 201).json({ success: true, project, duplicate, fromTemplate });
+    return;
+  }
   const { project, duplicate } = await createProject(req.user, req.body, req);
   res.status(duplicate ? 200 : 201).json({ success: true, project, duplicate });
 }));

@@ -247,3 +247,94 @@ describe('a task’s Project field', () => {
     expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull();
   });
 });
+
+describe('job templates', () => {
+  const FITTING = {
+    id: 'jt1', name: 'Fitting job', colour: 'blue', columns: ['To do', 'Garage 1', 'Garage 2', 'Done'], lists: ['Fitting', 'Paperwork'],
+    taskCount: 9, tasks: ['Order parts', 'Fit roof rack'], fromProject: 'PRJ-0007', createdByName: 'Meera', can: { delete: true },
+  };
+  const withTemplates = (list: unknown[]) => {
+    const orig = get.getMockImplementation()!;
+    get.mockImplementation((url: string) => (url === '/staff/tasks/projects/job-templates' ? Promise.resolve({ templates: list }) : orig(url)));
+  };
+  const openNew = async () => {
+    addressBar.reset('/team/tasks', 'view=projects');
+    head();
+    fireEvent.click((await screen.findAllByRole('button', { name: /New project/ }))[0]);
+    return screen.findByRole('dialog', { name: 'New project' });
+  };
+
+  it('New project starts from a template: it shows what comes with it and sends only its id, not lists or columns', async () => {
+    serve({ projects: [] });
+    withTemplates([FITTING]);
+    post.mockResolvedValue({ project: project({ id: 'p9' }), fromTemplate: { name: 'Fitting job', tasks: 9, movedEarlier: 0, failed: [] } });
+    const dialog = await openNew();
+    fireEvent.change(await within(dialog).findByLabelText('Start from'), { target: { value: 'jt1' } });
+    expect(within(dialog).getByText(/To do · Garage 1 · Garage 2 · Done/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Order parts, Fit roof rack and 7 more/)).toBeInTheDocument();
+    // The template brings its own: the editors step aside.
+    expect(within(dialog).queryByText(/Use this project’s own statuses/)).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Project name'), { target: { value: 'Arun’s Thar' } });
+    fireEvent.change(within(dialog).getByLabelText('Start date'), { target: { value: '2026-11-20' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, body] = post.mock.calls[0];
+    expect(body).toMatchObject({ name: 'Arun’s Thar', startOn: '2026-11-20', templateId: 'jt1', clientId: expect.any(String) });
+    expect(body).not.toHaveProperty('lists');
+    expect(body).not.toHaveProperty('statuses');
+    const toast = (jest.requireMock('react-hot-toast') as { default: { success: jest.Mock } }).default;
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Project created from “Fitting job” with 9 tasks.', undefined));
+  });
+
+  it('with no templates the form is as before; its author can delete one', async () => {
+    serve({ projects: [] });
+    withTemplates([]);
+    const dialog = await openNew();
+    expect(within(dialog).queryByLabelText('Start from')).toBeNull();
+    expect(within(dialog).getByText(/Use this project’s own statuses/)).toBeInTheDocument();
+  });
+
+  it('the author deletes a template from the picker', async () => {
+    serve({ projects: [] });
+    withTemplates([FITTING]);
+    const del = jest.requireMock('@/lib/api-client').default.delete as jest.Mock;
+    del.mockResolvedValue({ deleted: true });
+    const dialog = await openNew();
+    fireEvent.change(await within(dialog).findByLabelText('Start from'), { target: { value: 'jt1' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Delete this template/ }));
+    await waitFor(() => expect(del).toHaveBeenCalledWith('/staff/tasks/projects/job-templates/jt1'));
+  });
+
+  it('the owner saves a project as a template by name; someone without edit rights sees no button', async () => {
+    serve({ one: project() });
+    post.mockResolvedValue({ template: { ...FITTING, taskCount: 3 } });
+    addressBar.reset('/team/tasks', 'view=project&project=p1');
+    head();
+    fireEvent.click(await screen.findByRole('button', { name: /Save as template/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Save as job template' });
+    expect(within(dialog).getByRole('button', { name: /Save template/ })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText('Template name'), { target: { value: ' Fitting job ' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save template/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/projects/p1/template', { name: 'Fitting job' }));
+  });
+
+  it('a name already taken is said in the box', async () => {
+    serve({ one: project() });
+    post.mockRejectedValue({ status: 409, rawData: { message: 'There is already a template called “Fitting job”. Pick another name.' } });
+    addressBar.reset('/team/tasks', 'view=project&project=p1');
+    head();
+    fireEvent.click(await screen.findByRole('button', { name: /Save as template/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Save as job template' });
+    fireEvent.change(within(dialog).getByLabelText('Template name'), { target: { value: 'Fitting job' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save template/ }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/already a template/);
+  });
+
+  it('no Save as template without edit rights', async () => {
+    serve({ one: project({ can: { edit: false, archive: false, restore: false } }) });
+    addressBar.reset('/team/tasks', 'view=project&project=p1');
+    head();
+    expect(await screen.findByRole('region', { name: 'Project' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Save as template/ })).toBeNull();
+  });
+});
