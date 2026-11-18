@@ -48,6 +48,7 @@ import {
   loadProjectAccess, listProjects, pickableProjects, getProject, createProject, updateProject,
 } from '../services/staffProjectService.js';
 import { templatesForPanel, updateDetails, previewFromOrder } from '../services/staffProjectDetailsService.js';
+import { projectMoney } from '../services/projectMoneyService.js';
 import { loadSlip, saveSlipValues } from '../services/slipTemplateService.js';
 import { renderProjectSlip } from '../services/projectSlipService.js';
 import { getReminder, dismissReminder } from '../services/projectReminderService.js';
@@ -212,6 +213,13 @@ router.post('/projects', validateProjectCreate, validateRequest, asyncHandler(as
 // @route  GET /staff/tasks/projects/:projectId
 router.get('/projects/:projectId', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, project: await getProject(req.user, req.params.projectId) });
+}));
+
+// @route  GET /staff/tasks/projects/:projectId/payments?cursor= — the Money box: the admin, Accounts and the owner
+router.get('/projects/:projectId/payments', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+  res.json({ success: true, ...(await projectMoney(req.user, req.params.projectId, { cursor })) });
 }));
 
 // @route  PUT /staff/tasks/projects/:projectId/details { rev, template, values, custom, orderId? } — the project's people
