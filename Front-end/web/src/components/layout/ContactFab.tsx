@@ -6,12 +6,17 @@ import { trackContact } from '@/lib/contactTracking';
 import { SITE_URL } from '@/lib/siteUrl';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 
-/** Not on staff/admin screens, nor in checkout where it would compete with Pay. */
+/**
+ * Not on staff/admin screens, nor in cart/checkout where it would compete with
+ * the buttons that finish the order (on phones it sat on the cart's delete and
+ * "Clear cart" buttons).
+ */
 function isSuppressed(pathname: string | null): boolean {
   if (!pathname) return false;
   return (
     pathname.startsWith('/admin') ||
     pathname === '/team' || pathname.startsWith('/team/') ||
+    pathname === '/cart' ||
     pathname.startsWith('/checkout') ||
     pathname === '/careers' || pathname.startsWith('/careers/') ||
     pathname.startsWith('/staff-invite')
@@ -60,6 +65,13 @@ export default function ContactFab() {
     : 'bottom-[calc(80px_+_env(safe-area-inset-bottom))]';
 
   return (
+    <>
+    {/* Phones: empty room after the footer, as tall as the floating stack
+        (launcher + WhatsApp + Call tops out at 188px, plus a little air), so
+        the last price/link on any page can scroll clear of the buttons. On a
+        product page the sticky Add-to-cart bar already reserves its own room
+        below this, which together covers the lifted stack (→ 300px). */}
+    <div aria-hidden="true" data-testid="fab-clearance" className="h-[calc(196px_+_env(safe-area-inset-bottom))] md:hidden" />
     <div className={`fixed right-4 z-40 flex flex-col items-end gap-3 ${bottom} md:bottom-28`}>
       <a
         href={whatsappLink(message)}
@@ -82,5 +94,6 @@ export default function ContactFab() {
         <Phone className="h-5 w-5 md:h-6 md:w-6" />
       </a>
     </div>
+    </>
   );
 }

@@ -9,6 +9,7 @@ export function isHelpBotSuppressed(pathname: string | null): boolean {
   return (
     p.startsWith('/admin') ||
     p === '/team' || p.startsWith('/team/') ||
+    p === '/cart' ||                  // nor with the cart's own buttons
     p.startsWith('/checkout') ||      // nothing competes with Pay
     p.startsWith('/staff-invite') ||
     p === '/careers' ||
