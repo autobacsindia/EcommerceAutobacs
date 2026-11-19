@@ -15,6 +15,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
+import { savingsLabel } from '@/lib/savings';
 import CampaignRateBadge from '@/components/campaign/CampaignRateBadge';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
@@ -134,9 +135,8 @@ export default function BuyBox({
     // The time-boxed countdown only applies to simple-product sales; variant
     // "was" prices are static badges.
     (isVariable || !product.saleEndsAt || saleLive);
-  const discount = onSale
-    ? Math.round(((activeOriginal! - activePrice) / activeOriginal!) * 100)
-    : 0;
+  // Rupees saved against the M.R.P. ("Save ₹250"), not a percentage — display only.
+  const saveLabel = onSale ? savingsLabel(activePrice, activeOriginal, (n) => formatPrice(n)) : null;
   /*
     Diwali offer — an EXTRA % on top of the selling price of the exact unit being
     bought; M.R.P. strike-through and the sale badge stay as they are. A simple product
@@ -262,9 +262,11 @@ export default function BuyBox({
         {onSale && (
           <>
             <span className="text-[15px] text-ink-muted">M.R.P.: <span className="line-through">{formatPrice(activeOriginal!)}</span></span>
-            <span className="rounded-md bg-[#cc0c39] px-2.5 py-1 text-[13px] font-bold text-[#fff]">
-              -{discount}%
-            </span>
+            {saveLabel && (
+              <span className="rounded-md bg-[#cc0c39] px-2.5 py-1 text-[13px] font-bold text-[#fff]" data-testid="pdp-save-badge">
+                {saveLabel}
+              </span>
+            )}
             {/* Festival label on an existing sale only — visual, no price logic. */}
             <FestivalDealBadge
               price={needsSelection ? null : saleExpired ? activeOriginal : activePrice}

@@ -8,6 +8,7 @@ import type { PublicFestivalTheme } from '@/lib/festival/festivalTheme';
 import { festivalVars } from '@/components/festival/festivalStyle';
 import { countdownParts } from '@/components/festival/FestivalCountdown';
 import type { FestiveHeroPhoto } from './FestiveHome';
+import { useCurrency } from '@/context/CurrencyContext';
 
 /**
  * The Black Friday hero ("neon" festival style): night stage, neon-red light
@@ -47,6 +48,7 @@ export default function BlackFridayHero({
   /** Only when checkout really waives shipping/packing/delivery (server flag). */
   showSeal?: boolean;
 }) {
+  const { formatPrice } = useCurrency();
   const copy = tokens.home;
   const [line1, line2, line3] = copy.heroTitle;
   const art = photos.slice(0, 3);
@@ -126,7 +128,7 @@ export default function BlackFridayHero({
                   <span className="bfh-card-media">
                     <Img src={p.src} alt={p.name} className="bfh-card-img" sizes="(max-width: 768px) 30vw, 200px" priority={k === 0} />
                   </span>
-                  {p.off > 0 && <span className="bfh-card-tag">-{p.off}%</span>}
+                  {p.save > 0 && <span className="bfh-card-tag">Save {formatPrice(p.save)}</span>}
                   <span className="bfh-card-name">{p.name}</span>
                 </Link>
               ))}

@@ -160,9 +160,10 @@ describe('StoreProductCard campaign badge', () => {
         campaignRate={{ percent: 2, onSaleCapped: true }}
       />,
     );
-    // The catalogue markdown stays a percentage — it is a different claim from the
-    // campaign's, and keeping the two shapes distinct is what tells them apart.
-    expect(screen.getByText('-25%')).toBeInTheDocument();
+    // The catalogue markdown reads "Save ₹250" (M.R.P. − price) and the campaign
+    // "+₹15 off" — different wording keeps the two claims apart.
+    expect(screen.getByText('Save ₹250')).toBeInTheDocument();
+    expect(screen.queryByText('-25%')).not.toBeInTheDocument();
     expect(screen.getByText('+₹15 off')).toBeInTheDocument();
   });
 });

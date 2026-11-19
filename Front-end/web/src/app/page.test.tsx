@@ -68,13 +68,16 @@ it('advertises the real number of deals and the biggest real saving', () => {
   expect(screen.getByText(/75 products on sale now/)).toBeInTheDocument();
 });
 
-it('shows MRP and % off only on products that are genuinely on sale', () => {
+it('shows MRP and the rupee saving only on products that are genuinely on sale', () => {
   render(<StoreHome data={data} />);
   const deals = screen.getByRole('heading', { name: "Today's Deals" }).closest('section') as HTMLElement;
   expect(deals.querySelectorAll('.st-mrp')).toHaveLength(4);
-  expect(within(deals).getByText('-40%')).toBeInTheDocument();
+  // ₹1,000 M.R.P. at ₹600 reads "Save ₹400", not "-40%".
+  expect(within(deals).getByText('Save ₹400')).toBeInTheDocument();
+  expect(within(deals).queryByText('-40%')).not.toBeInTheDocument();
   const best = screen.getByRole('heading', { name: 'Best Sellers' }).closest('section') as HTMLElement;
   expect(best.querySelectorAll('.st-mrp')).toHaveLength(0);
+  expect(within(best).queryByText(/^Save /)).not.toBeInTheDocument();
   expect(within(best).getByText('#1 Best seller')).toBeInTheDocument();
 });
 

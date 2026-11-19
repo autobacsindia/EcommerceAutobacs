@@ -44,8 +44,8 @@ export interface FestiveHeroPhoto {
   src: string;
   href: string;
   name: string;
-  /** Real discount of that product, 0 when it is not on sale. */
-  off: number;
+  /** Real rupees saved on that product (M.R.P. − price), 0 when it is not on sale. */
+  save: number;
 }
 
 export function FestiveHero({
@@ -66,6 +66,7 @@ export function FestiveHero({
   freeDelivery?: boolean;
 }) {
   const festival = useFestival();
+  const { formatPrice } = useCurrency();
   if (!festival) return null;
   const { tokens } = festival;
   if (tokens.style === 'neon') {
@@ -127,7 +128,7 @@ export function FestiveHero({
                 <span className="fxh-arch-media">
                   <Img src={p.src} alt={p.name} className="fxh-arch-img" sizes="(max-width: 768px) 30vw, 220px" priority={k === 0} />
                 </span>
-                {p.off > 0 && <span className="fxh-arch-tag">-{p.off}%</span>}
+                {p.save > 0 && <span className="fxh-arch-tag">Save {formatPrice(p.save)}</span>}
               </Link>
             ))}
           </div>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Img from '../redesign/Img';
 import { useCurrency } from '@/context/CurrencyContext';
+import { savingsLabel } from '@/lib/savings';
 import { discountPct, type StoreProduct } from './storeData';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
@@ -29,6 +30,8 @@ export function Stars({ rating, size = 14 }: { rating: number; size?: number }) 
 export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: string }) {
   const { formatPrice } = useCurrency();
   const off = discountPct(p);
+  // The chip reads "Save ₹250", not "-5%" — display only, from the tile's own prices.
+  const saveLabel = savingsLabel(p.price, p.originalPrice, (n) => formatPrice(n));
   // Diwali offer (display mirror; the cart charges the server's figure) — an EXTRA %
   // on top of the price; the sale line and M.R.P. stay. Skipped for a variable product,
   // whose tile price is not one model's exact price.
@@ -43,7 +46,7 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
       <div className="st-tile-body">
         {off > 0 && (
           <div className="st-deal-line">
-            <span className="st-off">-{off}%</span>
+            {saveLabel && <span className="st-off">{saveLabel}</span>}
             <span className="st-deal-label">{p.offerEndDate ? 'Limited time deal' : 'Deal'}</span>
             <FestivalDealBadge price={p.variable ? null : p.price} setting={p.festivalOfferSetting} />
           </div>

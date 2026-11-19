@@ -120,9 +120,9 @@ describe('OffersPage', () => {
       expect(screen.getByText('Offer Product 2')).toBeInTheDocument();
     });
 
-    // Check discount badge for product 1 (StoreProductCard renders "-33%")
-    // (originalPrice - price) / originalPrice * 100 = (150 - 100) / 150 * 100 = 33%
-    expect(screen.getByText('-33%')).toBeInTheDocument();
+    // Sale badge for product 1 is the rupee saving, M.R.P. − price = 150 − 100,
+    // in the page's own currency formatter (mocked as AED here).
+    expect(screen.getByText('Save AED 50')).toBeInTheDocument();
 
     // Fetched page 1 at the standard page size.
     expect(apiClient.get).toHaveBeenCalledWith('/products/offers?page=1&limit=24');

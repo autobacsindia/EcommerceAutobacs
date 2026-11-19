@@ -98,11 +98,11 @@ describe('StoreProductCard — Diwali offer (display mirror)', () => {
     expect(tag).toHaveTextContent('You save ₹4,000');
   });
 
-  it('stacks on an existing sale and keeps the M.R.P. strike-through and −20% badge (Profender)', () => {
+  it('stacks on an existing sale and keeps the M.R.P. strike-through and Save ₹28,125 badge (Profender)', () => {
     renderWithOffer(<StoreProductCard product={makeProduct({ price: 112500, originalPrice: 140625 })} />);
     expect(screen.getByText('₹1,09,125')).toBeInTheDocument();
     expect(screen.getByText('₹1,40,625')).toHaveClass('line-through');
-    expect(screen.getByText('-20%')).toBeInTheDocument();
+    expect(screen.getByText('Save ₹28,125')).toBeInTheDocument();
     const tag = screen.getByTestId('festival-offer-tag');
     expect(tag).toHaveTextContent('Diwali offer −3%');
     expect(tag).toHaveTextContent('Before Diwali ₹1,12,500');
@@ -110,11 +110,11 @@ describe('StoreProductCard — Diwali offer (display mirror)', () => {
     expect(tag).toHaveTextContent('You save ₹31,500');
   });
 
-  it('offer off → exactly today\'s view: M.R.P. + current price + −20% badge, no Diwali', () => {
+  it('offer off → exactly today\'s view: M.R.P. + current price + Save ₹28,125 badge, no Diwali', () => {
     renderWithOffer(<StoreProductCard product={makeProduct({ price: 112500, originalPrice: 140625 })} />, null);
     expect(screen.getByText('₹1,12,500')).toBeInTheDocument();
     expect(screen.getByText('₹1,40,625')).toHaveClass('line-through');
-    expect(screen.getByText('-20%')).toBeInTheDocument();
+    expect(screen.getByText('Save ₹28,125')).toBeInTheDocument();
     expect(screen.queryByTestId('festival-offer-tag')).not.toBeInTheDocument();
   });
 
