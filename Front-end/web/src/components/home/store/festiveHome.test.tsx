@@ -113,13 +113,13 @@ describe('festive home page switch', () => {
 });
 
 describe('buildFestiveHero', () => {
-  it('tags each photo with that product\'s own discount, 0 when not on sale', () => {
+  it('tags each photo with that product\'s own rupee saving, 0 when not on sale', () => {
     const hero = buildFestiveHero(data, buildSlides(data));
     expect(hero.maxOff).toBe(58);
     expect(hero.photos).toHaveLength(3);
     for (const ph of hero.photos) {
       const p = deals.find((d) => d.href === ph.href)!;
-      expect(ph.off).toBe(Math.round((1 - p.price / p.originalPrice!) * 100));
+      expect(ph.save).toBe(p.originalPrice! - p.price);
     }
   });
 
@@ -128,7 +128,7 @@ describe('buildFestiveHero', () => {
     const hero = buildFestiveHero(none, buildSlides(none));
     expect(hero.maxOff).toBe(0);
     expect(hero.dealsTotal).toBe(0);
-    expect(hero.photos.every((p) => p.off === 0)).toBe(true);
+    expect(hero.photos.every((p) => p.save === 0)).toBe(true);
   });
 });
 

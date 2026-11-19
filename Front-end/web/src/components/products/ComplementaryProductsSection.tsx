@@ -12,6 +12,7 @@ import {
   lineSavings,
 } from '@/hooks/queries/useCampaignProductRates';
 import { useCurrency } from '@/context/CurrencyContext';
+import { savingsLabel } from '@/lib/savings';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
@@ -236,9 +237,8 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                 : firstImage?.alt || product.name;
             };
 
-            const discount = product.originalPrice && product.originalPrice > product.price
-              ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-              : null;
+            // Rupees saved against the M.R.P. ("Save ₹250"), not a percentage — display only.
+            const saveLabel = savingsLabel(product.price, product.originalPrice, (n) => formatPrice(n));
 
             const isVariable = product.productType === 'variable';
             const isOut = getStockStatus(product) === 'out';
@@ -269,9 +269,9 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                       className="object-contain p-4 transition-transform duration-300 hover:scale-105"
                       loading="lazy"
                     />
-                    {discount && (
+                    {saveLabel && (
                       <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">
-                        {discount}% OFF
+                        {saveLabel}
                       </div>
                     )}
                     {campaignSavingFor(product) && (

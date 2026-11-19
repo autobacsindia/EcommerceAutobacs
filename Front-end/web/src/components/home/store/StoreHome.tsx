@@ -4,6 +4,7 @@ import ProductRow from './ProductRow';
 import BrandStrip from './BrandStrip';
 import TrustStrip from './TrustStrip';
 import ReviewStrip from './ReviewStrip';
+import { savingsAmount } from '@/lib/savings';
 import { CATEGORY_ROW_SIZE, MAX_CATEGORY_ROWS, MIN_ROW, discountPct, type StoreCategoryRow, type StoreHomeData, type StoreProduct } from './storeData';
 import { DealsShelf, FestiveHero, FestiveOffers, FestiveScope, FestiveSwitch, FestiveWish, GiftSection, type FestiveHeroPhoto } from './FestiveHome';
 import { buildGiftTiers, type GiftTier } from './giftTiers';
@@ -153,12 +154,12 @@ export function pickHeroShowcase(deals: StoreProduct[], featured: StoreProduct[]
  * the deals banner's (or first banner's) photos.
  */
 export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
-  const offByHref = new Map(data.deals.map((p) => [p.href, discountPct(p)]));
+  const saveByHref = new Map(data.deals.map((p) => [p.href, savingsAmount(p.price, p.originalPrice)]));
   const showcase = pickHeroShowcase(data.deals, data.featured);
   const source = slides.find((s) => s.id === 'deals') ?? slides[0];
   const photos: FestiveHeroPhoto[] = showcase.length >= HERO_SHOWCASE
-    ? showcase.map((p) => ({ src: p.image, href: p.href, name: p.name, off: discountPct(p) }))
-    : (source?.images ?? []).map((img) => ({ ...img, off: offByHref.get(img.href) ?? 0 }));
+    ? showcase.map((p) => ({ src: p.image, href: p.href, name: p.name, save: savingsAmount(p.price, p.originalPrice) }))
+    : (source?.images ?? []).map((img) => ({ ...img, save: saveByHref.get(img.href) ?? 0 }));
   return {
     photos,
     maxOff: data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0),

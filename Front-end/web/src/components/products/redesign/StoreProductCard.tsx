@@ -9,6 +9,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useCurrency } from '@/context/CurrencyContext';
+import { savingsLabel } from '@/lib/savings';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
@@ -83,9 +84,8 @@ export default function StoreProductCard({
   const showsRange = isVariable && priceMax > priceMin;
 
   const onSale = !isVariable && !!product.originalPrice && product.originalPrice > product.price;
-  const discount = onSale
-    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
-    : 0;
+  // Rupees saved against the M.R.P. ("Save ₹250"), not a percentage — display only.
+  const saveLabel = onSale ? savingsLabel(product.price, product.originalPrice, (n) => formatPrice(n)) : null;
   // Diwali offer — an EXTRA % on top of the price shown; the sale badge and M.R.P.
   // strike-through stay exactly as they are. For a variable product every model is
   // priced with its own Diwali choice and the cheapest result is the true "From" price.
@@ -210,9 +210,9 @@ export default function StoreProductCard({
               Backorder
             </span>
           )}
-          {onSale && !outOfStock && (
-            <span className="rounded-md bg-[#cc0c39] px-2 py-1 text-[11px] font-bold text-[#fff]">
-              -{discount}%
+          {saveLabel && !outOfStock && (
+            <span className="rounded-md bg-[#cc0c39] px-2 py-1 text-[11px] font-bold text-[#fff]" data-testid="card-save-badge">
+              {saveLabel}
             </span>
           )}
           {featured && !onSale && !outOfStock && (

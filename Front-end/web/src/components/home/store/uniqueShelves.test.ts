@@ -140,7 +140,12 @@ describe('pickHeroShowcase (the three hero photos)', () => {
     const hero = buildFestiveHero(data, buildSlides(data));
     // `storm` is ticked Featured, so it leads; Profender is then taken, so no `thunder`.
     expect(hero.photos.map((p) => p.href)).toEqual(['/products/storm', '/products/maybach', '/products/raptor']);
-    expect(hero.photos.every((p) => p.off === 17)).toBe(true);
+    // Each tag is that product's own rupee saving (M.R.P. − price), e.g. "Save ₹53,600".
+    for (const ph of hero.photos) {
+      const p = deals.find((d) => d.href === ph.href)!;
+      expect(ph.save).toBe(p.originalPrice! - p.price);
+      expect(ph.save).toBeGreaterThan(0);
+    }
   });
 
   it('the admin\'s Featured products come first (in stock, with a photo, still one per brand), topped up by deals', () => {
