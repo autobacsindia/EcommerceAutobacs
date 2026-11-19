@@ -7,6 +7,25 @@ import { CANCELLATION_REASON_CODES } from '../../config/cancellationReasons.js';
 // The customer pop-up's limit; the same bound for the admin forms.
 export const MAX_CANCELLATION_NOTES = 500;
 
+/**
+ * A dialable Indian mobile as people type it: 10 digits starting 6–9, with an
+ * optional +91 / 91 / 0 prefix and any spaces, dashes or brackets.
+ *
+ * notEmpty() alone once let "533201" through, and the CRM's normalizePhone
+ * (utils/identity.js) then dropped it, leaving a lead nobody could call. The
+ * later fix kept the LAST 10 digits of anything longer, so "1239876543210"
+ * passed and was saved as typed. Only a known prefix may precede the 10 digits.
+ */
+export function isDialableIndianMobile(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return /^(?:91|0)?[6-9]\d{9}$/.test(digits);
+}
+
+/** An Indian PIN code: exactly 6 digits (surrounding spaces ignored). */
+export function isIndianPinCode(value) {
+  return /^\d{6}$/.test(String(value ?? '').trim());
+}
+
 /*
   Reason + notes on any cancel request. Checked here, at the door, so a reason the
   service would refuse comes back as a plain 400 BEFORE anything is written — on the
@@ -43,18 +62,7 @@ export const validateOrder = [
     .notEmpty()
     .withMessage('Phone number is required')
     .bail()
-    .custom((value) => {
-      // Enforce a dialable Indian mobile. notEmpty() alone let junk like "533201"
-      // (6 digits) through — it satisfied the model's required:true, but the CRM's
-      // normalizePhone (utils/identity.js) drops anything under 7 digits, so the
-      // resulting payment_failed/abandoned lead was created with phone:null and no
-      // way for sales to call the customer back. Mirror normalizePhone's "last 10
-      // significant digits" logic (tolerating +91/91/0 prefixes and separators) so
-      // a phone that passes here is guaranteed to survive normalization downstream.
-      const digits = String(value).replace(/\D/g, '');
-      const national = digits.length > 10 ? digits.slice(-10) : digits;
-      return /^[6-9]\d{9}$/.test(national);
-    })
+    .custom((value) => isDialableIndianMobile(value))
     .withMessage('Enter a valid 10-digit Indian mobile number'),
   body('shippingAddress.addressLine1')
     .notEmpty()
@@ -67,7 +75,12 @@ export const validateOrder = [
     .withMessage('State is required'),
   body('shippingAddress.postalCode')
     .notEmpty()
-    .withMessage('Postal code is required'),
+    .withMessage('Postal code is required')
+    .bail()
+    // Any text used to pass ("12" reached the order), leaving an address no
+    // courier can serve. Same rule as staff and offline orders.
+    .custom((value) => isIndianPinCode(value))
+    .withMessage('Enter a valid 6-digit PIN code'),
   // Strict boolean: only a deliberate tap on "Apply Black Friday offer" sends true.
   // Re-checked against the live switch in orderService (409 if it has ended).
   body('applyDeliveryFeeOffer')

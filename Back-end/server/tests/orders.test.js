@@ -38,7 +38,7 @@ describe('Orders API', () => {
     addressLine1: '123 Test St',
     city: 'Test City',
     state: 'Test State',
-    postalCode: '12345',
+    postalCode: '682001',
     country: 'Test Country',
     phone: '9876543210'
   };

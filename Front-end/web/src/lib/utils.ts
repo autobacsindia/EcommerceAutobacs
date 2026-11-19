@@ -134,14 +134,20 @@ export function getInitials(name: string): string {
 
 /**
  * Validate a dialable Indian mobile number. Tolerates +91/91/0 prefixes and
- * separators, then checks the last 10 significant digits form a real mobile
+ * separators, then checks the remaining 10 digits form a real mobile
  * (starts 6-9). Mirrors the backend order validator and the CRM's normalizePhone
  * so a number accepted at checkout survives lead normalization and stays callable.
  */
 export function isValidIndianMobile(phone: string): boolean {
+  // Only a +91 / 91 / 0 prefix may precede the 10 digits. Keeping "the last 10
+  // digits of anything" let "1239876543210" through to an order.
   const digits = String(phone || '').replace(/\D/g, '');
-  const national = digits.length > 10 ? digits.slice(-10) : digits;
-  return /^[6-9]\d{9}$/.test(national);
+  return /^(?:91|0)?[6-9]\d{9}$/.test(digits);
+}
+
+/** An Indian PIN code: exactly 6 digits. Mirrors the backend order validator. */
+export function isValidPinCode(pin: string): boolean {
+  return /^\d{6}$/.test(String(pin || '').trim());
 }
 
 /**
