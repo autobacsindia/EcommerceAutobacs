@@ -10,6 +10,7 @@ import { useAssignees } from './TaskForm';
 import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
 import { DueApprovalBadge, DueRuleHint } from './dueRules';
+import { dueRequired, useAskDue } from './DuePrompt';
 import TaskMenu from './TaskMenu';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
@@ -135,6 +136,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, b
   onTag?: (tag: string) => void; activeTag?: string; withOrder: boolean; base?: string;
 }) {
   const move = useSetStatus();
+  const askDue = useAskDue();
   const edit = useQuickEdit();
   const busy = move.isPending || edit.isPending;
   const save = (patch: QuickEdit) => edit.mutate({ t, patch });
@@ -160,7 +162,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, b
         <SelectBox checked={selected} onChange={onSelect} label={`Select ${t.code}`} />
       </span>
       <div className="flex min-w-0 flex-1 items-start gap-2.5">
-        <span className="mt-0.5"><CompleteButton t={t} busy={move.isPending} onToggle={() => { if (done || confirmComplete(t)) move.mutate({ t, status: done ? 'todo' : 'done' }); }} /></span>
+        <span className="mt-0.5"><CompleteButton t={t} busy={move.isPending} onToggle={() => { if (done || confirmComplete(t)) askDue.guard(t, done ? 'todo' : 'done', done ? 'To do' : 'Complete', ({ dueOn }) => move.mutate({ t, status: done ? 'todo' : 'done', dueOn })); }} /></span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={`line-clamp-2 break-words text-sm font-semibold ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</span>
@@ -192,6 +194,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, b
         </span>
       )}
       {base && <span className="absolute right-2 top-2 lg:top-1/2 lg:-translate-y-1/2"><TaskMenu t={t} base={base} onOpen={onOpen} /></span>}
+      {askDue.prompt}
     </li>
   );
 }
@@ -330,13 +333,15 @@ export function QuickAdd({ status, assigneeId, listId, projectId, projectListId,
       </button>
     );
   }
+  // Outside a project, only a To Do task may wait for a date (DuePrompt.tsx dueRequired).
+  const needsDue = dueRequired(status, !!projectId) && !extras.dueOn;
   const touched = !!(title.trim() || extras.assigneeIds !== undefined || extras.dueOn || extras.tags?.length || (extras.priority && extras.priority !== 'normal'));
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         const text = title.trim();
-        if (!text || nobody || !extras.dueOn) return;
+        if (!text || nobody || needsDue) return;
         add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(board && !personal && chosen.length ? { assigneeIds: chosen } : {}), ...(listId ? { listId } : {}), ...(projectId ? { projectId } : {}), ...(projectId && projectListId ? { projectListId } : {}), ...(projectId && stageId ? { stageId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
           // Ready for the next one; the people and the chips stay, the name clears.
           onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
@@ -364,21 +369,21 @@ export function QuickAdd({ status, assigneeId, listId, projectId, projectListId,
           className="min-w-0 flex-1 rounded-md border border-blue-500! px-2 py-1 text-sm outline-none ring-2 ring-blue-100"
         />
         {!board && (
-          // Every task needs a due date: the list's quick add asks for it beside the name.
+          // The list's quick add offers the date beside the name (optional in To Do and in a project).
           <input
             type="date"
             value={extras.dueOn || ''}
             onChange={(e) => setExtras((x) => ({ ...x, dueOn: e.target.value || null }))}
             aria-label="Due date"
-            title="Due date (required)"
-            required
+            title={needsDue || extras.dueOn ? 'Due date' : 'Due date (optional)'}
+            required={dueRequired(status, !!projectId)}
             className="h-7 rounded-md border border-gray-300 px-1.5 text-xs"
           />
         )}
-        {!board && <button type="submit" disabled={add.isPending || !title.trim() || !extras.dueOn} className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-40">Save</button>}
+        {!board && <button type="submit" disabled={add.isPending || !title.trim() || needsDue} className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-40">Save</button>}
       </div>
       <div className="basis-full space-y-1 empty:hidden">
-        {title.trim() && !extras.dueOn && <p className="text-xs text-gray-500">Pick a due date — every task needs one.</p>}
+        {title.trim() && needsDue && <p className="text-xs text-gray-500">Pick a due date — a task in {STATUS_STYLE[status].label} needs one.</p>}
         <DueRuleHint dueOn={extras.dueOn} priority={extras.priority ?? 'normal'} personal={personal} />
       </div>
       {board && (
@@ -387,7 +392,7 @@ export function QuickAdd({ status, assigneeId, listId, projectId, projectListId,
           {nobody && <p className="text-xs text-red-600">Pick at least one person.</p>}
           <div className="flex justify-end gap-1.5">
             <button type="button" onClick={stop} className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">Cancel</button>
-            <button type="submit" disabled={add.isPending || !title.trim() || nobody || !extras.dueOn} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
+            <button type="submit" disabled={add.isPending || !title.trim() || nobody || needsDue} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
           </div>
         </>
       )}

@@ -12,6 +12,7 @@ import { useQuickEdit, useRefreshTasks, useTaskPages, type QuickEdit } from './h
 import { QuickDate, QuickMove, QuickPeople, QuickPriority } from './CardActions';
 import TaskMenu from './TaskMenu';
 import { AddColumn, ColumnMenu } from './BoardColumns';
+import { useAskDue } from './DuePrompt';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { Chip, GroupCount, GroupPill, SkeletonRows } from './ui';
 import { TASK_STATUSES, confirmComplete, isConflict, listOf, orderHrefFor, projectListOf, projectOf, stageOf, type Project, type ProjectStage, type Task, type TaskFilters, type TaskStatus } from './types';
@@ -150,8 +151,11 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
   const unmove = (id: string) => setMoved((m) => { const next = { ...m }; delete next[id]; return next; });
 
   const move = useMutation({
-    mutationFn: ({ t, col }: { t: Task; col: Column }) =>
-      apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, col.stageId ? { rev: t.rev, stageId: col.stageId } : { rev: t.rev, status: col.kind }),
+    // A date picked in "When will this be done?" goes with the move: one change, one revision.
+    mutationFn: ({ t, col, dueOn }: { t: Task; col: Column; dueOn?: string }) =>
+      apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, {
+        rev: t.rev, ...(col.stageId ? { stageId: col.stageId } : { status: col.kind }), ...(dueOn ? { dueOn } : {}),
+      }),
     onMutate: ({ t, col }) => { setMoved((m) => ({ ...m, [t.id]: col.key })); },
     onSuccess: (_r, { t, col }) => { if (col.kind === 'done' && t.status !== 'done') toast.success(`${t.code} complete`, { id: `done-${t.id}` }); },
     onError: (e, { t }) => {
@@ -162,10 +166,12 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
     },
     onSettled: async (_r, _e, { t }) => { await refresh(); unmove(t.id); },
   });
+  const askDue = useAskDue();
   const onMoveTo = (t: Task, col: Column) => {
     const from = columnOf(t);
     if (col.key === from.key || (col.kind === 'done' && from.kind !== 'done' && !confirmComplete(t))) return;
-    move.mutate({ t, col });
+    // Outside a project, leaving To Do needs a date: ask for one first (Cancel leaves the card where it was).
+    askDue.guard(t, col.kind, col.label, ({ dueOn }) => move.mutate({ t, col, dueOn }));
   };
   // A plain status (the tick, the quick move menu): the first column of that kind.
   const onMove = (t: Task, status: TaskStatus) => {
@@ -230,6 +236,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base, s
         })}
         {project && <AddColumn project={project} />}
       </div>
+      {askDue.prompt}
       {open.hasNextPage && (
         <button onClick={() => open.fetchNextPage()} disabled={open.isFetchingNextPage} className="w-full rounded-lg py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">
           {open.isFetchingNextPage ? 'Loading…' : 'Load more tasks'}

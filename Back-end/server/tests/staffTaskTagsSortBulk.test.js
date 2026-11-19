@@ -111,8 +111,9 @@ describe('start dates', () => {
   it('may be the due day or before it, never after; a bad day is refused', async () => {
     expect(await make(procA, { startOn: day(1), dueOn: day(3) })).toMatchObject({ startOn: day(1), dueOn: day(3) });
     expect(await make(procA, { startOn: day(3), dueOn: day(3) })).toMatchObject({ startOn: day(3) });
-    // A start date alone is not enough: every task needs a due date (services/taskDueRules.js).
-    await status(400, () => make(procA, { startOn: day(3), dueOn: null }));
+    // A start date alone is fine in To Do (the due date may wait); not to start a task under way.
+    expect(await make(procA, { startOn: day(3), dueOn: null })).toMatchObject({ startOn: day(3), dueOn: null });
+    await status(400, () => make(procA, { startOn: day(3), dueOn: null, status: 'in_progress' }));
     await status(400, () => make(procA, { startOn: day(4), dueOn: day(3) }));
     await status(400, () => make(procA, { startOn: '2026-02-30' }));
   });

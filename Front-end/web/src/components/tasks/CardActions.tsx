@@ -138,7 +138,7 @@ export function QuickDate({ t, onSave, busy, variant = 'card' }: { t: Task; onSa
         try { e.currentTarget.showPicker?.(); } catch { /* older browser: the field still takes typing */ }
       }}
       onKeyDown={stop}
-      // A date can be moved, never taken off: every task needs one.
+      // The quick button only sets or moves a date; taking one off is on the task page (where the rules allow it).
       onChange={(e) => { if (e.target.value && e.target.value !== t.dueOn) onSave({ dueOn: e.target.value }); }}
       required
       className="tk-qa-date absolute inset-0 h-full! min-h-0! w-full cursor-pointer opacity-0"
@@ -146,8 +146,8 @@ export function QuickDate({ t, onSave, busy, variant = 'card' }: { t: Task; onSa
   );
   if (variant === 'cell') {
     return (
-      <span title={t.dueOn ? `Due ${formatDue(t.dueOn, t.dueTime)}` : 'No due date'} className={`${cellClass} ${t.can.edit ? 'cursor-pointer' : 'hover:bg-transparent'}`}>
-        <DuePill t={t} empty={<span className="inline-flex items-center gap-1 text-gray-300"><CalendarDays aria-hidden className="h-3.5 w-3.5" /><span className="sr-only">No due date</span>—</span>} />
+      <span title={t.dueOn ? `Due ${formatDue(t.dueOn, t.dueTime)}` : 'No date'} className={`${cellClass} ${t.can.edit ? 'cursor-pointer' : 'hover:bg-transparent'}`}>
+        <DuePill t={t} empty={<span className="inline-flex items-center gap-1 text-xs text-gray-400"><CalendarDays aria-hidden className="h-3.5 w-3.5" />No date</span>} />
         {picker}
       </span>
     );
@@ -156,9 +156,9 @@ export function QuickDate({ t, onSave, busy, variant = 'card' }: { t: Task; onSa
   const time = formatDueTime(t.dueTime);
   const text = t.dueOn ? (!done && t.dueToday ? `Today${time ? ` ${time}` : ''}` : formatDue(t.dueOn, t.dueTime)) : null;
   return (
-    <span title={t.dueOn ? `Due ${formatDue(t.dueOn, t.dueTime)}` : 'No due date'} data-empty={!t.dueOn || undefined} data-tone={tone} className={`${qa} ${text ? 'px-1.5' : ''}`}>
+    <span title={t.dueOn ? `Due ${formatDue(t.dueOn, t.dueTime)}` : 'No date'} data-empty={!t.dueOn || undefined} data-tone={tone} className={`${qa} ${text ? 'px-1.5' : ''}`}>
       <CalendarDays aria-hidden className="h-3.5 w-3.5 shrink-0" />
-      {text ?? <span className="sr-only">No due date</span>}
+      {text ?? <span className="sr-only">No date</span>}
       {picker}
     </span>
   );

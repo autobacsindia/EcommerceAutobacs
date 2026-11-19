@@ -57,8 +57,9 @@ export function useRefreshTasks() {
 export function useSetStatus() {
   const refresh = useRefreshTasks();
   return useMutation({
-    mutationFn: ({ t, status }: { t: Task; status: TaskStatus }) =>
-      apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, { rev: t.rev, status }),
+    // `dueOn`: a date picked in "When will this be done?" (DuePrompt.tsx), sent with the move.
+    mutationFn: ({ t, status, dueOn }: { t: Task; status: TaskStatus; dueOn?: string }) =>
+      apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, { rev: t.rev, status, ...(dueOn ? { dueOn } : {}) }),
     onSuccess: (_r, { t, status }) => {
       if (status === 'done') toast.success(`${t.code} complete`, { id: `done-${t.id}` });
     },

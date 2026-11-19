@@ -92,10 +92,10 @@ describe('the time itself', () => {
     t = await edit(head, t, { dueOn: day(4) });
     expect(t).toMatchObject({ dueOn: day(4), dueTime: '11:00' });
     expect((await StaffTask.findById(t.id).lean()).rank).toBe(`${day(4)} 11:00`);
-    // A date can't be taken off any more (services/taskDueRules.js) …
-    await status(400, () => edit(head, t, { dueOn: null }));
-    // … but a task saved before dates were required has none, and a time alone stays refused on it.
-    await StaffTask.updateOne({ _id: t.id }, { $set: { dueOn: null, dueTime: null, rank: '9999-12-31' } });
+    // Taking the day off (allowed in To Do) takes the time with it …
+    t = await edit(head, t, { dueOn: null });
+    expect(t).toMatchObject({ dueOn: null, dueTime: null });
+    // … and a time alone stays refused on a task with no day.
     await status(400, () => edit(head, t, { dueTime: '10:00' }));
     await status(400, () => edit(head, t, { dueOn: null, dueTime: '10:00' }));
   });
@@ -160,8 +160,10 @@ describe('a bulk date change', () => {
     const [a2, b2] = await Promise.all([tasks.getTask(head, a.id), tasks.getTask(head, b.id)]);
     expect(a2).toMatchObject({ dueOn: day(5), dueTime: '09:00' });
     expect(b2).toMatchObject({ dueOn: day(5), dueTime: null });
-    // Taking the date off is refused per task: every task keeps a due date.
-    const off = await tasks.bulkUpdate(head, { items: [{ id: a2.id, rev: a2.rev }], changes: { dueOn: null } }, req);
+    // Taking the date off is refused per task once it is under way (in To Do it may come off).
+    await tasks.bulkUpdate(head, { items: [{ id: a2.id, rev: a2.rev }], changes: { status: 'in_progress' } }, req);
+    const a3 = await tasks.getTask(head, a.id);
+    const off = await tasks.bulkUpdate(head, { items: [{ id: a3.id, rev: a3.rev }], changes: { dueOn: null } }, req);
     expect(off).toMatchObject({ changed: 0, failed: 1 });
     expect(off.results[0]).toMatchObject({ ok: false, status: 400 });
     expect(await tasks.getTask(head, a.id)).toMatchObject({ dueOn: day(5), dueTime: '09:00' });

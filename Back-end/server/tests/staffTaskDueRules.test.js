@@ -3,8 +3,8 @@
  * Mongo is real; push is a double that records what was sent.
  *
  * What must hold:
- *   - every new task has a due date, and a date once set can't be taken off
- *     (tasks saved before the rule keep working until someone changes the date)
+ *   - a task under way outside a project has a due date, and it can't be taken
+ *     off (To Do and project tasks may have none: staffTaskOptionalDue.test.js)
  *   - a date more than 9 days away waits for a manager: day 9 is fine, day 10 waits
  *   - each priority has a latest date (Urgent today, High today or tomorrow,
  *     Normal 30 days, Low 60) — a hard limit, checked when the date or the
@@ -135,16 +135,14 @@ describe('the rules themselves', () => {
 
 // ── A due date is required ─────────────────────────────────────────────────
 
-describe('a due date is required', () => {
-  it('no task without one — not blank, not missing', async () => {
-    await status(400, () => make(arun, { dueOn: undefined }), /due date/);
-    await status(400, () => make(arun, { dueOn: '' }), /due date/);
-    await status(400, () => make(arun, { dueOn: null }), /due date/);
-    expect(await StaffTask.countDocuments()).toBe(0);
+describe('when a due date is required (the rest: staffTaskOptionalDue.test.js)', () => {
+  it('a To Do task may have none; one under way may not', async () => {
+    expect((await make(arun, { dueOn: undefined })).dueOn).toBeNull();
+    await status(400, () => make(arun, { dueOn: null, status: 'in_progress' }), /out of To Do/);
   });
 
-  it('a date once set can be moved but not taken off — alone or in a bulk change', async () => {
-    const t = await make(arun);
+  it('a date on a task under way can be moved but not taken off — alone or in a bulk change', async () => {
+    const t = await edit(arun, await make(arun), { status: 'in_progress' });
     await status(400, () => edit(arun, t, { dueOn: null }), /needs a due date/);
     await status(400, () => edit(arun, t, { dueOn: '' }));
     const bulk = await tasks.bulkUpdate(arun, { items: [{ id: t.id, rev: t.rev }], changes: { dueOn: null } }, req);
@@ -405,7 +403,10 @@ describe('the "Waiting for my approval" list and count', () => {
 describe('sub-tasks', () => {
   it('follow the same rules', async () => {
     const parent = await make(arun, { dueOn: day(3) });
-    await status(400, () => tasks.createTask(arun, { title: 'part', parentId: parent.id }, req), /due date/);
+    // Starts in To Do, so the date may wait; once under way (outside a project) it may not.
+    const later = (await tasks.createTask(arun, { title: 'part', parentId: parent.id }, req)).task;
+    expect(later.dueOn).toBeNull();
+    await status(400, () => edit(arun, later, { status: 'done' }), /out of To Do/);
     const far = (await tasks.createTask(arun, { title: 'part', parentId: parent.id, dueOn: day(10) }, req)).task;
     expect(far.dueApproval.status).toBe('pending');
   });

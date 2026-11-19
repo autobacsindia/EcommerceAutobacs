@@ -25,6 +25,7 @@ import Links, { WaitingWarning } from './TaskLinks';
 import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import { DueApprovalPanel } from './dueRules';
+import { dueRequired, useAskDue } from './DuePrompt';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
 import { RepeatField } from './RepeatPicker';
@@ -229,14 +230,16 @@ function EstimateField({ task, saving, onSave }: { task: Task; saving: boolean; 
  * browser's date picker. The real date input is there, invisible, on top — so
  * it stays labelled and works with the keyboard.
  */
-function DateField({ value, label, min, max, onChange, extra }: {
+function DateField({ value, label, min, max, onChange, extra, empty = 'Empty' }: {
   value: string | null; label: string; min?: string; max?: string; onChange: (v: string) => void; extra?: ReactNode;
+  /** What shows with no date. */
+  empty?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
     <span className="flex flex-wrap items-center gap-2">
       <span className="relative inline-flex rounded-md px-1.5 py-1 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-blue-100">
-        <span className={value ? 'text-gray-900' : 'text-gray-400'}>{value ? formatDueDay(value) : 'Empty'}</span>
+        <span className={value ? 'text-gray-900' : 'text-gray-400'}>{value ? formatDueDay(value) : empty}</span>
         <input
           ref={ref}
           type="date"
@@ -553,6 +556,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
   const stages = taskProject.data?.statuses ?? [];
   const projectLists = taskProject.data?.lists ?? [];
 
+  const askDue = useAskDue();
   const save = useMutation({
     mutationFn: (patch: Patch) => apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(id)}`, { rev: task!.rev, ...patch }),
     onSuccess: (res) => {
@@ -620,7 +624,8 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
   };
   const setStatus = (status: TaskStatus) => {
     if (status === 'done' && !confirmComplete(task)) return;
-    save.mutate({ status });
+    // Outside a project, leaving To Do needs a date: "When will this be done?" first.
+    askDue.guard(task, status, TASK_STATUSES.find((s) => s.value === status)?.label ?? status, ({ dueOn }) => save.mutate({ status, ...(dueOn ? { dueOn } : {}) }));
   };
   const shownStage = stageOf(stages, task);
   const setStage = (id: string) => {
@@ -633,8 +638,8 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
     ? <button type="button" onClick={() => onOpen(task.parent!.id)} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></button>
     : <Link href={`${base}/${task.parent.id}`} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></Link>);
   const setDue = (value: string) => {
-    // A date can be moved, never taken off: every task needs one (the server refuses it too).
-    if (!value) return;
+    // A date comes off only where it is optional: To Do or a project, and not a repeating task (the server checks too).
+    if (!value && (dueRequired(task.status, !!task.project) || task.repeat)) return;
     if (isPastDue(value, task.dueTime) && !window.confirm('This date has already passed, so the task will show as late. Use it anyway?')) return;
     save.mutate({ dueOn: value || null });
   };
@@ -646,6 +651,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
   // Details first; the activity beside them in the window on a wide screen, below them otherwise.
   const details = (
     <>
+      {askDue.prompt}
       <header className="space-y-2">
         {archived && (
           <div className="flex items-center justify-between rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">
@@ -726,6 +732,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
               <DateField
                 value={task.dueOn}
                 label="Due date"
+                empty="No date"
                 min={task.startOn || undefined}
                 onChange={setDue}
                 extra={(

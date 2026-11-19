@@ -108,7 +108,8 @@ export function useDuplicateTask(onCreated?: (id: string) => void) {
       return apiClient.post<{ task: Task }>('/staff/tasks', {
         title,
         description: full.description || '',
-        ...(full.status === 'in_progress' ? { status: full.status } : {}),
+        // A copy under way needs a date (outside a project); without one it starts in To Do.
+        ...(full.status === 'in_progress' && full.dueOn ? { status: full.status } : {}),
         priority: full.priority,
         ...(full.dueOn ? { dueOn: full.dueOn, ...(full.dueTime ? { dueTime: full.dueTime } : {}) } : {}),
         ...(full.startOn ? { startOn: full.startOn } : {}),

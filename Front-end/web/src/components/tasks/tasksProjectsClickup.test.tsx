@@ -150,6 +150,8 @@ describe('a project’s own statuses', () => {
     // The phone's move picker lists the project's statuses.
     fireEvent.change(within(review).getByLabelText('Move T-7'), { target: { value: 's4' } });
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, stageId: 's4' }));
+    // A project task has no date here, and in a project none is asked for, whatever the column.
+    expect(screen.queryByRole('dialog', { name: 'When will this be done?' })).toBeNull();
   });
 
   it('the list groups by the project’s open statuses, active ones first', () => {

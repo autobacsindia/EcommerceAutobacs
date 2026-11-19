@@ -36,7 +36,7 @@ const addDays = (ymd: string, n: number) => {
 
 /** Which due bucket an open task falls in. */
 export function dueBucket(t: Pick<Task, 'dueOn'>, today: string): { value: string; label: string } {
-  if (!t.dueOn) return { value: 'none', label: 'No due date' };
+  if (!t.dueOn) return { value: 'none', label: 'No date' };
   if (t.dueOn < today) return { value: 'late', label: 'Late' };
   if (t.dueOn === today) return { value: 'today', label: 'Today' };
   if (t.dueOn === addDays(today, 1)) return { value: 'tomorrow', label: 'Tomorrow' };
