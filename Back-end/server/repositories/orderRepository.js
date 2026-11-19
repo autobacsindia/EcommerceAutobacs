@@ -919,6 +919,22 @@ class OrderRepository extends BaseRepository {
     return q;
   }
 
+  /** What the delivery-address lock reads (services/orderAddressService.js). */
+  async findForAddressEdit(id) {
+    return Order.findById(id)
+      .select('status trackingNumber shipments.status shipments.trackingNumber shippingAddress')
+      .lean();
+  }
+
+  /** Compare-and-set address correction: null when `filter` no longer matches. */
+  async applyAddressEdit(filter, update) {
+    return Order.findOneAndUpdate(filter, update, {
+      new: true,
+      projection: { shippingAddress: 1, addressChanges: 1, status: 1, trackingNumber: 1, 'shipments.status': 1, 'shipments.trackingNumber': 1 },
+      lean: true,
+    });
+  }
+
   /** Plain lean read — for eligibility checks that only inspect fields. */
   async findLean(id, session = null) {
     let q = Order.findById(id).lean();
