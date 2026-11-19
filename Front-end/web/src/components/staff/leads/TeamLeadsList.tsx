@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Hand, Loader2, Mail, Phone, UserRoundX, Clock, MessageSquarePlus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Hand, Loader2, Mail, Phone, UserRoundX, Clock, MessageSquarePlus, Pencil } from 'lucide-react';
+import EditLeadDetails from './EditLeadDetails';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -44,7 +45,8 @@ export type TeamLead = {
   /** Followed up on, nothing logged for this many days (0 = fine). */
   quietDays: number;
   /** Only for the person following up, the GTM head and admin. */
-  contact: { phone: string | null; email: string | null } | null;
+  /** Only for people who may see (and edit) it. `name` is the stored name, '' when unknown. */
+  contact: { phone: string | null; email: string | null; name?: string } | null;
 };
 type HistoryLine = {
   id: string; type: string; label: string; at: string; who: string | null; notes: string;
@@ -115,6 +117,7 @@ function LeadCard({ lead, you, sellers }: { lead: TeamLead; you: You; sellers: P
   const [error, setError] = useState('');
   const [moveTo, setMoveTo] = useState('');
   const [recording, setRecording] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const detail = useQuery({
     queryKey: staffKeys.leadOne(lead.id),
@@ -249,7 +252,23 @@ function LeadCard({ lead, you, sellers }: { lead: TeamLead; you: You; sellers: P
         </div>
       )}
 
+      {editing && contact && (
+        <EditLeadDetails<TeamLead>
+          leadId={lead.id}
+          contact={{ name: contact.name ?? '', phone: contact.phone, email: contact.email }}
+          onCancel={() => setEditing(false)}
+          onSaved={(res) => { done(res as WriteResult); setEditing(false); queryClient.invalidateQueries({ queryKey: staffKeys.leadOne(lead.id) }); }}
+          onConflict={(res) => { patchRow(queryClient, res.lead); setNotice(res.message || ''); setEditing(false); queryClient.invalidateQueries({ queryKey: staffKeys.leadOne(lead.id) }); }}
+        />
+      )}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {contact && !editing && (
+          <button type="button" onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-blue-700 hover:bg-blue-50">
+            <Pencil className="h-4 w-4" /> Edit details
+          </button>
+        )}
         <button type="button" onClick={() => setOpen((x) => !x)} aria-expanded={open}
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-blue-700 hover:bg-blue-50">
           {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />} History

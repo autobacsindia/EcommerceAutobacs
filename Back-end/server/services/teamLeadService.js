@@ -14,6 +14,8 @@
  *   record a follow-up      the person following up, GTM head, admin
  *   phone / e-mail          the person following up, GTM head, admin — so two
  *                           people never ring the same customer
+ *   edit name/phone/e-mail  the person following up, GTM head, admin (logged in
+ *                           `edits`; identityKey never changes)
  *
  * Every claim / release / reassign is a compare-and-set on the owner the caller
  * saw (repositories/leadRepository.js), so concurrent clicks resolve to exactly
@@ -35,7 +37,7 @@ import {
   FOLLOW_UP_STATUSES, FOLLOW_UP_STATUS_KEYS, FOLLOW_UP_NOTE_MAX,
 } from '../config/leadConstants.js';
 import { and, keysetPage, plainQuery, searchWords, searchClauses, isObjectId } from '../utils/listQuery.js';
-import { phoneSearchPattern } from '../utils/identity.js';
+import { phoneSearchPattern, normalizePhone, normalizeEmail } from '../utils/identity.js';
 import { cleanRichTextWithin, richTextToPlain } from '../utils/richText.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -153,7 +155,9 @@ export function rowOf(lead, actor, now = new Date(), items = undefined) {
   const last = lead.activities?.[lead.activities.length - 1];
   const lastUpdateAt = last?.at || lead.updatedAt || lead.createdAt || null;
   const quietDays = rep && lastUpdateAt ? Math.floor((now - new Date(lastUpdateAt)) / DAY) : 0;
-  const contact = seesContact(actor, ownerUserId) ? { phone: lead.phone || null, email: lead.email || null } : null;
+  // `name` here is the stored name ('' when unknown, unlike the 'Customer' label
+  // above) — what the Edit details form starts from. Only for people who may edit.
+  const contact = seesContact(actor, ownerUserId) ? { phone: lead.phone || null, email: lead.email || null, name: lead.name || '' } : null;
   return {
     id: idOf(lead._id),
     name: lead.name || 'Customer',
@@ -311,6 +315,15 @@ export async function getTeamLead(actor, leadId) {
     who: a.rep?.name || a.by?.name || null,
     notes: a.notes || '',
   }));
+  // Details edits are kept apart from follow-ups (see Lead.edits) but read as history.
+  for (const e of lead.edits || []) {
+    history.push({
+      id: `edit-${new Date(e.at).getTime()}`, type: 'edit', label: 'Details edited', followUpStatus: null, at: e.at,
+      who: e.byName || null,
+      notes: (e.changes || []).map((c) => `${c.field}: ${c.from || '—'} → ${c.to || '—'}`).join('; '),
+    });
+  }
+  history.sort((a, b) => new Date(b.at) - new Date(a.at));
   const signals = (lead.sources || []).map((s) => ({ type: s.type, at: s.capturedAt }));
   return { lead: { ...(await rowWithItems(lead, actor)), history, signals } };
 }
@@ -373,6 +386,78 @@ export async function reassignLead(actor, leadId, userId) {
   });
   const lead = await loadRow(leadId, actor);
   return { outcome: moved ? 'reassigned' : 'changed', lead };
+}
+
+// ── Edit details ──────────────────────────────────────────────────────────────
+
+export const LEAD_NAME_MAX = 120;
+export const LEAD_EDITS_KEPT = 50;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DETAIL_LABELS = { name: 'Name', phone: 'Phone', email: 'E-mail' };
+
+/** May `actor` edit this lead's details? Same people who may see its phone. */
+export const canEditLead = (actor, ownerUserId) => seesContact(actor, ownerUserId);
+
+/** Pure: the cleaned value for one field, or throws a 400 the person can act on. */
+export function cleanLeadDetail(field, raw) {
+  if (raw != null && typeof raw !== 'string') throw fail(`${DETAIL_LABELS[field]} must be text.`, 400);
+  const text = String(raw ?? '').trim();
+  if (field === 'name') {
+    if (text.length > LEAD_NAME_MAX) throw fail(`Keep the name under ${LEAD_NAME_MAX} characters.`, 400);
+    return text;
+  }
+  if (!text) return null;
+  if (field === 'phone') {
+    const phone = normalizePhone(text);
+    if (!phone || phone.length !== 10) throw fail('Type a 10-digit phone number.', 400);
+    return phone;
+  }
+  const email = normalizeEmail(text);
+  if (!EMAIL_RE.test(email) || email.length > 254) throw fail('That e-mail address does not look right.', 400);
+  return email;
+}
+
+/**
+ * PATCH /staff/leads/:id { name?, phone?, email?, seen?: { name, phone, email } }
+ * Fix a lead's name or contact details. `seen` = what the form was opened with;
+ * when someone saved in between → outcome 'changed' (409) with their version.
+ * → { outcome: 'saved' | 'unchanged' | 'changed', lead }
+ */
+export async function updateLeadDetails(actor, leadId, body = {}) {
+  assertView(actor);
+  if (!isObjectId(leadId)) throw fail('Lead not found.', 404);
+  const current = await leadRepository.findForDetailsEdit(leadId);
+  if (!current) throw fail('Lead not found.', 404);
+  const ownerUserId = current.assignedRep?.user ? idOf(current.assignedRep.user) : null;
+  if (!canEditLead(actor, ownerUserId)) {
+    throw fail('Only the person following up, the GTM head or admin can edit this lead.', 403);
+  }
+
+  const now = { name: current.name || '', phone: current.phone || null, email: current.email || null };
+  if (body.seen && typeof body.seen === 'object') {
+    // Only the fields the caller says it saw are compared.
+    const same = (f) => !Object.hasOwn(body.seen, f) || String(body.seen[f] ?? '') === String(now[f] ?? '');
+    if (!['name', 'phone', 'email'].every(same)) return { outcome: 'changed', lead: await loadRow(leadId, actor) };
+  }
+
+  const set = {};
+  const changes = [];
+  for (const field of ['name', 'phone', 'email']) {
+    if (body[field] === undefined) continue;
+    const value = cleanLeadDetail(field, body[field]);
+    if ((value ?? '') === (now[field] ?? '')) continue;
+    set[field] = value;
+    changes.push({ field: DETAIL_LABELS[field], from: now[field] ?? '', to: value ?? '' });
+  }
+  if (!changes.length) return { outcome: 'unchanged', lead: await loadRow(leadId, actor) };
+  const after = { ...now, ...set };
+  if (!after.phone && !after.email) throw fail('Keep at least a phone number or an e-mail.', 400);
+
+  const saved = await leadRepository.applyDetailsEdit(leadId, now, set, {
+    at: new Date(), by: actor._id, byName: actor.name || actor.email || '', changes,
+  }, LEAD_EDITS_KEPT);
+  if (!saved) return { outcome: 'changed', lead: await loadRow(leadId, actor) };
+  return { outcome: 'saved', lead: await loadRow(leadId, actor) };
 }
 
 // ── Follow-up status ──────────────────────────────────────────────────────────

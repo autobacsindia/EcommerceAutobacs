@@ -17,6 +17,8 @@ import {
   cancelAttribution, type OrderHistoryItem,
 } from '@/lib/leads';
 import { usePanel } from '@/lib/usePanel';
+import EditLeadDetails from '@/components/staff/leads/EditLeadDetails';
+import toast from 'react-hot-toast';
 import { displayEmail } from '@/lib/internalEmail';
 import CustomerPastSales from '@/components/staff/pastSales/CustomerPastSales';
 import type { CustomerPastSale } from '@/components/staff/pastSales/types';
@@ -43,6 +45,7 @@ export default function LeadDetailPage() {
   // activity form
   const [activityType, setActivityType] = useState<'call' | 'note' | 'email'>('call');
   const [activityNotes, setActivityNotes] = useState('');
+  const [editingDetails, setEditingDetails] = useState(false);
 
   // Merged cycle-grouped timeline (activities + signals + orders).
   const journey = useMemo(
@@ -153,6 +156,21 @@ export default function LeadDetailPage() {
             {displayEmail(lead.email, { label: false }) && <span className="flex items-center gap-1"><Mail className="h-4 w-4" />{lead.email}</span>}
             {lead.phone && <span className="flex items-center gap-1"><Phone className="h-4 w-4" />{lead.phone}</span>}
           </div>
+          {/* Admin only: the edit goes through the GTM sheet's endpoint (same Lead, same rules + trail). */}
+          {isAdmin && !editingDetails && (
+            <button type="button" onClick={() => setEditingDetails(true)} className="mt-2 text-sm font-medium text-blue-700 hover:underline">
+              Edit details
+            </button>
+          )}
+          {isAdmin && editingDetails && (
+            <EditLeadDetails
+              leadId={lead._id}
+              contact={{ name: lead.name || '', phone: lead.phone || null, email: lead.email || null }}
+              onCancel={() => setEditingDetails(false)}
+              onSaved={() => { setEditingDetails(false); toast.success('Lead details saved'); load(); }}
+              onConflict={(res) => { setEditingDetails(false); toast.error(res.message || 'Someone changed this lead just now.'); load(); }}
+            />
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
           <span className={`rounded px-2 py-1 text-xs font-medium ${LEAD_STATUS_COLORS[lead.status]}`}>

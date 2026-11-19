@@ -130,6 +130,22 @@ const LeadSchema = new mongoose.Schema(
 
     // ── Activity log ──────────────────────────────────────────────────────────
     activities: { type: [LeadActivitySchema], default: [] },
+    // Hand corrections to name / phone / e-mail (services/teamLeadService.js
+    // updateLeadDetails), newest last, capped by the writer. Kept apart from
+    // `activities` on purpose: an edit is not a follow-up, so it must not reset
+    // the "quiet for a week" tag or count as contact. `identityKey` is NOT
+    // changed by an edit — it stays the key later signals from the same person
+    // collapse onto.
+    edits: {
+      type: [{
+        _id: false,
+        at: { type: Date, required: true },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        byName: String,
+        changes: [{ _id: false, field: String, from: String, to: String }],
+      }],
+      default: undefined,
+    },
 
     // ── Conversion ────────────────────────────────────────────────────────────
     convertedOrder: { type: mongoose.Schema.Types.ObjectId, ref: "Order", default: null },

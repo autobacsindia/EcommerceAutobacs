@@ -106,7 +106,7 @@ class LeadRepository extends BaseRepository {
 
   /** One lead for the team panel, with its whole history (newest `historyLimit` lines). */
   async teamDetail(leadId, historyLimit = 50) {
-    return Lead.findById(leadId, { ...LeadRepository.TEAM_FIELDS, activities: { $slice: -historyLimit } })
+    return Lead.findById(leadId, { ...LeadRepository.TEAM_FIELDS, activities: { $slice: -historyLimit }, edits: { $slice: -20 } })
       .populate('assignedRep', 'name user')
       .populate('activities.by', 'name')
       .populate('activities.rep', 'name')
@@ -163,6 +163,27 @@ class LeadRepository extends BaseRepository {
     return Lead.findOneAndUpdate(
       { _id: leadId, assignedRep: ownerRepId, status: { $in: openStatuses } },
       { $set: set, $push: { activities: entry } },
+      { new: true, projection: { _id: 1 } }
+    ).lean();
+  }
+
+  /** Just what a details edit compares and its trail (services/teamLeadService.js). */
+  async findForDetailsEdit(leadId) {
+    return Lead.findById(leadId, { name: 1, phone: 1, email: 1, assignedRep: 1 })
+      .populate('assignedRep', 'name user')
+      .lean();
+  }
+
+  /**
+   * Save a details edit only if name / phone / e-mail are still what the caller
+   * compared against (`seen`) — of two people editing at once, the second gets
+   * null and is told to reload instead of silently overwriting the first.
+   */
+  async applyDetailsEdit(leadId, seen, set, entry, cap) {
+    const same = (v) => (v == null || v === '' ? { $in: [null, ''] } : v);
+    return Lead.findOneAndUpdate(
+      { _id: leadId, name: same(seen.name), phone: same(seen.phone), email: same(seen.email) },
+      { $set: set, $push: { edits: { $each: [entry], $slice: -cap } } },
       { new: true, projection: { _id: 1 } }
     ).lean();
   }
