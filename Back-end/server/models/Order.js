@@ -736,6 +736,22 @@ const OrderSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  /*
+    WhatsApp order updates (services/whatsapp/orderWhatsAppService.js).
+
+    whatsappOptIn is the customer's consent for THIS order: the checkout box, or the
+    sales-panel box a staff member ticks after asking. Absent on every order placed
+    before the feature — and absent means NO message, never an assumed yes.
+
+    whatsappNotified is the WhatsApp twin of notifiedStatuses, with the same keys. It
+    is a SEPARATE array on purpose: sharing one would let a sent email suppress the
+    WhatsApp message for the same event (and vice versa). Written only with atomic
+    $addToSet / $pull (orderRepository.claimWhatsAppNotified / releaseWhatsAppNotified).
+  */
+  whatsappOptIn: { type: Boolean, default: undefined },
+  whatsappOptInAt: { type: Date, default: undefined },
+  whatsappOptInBy: { type: String, enum: ['customer', 'staff'], default: undefined },
+  whatsappNotified: { type: [String], default: undefined },
   // Same as shipments[].deliveryNotice, for a legacy order shipped without parcels
   // (its order-level trackingNumber/carrier are what the customer sees).
   deliveryNotice: {

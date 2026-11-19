@@ -95,6 +95,10 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` / `EMAIL_WELCOME_FROM_*` | `noreply@` / `info@autobacsindia.com` | same | must be on the domain verified in ZeptoMail |
 | `CONSULTATION_NOTIFICATION_EMAILS` | unset (→ `sales@autobacsindia.com`) | unset, or the sales inbox(es) | where "new consultation request" alerts go; separate from `ADMIN_NOTIFICATION_EMAILS` (orders/payments/reviews), so changing one never moves the other |
 | `PAYMENT_FAILED_EMAIL_DELAY_MINUTES` | unset (→ 30) | unset (→ 30) | minutes after a failed payment before the customer's "payment didn't go through" email; skipped if the order is paid by then. Shrink it for QA |
+| `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_ACCESS_TOKEN` | **unset** (channel off), or Meta's test number + `WHATSAPP_TEST_RECIPIENTS` | the live number's id + permanent System User token | WhatsApp order updates are OFF unless both are set; off never affects emails. Only opted-in orders are messaged |
+| `WHATSAPP_APP_SECRET` / `WHATSAPP_VERIFY_TOKEN` | unset | app secret + a long random verify token | `/api/v1/webhooks/whatsapp`: signature check on every event (unset secret → 503, bad signature → 401) and Meta's subscribe handshake |
+| `WHATSAPP_TEST_RECIPIENTS` | your own test numbers | **unset** | while on Meta's test number, only these receive; remove at go-live |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` / `WHATSAPP_GRAPH_VERSION` / `WHATSAPP_TEMPLATE_LANGUAGE` / `WHATSAPP_TEMPLATE_*` | unset (defaults) | unset unless Meta renamed a template | see `Back-end/server/.env.example` |
 | `CAREERS_NOTIFICATION_EMAILS` / `CAREERS_FROM_EMAIL` | unset | the careers mailbox | the careers mailbox gets **employment email only** — job-application alerts go there, every store email skips it (`utils/careersMailbox.js`) |
 | `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | unset / `development` | prod DSN / `production` | keep dev noise out of prod |
 | `SLACK_WEBHOOK_URL` | **unset locally** | prod webhook | dev 5xx must not page the team |

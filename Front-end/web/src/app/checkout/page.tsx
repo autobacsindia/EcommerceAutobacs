@@ -309,6 +309,11 @@ function CheckoutPageContent() {
   // Unticked by default and never persisted: consent has to be given for THIS
   // order, so a remembered checkbox would defeat the point of recording it.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // "Order updates on WhatsApp" — ticked by default (owner decision, 2026-11), clearly
+  // labelled with the number, and the customer can untick it. Order updates only,
+  // never offers. Saved on the order as the consent record; the server sends nothing
+  // to an order without an explicit `true`.
+  const [whatsappOptIn, setWhatsappOptIn] = useState(true);
 
   const gstinCheck = useMemo(() => checkGstin(business.gstin), [business.gstin]);
   const isEnterprise = buyerType === BUYER_TYPES.ENTERPRISE;
@@ -577,6 +582,7 @@ function CheckoutPageContent() {
         // The version is NOT sent — the server stamps its own. This only says
         // that the box was ticked.
         acceptTerms: acceptedTerms,
+        whatsappOptIn,
         shippingAddress: {
           fullName: address.fullName, addressLine1: address.street,
           city: address.city, state: address.state, postalCode: address.postalCode,
@@ -1278,6 +1284,25 @@ function CheckoutPageContent() {
                   onChange={setPricing}
                 />
               </div>
+            </div>
+
+            {/* ── WhatsApp order updates (consent for THIS order) ────────── */}
+            <div className="bg-obsidian border border-hairline rounded-lg p-5 mb-6">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={whatsappOptIn}
+                  onChange={(e) => setWhatsappOptIn(e.target.checked)}
+                  className="h-4 w-4 mt-0.5 accent-gold rounded border-hairline bg-obsidian-raised shrink-0"
+                  aria-describedby="whatsapp-detail"
+                />
+                <span className="text-sm text-ink/70 font-display">
+                  Send my order updates on WhatsApp{address.phone ? <> to <span className="text-ink">{address.phone}</span></> : null}
+                </span>
+              </label>
+              <p id="whatsapp-detail" className="text-xs text-ink-muted font-display mt-2 pl-7">
+                Order confirmation, shipping, delivery and refund updates only — no offers. Untick if you prefer email only.
+              </p>
             </div>
 
             {/* ── Legal acceptance ─────────────────────────────────────────

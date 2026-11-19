@@ -22,18 +22,18 @@ const notificationLogSchema = new mongoose.Schema({
     index: true
   },
   
-  // Recipient user ID
+  // Recipient user ID. Not required: a WhatsApp message is logged against the ORDER,
+  // and an order is not guaranteed a user (requiring it made the log throw for those).
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
     index: true
   },
   
-  // Notification type: email or sms
+  // Notification channel
   type: {
     type: String,
-    enum: ['email', 'sms'],
+    enum: ['email', 'sms', 'whatsapp'],
     required: true
   },
   
@@ -51,7 +51,12 @@ const notificationLogSchema = new mongoose.Schema({
       'return_rejected',
       'item_received',
       'refund_processed',
-      'tracking_update'
+      'tracking_update',
+      // WhatsApp order updates (services/whatsapp/orderWhatsAppService.js)
+      'order_out_for_delivery',
+      'order_delivery_failed',
+      'payment_failed',
+      'refund_started'
     ],
     required: true
   },
@@ -79,14 +84,28 @@ const notificationLogSchema = new mongoose.Schema({
   // Service provider (SendGrid or Twilio)
   provider: {
     type: String,
-    enum: ['sendgrid', 'twilio', 'mock'],
+    enum: ['sendgrid', 'twilio', 'mock', 'meta'],
     required: true
   },
   
-  // Message ID from provider (for tracking)
+  // Message ID from provider (for tracking). For WhatsApp, Meta's `wamid.…` — the key
+  // the delivery-status webhook updates by.
   providerId: {
     type: String
   },
+
+  /*
+    WhatsApp only: what Meta's status webhook last told us. Only ever moves FORWARD
+    (accepted → sent → delivered → read); `failed` can replace accepted/sent only.
+    Statuses arrive out of order and more than once, so the update is conditional —
+    see notificationLogRepository.advanceDeliveryStatus.
+  */
+  deliveryStatus: {
+    type: String,
+    enum: ['accepted', 'sent', 'delivered', 'read', 'failed'],
+    default: undefined
+  },
+  deliveryStatusAt: { type: Date, default: undefined },
   
   // Error message if delivery failed
   errorMessage: {
@@ -95,6 +114,7 @@ const notificationLogSchema = new mongoose.Schema({
   
   // Additional metadata
   metadata: {
+    template: String,
     subject: String,
     messagePreview: String,
     retryDelays: [Number],
@@ -107,6 +127,12 @@ const notificationLogSchema = new mongoose.Schema({
 // Index for efficient queries
 notificationLogSchema.index({ orderId: 1, type: 1 });
 notificationLogSchema.index({ status: 1, createdAt: -1 });
+// The WhatsApp status webhook looks a message up by Meta's id. Sparse, so rows that
+// never carry an id cost nothing. NOT a `$type` partial index: the planner cannot
+// infer `$type: 'string'` from `providerId: '<id>'`, so the webhook's query would
+// never use it (proved in tests/whatsappWebhook.test.js). Built by
+// scripts/create-whatsapp-indexes.js (prod runs autoIndex off).
+notificationLogSchema.index({ providerId: 1 }, { name: 'notification_provider_id', sparse: true });
 
 // TTL index for automatic cleanup after 90 days (7776000 seconds)
 notificationLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7776000 });

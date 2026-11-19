@@ -356,6 +356,7 @@ export async function createSalesOrder(actor, input, req) {
     actorId: actor._id,
     notes: input.notes ? String(input.notes).slice(0, 1000) : undefined,
     defaultNote: `Sales order created in the team panel by ${actor.name}`,
+    whatsappOptIn: customer.whatsappOptIn,
   });
 
   auditLogger.logAction(req, 'CREATE', 'Order', order._id, {

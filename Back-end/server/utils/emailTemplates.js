@@ -1268,9 +1268,15 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
     : copy.heading;
   // Amount in the refund-started line when we know it (Razorpay's created refund).
   const refundAmount = Number(refund?.amount);
-  const refundBlurb = status === 'refund_initiated' && Number.isFinite(refundAmount) && refundAmount > 0
-    ? `We've started a refund of ${formatRupees(refundAmount)} to your original payment method. It usually reaches your account in 5–7 working days, depending on your bank. We'll email you again once it's done.`
-    : null;
+  // `refunded` carries an amount only for a part refund (a partial cancellation): it
+  // must say how much, or "your refund has been processed" reads as the whole order.
+  const hasRefundAmount = Number.isFinite(refundAmount) && refundAmount > 0;
+  const refundBlurb = !hasRefundAmount ? null
+    : status === 'refund_initiated'
+      ? `We've started a refund of ${formatRupees(refundAmount)} to your original payment method. It usually reaches your account in 5–7 working days, depending on your bank. We'll email you again once it's done.`
+      : status === 'refunded'
+        ? `We've refunded ${formatRupees(refundAmount)} to your original payment method. It may take a few business days to reflect in your account, depending on your bank.`
+        : null;
   const blurb = partialCopy
     ? (status === 'delivered'
         ? `Part of your order has arrived — this is ${parcelRef.toLowerCase()}. Here's what was in it:`

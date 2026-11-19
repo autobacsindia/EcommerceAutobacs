@@ -23,8 +23,10 @@
  *                them here would double-count.
  *   per-line     Payment row + affiliate clawback + LTV, via the SAME
  *                applyCancellationRefundSideEffectsOnce the gateway path and the
- *                refund webhook share. No customer email, because the gateway per-line
- *                path sends none either (applyCancellationRefundWebhook).
+ *                refund webhook share. No customer email here (yet): the gateway
+ *                per-line path now sends one (applyCancellationRefundWebhook, keyed
+ *                `refunded:<refundId>`), but an offline per-line payout can be reverted,
+ *                so emailing it needs its own decision — tracked as a follow-up.
  *
  * ── PHASE ORDER ─────────────────────────────────────────────────────────────────────
  * Copied from the return path (returnController.recordOfflineRefund), for its reason:
@@ -50,6 +52,7 @@ import { remainingRefundable } from './refundMathService.js';
 import { applyCancellationRefundSideEffectsOnce } from './cancellationRefundSideEffects.js';
 import { reverseRefundSideEffects } from './refundReversalService.js';
 import { enqueueNotification } from '../queue/queues.js';
+import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
 import { offlineMethodLabel } from '../config/offlineRefund.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import AppError from '../utils/AppError.js';
@@ -259,6 +262,7 @@ export const markOrderRefundOffline = async (req, {
       enqueueNotification('send-order-status-email', {
         orderId: order._id.toString(), status: 'refunded',
       });
+      enqueueOrderWhatsApp(order._id, 'refunded', { amount: amountRupees });
     });
   }
 
@@ -443,9 +447,9 @@ export const markCancellationRefundOffline = async (req, {
     behind one claim. Reusing it is what guarantees an offline payout and a gateway
     payout leave the books in identical states.
 
-    No customer email here — the gateway per-line path sends none either
-    (applyCancellationRefundWebhook), and an email that fires only for cash payouts
-    would be worse than no email at all.
+    No customer email here. The gateway per-line path does send one
+    (applyCancellationRefundWebhook), but this record can be reverted afterwards, so an
+    email for it is a separate decision — not made silently here.
   */
   await bestEffort(warnings, 'refund side effects', context, async () => {
     const result = await applyCancellationRefundSideEffectsOnce(

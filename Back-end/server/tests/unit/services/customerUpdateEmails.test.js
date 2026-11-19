@@ -258,6 +258,15 @@ describe('orderStatusEmail — wording', () => {
     expect(without.text).toContain("We've started your refund to your original payment method");
   });
 
+  it('refund processed names the amount for a part refund, and keeps the full-refund copy without one', () => {
+    const part = orderStatusEmail({ order: makeOrder(), status: 'refunded', refund: { amount: 499.5 } });
+    expect(part.subject).toBe('Refund processed — AB-1F3C9A2E');
+    expect(part.text).toContain("We've refunded ₹499.50 to your original payment method");
+    const full = orderStatusEmail({ order: makeOrder(), status: 'refunded' });
+    expect(full.text).toContain('Your refund has been processed.');
+    expect(full.text).not.toContain("We've refunded");
+  });
+
   it('the existing shipped email for a partial parcel is unchanged', () => {
     const order = makeOrder({ shipments: [parcel(), parcel({ _id: 'ship2', sequence: 2 })] });
     const { subject } = orderStatusEmail({ order, status: 'shipped', shipment: order.shipments[1] });

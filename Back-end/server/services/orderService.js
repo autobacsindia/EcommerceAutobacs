@@ -14,6 +14,7 @@ import { toPaise } from '../utils/money.js';
 import { resolveAttribution } from './affiliateAttributionService.js';
 import AppError from '../utils/AppError.js';
 import { getOrderQueue } from '../queue/queues.js';
+import { whatsappConsentFields } from '../utils/whatsappConsent.js';
 
 class OrderService {
   /**
@@ -252,7 +253,10 @@ class OrderService {
             // spread conditionally so an individual order carries no empty
             // subdoc, and so the ~1,500 pre-existing orders stay shape-identical.
             ...(orderData.buyer && { buyer: orderData.buyer }),
-            ...(orderData.legalAcceptance && { legalAcceptance: orderData.legalAcceptance })
+            ...(orderData.legalAcceptance && { legalAcceptance: orderData.legalAcceptance }),
+            // The checkout's "order updates on WhatsApp" box. Consent, not money: it
+            // decides only whether order updates also go by WhatsApp.
+            ...whatsappConsentFields(orderData.whatsappOptIn, 'customer'),
           },
           session
         );

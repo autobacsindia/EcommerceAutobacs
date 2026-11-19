@@ -30,6 +30,29 @@ export function normalizePhone(phone) {
 }
 
 /**
+ * An Indian mobile number in E.164 (`+919876543210`), or null.
+ *
+ * For sending to WhatsApp, so stricter than normalizePhone: it accepts only the
+ * shapes an Indian mobile is actually written in — 10 digits, 0 + 10, or 91 + 10,
+ * with any spaces, dashes, brackets or a leading `+` — and the 10 digits must start
+ * 6–9 (every Indian mobile series). Anything else (a landline, a foreign number, a
+ * typo with 9 or 11 digits) returns null so the caller skips the message rather than
+ * guessing at someone else's number.
+ * @param {string} phone
+ * @returns {string|null}
+ */
+export function toE164India(phone) {
+  if (phone == null) return null;
+  const digits = String(phone).replace(/\D/g, '');
+  let national = null;
+  if (digits.length === 10) national = digits;
+  else if (digits.length === 11 && digits.startsWith('0')) national = digits.slice(1);
+  else if (digits.length === 12 && digits.startsWith('91')) national = digits.slice(2);
+  if (!national || !/^[6-9]\d{9}$/.test(national)) return null;
+  return `+91${national}`;
+}
+
+/**
  * Canonical dedup key for a lead identity. Prefers email; falls back to a
  * phone-scoped key. Returns null when neither is usable (caller should skip).
  */

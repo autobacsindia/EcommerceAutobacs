@@ -170,6 +170,34 @@ describe('accepting', () => {
     expect((await SalesQuotation.findById(q.id).lean()).order.toString()).toBe(orderId);
   });
 
+  // WhatsApp consent: asked by staff on the quotation, carried onto the order at accept.
+  it.each([
+    [true, true],
+    [false, false],
+  ])('carries the WhatsApp choice (%p) from the quotation onto the order as staff consent', async (given, stored) => {
+    const rep = await makeStaff('sales');
+    const product = await makeProduct();
+    const q = await quotes.createQuotation(rep, quoteInput(
+      [{ product: String(product._id), quantity: 1 }],
+      { customer: { ...CUSTOMER, whatsappOptIn: given } },
+    ), req);
+    const { orderId } = await quotes.acceptQuotation(rep, q.id, req);
+    const order = await Order.findById(orderId).lean();
+    expect(order.whatsappOptIn).toBe(stored);
+    expect(order.whatsappOptInBy).toBe('staff');
+    expect(order.whatsappOptInAt).toBeInstanceOf(Date);
+  });
+
+  it('a quotation saved without the WhatsApp box records no consent on the order', async () => {
+    const rep = await makeStaff('sales');
+    const product = await makeProduct();
+    const q = await quotes.createQuotation(rep, quoteInput([{ product: String(product._id), quantity: 1 }]), req);
+    const { orderId } = await quotes.acceptQuotation(rep, q.id, req);
+    const order = await Order.findById(orderId).lean();
+    expect(order.whatsappOptIn).toBeUndefined();
+    expect(order.whatsappOptInBy).toBeUndefined();
+  });
+
   it('two accepts at once create one order', async () => {
     const rep = await makeStaff('sales');
     const q = await quotes.createQuotation(rep, quoteInput([{ custom: true, name: 'Labour', quantity: 1, price: 500 }]), req);

@@ -40,6 +40,8 @@ export default function OfflineOrderForm({
   const [name, setName] = useState(defaults?.name || '');
   const [email, setEmail] = useState(defaults?.email || '');
   const [phone, setPhone] = useState(defaults?.phone || '');
+  // "Order updates on WhatsApp": ticked by default; untick if the customer says no.
+  const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [addr, setAddr] = useState({
     fullName: defaults?.name || '', addressLine1: '', addressLine2: '',
     city: '', state: '', postalCode: '', country: 'India',
@@ -126,6 +128,7 @@ export default function OfflineOrderForm({
         {
           name: name || undefined,
           email, phone,
+          whatsappOptIn,
           items: items.map((i) => ({ product: i.product, name: i.name, price: i.price, listPrice: i.listPrice, quantity: i.quantity })),
           shippingAddress: { ...addr, fullName: addr.fullName || name, phone },
           paymentMode,
@@ -177,6 +180,10 @@ export default function OfflineOrderForm({
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
         </label>
       </div>
+      <label className="flex items-start gap-2 text-sm text-gray-700">
+        <input type="checkbox" className="mt-0.5 h-4 w-4" checked={whatsappOptIn} onChange={(e) => setWhatsappOptIn(e.target.checked)} />
+        <span>Send order updates on WhatsApp to this phone (ask the customer first; untick if they say no)</span>
+      </label>
 
       {/* Business buyer (GST) */}
       <div>
