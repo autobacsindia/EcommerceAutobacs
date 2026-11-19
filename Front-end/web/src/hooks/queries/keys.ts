@@ -100,6 +100,8 @@ export const profileKeys = {
   myProfile: () => [...profileKeys.all, 'my-profile'] as const,
   /** `/staff/photos` — { userId: photoUrl } for everyone in the panels. */
   panelPhotos: () => [...profileKeys.all, 'panel-photos'] as const,
+  /** `/reviews/user` — the customer's own product reviews (profile "My reviews"). */
+  myReviews: () => [...profileKeys.all, 'my-reviews'] as const,
 };
 
 export const campaignKeys = {

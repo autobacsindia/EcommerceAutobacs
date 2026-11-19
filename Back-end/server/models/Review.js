@@ -93,6 +93,16 @@ ReviewSchema.index(
   { unique: true, partialFilterExpression: { order: { $exists: true } } }
 );
 ReviewSchema.index({ product: 1, isApproved: 1 });
+// A customer's own reviews, newest first (GET /reviews/user — the profile "My
+// reviews" card). Without it every profile visit scanned the whole collection:
+// measured 100,000 docs examined → 10 on a 100k-review fixture. Partial on
+// `$exists` (not `$type`): the planner only picks a partial index whose filter the
+// query implies, and `{ user: <id> }` implies `$exists` but not `$type`.
+// Built in prod by the safety net in config/db.js (autoIndex is off there).
+ReviewSchema.index(
+  { user: 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { user: { $exists: true } } }
+);
 // Homepage testimonials feed (approved + flagged).
 ReviewSchema.index({ isTestimonial: 1, isApproved: 1 });
 

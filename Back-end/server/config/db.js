@@ -343,6 +343,14 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Lead worklist score index confirmed');
 
+    // Profile "My reviews": a customer's own reviews newest first. Same spec and
+    // options as models/Review.js so the two never disagree on the name.
+    await db.collection('reviews').createIndex(
+      { user: 1, createdAt: -1, _id: -1 },
+      { partialFilterExpression: { user: { $exists: true } }, background: true }
+    );
+    console.log('✓ Review per-customer index confirmed');
+
     // Careers media retention sweep lookup: "rejected, rejected before X, media not
     // yet purged". The daily cron reads this every run; without it the sweep does a
     // full collection scan of jobapplications. Declared on the JobApplication schema

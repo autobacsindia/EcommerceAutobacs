@@ -13,6 +13,7 @@ import { profileKeys } from '@/hooks/queries/keys';
 import { Address } from '@/lib/types';
 import KarmaBadge from '@/components/profile/KarmaBadge';
 import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
+import MyReviewsCard from '@/components/profile/MyReviewsCard';
 import AffiliateCard from '@/components/profile/AffiliateCard';
 import PhotoEditor from '@/components/profile/PhotoEditor';
 
@@ -296,6 +297,7 @@ export default function ProfilePage() {
 
         {/* Recent orders — directly under the identity header */}
         <RecentOrdersCard />
+        <MyReviewsCard />
 
         {/* The ONLY in-app route to /account/affiliate. See the component header. */}
         <AffiliateCard />
