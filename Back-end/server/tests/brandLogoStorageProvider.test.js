@@ -57,6 +57,7 @@ const cldStub = {
   buildOptimizedUrl: jest.fn((u) => u), deleteFromCloudinary: jest.fn(),
   generateUploadSignature: jest.fn(), uploadManyToCloudinary: jest.fn(),
   uploadRawToCloudinary: jest.fn(),
+  uploadVideoToCloudinary: jest.fn(),
 };
 jest.unstable_mockModule('../utils/cloudinaryHelpers.js', () => ({
   ...cldStub, default: cldStub,

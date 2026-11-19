@@ -17,7 +17,7 @@ describe('media-src', () => {
     expect(directive(await buildStrictCsp('n0nc3'), 'media-src')).toMatch(/r2\.cloudflarestorage\.com/);
   });
 
-  test('lets a reel video play from Cloudinary', async () => {
+  test('lets a reel or team-chat video play from Cloudinary', async () => {
     expect(directive(await buildStrictCsp('n0nc3'), 'media-src')).toContain('https://res.cloudinary.com');
   });
 });

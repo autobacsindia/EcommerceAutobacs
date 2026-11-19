@@ -23,6 +23,10 @@ import { pushConfigured, sendToUsers } from './pushService.js';
 import { onlineAmong } from './chatPresence.js';
 import { uploadChatAttachments, copyChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE, CHAT_FILE_NAME, chatFolder, chatFileType } from './chatAttachmentService.js';
 import { readPrivateAsset } from './storage/privateUploads.js';
+import { r2PrivateUrl } from './storage/privateAssetUrl.js';
+
+/** A chat video's private link lives this long: the player keeps asking for ranges while someone watches. */
+export const CHAT_VIDEO_URL_TTL_SECONDS = 2 * 60 * 60;
 import { firstUrl, previewFor, linkPreviewsEnabled } from './linkPreviewService.js';
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
@@ -442,13 +446,28 @@ async function loadAccessible(user, channelId) {
  * The bytes of a file shared in a channel (private storage). Same rule as
  * reading the messages: 404 unless the reader may see the channel.
  */
-export async function readChatFile(user, channelId, name) {
+export async function readChatFile(user, channelId, name, { download = false } = {}) {
   const channel = await loadAccessible(user, channelId);
   const type = CHAT_FILE_NAME.test(String(name)) ? chatFileType(name) : null;
   if (!type) throw fail('File not found', 404);
+  const publicId = `${chatFolder(idOf(channel))}/${name}`;
+  // A video is not pulled through this process: the player asks for byte ranges
+  // (Safari will not play without them) and a clip can be 40 MB. Access is
+  // checked above; the reader is then sent to a short-lived private link that
+  // R2 serves with Range support. Same pattern as the Lesson Library.
+  if (type.kind === 'video') {
+    const url = await r2PrivateUrl({
+      key: publicId,
+      ttlSeconds: CHAT_VIDEO_URL_TTL_SECONDS,
+      contentType: type.mime,
+      downloadAs: download ? String(name).replace(/^\d+-[a-z0-9]+-/, '') : undefined,
+    });
+    if (!url) throw fail('File not found', 404);
+    return { redirect: url, mime: type.mime };
+  }
   let buffer;
   try {
-    buffer = await readPrivateAsset({ publicId: `${chatFolder(idOf(channel))}/${name}`, provider: 'r2' });
+    buffer = await readPrivateAsset({ publicId, provider: 'r2' });
   } catch {
     throw fail('File not found', 404);
   }

@@ -156,9 +156,11 @@ function buildPolicy(scriptSrc: string): string {
     "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.facebook.com",
     // Training videos in the staff Lesson Library play straight from the private
     // bucket by a short-lived link. Without this they fall back to default-src and
-    // the player silently shows nothing.
+    // the player silently shows nothing. Team-chat videos do the same (the API
+    // checks access, then redirects to a private link).
     // res.cloudinary.com: shoppable reels (admin review queue) stream their MP4
-    // from Cloudinary. Without it the <video> silently stays black.
+    // from Cloudinary, as do chat videos stored before / without R2. Without it
+    // the <video> silently stays black.
     `media-src 'self' ${R2_UPLOAD_ORIGIN} https://res.cloudinary.com`,
     "frame-ancestors 'none'",
     "object-src 'none'",

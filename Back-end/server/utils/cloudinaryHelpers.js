@@ -155,6 +155,32 @@ export const uploadRawToCloudinary = (buffer, options = {}) => {
   });
 };
 
+/**
+ * Upload a video buffer as a Cloudinary `video` asset (plays and seeks from the
+ * CDN, which answers Range requests). No transformation: the clip is stored as sent.
+ *
+ * @param {Buffer} buffer
+ * @param {object} [options]
+ * @param {string} [options.folder='general']
+ * @returns {Promise<{ secure_url: string, public_id: string }>}
+ */
+export const uploadVideoToCloudinary = (buffer, options = {}) => {
+  const { folder = 'general' } = options;
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: 'video' },
+      (error, result) => {
+        if (error) {
+          console.error(`[Cloudinary] Video upload failed — folder: ${folder} | error: ${error.message}`);
+          return reject(new AppError(`Cloudinary upload failed: ${error.message}`, 500));
+        }
+        resolve({ secure_url: result.secure_url, public_id: result.public_id });
+      },
+    );
+    uploadStream.end(buffer);
+  });
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // deleteFromCloudinary
 // ────────────────────────────────────────────────────────────────────────────

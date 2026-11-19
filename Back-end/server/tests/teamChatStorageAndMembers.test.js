@@ -29,7 +29,7 @@ jest.unstable_mockModule('../services/storage/privateUploads.js', () => ({ ...st
 jest.unstable_mockModule('../utils/cloudinaryHelpers.js', () => {
   const boom = (...a) => { cloudinaryCalls.push(a); return Promise.reject(new Error('cloud_name is disabled')); };
   return {
-    uploadToCloudinary: boom, uploadRawToCloudinary: boom, uploadManyToCloudinary: boom,
+    uploadToCloudinary: boom, uploadRawToCloudinary: boom, uploadVideoToCloudinary: boom, uploadManyToCloudinary: boom,
     deleteFromCloudinary: () => Promise.resolve(), deleteManyFromCloudinary: () => Promise.resolve(),
     buildOptimizedUrl: (id) => id,
     generateUploadSignature: () => ({}),

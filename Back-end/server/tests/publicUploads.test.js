@@ -49,6 +49,7 @@ jest.unstable_mockModule('../utils/cloudinaryHelpers.js', () => ({
   deleteManyFromCloudinary: jest.fn(),
   generateUploadSignature: jest.fn(),
   uploadRawToCloudinary: jest.fn(),
+  uploadVideoToCloudinary: jest.fn(),
   uploadManyToCloudinary: jest.fn(),
 }));
 
