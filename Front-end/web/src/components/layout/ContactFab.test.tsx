@@ -19,7 +19,7 @@ describe('ContactFab', () => {
     expect(screen.getByLabelText(/call us/i)).toHaveAttribute('href', 'tel:+919895257905');
   });
 
-  it.each(['/admin/orders', '/team', '/team/members', '/checkout', '/staff-invite'])(
+  it.each(['/admin/orders', '/team', '/team/members', '/cart', '/checkout', '/staff-invite'])(
     'stays out of %s',
     (path) => {
       pathname = path;
@@ -27,6 +27,15 @@ describe('ContactFab', () => {
       expect(container).toBeEmptyDOMElement();
     },
   );
+
+  it('reserves room after the page on phones so content can scroll clear of the stack', () => {
+    pathname = '/orders';
+    render(<ContactFab />);
+    const spacer = screen.getByTestId('fab-clearance');
+    // Phones only, and tall enough for launcher + WhatsApp + Call (188px).
+    expect(spacer).toHaveClass('md:hidden');
+    expect(spacer.className).toContain('h-[calc(196px');
+  });
 
   it('does not hide on a page that merely starts with "team"', () => {
     pathname = '/teamwork-guide';
@@ -62,26 +71,26 @@ describe('ContactFab', () => {
   it('sits above the chat launcher, and higher still above the product page buy bar', () => {
     pathname = '/';
     const { container, unmount } = render(<ContactFab />);
-    const stack = () => container.firstElementChild as HTMLElement;
+    const stack = () => container.lastElementChild as HTMLElement;
     expect(stack().className).toContain('bottom-[calc(80px_+_env(safe-area-inset-bottom))]');
     expect(stack()).toHaveClass('md:bottom-28');
     unmount();
     pathname = '/products/ironman-reco-traks';
     const second = render(<ContactFab />);
-    expect((second.container.firstElementChild as HTMLElement).className)
+    expect((second.container.lastElementChild as HTMLElement).className)
       .toContain('bottom-[calc(192px_+_env(safe-area-inset-bottom))]');
   });
 
   it('records each tap once, per channel, in PostHog and GTM', () => {
-    pathname = '/cart';
+    pathname = '/orders';
     render(<ContactFab />);
     fireEvent.click(screen.getByLabelText(/whatsapp/i));
     fireEvent.click(screen.getByLabelText(/call us/i));
     expect(capture).toHaveBeenCalledTimes(2);
-    expect(capture).toHaveBeenNthCalledWith(1, 'contact_click', { channel: 'whatsapp', path: '/cart' });
-    expect(capture).toHaveBeenNthCalledWith(2, 'contact_click', { channel: 'call', path: '/cart' });
+    expect(capture).toHaveBeenNthCalledWith(1, 'contact_click', { channel: 'whatsapp', path: '/orders' });
+    expect(capture).toHaveBeenNthCalledWith(2, 'contact_click', { channel: 'call', path: '/orders' });
     expect(pushToGtm).toHaveBeenCalledTimes(2);
-    expect(pushToGtm).toHaveBeenNthCalledWith(1, { event: 'contact_click', contact_channel: 'whatsapp', page_path: '/cart' });
-    expect(pushToGtm).toHaveBeenNthCalledWith(2, { event: 'contact_click', contact_channel: 'call', page_path: '/cart' });
+    expect(pushToGtm).toHaveBeenNthCalledWith(1, { event: 'contact_click', contact_channel: 'whatsapp', page_path: '/orders' });
+    expect(pushToGtm).toHaveBeenNthCalledWith(2, { event: 'contact_click', contact_channel: 'call', page_path: '/orders' });
   });
 });

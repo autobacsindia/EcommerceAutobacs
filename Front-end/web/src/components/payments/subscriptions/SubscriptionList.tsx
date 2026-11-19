@@ -9,7 +9,7 @@ import { errorMessage } from '../api';
 import SubscriptionDetail from './SubscriptionDetail';
 import SubscriptionForm from './SubscriptionForm';
 import {
-  approxText, billText, dayText, dueText, listSubscriptions, payText, perText, STATUS_TONE, subscriptionKeys,
+  approxText, billText, dayText, dueText, estimateText, listSubscriptions, payText, perText, STATUS_TONE, subscriptionKeys,
 } from './api';
 
 /** The quick filters. "Due in 7 days" and "Overdue" are about the date; the rest about the check. */
@@ -126,7 +126,7 @@ export default function SubscriptionList({ teams, intro }: {
                   </p>
                 </div>
                 <span className="shrink-0 text-right text-sm font-semibold text-gray-900">
-                  {billText(s)}{perText(s.kind)}
+                  {billText(s)}{perText(s.kind)}{estimateText(s)}
                   {approxText(s.approxInr) && <span className="block text-xs font-normal text-gray-500">{approxText(s.approxInr)}</span>}
                 </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[s.status]}`}>{s.statusLabel}</span>

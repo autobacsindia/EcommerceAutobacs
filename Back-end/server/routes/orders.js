@@ -48,6 +48,7 @@ import {
   deleteOrder,
   updateOrderStatus,
   getShipments,
+  updateOrderShippingAddress,
   createShipment,
   getCancellations,
   createCancellation,
@@ -192,6 +193,12 @@ router.put(
 // @desc    Parcels on an order + what is still to ship + the fulfilment label
 // @access  Private (order owner or admin)
 router.get("/:id/shipments", protect, validateIdParam, asyncHandler(getShipments));
+
+// @route   PATCH /orders/:id/shipping-address { address, reason }
+// @desc    Correct name/phone/street/city before dispatch (Admin only). PIN + state
+//          are locked (they set the delivery charge). See services/orderAddressService.js.
+// @access  Private/Admin
+router.patch("/:id/shipping-address", protect, admin, validateIdParam, asyncHandler(updateOrderShippingAddress));
 
 // @route   POST /orders/:id/shipments
 // @desc    Create one parcel from a subset of the outstanding lines (Admin only)

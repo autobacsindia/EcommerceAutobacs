@@ -380,6 +380,35 @@ describe('the board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Late' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Complete' })).toBeNull());
   });
+
+  // Regression: the board scrolled into blank space with the column tops cut off.
+  // jsdom has no layout, so these pin the layout contract that prevents it.
+  it('fills the screen on a wide display: one scroll per column, never the page', async () => {
+    await board([task()]);
+    await screen.findByText('Call Bosch');
+    const edge = document.querySelector('.tk-edge')!;
+    expect(edge).toHaveAttribute('data-fill', 'true');
+    expect(edge.className).toMatch(/lg:sticky/);
+    expect(edge.className).toMatch(/lg:h-\[calc\(100dvh-3\.5rem-1px\)\]/);
+    expect(edge.className).not.toMatch(/min-h-\[/);
+    // A screen-based height on a column ignores the header above it and pushes the page into a scroll.
+    for (const c of screen.getAllByRole('region').filter((r) => r.classList.contains('tk-col'))) {
+      expect(c.className).not.toMatch(/dvh|vh\)/);
+    }
+    // Each card contains its own hidden labels and invisible date picker; without
+    // `relative` they escape the column's scroll box and stretch the board row.
+    const card = screen.getByRole('button', { name: /Open T-7/ });
+    expect(card.className).toMatch(/(^|\s)relative(\s|$)/);
+  });
+
+  it('the list view keeps the ordinary page scroll', async () => {
+    serve({ list: [task()] });
+    workspace();
+    await screen.findByText('Call Bosch');
+    const edge = document.querySelector('.tk-edge')!;
+    expect(edge).not.toHaveAttribute('data-fill');
+    expect(edge.className).toMatch(/lg:min-h-\[calc\(100dvh-3\.5rem\)\]/);
+  });
 });
 
 describe('new task', () => {

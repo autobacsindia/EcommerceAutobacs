@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Mail, Phone, Lock, CheckCircle } from 'lucide-react';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 
 function ClaimOrderPageInner() {
   const router = useRouter();
@@ -218,10 +219,10 @@ function ClaimOrderPageInner() {
               <label htmlFor="password" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
                 Set Password <span className="normal-case font-display tracking-normal">(optional)</span>
               </label>
-              <input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={inputClass}

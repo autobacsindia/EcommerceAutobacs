@@ -70,6 +70,7 @@ function isSuppressed(pathname: string | null): boolean {
   return (
     pathname.startsWith('/admin') ||
     pathname === '/team' || pathname.startsWith('/team/') ||
+    pathname === '/cart' ||
     pathname.startsWith('/checkout') ||
     pathname === '/careers' || pathname.startsWith('/careers/') ||
     pathname === '/contact' ||
@@ -234,8 +235,11 @@ export default function HelpWidget() {
           aria-hidden="true"
         />
       </span>
+      {/* Phones: icon only, so the tab covers ~44×44px of page instead of a
+          120px-tall strip over prices and delete buttons. The button's
+          aria-label still says "Need help?". */}
       <span
-        className="font-display text-[12px] font-semibold uppercase leading-none tracking-[0.12em]"
+        className="hidden font-display text-[12px] font-semibold uppercase leading-none tracking-[0.12em] sm:inline"
         style={{ writingMode: 'vertical-rl' }}
       >
         Need help?

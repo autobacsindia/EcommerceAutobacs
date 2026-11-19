@@ -43,7 +43,7 @@ describe('LoginPage Integration', () => {
     
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
   });
 
@@ -68,7 +68,7 @@ describe('LoginPage Integration', () => {
     
     // Needs an '@' to be judged as an email; without one it's a valid staff username.
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'invalid@email' } });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
     
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
     
@@ -85,7 +85,7 @@ describe('LoginPage Integration', () => {
     render(<LoginPage />);
     
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'test@example.com' } });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
     
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
     

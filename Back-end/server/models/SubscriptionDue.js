@@ -49,6 +49,28 @@ const HistorySchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * One cycle of a usage-based bill, as actually paid: "Nov — USD 112, invoice
+ * attached, recorded by Priya". `dueDate` is the cycle's due day (the item's
+ * dueDate when it was recorded), so each cycle is recorded once. Never edited or
+ * removed — it is the paid history.
+ */
+const CycleSchema = new mongoose.Schema(
+  {
+    dueDate: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+    amount: { type: Number, required: true, min: 0.01 },
+    currency: { type: String, required: true, maxlength: 3 },
+    // The estimate at the time, for "estimate USD 100 → actual USD 112".
+    estimate: { type: Number, default: null },
+    invoices: { type: [FileSchema], default: [] },
+    note: { type: String, default: '', maxlength: 500 },
+    paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    paidByName: { type: String, default: '' },
+    paidAt: { type: Date, required: true },
+  },
+  { _id: true }
+);
+
 const SubscriptionDueSchema = new mongoose.Schema(
   {
     // SD-0001 … from the 'subscription_due' counter.
@@ -61,7 +83,12 @@ const SubscriptionDueSchema = new mongoose.Schema(
 
     // What the bill says, in its own currency — "USD 20". Never converted and
     // stored: a rupee figure shown beside it is a rough guide worked out on read.
+    // For a usage-based bill (`variableAmount`), this is the ESTIMATE; each
+    // cycle's real amount is entered when it is paid and kept in `cycles`.
     amount: { type: Number, required: true, min: 0 },
+    // "Amount varies (usage-based)" — MongoDB Atlas, Railway… Absent on items
+    // added before it existed, which reads as false: a fixed amount.
+    variableAmount: { type: Boolean, default: false },
     currency: { type: String, required: true, maxlength: 3 },
     // The next due DAY in India time, 'YYYY-MM-DD' — a calendar day, not an
     // instant, so "due on 2 Dec" means 2 Dec whatever the server's clock zone.
@@ -77,6 +104,8 @@ const SubscriptionDueSchema = new mongoose.Schema(
     billingUrl: { type: String, default: '', maxlength: 500 },
     notes: { type: String, default: '', maxlength: 6000 },
     files: { type: [FileSchema], default: [] },
+    // The paid history of a usage-based bill, oldest first (one per cycle, ~12 a year).
+    cycles: { type: [CycleSchema], default: [] },
 
     status: { type: String, enum: ['pending', 'verified', 'rejected'], default: 'pending', required: true },
     rejectReason: { type: String, default: '', maxlength: 1000 },

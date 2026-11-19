@@ -22,7 +22,7 @@ import {
   razorpayStartMethodForChoice,
   type PaymentChoice,
 } from '@/lib/paymentChoices';
-import { isValidIndianMobile } from '@/lib/utils';
+import { validateCheckoutAddress, firstAddressError, type AddressErrors, type AddressField } from '@/lib/checkout/addressValidation';
 import { BUYER_TYPES, checkGstin, normalizeGstin, type BuyerType } from '@/lib/legal/buyerTypes';
 import { enterpriseBlockError } from '@/lib/legal/checkoutBuyer';
 import { LEGAL_LINKS } from '@/lib/constants';
@@ -72,6 +72,44 @@ interface SavedAddress {
   country: string;
   phone: string;
   isDefault?: boolean;
+}
+
+/** A labelled delivery-address box that turns red with its own message. */
+function AddressInput({ field, label, value, error, className, onChange, type = 'text', placeholder, inputMode, maxLength, autoComplete }: {
+  field: AddressField;
+  label: string;
+  value: string;
+  error?: string;
+  className: string;
+  onChange: (field: AddressField, value: string) => void;
+  type?: 'text' | 'tel';
+  placeholder?: string;
+  inputMode?: 'numeric' | 'tel';
+  maxLength?: number;
+  autoComplete?: string;
+}) {
+  const id = `checkout-${field}`;
+  const errorId = `${id}-error`;
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-xs font-display font-semibold text-ink/70">{label}</label>
+      <input
+        id={id}
+        name={field}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        autoComplete={autoComplete}
+        onChange={(e) => onChange(field, e.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        className={`${className}${error ? ' !border-red-500' : ''}`}
+      />
+      {error && <p id={errorId} role="alert" className="mt-1 text-xs font-display text-red-600">{error}</p>}
+    </div>
+  );
 }
 
 export default function CheckoutPage() {
@@ -284,6 +322,8 @@ function CheckoutPageContent() {
   const [shouldSaveAddress, setShouldSaveAddress] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState<number | null>(null);
+  // Per-field messages from the last "Continue to Payment"; a box clears as it is edited.
+  const [addressErrors, setAddressErrors] = useState<AddressErrors>({});
 
   useEffect(() => {
     const validateCartStock = async () => {
@@ -386,6 +426,12 @@ function CheckoutPageContent() {
     }
   }, [cart, router, authLoading, cartLoading]);
 
+  // Edits clear that box's message; the rest stay until the next submit.
+  const onAddressChange = (field: AddressField, value: string) => {
+    setAddress((prev) => ({ ...prev, [field]: value }));
+    setAddressErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+  };
+
   const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Runs BEFORE the saved-address early return below. Placing it after meant a
@@ -401,18 +447,19 @@ function CheckoutPageContent() {
     });
     if (buyerError) { toast.error(buyerError); return; }
 
+    // Same checks as the server (middleware/validators/order.js), field by field,
+    // so the wrong box turns red instead of the order failing at "Place order".
+    const errors = validateCheckoutAddress(address);
+    setAddressErrors(errors);
+    const firstError = firstAddressError(errors);
+    if (firstError) {
+      // A saved address from before these checks (e.g. PIN "12") opens in the
+      // form, filled in, so the customer can correct it.
+      if (!showAddressForm) setShowAddressForm(true);
+      toast.error(firstError);
+      return;
+    }
     if (!showAddressForm && selectedAddressIndex !== null) { setCurrentStep('payment'); return; }
-    if (!address.fullName || !address.street || !address.city || !address.state || !address.postalCode || !address.phone) {
-      toast.error('Please fill all address fields');
-      return;
-    }
-    // Mirror the backend validator (middleware/validators/order.js): a dialable
-    // Indian mobile. Blocks junk like "533201" that would otherwise reach the
-    // order and leave any resulting CRM lead with no callable phone.
-    if (!isValidIndianMobile(address.phone)) {
-      toast.error('Enter a valid 10-digit mobile number');
-      return;
-    }
     if (shouldSaveAddress && isAuthenticated) {
       try {
         const newAddress: SavedAddress = { fullName: address.fullName, addressLine1: address.street, city: address.city, state: address.state, postalCode: address.postalCode, country: address.country, phone: address.phone, isDefault: savedAddresses.length === 0 };
@@ -1083,7 +1130,7 @@ function CheckoutPageContent() {
                 ))}
 
                 <button
-                  onClick={() => { setShowAddressForm(true); setSelectedAddressIndex(null); setAddress({ fullName: user?.name || '', street: '', city: '', state: '', postalCode: '', country: 'India', phone: '' }); }}
+                  onClick={() => { setShowAddressForm(true); setSelectedAddressIndex(null); setAddressErrors({}); setAddress({ fullName: user?.name || '', street: '', city: '', state: '', postalCode: '', country: 'India', phone: '' }); }}
                   className="w-full py-3 border-2 border-dashed border-hairline rounded-full text-ink-muted hover:border-gold hover:text-gold flex items-center justify-center gap-2 transition-colors font-display font-bold text-[15px]"
                 >
                   <Plus className="h-4 w-4" />
@@ -1101,21 +1148,23 @@ function CheckoutPageContent() {
             )}
 
             {showAddressForm && (
-              <form onSubmit={handleAddressSubmit} className="space-y-4">
+              <form onSubmit={handleAddressSubmit} noValidate className="space-y-4">
                 {savedAddresses.length > 0 && (
                   <button type="button" onClick={() => setShowAddressForm(false)} className="text-sm text-gold hover:text-ink font-display font-bold uppercase tracking-[0.12em] transition-colors mb-2">
                     ← Back to Saved Addresses
                   </button>
                 )}
-                <input type="text" placeholder="Full Name" value={address.fullName} onChange={(e) => setAddress({ ...address, fullName: e.target.value })} className={inputClass} required />
-                <input type="text" placeholder="Street Address" value={address.street} onChange={(e) => setAddress({ ...address, street: e.target.value })} className={inputClass} required />
+                {/* noValidate: our own per-box messages replace the browser's
+                    bubble, which named no field once the placeholders were gone. */}
+                <AddressInput field="fullName" label="Full name" autoComplete="name" value={address.fullName} error={addressErrors.fullName} className={inputClass} onChange={onAddressChange} />
+                <AddressInput field="street" label="House / street address" autoComplete="street-address" value={address.street} error={addressErrors.street} className={inputClass} onChange={onAddressChange} />
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="text" placeholder="City" value={address.city} onChange={(e) => setAddress({ ...address, city: e.target.value })} className={inputClass} required />
-                  <input type="text" placeholder="State" value={address.state} onChange={(e) => setAddress({ ...address, state: e.target.value })} className={inputClass} required />
+                  <AddressInput field="city" label="City" autoComplete="address-level2" value={address.city} error={addressErrors.city} className={inputClass} onChange={onAddressChange} />
+                  <AddressInput field="state" label="State" autoComplete="address-level1" value={address.state} error={addressErrors.state} className={inputClass} onChange={onAddressChange} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="text" placeholder="Postal Code" value={address.postalCode} onChange={(e) => setAddress({ ...address, postalCode: e.target.value })} className={inputClass} required />
-                  <input type="tel" placeholder="Phone" value={address.phone} onChange={(e) => setAddress({ ...address, phone: e.target.value })} className={inputClass} required />
+                  <AddressInput field="postalCode" label="PIN code" placeholder="6 digits" inputMode="numeric" maxLength={6} autoComplete="postal-code" value={address.postalCode} error={addressErrors.postalCode} className={inputClass} onChange={onAddressChange} />
+                  <AddressInput field="phone" label="Mobile number" placeholder="10 digits" type="tel" inputMode="tel" autoComplete="tel" value={address.phone} error={addressErrors.phone} className={inputClass} onChange={onAddressChange} />
                 </div>
                 {isAuthenticated && (
                   <div className="flex items-center gap-3 mt-2">
@@ -1211,6 +1260,7 @@ function CheckoutPageContent() {
             <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6 space-y-5">
               <div>
                 <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-2">Shipping Address</h3>
+                <p className="text-ink font-display text-sm font-semibold">{address.fullName}</p>
                 <p className="text-ink/70 font-display text-sm">{address.street}</p>
                 <p className="text-ink/70 font-display text-sm">{address.city}, {address.state} {address.postalCode}</p>
                 <p className="text-ink-muted font-display text-sm">{address.phone}</p>

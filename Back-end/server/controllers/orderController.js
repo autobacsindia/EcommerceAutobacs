@@ -39,6 +39,7 @@ import * as Sentry from '@sentry/node';
 import { isSplitPaid, SPLIT_REFUND_MESSAGE } from '../utils/splitPayment.js';
 import { forCustomer as forCustomerExtras, customerReceipt as extraChargeReceiptFor } from '../services/orderExtraChargeService.js';
 import { pinnedIds, withoutPinned, inPinOrder } from '../services/orderPinService.js';
+import { isAddressEditable, updateShippingAddress } from '../services/orderAddressService.js';
 
 /**
  * Project a populated Payment document down to what a client may see.
@@ -366,7 +367,9 @@ export const getOrderById = async (req, res) => {
   const {
     workflow: _workflow, salesAttribution: _salesAttribution, salesUser: _salesUser,
     salesRep: _salesRep, crmLeadId: _crmLeadId, bankTransferPendingAt: _bankTransferPendingAt,
-    offlinePayment: _offlinePayment, salesDiscount: _salesDiscount, ...customerSafe
+    offlinePayment: _offlinePayment, salesDiscount: _salesDiscount,
+    // Admin address corrections carry internal reasons and staff names.
+    addressChanges: _addressChanges, ...customerSafe
   } = order;
   // A quotation's % discount: the customer sees the percent and amount; the reason
   // and who gave it stay with staff.
@@ -386,6 +389,8 @@ export const getOrderById = async (req, res) => {
     // What the order summary's "Subtotal" row prints, from the order's own
     // snapshot — so Subtotal − discount + Tax + Shipping = Total on the page.
     subtotalBeforeTax: subtotalBeforeTax(order.subtotal, order.tax),
+    // Shows the admin "Edit address" button; PATCH /:id/shipping-address re-checks.
+    ...(isAdmin ? { addressEditable: isAddressEditable(order) } : {}),
     items: order.items.map(item => {
       const metaContentId = contentIdForLineItem(item.product, item.variantId);
       // Strip internal-only fields we populated solely to derive metaContentId —
@@ -411,6 +416,14 @@ export const getOrderById = async (req, res) => {
   }
 
   res.json({ success: true, order: normalizedOrder });
+};
+
+// @desc    Correct the delivery address on an order before dispatch
+// @route   PATCH /orders/:id/shipping-address { address, reason }
+// @access  Private/Admin
+export const updateOrderShippingAddress = async (req, res) => {
+  const result = await updateShippingAddress(req, req.params.id, req.body || {});
+  res.json({ success: true, ...result });
 };
 
 // @desc    Download the receipt for one paid extra charge

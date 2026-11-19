@@ -252,12 +252,12 @@ test.describe('Checkout Flow', () => {
       await expect(page.getByText('Shipping Address', { exact: false })).toBeVisible();
       
       // Fill address details
-      await page.fill('input[placeholder="Full Name"]', user.name);
-      await page.fill('input[placeholder="Street Address"]', '123 Test St');
-      await page.fill('input[placeholder="City"]', 'Test City');
-      await page.fill('input[placeholder="State"]', 'Test State');
-      await page.fill('input[placeholder="Postal Code"]', '123456');
-      await page.fill('input[placeholder="Phone"]', user.phone);
+      await page.fill('input[name="fullName"]', user.name);
+      await page.fill('input[name="street"]', '123 Test St');
+      await page.fill('input[name="city"]', 'Test City');
+      await page.fill('input[name="state"]', 'Test State');
+      await page.fill('input[name="postalCode"]', '123456');
+      await page.fill('input[name="phone"]', user.phone);
       
       // Click "Continue to Payment"
       await page.click('button:has-text("Continue to Payment")');

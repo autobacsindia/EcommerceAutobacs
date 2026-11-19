@@ -361,7 +361,17 @@ export async function getAdminDeliveryFeeConfig() {
   return { ...toRateCard(doc), updatedAt: doc?.updatedAt ?? null, remotePinCount, pinLocationCount };
 }
 
-export async function updateRateCard(req, raw) {
+/**
+ * The two on/off switches — "Charge delivery fees at checkout" and "Add GST on
+ * delivery fees" — are business/tax decisions, not courier rates, so only an admin
+ * may change them. Procurement (who know the courier bills) save rates with
+ * `allowSwitches: false`: a payload that even names a switch is refused, never
+ * silently half-applied, and the stored switch values are kept.
+ */
+export async function updateRateCard(req, raw, { allowSwitches = true } = {}) {
+  if (!allowSwitches && (raw?.chargeAtCheckout !== undefined || raw?.gstOnFees?.enabled !== undefined)) {
+    throw fail('Only an admin can turn delivery fees or GST on fees on or off', 403);
+  }
   const before = toRateCard(await deliveryFeeRepository.findConfig());
   const set = parseRateCardInput(raw, before);
   const doc = await deliveryFeeRepository.saveConfig({ ...set, updatedBy: req.user?._id ?? null });

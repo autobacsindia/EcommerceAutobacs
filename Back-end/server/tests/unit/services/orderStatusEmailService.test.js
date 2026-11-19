@@ -7,10 +7,11 @@ import { jest } from '@jest/globals';
 
 const mockFindById = jest.fn();
 const mockSave = jest.fn();
+const mockAddNotified = jest.fn();
 const mockSendStatus = jest.fn();
 
 jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({
-  default: { findById: mockFindById, save: mockSave },
+  default: { findById: mockFindById, save: mockSave, addNotifiedStatus: mockAddNotified },
 }));
 
 jest.unstable_mockModule('../../../services/emailHandler.js', () => ({
@@ -42,7 +43,9 @@ describe('emailOrderStatusUpdate', () => {
     expect(mockSendStatus).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'asha@example.com', status: 'shipped' })
     );
-    expect(order.notifiedStatuses).toContain('shipped');
+    // Stamped atomically ($addToSet) — a whole-array save would race other emails.
+    expect(mockAddNotified).toHaveBeenCalledWith('order123', 'shipped');
+    // Saved only for the delivery notice a shipped email records.
     expect(mockSave).toHaveBeenCalledWith(order);
   });
 
@@ -76,6 +79,7 @@ describe('emailOrderStatusUpdate', () => {
 
     await expect(emailOrderStatusUpdate('order123', 'cancelled')).rejects.toThrow(/postmark down/);
     expect(order.notifiedStatuses).not.toContain('cancelled');
+    expect(mockAddNotified).not.toHaveBeenCalled();
     expect(mockSave).not.toHaveBeenCalled();
   });
 

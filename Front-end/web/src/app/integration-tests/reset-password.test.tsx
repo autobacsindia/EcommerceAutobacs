@@ -31,6 +31,8 @@ jest.mock('lucide-react', () => ({
   ArrowLeft: () => <span>ArrowLeft</span>,
   CheckCircle: () => <span>CheckCircle</span>,
   AlertCircle: () => <span>AlertCircle</span>,
+  Eye: () => <span>Eye</span>,
+  EyeOff: () => <span>EyeOff</span>,
 }));
 
 describe('ResetPasswordPage Integration', () => {

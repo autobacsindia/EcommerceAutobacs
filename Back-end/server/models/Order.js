@@ -1213,8 +1213,28 @@ const OrderSchema = new mongoose.Schema({
     // See models/shared/offlineRefundFields.js for why these are all scalars.
     ...offlineRefundFields()
   },
-  notes: String
-}, { 
+  notes: String,
+  /**
+   * Admin corrections to `shippingAddress`, newest last, capped by the writer
+   * (services/orderAddressService.js). The order keeps its own trail because the
+   * AuditLog collection expires rows after 90 days, and an order is a financial
+   * record kept far longer. PIN code and state are never changed this way (they
+   * set the delivery charge), so `before`/`after` only ever differ in contact
+   * and street fields.
+   */
+  addressChanges: {
+    type: [{
+      _id: false,
+      at: { type: Date, required: true },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: String,
+      reason: { type: String, maxlength: 300 },
+      before: { type: mongoose.Schema.Types.Mixed },
+      after: { type: mongoose.Schema.Types.Mixed },
+    }],
+    default: undefined,
+  }
+}, {
   timestamps: true 
 });
 

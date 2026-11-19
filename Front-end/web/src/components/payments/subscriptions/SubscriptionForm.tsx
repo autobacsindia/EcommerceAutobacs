@@ -18,7 +18,7 @@ const label = 'block text-sm font-medium text-gray-800';
 const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50';
 
 type Draft = {
-  name: string; purpose: string; team: string; kind: SubscriptionKind; amount: string; currency: string; dueDate: string;
+  name: string; purpose: string; team: string; kind: SubscriptionKind; variableAmount: boolean; amount: string; currency: string; dueDate: string;
   method: PayMethod; cardLast4: string; autoDebit: boolean; billingUrl: string; notes: string;
 };
 
@@ -27,6 +27,7 @@ const fromItem = (s?: Subscription): Draft => ({
   purpose: s?.purpose ?? '',
   team: s?.team ?? '',
   kind: s?.kind ?? 'monthly',
+  variableAmount: s?.variableAmount ?? false,
   amount: s ? String(s.amount) : '',
   currency: s?.currency ?? 'USD',
   dueDate: s?.dueDate ?? '',
@@ -38,7 +39,7 @@ const fromItem = (s?: Subscription): Draft => ({
 });
 
 /** Which of a Verified item's fields send it back to "waiting for check" (the server's CHECKED_FIELDS). */
-const RECHECK: (keyof Draft)[] = ['amount', 'currency', 'dueDate', 'kind', 'method', 'cardLast4', 'autoDebit'];
+const RECHECK: (keyof Draft)[] = ['amount', 'currency', 'dueDate', 'kind', 'variableAmount', 'method', 'cardLast4', 'autoDebit'];
 
 /**
  * Add a tool / subscription, or edit one (`item`). An edit sends only what
@@ -67,7 +68,8 @@ export default function SubscriptionForm({ item, onCancel, onDone }: {
   function problem(): string {
     if (d.name.trim().length < 2) return 'Enter the name of the tool or bill (e.g. Railway).';
     if (!item && d.purpose.trim().length < 3) return 'Say what it is for.';
-    if (!(Number(d.amount) > 0)) return 'Enter the amount on the bill.';
+    if (!(Number(d.amount) > 0)) return d.variableAmount ? 'Enter the estimated amount (more than 0).' : 'Enter the amount on the bill.';
+    if (d.variableAmount && d.kind === 'one_time') return 'A one-time purchase cannot be usage-based — choose monthly or yearly.';
     if (!d.dueDate) return 'Enter the next due date.';
     if (d.method === 'card' && !/^\d{4}$/.test(d.cardLast4)) return 'Enter the last 4 digits of the card — only 4 digits.';
     if (d.billingUrl.trim() && !/^https:\/\//i.test(d.billingUrl.trim())) return 'The billing page link must start with https://';
@@ -87,6 +89,7 @@ export default function SubscriptionForm({ item, onCancel, onDone }: {
       if (changed('purpose')) put('purpose', d.purpose.trim());
       if (d.team && changed('team')) put('team', d.team);
       if (changed('kind')) put('kind', d.kind);
+      if (changed('variableAmount')) put('variableAmount', String(d.variableAmount));
       if (changed('amount')) put('amount', d.amount.trim());
       if (changed('currency')) put('currency', d.currency);
       if (changed('dueDate')) put('dueDate', d.dueDate);
@@ -137,16 +140,27 @@ export default function SubscriptionForm({ item, onCancel, onDone }: {
           <input className={`${input} mt-1`} value={d.purpose} onChange={(e) => set({ purpose: e.target.value })} placeholder="e.g. Hosts the website backend" maxLength={300} />
         </label>
         <label className={label}>Type
-          <select className={`${input} mt-1`} value={d.kind} onChange={(e) => set({ kind: e.target.value as SubscriptionKind })}>
+          <select className={`${input} mt-1`} value={d.kind}
+            onChange={(e) => { const kind = e.target.value as SubscriptionKind; set({ kind, ...(kind === 'one_time' ? { variableAmount: false } : {}) }); }}>
             {(o?.kinds ?? [{ value: 'monthly', label: 'Monthly subscription' }]).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
         </label>
         <label className={label}>{d.kind === 'one_time' ? 'Due date' : 'Next due date'}
           <input type="date" className={`${input} mt-1`} value={d.dueDate} onChange={(e) => set({ dueDate: e.target.value })} />
         </label>
+        {d.kind !== 'one_time' && (
+          <div className="sm:col-span-2">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-800">
+              <input type="checkbox" checked={d.variableAmount} onChange={(e) => set({ variableAmount: e.target.checked })} /> Amount varies (usage-based)
+            </label>
+            <p className="text-xs text-gray-500">
+              For tools that charge what you used, like MongoDB Atlas or Railway. Put a rough estimate below; each {d.kind === 'yearly' ? 'year' : 'month'}, enter the real bill with its invoice before paying.
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-[1fr_auto] gap-2 sm:col-span-2">
-          <label className={label}>Amount on the bill
-            <input className={`${input} mt-1`} inputMode="decimal" value={d.amount} onChange={(e) => set({ amount: e.target.value })} placeholder="e.g. 20" />
+          <label className={label}>{d.variableAmount ? 'Estimated amount' : 'Amount on the bill'}
+            <input className={`${input} mt-1`} inputMode="decimal" value={d.amount} onChange={(e) => set({ amount: e.target.value })} placeholder={d.variableAmount ? 'e.g. 100' : 'e.g. 20'} />
           </label>
           <label className={label}>Currency
             <select className={`${input} mt-1`} value={d.currency} onChange={(e) => set({ currency: e.target.value })}>
@@ -207,7 +221,7 @@ export default function SubscriptionForm({ item, onCancel, onDone }: {
 
       {resetsCheck && (
         <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          This item is verified. Changing the amount, currency, due date, type or payment sends it back to accounts to check again.
+          This item is verified. Changing the amount, currency, due date, type, &quot;amount varies&quot; or payment sends it back to accounts to check again.
         </p>
       )}
       {item?.status === 'rejected' && (

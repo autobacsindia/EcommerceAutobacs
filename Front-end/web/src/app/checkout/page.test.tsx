@@ -179,8 +179,52 @@ describe('CheckoutPage', () => {
     fireEvent.click(proceedBtn);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
+  });
+
+  it('marks the PIN box red and stays on Shipping when the PIN is "12"', async () => {
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByLabelText('Full name')).toBeInTheDocument());
+
+    const fill = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fill('Full name', 'Rahul Menon');
+    fill('House / street address', '12 MG Road');
+    fill('City', 'Kochi');
+    fill('State', 'Kerala');
+    fill('PIN code', '12');
+    fill('Mobile number', '1239876543210');
+    fireEvent.click(screen.getByText(/continue to payment/i));
+
+    expect(await screen.findByText('Enter a valid 6-digit PIN code')).toBeInTheDocument();
+    expect(screen.getByText('Enter a valid 10-digit mobile number')).toBeInTheDocument();
+    expect(screen.getByLabelText('PIN code')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('City')).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByTestId('payment-method-selector')).not.toBeInTheDocument();
+
+    // Fixing a box clears its message; a valid form moves on.
+    fill('PIN code', '682016');
+    expect(screen.queryByText('Enter a valid 6-digit PIN code')).not.toBeInTheDocument();
+    fill('Mobile number', '+91 98765 43210');
+    fireEvent.click(screen.getByText(/continue to payment/i));
+    await waitFor(() => expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument());
+  });
+
+  it('opens an old saved address with a bad PIN in the form instead of going to payment', async () => {
+    (apiClient.get as jest.Mock).mockResolvedValue({
+      success: true,
+      user: { addresses: [{ fullName: 'Old Address', addressLine1: 'Old St', city: 'Kochi', state: 'Kerala', postalCode: '12', country: 'India', phone: '9876543210', isDefault: true }] },
+    });
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByText('Old Address')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Old Address'));
+    fireEvent.click(screen.getByText(/deliver to this address/i));
+
+    expect(await screen.findByText('Enter a valid 6-digit PIN code')).toBeInTheDocument();
+    expect(screen.getByLabelText('PIN code')).toHaveValue('12');
+    expect(screen.queryByTestId('payment-method-selector')).not.toBeInTheDocument();
   });
 
   it('allows selecting a saved address', async () => {
@@ -231,14 +275,14 @@ describe('CheckoutPage', () => {
 
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => {
-       expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
+       expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
-    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
-    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
-    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
-    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9999999999' } });
 
     fireEvent.click(screen.getByText(/continue to payment/i));
     await waitFor(() => {
@@ -284,13 +328,13 @@ describe('CheckoutPage', () => {
     // would leave that one open.
     render(<CheckoutPage />);
     fireEvent.click(screen.getByText(/continue to shipping/i));
-    await waitFor(() => expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument());
-    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
-    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
-    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
-    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
-    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+    await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9999999999' } });
     fireEvent.click(screen.getByText(/continue to payment/i));
     fireEvent.click(screen.getByText('Select EMI'));
     fireEvent.click(screen.getByText(/continue to review/i));
@@ -313,13 +357,13 @@ describe('CheckoutPage', () => {
     // can be chosen by the client.
     render(<CheckoutPage />);
     fireEvent.click(screen.getByText(/continue to shipping/i));
-    await waitFor(() => expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument());
-    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
-    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
-    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
-    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
-    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+    await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9999999999' } });
     fireEvent.click(screen.getByText(/continue to payment/i));
     fireEvent.click(screen.getByText('Select EMI'));
     fireEvent.click(screen.getByText(/continue to review/i));
@@ -350,14 +394,14 @@ describe('CheckoutPage', () => {
 
     // Fill Address
     await waitFor(() => {
-       expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
+       expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
-    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
-    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
-    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
-    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9999999999' } });
 
     // Shipping -> Payment
     fireEvent.click(screen.getByText(/continue to payment/i));
@@ -418,13 +462,13 @@ describe('CheckoutPage — purchase attribution', () => {
   const reachReviewAndPay = async () => {
     render(<CheckoutPage />);
     fireEvent.click(screen.getByText(/continue to shipping/i));
-    await waitFor(() => expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument());
-    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
-    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
-    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
-    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
-    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+    await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9999999999' } });
     fireEvent.click(screen.getByText(/continue to payment/i));
     fireEvent.click(screen.getByText('Select Razorpay'));
     fireEvent.click(screen.getByText(/continue to review/i));

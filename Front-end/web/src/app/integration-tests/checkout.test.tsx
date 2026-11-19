@@ -158,12 +158,12 @@ describe('Checkout Page Integration', () => {
     });
 
     // Step 2: Fill Address -> Payment
-    fireEvent.change(screen.getByPlaceholderText('Full Name'), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByPlaceholderText('Street Address'), { target: { value: '123 Main St' } });
-    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: 'Mumbai' } });
-    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: 'Maharashtra' } });
-    fireEvent.change(screen.getByPlaceholderText('Postal Code'), { target: { value: '400001' } });
-    fireEvent.change(screen.getByPlaceholderText('Phone'), { target: { value: '9876543210' } });
+    fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByLabelText('House / street address'), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9876543210' } });
 
     fireEvent.click(screen.getByText('Continue to Payment'));
 
