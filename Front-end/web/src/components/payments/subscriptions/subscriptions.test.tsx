@@ -32,14 +32,14 @@ jest.mock('@/lib/http/tokenManager', () => ({
 
 const item = (over: Partial<Subscription> = {}): Subscription => ({
   id: 's1', number: 'SD-0001', name: 'Railway', purpose: 'Hosts the backend', team: 'developer', teamLabel: 'Developer',
-  kind: 'monthly', kindLabel: 'Monthly subscription', amount: 20, currency: 'USD', approxInr: 1760,
+  kind: 'monthly', kindLabel: 'Monthly subscription', amount: 20, variableAmount: false, currency: 'USD', approxInr: 1760,
   dueDate: '2026-12-02', dueInDays: 30, overdue: false,
   payment: { method: 'card', methodLabel: 'Card', cardLast4: '4007', autoDebit: true },
   billingUrl: 'https://railway.com/account/billing', notes: '', files: [],
   status: 'pending', statusLabel: 'Waiting for check', rejectReason: '', verifiedByName: '', verifiedAt: null,
   addedBy: 'u1', addedByName: 'Dev', archived: false, rev: 3, createdAt: '2026-11-01T05:00:00Z', updatedAt: '2026-11-01T05:00:00Z',
   history: [{ at: '2026-11-01T05:00:00Z', byName: 'Dev', role: 'developer', action: 'added', note: '' }],
-  can: { edit: true, delete: true, verify: false, reject: false },
+  can: { edit: true, delete: true, verify: false, reject: false, recordBill: false },
   ...over,
 });
 
@@ -213,14 +213,14 @@ describe('the detail', () => {
   });
 
   it('someone else’s item: no buttons at all', async () => {
-    current = item({ can: { edit: false, delete: false, verify: false, reject: false } });
+    current = item({ can: { edit: false, delete: false, verify: false, reject: false, recordBill: false } });
     wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
     await screen.findByRole('heading', { name: /Railway/ });
     expect(screen.queryByRole('button', { name: /Edit|Delete|Verify|Reject/ })).not.toBeInTheDocument();
   });
 
   it('accounts verifies with the version on screen', async () => {
-    current = item({ can: { edit: true, delete: true, verify: true, reject: true } });
+    current = item({ can: { edit: true, delete: true, verify: true, reject: true, recordBill: false } });
     post.mockResolvedValue({ item: { ...current, status: 'verified' } });
     wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Verify' }));
@@ -244,6 +244,92 @@ describe('the detail', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/subscription-dues/s1/archive', { rev: 3, reason: 'Stopped using it' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+});
+
+describe('usage-based bills (amount varies)', () => {
+  const fill = (name: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(name), { target: { value } });
+  const atlas = (over: Partial<Subscription> = {}) => item({
+    name: 'MongoDB Atlas', amount: 100, variableAmount: true, status: 'verified', statusLabel: 'Verified', dueDate: '2026-11-30',
+    can: { edit: true, delete: true, verify: false, reject: false, recordBill: true }, cycles: [], ...over,
+  });
+
+  it('the list shows the amount as an estimate; a fixed one is unchanged', async () => {
+    current = atlas();
+    wrap(<SubscriptionList />);
+    const row = await screen.findByRole('button', { name: /MongoDB Atlas/ });
+    expect(row).toHaveTextContent('~USD 100/month (estimate)');
+  });
+
+  it('ticking "Amount varies" makes the amount an estimate and sends it; one-time hides the box', async () => {
+    const onDone = jest.fn();
+    wrap(<SubscriptionForm onCancel={jest.fn()} onDone={onDone} />);
+    await screen.findByRole('option', { name: 'Yearly subscription' });
+    fireEvent.click(screen.getByLabelText(/Amount varies/));
+    expect(screen.queryByLabelText('Amount on the bill')).not.toBeInTheDocument();
+    fill('Name', 'MongoDB Atlas');
+    fill(/What it.s for/, 'The database');
+    fill('Next due date', '2026-11-30');
+    fill(/last 4 digits only/, '4007');
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/estimated amount/);
+    fill('Estimated amount', '100');
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(sentForm().get('variableAmount')).toBe('true');
+    expect(sentForm().get('amount')).toBe('100');
+
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'one_time' } });
+    expect(screen.queryByLabelText(/Amount varies/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Amount on the bill')).toBeInTheDocument();
+  });
+
+  it('a fixed item has no bill button', async () => {
+    current = item({ status: 'verified', statusLabel: 'Verified' });
+    wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    await screen.findByRole('heading', { name: /Railway/ });
+    expect(screen.queryByRole('button', { name: /bill/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Bills paid')).not.toBeInTheDocument();
+  });
+
+  it('the bill needs the actual amount and the invoice before it is sent; then it sends both with the version', async () => {
+    current = atlas();
+    wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    expect(await screen.findByText('No bills recorded yet.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Enter this month.s bill/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save bill' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/actual amount/);
+    fill(/Actual amount/, '112');
+    fireEvent.click(screen.getByRole('button', { name: 'Save bill' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Attach the invoice/);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const file = new File(['%PDF-1.4'], 'nov.pdf', { type: 'application/pdf' });
+    const picker = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(picker, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save bill' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/subscription-dues/s1/bills');
+    expect(init.method).toBe('POST');
+    expect(sentForm().get('amount')).toBe('112');
+    expect(sentForm().get('rev')).toBe('3');
+    expect(sentForm().getAll('invoice')).toHaveLength(1);
+  });
+
+  it('shows the paid history, newest first, actual beside the estimate', async () => {
+    const cycle = (id: string, dueDate: string, amount: number) => ({
+      id, dueDate, amount, currency: 'USD', estimate: 100, approxInr: null, note: '', paidByName: 'Anu', paidAt: '2026-11-01T05:00:00Z',
+      invoices: [{ id: `f${id}`, name: 'inv.pdf', contentType: 'application/pdf', bytes: 9 }],
+    });
+    current = atlas({ cycles: [cycle('1', '2026-10-31', 95), cycle('2', '2026-11-30', 112), cycle('3', '2026-12-31', 104)] });
+    wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    const list = await screen.findByRole('list', { name: 'Bills paid' });
+    const rows = within(list).getAllByRole('listitem').map((li) => li.textContent);
+    expect(rows[0]).toMatch(/Dec 2026.*USD 104.*estimate USD 100/);
+    expect(rows[1]).toMatch(/Nov 2026.*USD 112/);
+    expect(rows[2]).toMatch(/Oct 2026.*USD 95/);
+    expect(within(list).getAllByRole('link', { name: /Invoice/ })[0]).toHaveAttribute('href', '/api/v1/subscription-dues/s1/files/f3');
   });
 });
 
