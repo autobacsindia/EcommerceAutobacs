@@ -47,6 +47,7 @@ const { default: PaymentRequest } = await import('../models/PaymentRequest.js');
 const { default: AuditLog } = await import('../models/AuditLog.js');
 const { default: orderStatusService } = await import('../services/orderStatusService.js');
 const wf = await import('../services/teamWorkflowService.js');
+const { default: orderRepository } = await import('../repositories/orderRepository.js');
 
 const BASE = '/api/v1';
 const PW = 'SecurePass123!';
@@ -222,7 +223,11 @@ describe('Supplier parts', () => {
     expect((await PaymentRequest.findById(pr.body.request.id).lean()).status).toBe('paid');
     const row = (await procurement.session.get(`/payment-requests/order/${id}`)).body.requests.find((r) => r.id === pr.body.request.id);
     expect(row.supplierRefund).toMatchObject({ canClaim: true, savedSupplier: true, why: 'supplier_changed' });
+    // One read of the order works out both "cancelled?" and "part replaced?" (was two).
+    const reads = jest.spyOn(orderRepository, 'findForWorkflow');
     expect((await procurement.session.get(`/payment-requests/${pr.body.request.id}`)).body.request.supplierRefund).toMatchObject({ why: 'supplier_changed' });
+    expect(reads).toHaveBeenCalledTimes(1);
+    reads.mockRestore();
     const claim = await procurement.session.post('/suppliers/credit/claims', { paymentRequestId: pr.body.request.id, note: 'Refund for jerry can' });
     expect(claim.status).toBe(201);
     expect(claim.body.entry).toMatchObject({ kind: 'refund_due', status: 'pending' });

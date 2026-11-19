@@ -902,9 +902,12 @@ function payPinned(r) {
  * An item with only some units cancelled is still live (supplierAdvanceGuard.itemsCancelled).
  */
 
-async function partReplaced(r) {
-  if (!r.order) return false;
-  return requestPartReplaced(await orderRepository.findForWorkflow(idOf(r.order)), r);
+// Why a paid supplier PR is owed back, from ONE read of its order.
+async function paidRefundWhy(r) {
+  if (!r.order) return null;
+  const order = await orderRepository.findForWorkflow(idOf(r.order));
+  if (itemsCancelled(order, r.itemIds)) return 'cancelled';
+  return requestPartReplaced(order, r) ? 'supplier_changed' : null;
 }
 async function orderGone(r) {
   if (r.kind !== 'supplier' || !r.order) return false;
@@ -1409,8 +1412,7 @@ export async function get(actor, id) {
   if (r.deal) out.deal = await dealSummaryOf(r);
   // Paid, and the customer cancelled the items since — or procurement changed the
   // supplier of the part it paid for: the supplier owes us a refund.
-  const why = r.kind === 'supplier' && r.status === 'paid'
-    ? (await orderGone(r) ? 'cancelled' : await partReplaced(r) ? 'supplier_changed' : null) : null;
+  const why = r.kind === 'supplier' && r.status === 'paid' ? await paidRefundWhy(r) : null;
   if (why) {
     const claim = (await credit.claimsFor([r._id])).get(idOf(r._id)) || null;
     out.supplierRefund = { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier), why };
