@@ -32,6 +32,7 @@ import { setCronService } from './routes/scheduledTasks.js';
 import { protect, admin } from "./middleware/authMiddleware.js";
 import { errorHandler, notFound, requestLogger } from "./middleware/errorMiddleware.js";
 import razorpayWebhook from './middleware/razorpayWebhook.js';
+import whatsappWebhook from './middleware/whatsappWebhook.js';
 import supportInboundWebhook from './middleware/supportInboundWebhook.js';
 // Sanitization middleware
 import { mongoSanitization, requestSanitization } from "./middleware/sanitizationMiddleware.js";
@@ -613,6 +614,13 @@ app.use(cookieParser());
 //      Mounting it after app.use(csrfProtection) would cause every webhook to get a
 //      403 "CSRF token missing or invalid" before the signature check ever runs.
 app.use('/api/v1/razorpay/webhook', express.raw({ type: 'application/json', limit: '1mb' }), razorpayWebhook);
+
+// ── CRITICAL: Meta WhatsApp webhook (MUST be before csrfProtection AND body parsers) ──
+// Same two invariants as Razorpay: the X-Hub-Signature-256 HMAC is over the raw bytes,
+// and Meta sends no CSRF token. `type: () => true` keeps the body a Buffer whatever
+// Content-Type arrives, so an odd header fails the signature check instead of
+// slipping past it as an already-parsed object. GET is Meta's subscribe handshake.
+app.use('/api/v1/webhooks/whatsapp', express.raw({ type: () => true, limit: '1mb' }), whatsappWebhook);
 
 // ── CRITICAL: Postmark inbound-email webhook (MUST be before csrfProtection) ──
 // Same reasoning as above: a server-to-server POST with no cookie and no CSRF

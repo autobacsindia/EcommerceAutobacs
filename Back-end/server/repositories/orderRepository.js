@@ -625,6 +625,25 @@ class OrderRepository extends BaseRepository {
     return res.modifiedCount === 1;
   }
 
+  /**
+   * Claim a WhatsApp notification key BEFORE sending. Atomic: of two workers racing on
+   * the same event, exactly one sees `true` and sends. Separate from notifiedStatuses
+   * (the email stamp) so the two channels never suppress each other.
+   * @returns {Promise<boolean>} true when this caller claimed the key
+   */
+  async claimWhatsAppNotified(orderId, key) {
+    const res = await Order.updateOne(
+      { _id: orderId, whatsappNotified: { $ne: key } },
+      { $addToSet: { whatsappNotified: key } },
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /** Give a claimed WhatsApp key back after a send failed, so the retry can send. */
+  async releaseWhatsAppNotified(orderId, key) {
+    await Order.updateOne({ _id: orderId }, { $pull: { whatsappNotified: key } });
+  }
+
   async clearNotifiedStatus(orderId, key, session = null) {
     const res = await Order.updateOne(
       { _id: orderId },

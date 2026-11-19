@@ -142,7 +142,7 @@ describe('editing a quotation the client accepted', () => {
   it('says what will happen and asks before saving', async () => {
     wrap(<NewSalesOrderForm quotation={accepted(false)} />);
     expect(screen.getByRole('note')).toHaveTextContent(/cancels its unpaid order and every payment link/);
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /have not paid yet/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Save new version/ }));
     await waitFor(() => expect(put).toHaveBeenCalled());
     expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/already accepted/));

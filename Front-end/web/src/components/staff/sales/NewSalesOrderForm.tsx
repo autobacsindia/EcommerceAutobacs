@@ -85,6 +85,10 @@ export default function NewSalesOrderForm({
   const [customer, setCustomer] = useState(() => (quotation
     ? { name: quotation.customer.name, email: quotation.customer.email || '', phone: quotation.customer.phone, alternatePhone: quotation.customer.alternatePhone || '' }
     : EMPTY_CUSTOMER));
+  // "Order updates on WhatsApp": ticked by default (owner decision, 2026-11). Staff
+  // ask the customer and untick it if they say no. Stored on the quotation and carried
+  // onto the order as the consent record.
+  const [whatsappOptIn, setWhatsappOptIn] = useState<boolean>(() => quotation?.customer.whatsappOptIn ?? true);
   const [address, setAddress] = useState(() => {
     const a = quotation?.shippingAddress;
     return a
@@ -235,6 +239,7 @@ export default function NewSalesOrderForm({
       customer: {
         name: customer.name.trim(), email: customer.email.trim(), phone: normalizeMobile(customer.phone),
         alternatePhone: customer.alternatePhone.trim() ? normalizeMobile(customer.alternatePhone) : '',
+        whatsappOptIn,
       },
       shippingAddress: { ...address, fullName: customer.name.trim(), phone: normalizeMobile(customer.phone) },
       items: lines.map((l) => (l.custom
@@ -358,6 +363,16 @@ export default function NewSalesOrderForm({
               onChange={(e) => setCustomer({ ...customer, alternatePhone: e.target.value.replace(/[^\d\s+\-]/g, '') })} />
             <p id="c-alt-phone-hint" className={`mt-1 text-xs ${altPhoneTouched && altPhoneProblem ? 'text-red-600' : 'text-gray-500'}`}>
               {altPhoneTouched && altPhoneProblem ? altPhoneProblem : 'For delivery to call if the main number doesn’t answer'}
+            </p>
+          </div>
+          <div className="sm:col-span-3">
+            <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer">
+              <input type="checkbox" className="mt-0.5 h-4 w-4" checked={whatsappOptIn}
+                onChange={(e) => setWhatsappOptIn(e.target.checked)} aria-describedby="c-whatsapp-hint" />
+              <span>Send order updates on WhatsApp to the mobile number</span>
+            </label>
+            <p id="c-whatsapp-hint" className="mt-1 pl-6 text-xs text-gray-500">
+              Ask the customer first. Untick if they say no — they will still get emails.
             </p>
           </div>
         </div>

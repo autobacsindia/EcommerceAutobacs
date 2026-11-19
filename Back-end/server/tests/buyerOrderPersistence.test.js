@@ -139,6 +139,24 @@ describe('individual order', () => {
   });
 });
 
+describe('WhatsApp order-updates consent (checkout box)', () => {
+  it.each([[true], [false]])('stores the customer\'s %p with who and when', async (given) => {
+    const order = await placeOrder(await seedUser(), await seedProduct(), { acceptTerms: true, whatsappOptIn: given });
+    const stored = await Order.findById(order._id).lean();
+    expect(stored.whatsappOptIn).toBe(given);
+    expect(stored.whatsappOptInBy).toBe('customer');
+    expect(stored.whatsappOptInAt).toBeInstanceOf(Date);
+  });
+
+  it.each([[undefined], ['true'], [1]])('stores nothing for %p (an older checkout, or junk) — never an assumed yes', async (given) => {
+    const order = await placeOrder(await seedUser(), await seedProduct(), { acceptTerms: true, whatsappOptIn: given });
+    const raw = await Order.collection.findOne({ _id: order._id });
+    expect('whatsappOptIn' in raw).toBe(false);
+    expect('whatsappOptInAt' in raw).toBe(false);
+    expect('whatsappNotified' in raw).toBe(false);
+  });
+});
+
 describe('legacy orders (no buyer field at all)', () => {
   /**
    * Reproduce a pre-migration document: create through the model, then strip the

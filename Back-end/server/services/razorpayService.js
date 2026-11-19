@@ -22,7 +22,8 @@ import userRepository from '../repositories/userRepository.js';
 import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
 import { afterExtraPaid } from './extraChargeEffects.js';
 import { isOrderClosed } from '../utils/extraCharge.js';
-import { enqueuePaymentFailedEmail, enqueueRefundStartedEmail } from './orderStatusEmailService.js';
+import { enqueuePaymentFailedEmail, enqueueRefundStartedEmail, enqueueRefundProcessedEmail } from './orderStatusEmailService.js';
+import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
 
 /**
  * Ceiling on the optional EMI-plan lookup performed during a capture. Kept well inside
@@ -710,6 +711,8 @@ class RazorpayService {
         .catch((err) =>
           console.error(`[Queue] Failed to enqueue send-order-invoice for ${orderId}:`, err.message)
         );
+      // WhatsApp "order confirmed" beside the invoice email — same create-once gate.
+      enqueueOrderWhatsApp(orderId, 'confirmed');
 
       // Tell the support inbox there is a paid order to fulfil. Same
       // create-once gate as the invoice, so a duplicate webhook can't re-alert.
@@ -832,6 +835,9 @@ class RazorpayService {
       */
       if (orderId && !returnId && !extraChargeId && refund.status !== 'processed') {
         enqueueRefundStartedEmail(orderId, refund.id, (refund.amount || amountPaise) / 100);
+        enqueueOrderWhatsApp(orderId, 'refund_initiated', {
+          occurrence: refund.id, amount: (refund.amount || amountPaise) / 100,
+        });
       }
 
       return {
@@ -1266,7 +1272,10 @@ class RazorpayService {
             // orders are excluded: their payment link is the salesperson's conversation.
             // One email per order however many attempts fail (jobId + notifiedStatuses),
             // and none if the order is paid by the time it runs (stillRelevant).
-            if ((order.source || 'web') === 'web') enqueuePaymentFailedEmail(order._id);
+            if ((order.source || 'web') === 'web') {
+              enqueuePaymentFailedEmail(order._id);
+              enqueueOrderWhatsApp(order._id, 'payment_failed');
+            }
             console.log(`Order ${orderId} paymentStatus set to failed`);
           }
         }
@@ -1393,6 +1402,7 @@ class RazorpayService {
           .catch((err) =>
             console.error(`[Queue] Failed to enqueue refund status email for ${order._id}:`, err.message)
           );
+        enqueueOrderWhatsApp(order._id, 'refunded', { amount: (refundEntity.amount || 0) / 100 });
       } else if (finalStatus === 'failed') {
         // Refund failed at the gateway — the customer is still owed money and only a
         // human can resolve it. Alert the support inbox. (Guarded on the explicit
@@ -1472,8 +1482,23 @@ class RazorpayService {
       console.warn(`[Webhook] cancellation refund id mismatch on order ${order._id} | stored: ${record.refund.razorpayRefundId} | webhook: ${refundId}`);
       return;
     }
+    /*
+      "Your refund has been processed", once per refund id (key `refunded:<refundId>`,
+      so it never uses up the bare `refunded` key of a full refund). Fired on EVERY
+      path where Razorpay says this refund is done — including the two early exits
+      below, because an instant refund is settled by the controller before this
+      webhook lands, and that customer is owed the email just the same. The jobId and
+      the notifiedStatuses stamp make a replayed webhook a no-op.
+    */
+    const notifyRefunded = () => {
+      if (finalStatus !== 'completed') return;
+      const amount = (refundEntity.amount || 0) / 100;
+      enqueueRefundProcessedEmail(order._id, refundId, amount);
+      enqueueOrderWhatsApp(order._id, 'refunded', { occurrence: refundId, amount });
+    };
+
     // Idempotency: already terminal → nothing to do.
-    if (record.refund?.status === finalStatus) return;
+    if (record.refund?.status === finalStatus) { notifyRefunded(); return; }
 
     const settled = await orderRepository.settleCancellationRefund(
       order._id, record._id, finalStatus,
@@ -1485,8 +1510,8 @@ class RazorpayService {
         },
     );
     // Matched on `processing`, so null means the controller already settled it — the
-    // instant-refund path. Not an error, just nothing left to do.
-    if (!settled) return;
+    // instant-refund path. Not an error, just nothing left to do but tell the customer.
+    if (!settled) { notifyRefunded(); return; }
 
     if (finalStatus !== 'completed') return;
 
@@ -1497,6 +1522,7 @@ class RazorpayService {
     */
     await applyCancellationRefundSideEffectsOnce(
       order._id, record._id, order.payment, refundEntity.amount || 0);
+    notifyRefunded();
   }
 
   /**

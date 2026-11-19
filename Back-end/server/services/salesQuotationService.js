@@ -65,6 +65,9 @@ function cleanCustomer(input = {}) {
     email: String(input.email ?? '').trim().toLowerCase(),
     phone: String(input.phone ?? '').trim(),
     alternatePhone: String(input.alternatePhone ?? '').trim(),
+    // Staff asked: "order updates on WhatsApp?" Carried onto the order at accept.
+    // Only a real boolean is kept; anything else means "not asked".
+    ...(typeof input.whatsappOptIn === 'boolean' ? { whatsappOptIn: input.whatsappOptIn } : {}),
   };
 }
 
@@ -552,6 +555,7 @@ export async function acceptQuotation(actor, id, req) {
       actorId: actor._id,
       notes: q.notes || undefined,
       defaultNote: `Order from quotation ${printedNumber(q)}, accepted in the team panel by ${actor.name}`,
+      whatsappOptIn: q.customer.whatsappOptIn,
     }));
   } catch (err) {
     // Release the claim so the quotation can be accepted again.

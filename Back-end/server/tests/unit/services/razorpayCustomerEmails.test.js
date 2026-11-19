@@ -35,9 +35,11 @@ jest.unstable_mockModule('../../../services/orderStatusEmailService.js', () => {
   const enqueuePaymentFailedEmail = (orderId) => { paymentFailed.push(String(orderId)); };
   const enqueueRefundStartedEmail = (orderId, refundId, amount) => { refundStarted.push({ orderId, refundId, amount }); };
   const enqueueParcelStepEmail = () => {};
+  const enqueueRefundProcessedEmail = () => {};
   const emailOrderStatusUpdate = async () => ({ status: 'sent' });
   return {
     enqueuePaymentFailedEmail, enqueueRefundStartedEmail, enqueueParcelStepEmail, emailOrderStatusUpdate,
+    enqueueRefundProcessedEmail, paymentFailedEmailDelayMs: () => 0,
     notificationKey: () => '', stillRelevant: () => true,
     default: { enqueuePaymentFailedEmail, enqueueRefundStartedEmail, enqueueParcelStepEmail, emailOrderStatusUpdate },
   };

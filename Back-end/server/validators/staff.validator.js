@@ -296,6 +296,8 @@ export const validateSalesOrder = [
   body('customer.alternatePhone').optional({ values: 'falsy' }).customSanitizer(normalizeIndianMobile)
     .matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit alternative mobile number, or leave it empty').bail()
     .custom((v, { req }) => v !== req.body.customer?.phone).withMessage('The alternative number is the same as the main mobile — enter a different one or leave it empty'),
+  // "Order updates on WhatsApp" — staff tick it after asking the customer.
+  body('customer.whatsappOptIn').optional().isBoolean({ strict: true }).withMessage('Invalid WhatsApp choice').toBoolean(true),
   body('shippingAddress.fullName').optional().trim().isLength({ max: 100 }),
   body('shippingAddress.phone').optional({ values: 'falsy' }).customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit delivery mobile number'),
   body('shippingAddress.addressLine1').trim().isLength({ min: 3, max: 200 }).withMessage('Enter the delivery address'),

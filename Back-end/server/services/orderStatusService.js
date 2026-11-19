@@ -15,6 +15,7 @@ import leadSyncService from './leadSyncService.js';
 import spinService from './spinService.js';
 import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
 import { reviewRequestsEnabled } from './reviewRequestService.js';
+import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
 
 const LOYALTY_JOB_BY_STATUS = {
   delivered: 'post-order-delivered',
@@ -514,6 +515,9 @@ class OrderStatusService {
       queue
         .add('send-order-status-email', { orderId, status: newStatus })
         .catch(err => console.error(`[OrderStatus] Failed to enqueue send-order-status-email:`, err.message));
+      // WhatsApp twin — suppressed exactly when the email is (a parcel roll-up
+      // already told the customer per parcel).
+      enqueueOrderWhatsApp(orderId, newStatus);
     }
 
     // A day after delivery, ask the customer to review what they bought — only when

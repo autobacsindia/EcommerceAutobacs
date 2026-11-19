@@ -311,6 +311,8 @@ describe('CheckoutPage', () => {
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith('/orders', expect.objectContaining({
         paymentMethod: 'razorpay',
+        // The WhatsApp box starts ticked (owner decision) and is sent as consent.
+        whatsappOptIn: true,
         shippingAddress: expect.objectContaining({ fullName: 'John Doe' })
       }));
       expect(mockProcessPayment).toHaveBeenCalledWith(
@@ -319,6 +321,36 @@ describe('CheckoutPage', () => {
     });
     // Payment has not succeeded yet, so no inline "Order Placed!" without paying.
     expect(screen.queryByText('Order Placed!')).not.toBeInTheDocument();
+  });
+
+  it('sends whatsappOptIn: false when the customer unticks the WhatsApp box', async () => {
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9999999999' } });
+    fireEvent.click(screen.getByText(/continue to payment/i));
+    await waitFor(() => expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Select EMI'));
+    fireEvent.click(screen.getByText(/continue to review/i));
+    await waitFor(() => expect(screen.getByText('Review Your Order')).toBeInTheDocument());
+
+    const box = screen.getByRole('checkbox', { name: /order updates on WhatsApp/i });
+    expect(box).toBeChecked();
+    expect(screen.getByText('9999999999', { selector: 'span' })).toBeInTheDocument();
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+
+    (apiClient.post as jest.Mock).mockResolvedValue({ success: true, order: { _id: 'order_123', totalAmount: 118 } });
+    acceptTerms();
+    await act(async () => {
+      fireEvent.click(screen.getByText(/place order/i));
+    });
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/orders', expect.objectContaining({ whatsappOptIn: false })));
   });
 
   it('will not place an order until the Terms are accepted', async () => {

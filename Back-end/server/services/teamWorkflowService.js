@@ -53,7 +53,8 @@ import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { parcelProofs, proofFilePath, LEGACY_PROOF_ID } from '../utils/shipmentView.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
-import { enqueueParcelStepEmail } from './orderStatusEmailService.js';
+import { enqueueParcelStepEmail, CUSTOMER_EMAILED_STEPS } from './orderStatusEmailService.js';
+import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from './orderTrackingService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
@@ -1315,6 +1316,10 @@ export async function addParcelStep(actor, orderId, shipmentId, { status, note, 
   // order page only). Only the click that won the compare-and-set above gets here, and
   // `expected + 1` is the step number it wrote — one email per real step.
   enqueueParcelStepEmail(orderId, shipmentId, status, expected + 1, text);
+  // Same filter as the email: only out-for-delivery / missed delivery message the customer.
+  if (CUSTOMER_EMAILED_STEPS.has(status)) {
+    enqueueOrderWhatsApp(orderId, status, { shipmentId, occurrence: expected + 1 });
+  }
 
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_step', shipmentId: String(shipmentId), status });
   return getOrder(actor, orderId);

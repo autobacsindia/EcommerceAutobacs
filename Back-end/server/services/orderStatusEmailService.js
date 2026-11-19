@@ -17,6 +17,7 @@ import { readPrivateAsset } from './storage/privateUploads.js';
 import { hashOf } from './deliveryUpdateEmailService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { PARCEL_STEP } from '../utils/parcelSteps.js';
+import { notificationKey, stillRelevant, paymentFailedEmailDelayMs } from './orderNotificationRules.js';
 
 /**
  * Download a URL into a Buffer (used to fetch the Cloudinary-hosted shipping slip
@@ -32,52 +33,10 @@ const downloadToBuffer = async (url) => {
   return Buffer.from(await res.arrayBuffer());
 };
 
-/**
- * The idempotency key stored in `Order.notifiedStatuses`.
- *
- * ⚠️ THIS IS THE FIX FOR A REAL SWALLOWED EMAIL. The guard used to be the bare status
- * word, and the send is skipped when the array already contains it — so the moment an
- * order shipped in two parcels, the SECOND "your order has shipped" email was silently
- * dropped and the customer was never told about their other box. Keying on the parcel
- * makes each one notifiable exactly once.
- *
- * Order-level events (cancelled, refunded, and every historical order) keep the bare
- * word, so nothing already sent is ever re-sent after this change ships.
- *
- * `occurrence` is for events that can legitimately happen more than once on the same
- * parcel or order: a courier step (a parcel can be out for delivery, missed, and out
- * for delivery again — keyed on the parcel's step number) or a refund (keyed on the
- * Razorpay refund id). Without it the second "out for delivery" would be swallowed
- * exactly like the second parcel's "shipped" email was.
- *
- * @param {string} status
- * @param {string|null} [shipmentId]
- * @param {string|number|null} [occurrence]
- * @returns {string}
- */
-export const notificationKey = (status, shipmentId = null, occurrence = null) =>
-  [status, shipmentId, occurrence].filter((part) => part != null && part !== '').join(':');
-
-/**
- * Is this email still true by the time the worker runs it? Each answer is read off the
- * order the worker just loaded, so a delayed or retried job never tells the customer
- * something that has stopped being the case.
- *   payment_failed  — sent after a delay (see razorpayService.handlePaymentFailure);
- *                     a customer who retried and paid in the meantime gets nothing.
- *   out_for_delivery / delivery_failed — only while the parcel is still in transit;
- *                     once it is delivered (or lost) the step is old news.
- * Every other status was true when it was enqueued and stays true.
- * @returns {boolean}
- */
-export const stillRelevant = (order, status, shipment) => {
-  if (status === 'payment_failed') {
-    return order.status === 'awaiting_payment' && order.paymentStatus !== 'paid';
-  }
-  if (status === 'out_for_delivery' || status === 'delivery_failed') {
-    return shipment?.status === 'shipped';
-  }
-  return true;
-};
+// notificationKey / stillRelevant live in orderNotificationRules.js (no imports), so
+// the WhatsApp channel can share them without loading this module's email/queue deps.
+// Re-exported here so every existing import keeps working.
+export { notificationKey, stillRelevant };
 
 /**
  * Send the status-update email for an order, once per status (or once per parcel).
@@ -229,16 +188,7 @@ export function enqueueParcelStepEmail(orderId, shipmentId, step, stepNumber, no
   );
 }
 
-/**
- * How long after a failed payment we wait before emailing. Most failures are retried
- * in the same Razorpay window within a minute or two (wrong OTP, a declined card then
- * UPI); emailing at once would tell a customer who has just paid that they have not.
- * The worker re-checks the order (stillRelevant) before sending.
- */
-export const paymentFailedEmailDelayMs = () => {
-  const minutes = Number(process.env.PAYMENT_FAILED_EMAIL_DELAY_MINUTES);
-  return (Number.isFinite(minutes) && minutes >= 0 ? minutes : 30) * 60 * 1000;
-};
+export { paymentFailedEmailDelayMs };
 
 /** One "your payment didn't go through" email per order, however many attempts fail. */
 export function enqueuePaymentFailedEmail(orderId) {
@@ -260,7 +210,24 @@ export function enqueueRefundStartedEmail(orderId, refundId, amount) {
   );
 }
 
+/**
+ * One "your refund has been processed" email per Razorpay refund that is NOT the
+ * order's single full refund — today, a partial-cancellation refund
+ * (razorpayService.applyCancellationRefundWebhook). Keyed `refunded:<refundId>`, so it
+ * can never collide with — or use up — the bare `refunded` key of a full refund.
+ * `amount` is in ₹ and puts the refunded figure in the email.
+ */
+export function enqueueRefundProcessedEmail(orderId, refundId, amount) {
+  return addJob(
+    'send-order-status-email',
+    { orderId: String(orderId), status: 'refunded', refundId: String(refundId), amount },
+    { jobId: `refund-processed|${refundId}` },
+    `refund-processed email for order ${orderId}`,
+  );
+}
+
 export default {
   emailOrderStatusUpdate, notificationKey, stillRelevant,
   enqueueParcelStepEmail, enqueuePaymentFailedEmail, enqueueRefundStartedEmail,
+  enqueueRefundProcessedEmail,
 };

@@ -105,6 +105,9 @@ const SalesQuotationSchema = new mongoose.Schema(
       phone: { type: String, required: true },
       // Optional second number to call. Contact only — never a lookup key.
       alternatePhone: { type: String, default: '' },
+      // Customer agreed to order updates on WhatsApp (asked by staff). Absent on
+      // quotations made before the box existed → their orders get no WhatsApp.
+      whatsappOptIn: { type: Boolean, default: undefined },
     },
     shippingAddress: { type: AddressSchema, required: true },
     items: { type: [LineSchema], default: [] },

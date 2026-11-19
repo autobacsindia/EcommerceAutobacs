@@ -38,6 +38,7 @@ import {
 } from '../utils/orderFulfilment.js';
 import { owesGoodie } from '../utils/orderLines.js';
 import * as Sentry from '@sentry/node';
+import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
 
 // Bounded retries for the compare-and-set. A conflict means another admin shipped
 // something while we validated; re-reading resolves it. More than a couple of rounds
@@ -501,6 +502,7 @@ class ShipmentService {
       .add('send-shipment-email', { orderId, shipmentId, kind })
       .catch((err) =>
         console.error(`[Shipment] Failed to enqueue ${kind} email for parcel ${shipmentId}:`, err.message));
+    enqueueOrderWhatsApp(orderId, kind, { shipmentId });
   }
 }
 

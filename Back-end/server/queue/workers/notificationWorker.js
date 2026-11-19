@@ -5,6 +5,9 @@
  *   send-order-invoice       { orderId }          — generate + email the invoice/receipt (idempotent)
  *   send-order-status-email  { orderId, status }  — fulfillment status-change email (idempotent)
  *   send-shipment-email      { orderId, shipmentId, kind } — ONE parcel of a split shipment (idempotent per parcel)
+ *   send-order-whatsapp      { orderId, status, shipmentId?, occurrence?, amount? } — WhatsApp twin of the
+ *                            two jobs above; its own job + stamp (Order.whatsappNotified), see
+ *                            services/whatsapp/orderWhatsAppService.js
  *   send-delivery-update-email { orderId, shipmentId } — tracking/courier corrected after dispatch (once per change, ≤1 per parcel per 10 min)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
@@ -44,6 +47,7 @@ import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice, emailExtraChargeReceipt } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
+import { sendOrderWhatsApp, WHATSAPP_JOB } from '../../services/whatsapp/orderWhatsAppService.js';
 import { emailDeliveryUpdate } from '../../services/deliveryUpdateEmailService.js';
 import { emailAffiliateApproved, emailAffiliatePayoutSent } from '../../services/affiliateEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
@@ -105,6 +109,22 @@ const handlers = {
   'send-shipment-email': async (job) => {
     const { orderId, shipmentId, kind, occurrence, note } = job.data;
     await emailOrderStatusUpdate(orderId, kind, { shipmentId, occurrence: occurrence ?? null, note: note || '' });
+  },
+
+  // WhatsApp for one order event. Never touches the email stamp; throws only on a
+  // transient Meta failure (so BullMQ retries), and returns quietly when the channel
+  // is off, the customer did not opt in, or the number is not a valid Indian mobile.
+  [WHATSAPP_JOB]: async (job) => {
+    const { orderId, status, shipmentId, occurrence, amount } = job.data;
+    const res = await sendOrderWhatsApp(orderId, status, {
+      shipmentId: shipmentId || null,
+      occurrence: occurrence ?? null,
+      amount: amount ?? null,
+    });
+    if (res.status !== 'sent' && res.status !== 'disabled') {
+      console.log(`[Notifications] ${WHATSAPP_JOB} ${orderId} ${status}: ${res.status}`);
+    }
+    return res;
   },
 
   // A parcel's tracking/courier was corrected after it shipped. Idempotent per value

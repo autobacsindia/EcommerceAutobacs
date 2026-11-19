@@ -22,6 +22,8 @@ import { ACCEPTANCE_CHANNELS } from '../config/legalDocuments.js';
 import { hashToken } from '../utils/tokenUtils.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { isInternalEmail } from '../utils/customerContact.js';
+import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
+import { whatsappConsentFields } from '../utils/whatsappConsent.js';
 
 /** Payment links expire after this long (matches razorpayService.createPaymentLink). */
 export const PAYMENT_LINK_TTL_MS = 48 * 60 * 60 * 1000;
@@ -59,6 +61,8 @@ const saveBusinessProfile = (userId, buyer) =>
  *   afterwards in parts (salesPaymentService); nothing is sent until it is paid.
  * @param {string} p.actorId       User id recorded in status history
  * @param {string} [p.defaultNote]
+ * @param {boolean} [p.whatsappOptIn]  staff confirmed the customer wants WhatsApp order
+ *   updates (defaults to body.whatsappOptIn); not a boolean → nothing stored, no messages
  * @returns {Promise<{order: Object, customer: {id, email, isNewUser}, paymentLink: {id, shortUrl}|null}>}
  */
 export async function createOfflineOrderRecord({
@@ -81,6 +85,7 @@ export async function createOfflineOrderRecord({
   paymentMode,
   actorId,
   defaultNote = 'Offline order created by admin',
+  whatsappOptIn = body?.whatsappOptIn,
 }) {
   /*
     Validate the buyer BEFORE creating the customer: a mistyped GSTIN would
@@ -173,6 +178,8 @@ export async function createOfflineOrderRecord({
     totalAmount,
     status: 'awaiting_payment',
     guestEmail: normEmail,
+    // Staff ticked "order updates on WhatsApp" after asking the customer.
+    ...whatsappConsentFields(whatsappOptIn, 'staff'),
     statusHistory: [
       {
         status: 'awaiting_payment',
@@ -279,6 +286,7 @@ export async function createOfflineOrderRecord({
       queue
         .add('send-order-invoice', { orderId: order._id.toString() })
         .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
+      enqueueOrderWhatsApp(order._id, 'confirmed');
       // Paid now (not via the webhook), so it entered the team workflow here — the
       // teams are told the same way as for a Razorpay payment.
       queue
