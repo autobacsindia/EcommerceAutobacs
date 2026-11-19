@@ -325,7 +325,14 @@ router.get('/channels/:id/files', validateChannelIdParam, validateFilePage, vali
 
 // GET /chat/channels/:id/files/:name — a shared file's bytes, for people in the channel
 router.get('/channels/:id/files/:name', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
-  const { buffer, mime, inline } = await readChatFile(req.user, req.params.id, req.params.name);
+  const { buffer, mime, inline, redirect } = await readChatFile(req.user, req.params.id, req.params.name, {
+    download: req.query.download === '1',
+  });
+  if (redirect) {
+    // A fresh signed link each time; never cached, as it is a short-lived credential.
+    res.set('Cache-Control', 'no-store');
+    return res.redirect(302, redirect);
+  }
   res.set({
     'Content-Type': mime,
     'Content-Length': buffer.length,

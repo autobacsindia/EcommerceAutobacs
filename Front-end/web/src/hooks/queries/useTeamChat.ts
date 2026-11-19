@@ -108,7 +108,7 @@ export const readUpdatesSeqOf = (c: ChatChannel) => c.lastReadUpdatesSeq ?? c.la
 
 export interface ChatAttachment {
   url: string;
-  kind: 'image' | 'file';
+  kind: 'image' | 'video' | 'file';
   name: string;
   mime: string;
   size: number;

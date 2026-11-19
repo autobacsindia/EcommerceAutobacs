@@ -8,7 +8,8 @@ import { upsertReply, useDeleteMessage, useEditMessage, useReactToMessage, useSe
 import { useTypingLine } from '@/lib/chatTyping';
 import type { ChatChannel, ChatMessage, ChatPerson, SendVars, ThreadData } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
-import Composer, { mentionableTeams } from './Composer';
+import Composer, { mentionableTeams, type ComposerHandle } from './Composer';
+import { DropOverlay, useFileDrop } from './useFileDrop';
 import MessageItem from './MessageItem';
 import { channelTitle } from './QuickSwitcher';
 
@@ -58,6 +59,9 @@ export default function ThreadPanel({
   const react = useReactToMessage(channel.id, meId);
   const star = useStarMessage();
   const [quote, setQuote] = useState<ChatMessage | null>(null);
+  // Files dropped on the thread go to the thread's composer (and not the conversation's).
+  const composer = useRef<ComposerHandle>(null);
+  const drop = useFileDrop((dropped) => composer.current?.addFiles(dropped));
   const scroller = useRef<HTMLDivElement>(null);
   const replies = data?.replies ?? [];
 
@@ -132,9 +136,11 @@ export default function ThreadPanel({
 
   return (
     <aside
-      className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-white xl:static xl:ml-2 xl:w-[380px] xl:shrink-0 xl:rounded-2xl"
+      className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-white xl:relative xl:ml-2 xl:w-[380px] xl:shrink-0 xl:rounded-2xl"
       aria-label="Thread"
+      {...drop.handlers}
     >
+      <DropOverlay show={drop.active} />
       <header className="flex items-center gap-2 border-b border-gray-200 px-4 py-3">
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-gray-900">Thread</h3>
@@ -180,6 +186,7 @@ export default function ThreadPanel({
 
       <TypingLine channelId={channel.id} threadRoot={rootId} />
       <Composer
+        handle={composer}
         channelName={channelTitle(channel)}
         people={people.filter((p) => p.id !== meId)}
         teams={mentionableTeams(channel)}

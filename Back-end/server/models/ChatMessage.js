@@ -10,9 +10,9 @@ const AttachmentSchema = new mongoose.Schema(
     publicId: { type: String, required: true },
     // 'r2' (private bucket, served by /chat/channels/:id/files/:name) or 'cloudinary' (older files).
     provider: { type: String, default: 'cloudinary' },
-    // 'image' renders inline; 'file' shows a download row. Decided server-side
-    // from the verified MIME type, never from the client.
-    kind: { type: String, enum: ['image', 'file'], required: true },
+    // 'image' renders inline; 'video' plays inline; 'file' shows a download row.
+    // Decided server-side from the verified MIME type, never from the client.
+    kind: { type: String, enum: ['image', 'video', 'file'], required: true },
     name: { type: String, required: true, maxlength: 200 },
     mime: { type: String, required: true, maxlength: 120 },
     size: { type: Number, required: true },

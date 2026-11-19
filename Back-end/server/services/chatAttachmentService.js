@@ -13,26 +13,39 @@
  *      is rejected here, so nothing unexpected ever reaches Cloudinary;
  *   4. the stored filename is sanitised; the original is only ever shown as text.
  *
- * Images go to Cloudinary as `image` (so thumbnails work); everything else as
- * `raw`, which is served as an opaque download and never executed or rendered.
+ * Images go to Cloudinary as `image` (so thumbnails work), videos as `video`
+ * (so they play and seek); everything else as `raw`, which is served as an
+ * opaque download and never executed or rendered.
+ *
+ * Videos (MP4, MOV, WebM) get their own, larger size cap — a phone clip is
+ * bigger than a photo — which is why multer's own limit is the larger of the two
+ * and the per-kind cap is checked straight after (assertSizes).
  */
 import crypto from 'crypto';
 import multer from 'multer';
 import path from 'path';
 import AppError from '../utils/AppError.js';
-import { uploadToCloudinary, uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
+import { uploadToCloudinary, uploadRawToCloudinary, uploadVideoToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { storageProvider } from '../config/storage.js';
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_VIDEO_ATTACHMENT_BYTES, mb } from '../config/attachments.js';
+import { detectKind, KIND } from './storage/contentSniff.js';
 import { storeAll } from './storage/storeAll.js';
 
-/** The staff-wide limits (config/attachments.js): 10 MB a file, 20 files a message. */
+/** The staff-wide limits (config/attachments.js): 10 MB a file, 40 MB a video, 20 files a message. */
 export const MAX_ATTACHMENT_SIZE = MAX_ATTACHMENT_BYTES;
+export const MAX_VIDEO_SIZE = MAX_VIDEO_ATTACHMENT_BYTES;
 export const MAX_ATTACHMENTS_PER_MESSAGE = MAX_ATTACHMENTS;
 
 /** mime → { kind, ext, verify(buffer) }. Anything not here is refused. */
 const starts = (buf, sig) => buf.length >= sig.length && buf.subarray(0, sig.length).equals(Buffer.from(sig));
 const PK_ZIP = [0x50, 0x4b, 0x03, 0x04]; // docx/xlsx are zip containers
+// MP4/MOV share the ISO `ftyp` box; contentSniff tells a video brand from a HEIC/AVIF photo.
+const isVideo = (b) => detectKind(b) === KIND.VIDEO;
+// Older QuickTime files (some cameras, screen recorders) open with a moov/mdat/
+// wide/free atom instead of `ftyp`.
+const QT_ATOMS = new Set(['moov', 'mdat', 'wide', 'free', 'skip']);
+const isQuickTime = (b) => isVideo(b) || (b.length >= 8 && QT_ATOMS.has(b.subarray(4, 8).toString('latin1')));
 
 const TYPES = {
   'image/jpeg': { kind: 'image', ext: 'jpg', verify: (b) => starts(b, [0xff, 0xd8, 0xff]) },
@@ -44,6 +57,10 @@ const TYPES = {
     verify: (b) => b.length >= 12 && starts(b, [0x52, 0x49, 0x46, 0x46]) && b.subarray(8, 12).toString() === 'WEBP',
   },
   'image/gif': { kind: 'image', ext: 'gif', verify: (b) => starts(b, [0x47, 0x49, 0x46, 0x38]) },
+  'video/mp4': { kind: 'video', ext: 'mp4', verify: isVideo },
+  'video/quicktime': { kind: 'video', ext: 'mov', verify: isQuickTime }, // iPhone
+  'video/x-m4v': { kind: 'video', ext: 'm4v', verify: isVideo },
+  'video/webm': { kind: 'video', ext: 'webm', verify: (b) => starts(b, [0x1a, 0x45, 0xdf, 0xa3]) },
   'application/pdf': { kind: 'file', ext: 'pdf', verify: (b) => starts(b, [0x25, 0x50, 0x44, 0x46]) },
   'text/csv': { kind: 'file', ext: 'csv', verify: () => true }, // plain text: nothing to forge
   'text/plain': { kind: 'file', ext: 'txt', verify: () => true },
@@ -56,6 +73,34 @@ const TYPES = {
 };
 
 export const ALLOWED_ATTACHMENT_TYPES = Object.keys(TYPES);
+
+/**
+ * Some browsers send a video with no useful label (Windows without a codec pack,
+ * some Android pickers). The file name then says what it claims to be; the BYTES
+ * still decide (assertRealFiles), so a renamed .exe is refused either way.
+ */
+const NO_LABEL = new Set(['', 'application/octet-stream', 'binary/octet-stream', 'application/unknown']);
+const VIDEO_BY_EXT = { mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm' };
+export function declaredType({ mimetype, originalname }) {
+  const type = String(mimetype || '').toLowerCase();
+  if (!NO_LABEL.has(type)) return type;
+  const ext = String(originalname || '').toLowerCase().split('.').pop();
+  return VIDEO_BY_EXT[ext] || type;
+}
+
+/** The size cap for one file of this kind. */
+export const maxBytesFor = (kind) => (kind === 'video' ? MAX_VIDEO_SIZE : MAX_ATTACHMENT_SIZE);
+const TOO_BIG_TEXT = `Videos can be up to ${mb(MAX_VIDEO_ATTACHMENT_BYTES)}; other files up to ${mb(MAX_ATTACHMENT_BYTES)}.`;
+
+/** Refuse the batch (400) when any file is over the cap for its kind. */
+export function assertSizes(files) {
+  for (const file of files || []) {
+    const type = TYPES[file.mimetype];
+    if (type && file.size > maxBytesFor(type.kind)) {
+      throw new AppError(`"${file.originalname}" is too big. ${TOO_BIG_TEXT}`, 400, { expose: true });
+    }
+  }
+}
 
 /** { kind, ext } for an allowed MIME type, or undefined. */
 export const attachmentType = (mime) => TYPES[mime];
@@ -76,11 +121,15 @@ export function assertRealFiles(files) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_ATTACHMENT_SIZE, files: MAX_ATTACHMENTS_PER_MESSAGE },
+  // The larger cap (+1 byte: busboy treats reaching the limit as going over, so
+  // a file of exactly 40 MB would be refused). assertSizes then holds every
+  // file to its own kind's cap, inclusive.
+  limits: { fileSize: Math.max(MAX_ATTACHMENT_SIZE, MAX_VIDEO_SIZE) + 1, files: MAX_ATTACHMENTS_PER_MESSAGE },
   fileFilter: (req, file, cb) => {
+    file.mimetype = declaredType(file);
     if (!TYPES[file.mimetype]) {
       return cb(new AppError(
-        `"${file.originalname}" is a ${file.mimetype || 'unknown'} file. Share a photo, PDF, CSV, Excel or Word file.`,
+        `"${file.originalname}" is a ${file.mimetype || 'unknown'} file. Share a photo, video (MP4, MOV, WebM), PDF, CSV, Excel or Word file.`,
         400,
         { expose: true },
       ), false);
@@ -98,7 +147,7 @@ export const handleChatUploadError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     const message =
       err.code === 'LIMIT_FILE_SIZE'
-        ? `That file is too big. Each file must be under ${MAX_ATTACHMENT_SIZE / (1024 * 1024)} MB.`
+        ? `That file is too big. ${TOO_BIG_TEXT}`
         : err.code === 'LIMIT_FILE_COUNT'
           ? `Too many files. You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} at a time.`
           : 'That upload could not be read. Please try again.';
@@ -126,6 +175,7 @@ export function safeName(original, ext) {
 export async function uploadChatAttachments(files, { channelId }) {
   if (!files?.length) return [];
 
+  assertSizes(files);
   assertRealFiles(files);
 
   // On R2 (STORAGE_PROVIDER=r2, as the rest of the site): PRIVATE objects, read
@@ -142,6 +192,8 @@ export async function uploadChatAttachments(files, { channelId }) {
     const result =
       type.kind === 'image'
         ? await uploadToCloudinary(file.buffer, { folder })
+        : type.kind === 'video'
+          ? await uploadVideoToCloudinary(file.buffer, { folder })
         // Raw assets keep their extension in the public id so the download URL
         // ends in .pdf/.xlsx and opens in the right app.
         : await uploadRawToCloudinary(file.buffer, {
@@ -158,7 +210,7 @@ export async function uploadChatAttachments(files, { channelId }) {
       width: null,
       height: null,
     };
-  }, (a) => deleteFromCloudinary(a.publicId, a.kind === 'image' ? 'image' : 'raw'));
+  }, (a) => deleteFromCloudinary(a.publicId, a.kind === 'image' || a.kind === 'video' ? a.kind : 'raw'));
 }
 
 /** Where a channel's files live in the private bucket. */

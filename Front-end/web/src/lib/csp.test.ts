@@ -16,6 +16,10 @@ describe('media-src', () => {
   test('lets a lesson video play from the private bucket', async () => {
     expect(directive(await buildStrictCsp('n0nc3'), 'media-src')).toMatch(/r2\.cloudflarestorage\.com/);
   });
+
+  test('lets a team-chat video play from Cloudinary too', async () => {
+    expect(directive(await buildStrictCsp('n0nc3'), 'media-src')).toContain('https://res.cloudinary.com');
+  });
 });
 
 describe('connect-src', () => {

@@ -23,6 +23,7 @@ const deleted = [];
 jest.unstable_mockModule('../utils/cloudinaryHelpers.js', () => ({
   uploadToCloudinary: (...args) => fakeUpload(...args),
   uploadRawToCloudinary: (...args) => fakeUpload(...args),
+  uploadVideoToCloudinary: (...args) => fakeUpload(...args),
   uploadManyToCloudinary: jest.fn(),
   deleteFromCloudinary: (publicId) => { deleted.push(publicId); return Promise.resolve(); },
   deleteManyFromCloudinary: jest.fn(),

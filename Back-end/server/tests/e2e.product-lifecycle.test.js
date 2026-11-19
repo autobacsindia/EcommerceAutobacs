@@ -32,6 +32,7 @@ const mockUploadRaw    = jest.fn();
 jest.unstable_mockModule('../utils/cloudinaryHelpers.js', () => ({
   uploadToCloudinary:       (...args) => mockUploadSingle(...args),
   uploadRawToCloudinary:    (...args) => mockUploadRaw(...args),
+  uploadVideoToCloudinary:    (...args) => mockUploadRaw(...args),
   uploadManyToCloudinary:   (...args) => mockUploadMany(...args),
   deleteFromCloudinary:     (...args) => mockDeleteSingle(...args),
   deleteManyFromCloudinary: (...args) => mockDeleteMany(...args),

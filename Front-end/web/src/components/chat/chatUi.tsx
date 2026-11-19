@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, type RefObject } from 'react';
-import { ArrowLeftRight, Building2, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, Users, X } from 'lucide-react';
+import { ArrowLeftRight, Building2, FileSpreadsheet, FileText, File as FileIcon, Film, Hash, Image as ImageIcon, Lock, Users, X } from 'lucide-react';
 import type { ChatChannel, ChatPerson } from '@/hooks/queries/useTeamChat';
 import PersonFace from '@/components/profile/PersonFace';
 
@@ -84,8 +84,18 @@ export function fileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * A link that saves a shared file rather than opening it. Private (R2) chat files
+ * are served by our API, which takes ?download=1; a Cloudinary URL is left as is.
+ */
+export function chatDownloadUrl(url: string): string {
+  if (!url.startsWith('/api/')) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}download=1`;
+}
+
 export function FileKindIcon({ mime, className = 'h-5 w-5' }: { mime: string; className?: string }) {
   if (mime.startsWith('image/')) return <ImageIcon className={className} aria-hidden="true" />;
+  if (mime.startsWith('video/')) return <Film className={className} aria-hidden="true" />;
   if (mime === 'application/pdf') return <FileText className={className} aria-hidden="true" />;
   if (mime.includes('sheet') || mime === 'text/csv') return <FileSpreadsheet className={className} aria-hidden="true" />;
   return <FileIcon className={className} aria-hidden="true" />;

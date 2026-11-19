@@ -11,6 +11,17 @@ export const MAX_ATTACHMENTS = 20;
 /** Each file, after a photo has been shrunk. */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
+/** One team-chat video (MP4, MOV, WebM). Same as config/attachments.js. */
+export const MAX_VIDEO_ATTACHMENT_BYTES = 40 * 1024 * 1024;
+
+/** What the team-chat attach button takes. The server checks every file's bytes. */
+export const CHAT_FILES =
+  'image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,text/csv,text/plain,.csv,.txt,.pdf,.xlsx,.docx';
+
+/** Is this (probably) a video? By its label, or by its name when the label says nothing. */
+export const isVideoFile = (file: Pick<File, 'name' | 'type'>) =>
+  (file.type || '').toLowerCase().startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(file.name || '');
+
 /** All files in one save together. */
 export const MAX_ATTACHMENTS_TOTAL_BYTES = 40 * 1024 * 1024;
 

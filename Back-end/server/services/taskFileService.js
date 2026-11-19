@@ -16,7 +16,7 @@ import AppError from '../utils/AppError.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { storageProvider } from '../config/storage.js';
 import { storeAll } from './storage/storeAll.js';
-import { assertRealFiles, attachmentType, safeName, CHAT_FILE_NAME, chatFileType } from './chatAttachmentService.js';
+import { assertRealFiles, assertSizes, attachmentType, safeName, CHAT_FILE_NAME, chatFileType } from './chatAttachmentService.js';
 
 /** Files on one task, and on one comment. */
 export const TASK_FILES_MAX = 30;
@@ -34,6 +34,13 @@ export const basenameOf = (publicId) => String(publicId).split('/').pop();
  */
 export async function storeTaskFiles(files, taskId) {
   if (!files?.length) return [];
+  // The uploader is shared with chat, which also takes videos. Tasks do not
+  // (yet): a task file shows as a download row, and the size caps differ.
+  const video = files.find((f) => attachmentType(f.mimetype)?.kind === 'video');
+  if (video) {
+    throw new AppError(`"${video.originalname}" is a video. Share videos in team chat; tasks take photos and documents.`, 400, { expose: true });
+  }
+  assertSizes(files);
   assertRealFiles(files);
   if (storageProvider() !== 'r2') {
     throw new AppError('File storage is not set up here, so files can’t be added.', 503, { expose: true });

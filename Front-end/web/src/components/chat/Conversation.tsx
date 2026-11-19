@@ -27,8 +27,9 @@ import { useTypingLine } from '@/lib/chatTyping';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import MembersPanel from './MembersPanel';
-import { Avatar, ChannelIcon, FileKindIcon, fileSize, newClientId, timeOf } from './chatUi';
-import Composer, { mentionableTeams } from './Composer';
+import { Avatar, ChannelIcon, FileKindIcon, chatDownloadUrl, fileSize, newClientId, timeOf } from './chatUi';
+import Composer, { mentionableTeams, type ComposerHandle } from './Composer';
+import { DropOverlay, useFileDrop } from './useFileDrop';
 import MessageItem, { DaySeparator, messageDomId, startsNewDay } from './MessageItem';
 import NotifyMenu from './NotifyMenu';
 import ForwardDialog from './ForwardDialog';
@@ -84,7 +85,7 @@ function FilesPanel({ channelId }: { channelId: string }) {
         {files.map((f) => (
           <li key={f.id}>
             <a
-              href={f.url}
+              href={chatDownloadUrl(f.url)}
               target="_blank"
               rel="noopener noreferrer"
               download={f.name}
@@ -191,6 +192,10 @@ export default function Conversation({
     if (initialTab === 'updates') return channel.kind === 'space' ? 'updates' : 'messages';
     return initialTab ?? defaultTab(channel);
   });
+  // Files dragged anywhere over the conversation go to the composer, exactly as
+  // if picked with the attach button. Only on the Messages tab, where it is.
+  const composer = useRef<ComposerHandle>(null);
+  const drop = useFileDrop((dropped) => composer.current?.addFiles(dropped), tab === 'messages');
   // Custom groups have a member list; team spaces and DMs do not.
   const isGroup = channel.kind === 'space' && channel.audience === 'members';
   const [quote, setQuote] = useState<ChatMessage | null>(null);
@@ -441,7 +446,12 @@ export default function Conversation({
     // min-w-0: without it this pane grows to its widest child (the pinned bar, the
     // header icons) and every message is clipped on a phone, Send off-screen.
     <div className="relative flex h-full min-h-0 min-w-0 flex-1">
-      <section className="gc-card gc-pane gc-open flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl" aria-label={`Conversation ${title}`}>
+      <section
+        className="gc-card gc-pane gc-open relative flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl"
+        aria-label={`Conversation ${title}`}
+        {...drop.handlers}
+      >
+        <DropOverlay show={drop.active} />
         <header className="border-b border-gray-200/80 px-3 pt-2.5 sm:px-5 sm:pt-3">
           <div className="flex items-center gap-2 sm:gap-3">
             <button type="button" onClick={onBack} className="-ml-1.5 shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Back to channels">
@@ -642,6 +652,7 @@ export default function Conversation({
             <>
             <TypingLine channelId={channel.id} threadRoot={null} />
             <Composer
+              handle={composer}
               channelName={title}
               people={people.filter((p) => p.id !== meId)}
               teams={mentionableTeams(channel)}

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ChevronRight, CornerUpRight, Download, Phone, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { meetLinkIn } from './meet';
-import { Avatar, TeamBadge, dayLabel, fileSize, timeOf, useOpenUpwardIfCut } from './chatUi';
+import { Avatar, TeamBadge, chatDownloadUrl, dayLabel, fileSize, timeOf, useOpenUpwardIfCut } from './chatUi';
 import EmojiPicker from './EmojiPicker';
 import { formatMessage } from './chatFormat';
 import { CallLine } from '@/components/calls/DmCallButtons';
@@ -129,6 +129,56 @@ function Photos({ items }: { items: ChatAttachment[] }) {
           <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="h-full w-full object-contain" />
         </a>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Shared videos: a player with controls in the message, and a download link.
+ * `preload="metadata"` fetches only the first frame and length, not the clip.
+ * Some videos cannot play in some browsers (an iPhone's HEVC .mov in Chrome on
+ * Windows, say): the player then gives way to a plain "download it" line.
+ */
+function OneVideo({ a }: { a: ChatAttachment }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <figure className="max-w-full" data-testid="chat-video">
+      {broken ? (
+        <p className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          This video can’t play in this browser. Download it to watch.
+        </p>
+      ) : (
+        <video
+          src={a.url}
+          controls
+          playsInline
+          preload="metadata"
+          onError={() => setBroken(true)}
+          className="block max-h-[var(--gc-photo-h,280px)] w-[360px] max-w-full rounded-xl border border-gray-200 bg-black"
+          aria-label={a.name}
+        />
+      )}
+      <figcaption className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+        <span className="min-w-0 truncate">{a.name} · {fileSize(a.size)}</span>
+        <a
+          href={chatDownloadUrl(a.url)}
+          download={a.name}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-1 font-medium text-blue-700 hover:underline"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
+        </a>
+      </figcaption>
+    </figure>
+  );
+}
+
+function Videos({ items }: { items: ChatAttachment[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      {items.map((a, i) => <OneVideo key={`${i}:${a.url}`} a={a} />)}
     </div>
   );
 }
@@ -627,7 +677,8 @@ export default function MessageItem({
     ...(m.mentionAll ? ['all'] : []),
   ];
   const photos = m.attachments.filter((a) => a.kind === 'image');
-  const documents = m.attachments.filter((a) => a.kind !== 'image');
+  const videos = m.attachments.filter((a) => a.kind === 'video');
+  const documents = m.attachments.filter((a) => a.kind !== 'image' && a.kind !== 'video');
   // Your own messages: a light-blue card on the right, no avatar (as in Google Chat).
   const card = mine && m.kind === 'user';
   const sentAt = new Date(m.createdAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -686,6 +737,7 @@ export default function MessageItem({
               <div className="opacity-70">
                 {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
                 <Photos items={photos} />
+                <Videos items={videos} />
                 <Documents items={documents} />
               </div>
             </div>
@@ -744,9 +796,10 @@ export default function MessageItem({
                   {meetLinkIn(m.text) ? <MeetCard url={meetLinkIn(m.text)!} /> : m.preview && <LinkCard preview={m.preview} />}
                 </div>
               )}
-              {(photos.length > 0 || documents.length > 0 || m.refs.length > 0) && (
+              {(photos.length > 0 || videos.length > 0 || documents.length > 0 || m.refs.length > 0) && (
                 <div title={m.text ? undefined : sentAt} className={`${m.pending ? 'opacity-60' : ''} min-w-0 max-w-full ${card ? 'flex flex-col items-end' : ''}`}>
                   <Photos items={photos} />
+                  <Videos items={videos} />
                   <Documents items={documents} />
                   <OrderRefs refs={m.refs} orderHref={orderHref} />
                 </div>

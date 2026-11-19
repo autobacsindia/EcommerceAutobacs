@@ -1,17 +1,49 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { Bold, Code, Italic, List, Package, Paperclip, Plus, Quote, SendHorizontal, Smile, Strikethrough, Type, X } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
 import { useRecentOrders } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, fileSize, newClientId } from './chatUi';
 import { STAFF_TEAMS } from '@/lib/staffTeams';
 import EmojiPicker from './EmojiPicker';
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, mb } from '@/lib/attachments';
+import { CHAT_FILES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, MAX_VIDEO_ATTACHMENT_BYTES, isVideoFile, mb } from '@/lib/attachments';
+import { matchesAccept, namePastedFile } from '@/lib/clipboardFiles';
 
-/** The server's limits (config/attachments.js): 20 files a message, 10 MB each, 40 MB together. */
+/** The server's limits (config/attachments.js): 20 files a message, 10 MB each (40 MB a video), 40 MB together. */
 const MAX_FILES = MAX_ATTACHMENTS;
-const MAX_FILE_MB = MAX_ATTACHMENT_BYTES / (1024 * 1024);
+const capFor = (f: File) => (isVideoFile(f) ? MAX_VIDEO_ATTACHMENT_BYTES : MAX_ATTACHMENT_BYTES);
+const SUPPORTED_TEXT = 'Send a photo, video (MP4, MOV, WebM), PDF, Word, Excel, CSV or text file.';
+
+/** What a parent (the conversation's drop zone) may do with the composer. */
+export type ComposerHandle = { addFiles: (files: File[]) => void };
+
+/**
+ * Sort files offered to the composer into the ones it can take and why the
+ * rest were refused (wrong type, too big, too many, over the message total).
+ * Pure, so the rules are tested without a browser.
+ */
+export function pickFiles(incoming: File[], already: File[]): { accepted: File[]; error: string } {
+  const errors: string[] = [];
+  const unsupported = incoming.find((f) => !matchesAccept(f, CHAT_FILES));
+  if (unsupported) errors.push(`"${unsupported.name}" can’t be shared here. ${SUPPORTED_TEXT}`);
+  const typed = incoming.filter((f) => matchesAccept(f, CHAT_FILES));
+  const tooBig = typed.find((f) => f.size > capFor(f));
+  if (tooBig) {
+    errors.push(isVideoFile(tooBig)
+      ? `"${tooBig.name}" is ${mb(tooBig.size)} — videos can be up to ${mb(MAX_VIDEO_ATTACHMENT_BYTES)}. Send a shorter clip.`
+      : `"${tooBig.name}" is over ${mb(MAX_ATTACHMENT_BYTES)} and was not added.`);
+  }
+  const room = MAX_FILES - already.length;
+  const sized = typed.filter((f) => f.size <= capFor(f));
+  if (sized.length > room) errors.push(`You can attach up to ${MAX_FILES} files at a time.`);
+  const fitting = sized.slice(0, Math.max(0, room));
+  // Keep adding while the message stays under the total; say so for the rest.
+  let total = already.reduce((sum, f) => sum + f.size, 0);
+  const accepted = fitting.filter((f) => (total + f.size <= MAX_ATTACHMENTS_TOTAL_BYTES ? ((total += f.size), true) : false));
+  if (accepted.length < fitting.length) errors.push(`Files in one message can add up to ${mb(MAX_ATTACHMENTS_TOTAL_BYTES)} — send the rest in another message.`);
+  return { accepted, error: errors[0] ?? '' };
+}
 
 /** Teams that can be addressed as a group. One list — see lib/staffTeams.ts. */
 const TEAMS = STAFF_TEAMS;
@@ -70,7 +102,10 @@ export default function Composer({
   onClearQuote,
   canMentionAll = false,
   onTyping,
+  handle,
 }: {
+  /** Lets the conversation's drop zone add files the same way the attach button does. */
+  handle?: Ref<ComposerHandle>;
   channelName: string;
   people: ChatPerson[];
   /** Teams that may be @mentioned here (see mentionableTeams). */
@@ -119,19 +154,14 @@ export default function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [text]);
 
+  // One way in for every file: the attach button, a paste, and a drop.
   const addFiles = (incoming: FileList | File[] | null) => {
     if (!incoming) return;
-    const list = Array.from(incoming);
-    const room = MAX_FILES - files.length;
-    if (room <= 0) return setError(`You can attach up to ${MAX_FILES} files at a time.`);
-    const tooBig = list.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
-    if (tooBig) setError(`"${tooBig.name}" is over ${MAX_FILE_MB} MB and was not added.`);
-    const fitting = list.filter((f) => f.size <= MAX_FILE_MB * 1024 * 1024).slice(0, room);
-    // Keep adding while the message stays under the total; say so for the rest.
-    let total = files.reduce((sum, f) => sum + f.file.size, 0);
-    const accepted = fitting.filter((f) => (total + f.size <= MAX_ATTACHMENTS_TOTAL_BYTES ? ((total += f.size), true) : false));
-    if (accepted.length < fitting.length) setError(`Files in one message can add up to ${mb(MAX_ATTACHMENTS_TOTAL_BYTES)} — send the rest in another message.`);
-    else if (accepted.length && !tooBig) setError('');
+    const list = Array.from(incoming).map((f) => namePastedFile(f));
+    if (!list.length) return;
+    const { accepted, error: why } = pickFiles(list, files.map((f) => f.file));
+    setError(why);
+    if (accepted.length) box.current?.focus();
     setFiles((prev) => [
       ...prev,
       ...accepted.map((file) => ({
@@ -140,6 +170,8 @@ export default function Composer({
       })),
     ]);
   };
+
+  useImperativeHandle(handle, () => ({ addFiles: (list: File[]) => addFiles(list) }));
 
   const removeFile = (index: number) =>
     setFiles((prev) => {
@@ -220,11 +252,6 @@ export default function Composer({
     <form
       onSubmit={submit}
       className="px-3 pb-3 pt-1 sm:px-4"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        addFiles(e.dataTransfer.files);
-      }}
     >
       {/* Chosen attachments and orders, removable before sending. */}
       {(files.length > 0 || orders.length > 0) && (
@@ -259,7 +286,7 @@ export default function Composer({
         </div>
       )}
 
-      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+      {error && <p role="alert" className="mb-2 text-xs text-red-600">{error}</p>}
 
       {quote && (
         <div className="mb-2 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
@@ -401,7 +428,7 @@ export default function Composer({
                   className="pn-pop absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-2xl border border-gray-200 bg-[var(--gc-card)] py-1.5 shadow-lg"
                 >
                   {([
-                    ['Attach a file', 'Photo or document', Paperclip, () => fileInput.current?.click()],
+                    ['Attach a file', `Photo, video (up to ${mb(MAX_VIDEO_ATTACHMENT_BYTES)}) or document`, Paperclip, () => fileInput.current?.click()],
                     ['Link an order', 'Link an order', Package, () => setShowOrders(true)],
                     ['Formatting', 'Bold, italic, list…', Type, () => setShowFormat((v) => !v)],
                   ] as const).map(([label, text, Icon, run], i) => (
@@ -436,7 +463,7 @@ export default function Composer({
             type="file"
             multiple
             hidden
-            accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/csv,text/plain,.xlsx,.docx"
+            accept={CHAT_FILES}
             onChange={(e) => {
               addFiles(e.target.files);
               e.target.value = ''; // let the same file be picked again after removing it

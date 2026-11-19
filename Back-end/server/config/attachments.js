@@ -19,6 +19,13 @@ export const MAX_ATTACHMENTS = 20;
 /** Each file. A 10-page scanned PDF is ~3 MB; a shrunk phone photo ~0.3 MB. */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
+/**
+ * One chat VIDEO. Bigger than other files because a phone clip is: about 30–40
+ * seconds of 1080p. It is still held in memory while it is checked, so it is
+ * capped at the per-message total — one video never raises the worst case.
+ */
+export const MAX_VIDEO_ATTACHMENT_BYTES = 40 * 1024 * 1024;
+
 /** All files in one save together. */
 export const MAX_ATTACHMENTS_TOTAL_BYTES = 40 * 1024 * 1024;
 
@@ -31,5 +38,5 @@ export const mb = (bytes) => `${Math.round(bytes / (1024 * 1024))} MB`;
 export const ATTACHMENT_TYPES_TEXT = 'a photo (JPG, PNG, WebP) or a PDF';
 
 export default {
-  MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, MAX_ATTACHMENTS_PER_RECORD, mb, ATTACHMENT_TYPES_TEXT,
+  MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_VIDEO_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, MAX_ATTACHMENTS_PER_RECORD, mb, ATTACHMENT_TYPES_TEXT,
 };
