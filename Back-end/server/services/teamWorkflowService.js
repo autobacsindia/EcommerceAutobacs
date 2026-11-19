@@ -53,6 +53,7 @@ import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { parcelProofs, proofFilePath, LEGACY_PROOF_ID } from '../utils/shipmentView.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
+import { enqueueParcelStepEmail } from './orderStatusEmailService.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from './orderTrackingService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
@@ -1309,6 +1310,11 @@ export async function addParcelStep(actor, orderId, shipmentId, { status, note, 
     maxSteps: MAX_PARCEL_STEPS,
   });
   if (!updated) throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
+
+  // Out for delivery / missed delivery email the customer (other steps are shown on the
+  // order page only). Only the click that won the compare-and-set above gets here, and
+  // `expected + 1` is the step number it wrote — one email per real step.
+  enqueueParcelStepEmail(orderId, shipmentId, status, expected + 1, text);
 
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_step', shipmentId: String(shipmentId), status });
   return getOrder(actor, orderId);

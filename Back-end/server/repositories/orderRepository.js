@@ -613,6 +613,18 @@ class OrderRepository extends BaseRepository {
    * customer has been told, and that stamp is what stops a duplicate. Leave it and the
    * customer would never be emailed about the REAL refund when it later goes out.
    */
+  /**
+   * Record that a status email went out. `$addToSet`, not a whole-array save: the
+   * notification worker runs several jobs at once, and two emails for the same order
+   * (a cancellation and its refund-started email, say) each saving the array they
+   * read would drop the other's stamp — and a dropped stamp is a duplicate email the
+   * next time that job runs.
+   */
+  async addNotifiedStatus(orderId, key) {
+    const res = await Order.updateOne({ _id: orderId }, { $addToSet: { notifiedStatuses: key } });
+    return res.modifiedCount === 1;
+  }
+
   async clearNotifiedStatus(orderId, key, session = null) {
     const res = await Order.updateOne(
       { _id: orderId },

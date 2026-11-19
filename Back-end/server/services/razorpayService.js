@@ -22,6 +22,7 @@ import userRepository from '../repositories/userRepository.js';
 import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
 import { afterExtraPaid } from './extraChargeEffects.js';
 import { isOrderClosed } from '../utils/extraCharge.js';
+import { enqueuePaymentFailedEmail, enqueueRefundStartedEmail } from './orderStatusEmailService.js';
 
 /**
  * Ceiling on the optional EMI-plan lookup performed during a capture. Kept well inside
@@ -818,6 +819,21 @@ class RazorpayService {
         }
       });
 
+      /*
+        "We've started your refund" — every Razorpay refund passes through here, so this
+        is the one place to send it. Not for:
+          • a return refund — returnCustomerEmailService already sends its own refund
+            email when the return refund is issued;
+          • an extra-charge refund — a separate payment with its own receipt flow;
+          • an instant refund already `processed` — the "refund processed" email from
+            the refund.processed webhook follows straight away and says it all.
+        One email per refund id (jobId + notifiedStatuses), so a retried call that
+        Razorpay de-duplicates cannot double-send either.
+      */
+      if (orderId && !returnId && !extraChargeId && refund.status !== 'processed') {
+        enqueueRefundStartedEmail(orderId, refund.id, (refund.amount || amountPaise) / 100);
+      }
+
       return {
         success: true,
         refundId: refund.id,
@@ -1246,6 +1262,11 @@ class RazorpayService {
             await orderRepository.save(order);
             // Surface it to the Sales CRM as a payment-failed lead (best-effort).
             await leadSyncService.safeSync(() => leadSyncService.upsertFromOrder(order));
+            // Tell a storefront customer, after a delay, with a way to pay. Sales-panel
+            // orders are excluded: their payment link is the salesperson's conversation.
+            // One email per order however many attempts fail (jobId + notifiedStatuses),
+            // and none if the order is paid by the time it runs (stillRelevant).
+            if ((order.source || 'web') === 'web') enqueuePaymentFailedEmail(order._id);
             console.log(`Order ${orderId} paymentStatus set to failed`);
           }
         }

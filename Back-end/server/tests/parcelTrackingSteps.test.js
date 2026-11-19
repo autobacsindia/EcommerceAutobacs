@@ -143,8 +143,9 @@ describe('operations records the courier\'s progress', () => {
       ['picked_up', null], ['in_transit', 'Reached Ernakulam hub'], ['out_for_delivery', null],
     ]);
     expect(view.history.map((h) => h.action)).toContain('Parcel update');
-    // No customer email for a step: only the parcel's own emails.
-    expect(enqueued.filter((j) => j.name === 'send-shipment-email' && j.data.kind !== 'shipped')).toHaveLength(0);
+    // Out for delivery emails the customer; picked up / in transit do not.
+    expect(enqueued.filter((j) => j.name === 'send-shipment-email' && j.data.kind !== 'shipped').map((j) => j.data))
+      .toEqual([{ orderId: id, shipmentId: sid, kind: 'out_for_delivery', occurrence: 3, note: '' }]);
 
     view = await wf.markDelivered(ops, id, { shipmentId: sid }, req);
     fresh = await Order.findById(id).lean();
@@ -160,6 +161,26 @@ describe('operations records the courier\'s progress', () => {
     expect(view.parcels[0]).toMatchObject({ status: 'shipped', canAddStep: true });
     expect((await Order.findById(id).lean()).trackingEvents.at(-1)).toMatchObject({ status: 'failed_delivery', location: 'Customer not at home' });
     expect((await step(ops, id, sid, 'out_for_delivery', 2)).parcels[0].steps[0].label).toBe('Out for delivery');
+  });
+
+  it('a missed delivery and the next attempt each email the customer once, with the note', async () => {
+    const ops = await staff('operations');
+    const { id, parcelIds: [sid] } = await shippedOrder();
+    await step(ops, id, sid, 'out_for_delivery', 0);
+    await step(ops, id, sid, 'delivery_failed', 1, 'Customer not at home');
+    await step(ops, id, sid, 'out_for_delivery', 2);
+    const steps = enqueued.filter((j) => j.name === 'send-shipment-email' && j.data.kind !== 'shipped').map((j) => j.data);
+    expect(steps.map((d) => [d.kind, d.occurrence, d.note])).toEqual([
+      ['out_for_delivery', 1, ''], ['delivery_failed', 2, 'Customer not at home'], ['out_for_delivery', 3, ''],
+    ]);
+  });
+
+  it('a double press emails once — the losing click enqueues nothing', async () => {
+    const ops = await staff('operations');
+    const ops2 = await staff('operations');
+    const { id, parcelIds: [sid] } = await shippedOrder();
+    await Promise.allSettled([step(ops, id, sid, 'out_for_delivery', 0), step(ops2, id, sid, 'out_for_delivery', 0)]);
+    expect(enqueued.filter((j) => j.data.kind === 'out_for_delivery')).toHaveLength(1);
   });
 
   it('a double press or two people at once add ONE step', async () => {
