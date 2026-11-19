@@ -129,7 +129,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345',
+          postalCode: '682001',
           country: 'India'
         },
         shippingCost: 50,
@@ -166,7 +166,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345',
+          postalCode: '682001',
           country: 'India'
         },
         acceptTerms: true
@@ -197,7 +197,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345',
+          postalCode: '682001',
           country: 'India'
         },
         // Present so the 400 under test is the OUT-OF-STOCK one. Without it the
@@ -233,7 +233,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345'
+          postalCode: '682001'
         },
         subtotal: 500,
         totalAmount: 500,
@@ -266,7 +266,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345'
+          postalCode: '682001'
         },
         subtotal: 500,
         totalAmount: 500,
@@ -300,7 +300,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345'
+          postalCode: '682001'
         },
         subtotal: 500,
         totalAmount: 500,
@@ -376,7 +376,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345',
+          postalCode: '682001',
           country: 'India'
         },
         subtotal: 500,
@@ -403,7 +403,7 @@ describe('Orders Integration API', () => {
         addressLine1: '123 Test St',
         city: 'Test City',
         state: 'Test State',
-        postalCode: '12345',
+        postalCode: '682001',
         country: 'India'
       },
       subtotal: 500,
@@ -492,7 +492,7 @@ describe('Orders Integration API', () => {
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
-          postalCode: '12345',
+          postalCode: '682001',
           country: 'India'
         },
         subtotal: 500,
@@ -524,7 +524,7 @@ describe('Orders Integration API', () => {
       items: [{ product: productId, quantity: 1, price: 500, name: 'Test Product' }],
       shippingAddress: {
         fullName: 'Test User', phone: '9876543210', addressLine1: '123 Test St',
-        city: 'Test City', state: 'Test State', postalCode: '12345', country: 'India'
+        city: 'Test City', state: 'Test State', postalCode: '682001', country: 'India'
       },
       subtotal: 500,
       totalAmount: 500,

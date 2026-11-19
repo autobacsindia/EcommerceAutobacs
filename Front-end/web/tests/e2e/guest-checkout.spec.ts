@@ -140,12 +140,12 @@ test.describe('Guest checkout (UI, mocked network)', () => {
       // Step: shipping address — guest contact fields appear here.
       await expect(page.getByText('Shipping Address')).toBeVisible();
       await page.fill('input[placeholder="your@email.com"]', `guest${Date.now()}@example.com`);
-      await page.fill('input[placeholder="Full Name"]', 'Guest Buyer');
-      await page.fill('input[placeholder="Street Address"]', '123 Guest St');
-      await page.fill('input[placeholder="City"]', 'Guest City');
-      await page.fill('input[placeholder="State"]', 'Guest State');
-      await page.fill('input[placeholder="Postal Code"]', '123456');
-      await page.fill('input[placeholder="Phone"]', '9876543210');
+      await page.fill('input[name="fullName"]', 'Guest Buyer');
+      await page.fill('input[name="street"]', '123 Guest St');
+      await page.fill('input[name="city"]', 'Guest City');
+      await page.fill('input[name="state"]', 'Guest State');
+      await page.fill('input[name="postalCode"]', '123456');
+      await page.fill('input[name="phone"]', '9876543210');
       await page.click('button:has-text("Continue to Payment")');
 
       // Step: payment (Razorpay is the only method today)

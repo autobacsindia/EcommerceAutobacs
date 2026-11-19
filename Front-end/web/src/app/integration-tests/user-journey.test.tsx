@@ -404,14 +404,14 @@ describe('User Journey Integration Flow', () => {
     await screen.findByText(/Shipping Address/i);
 
     // Since mock profile returns no addresses, form should be visible
-    const nameInput = screen.getByPlaceholderText(/Full Name/i);
+    const nameInput = screen.getByLabelText(/Full\ name/i);
     fireEvent.change(nameInput, { target: { value: 'Test User' } });
     
-    fireEvent.change(screen.getByPlaceholderText(/Street Address/i), { target: { value: '123 Main St' } });
-    fireEvent.change(screen.getByPlaceholderText(/City/i), { target: { value: 'Mumbai' } });
-    fireEvent.change(screen.getByPlaceholderText(/State/i), { target: { value: 'MH' } });
-    fireEvent.change(screen.getByPlaceholderText(/Postal Code/i), { target: { value: '400001' } });
-    fireEvent.change(screen.getByPlaceholderText(/Phone/i), { target: { value: '9876543210' } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText(/City/i), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByLabelText(/State/i), { target: { value: 'MH' } });
+    fireEvent.change(screen.getByLabelText(/PIN\ code/i), { target: { value: '400001' } });
+    fireEvent.change(screen.getByLabelText(/Mobile\ number/i), { target: { value: '9876543210' } });
 
     // Click "Continue to Payment"
     const paymentBtn = await screen.findByText(/Continue to Payment/i);
