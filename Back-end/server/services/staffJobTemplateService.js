@@ -5,7 +5,7 @@
  *            top-level tasks (title, notes, priority, checklist unticked, tags,
  *            list, column, and due date as days after the project's start).
  *            No people, comments, time, files, job details or money.
- *   use      whoever may start a project (admin, team heads): createProject
+ *   use      whoever may start a project (the admin and every active staff member): createProject
  *            with the template's columns and lists, then one task per template
  *            task, given to the project's owner.
  *   delete   the admin or whoever saved it.
@@ -138,7 +138,7 @@ export async function deleteJobTemplate(actor, id, req) {
  * counted). The browser's clientId is required: it is what makes a retry safe.
  */
 export async function createProjectFromTemplate(actor, input = {}, req) {
-  if (!canCreateProject(actor)) throw fail('Only the admin and team heads can start a project.', 403);
+  if (!canCreateProject(actor)) throw fail('Only staff in the panel can start a project.', 403);
   if (!mongoose.isValidObjectId(input.templateId)) throw fail('That template no longer exists.', 400);
   const clientId = cleanClientId(input.clientId);
   if (!clientId) throw fail('Reload the page and try again.', 400);
