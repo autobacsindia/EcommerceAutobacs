@@ -209,7 +209,7 @@ router.post('/projects/reminder/dismiss', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await dismissReminder(req.user, req.body?.day)) });
 }));
 
-// @route  GET /staff/tasks/projects/job-templates — the job templates, for the New project form (admin, team heads)
+// @route  GET /staff/tasks/projects/job-templates — the job templates, for the New project form (admin and all active staff)
 router.get('/projects/job-templates', asyncHandler(async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   res.json({ success: true, ...(await listJobTemplates(req.user)) });

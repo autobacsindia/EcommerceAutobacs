@@ -13,7 +13,8 @@
  *   - a retry (same clientId) is one project with one set of tasks, and a retry
  *     after a half-way failure adds only the missing tasks
  *   - a due date past what its priority allows is moved earlier and counted
- *   - only the admin and team heads use templates; the admin or its author deletes one
+ *   - every active staff member (and the admin) uses templates; customers and
+ *     inactive staff do not; the admin or its author deletes one
  */
 import { jest } from '@jest/globals';
 
@@ -173,9 +174,15 @@ describe('starting a project from a template', () => {
     expect(made.map((x) => [x.title, x.dueOn])).toEqual([['Book the bay', d(1)], ['Follow up', d(6)]]);
   });
 
-  it('only the admin and team heads use one; a clientId and a real template are required', async () => {
+  it('every active staff member uses one; customers and inactive staff do not; a clientId and a real template are required', async () => {
     const t = await save(head, await fittingJob());
-    await status(403, () => useIt(member, t));
+    const byMember = await useIt(member, t, { clientId: 'memberproj-0001' });
+    expect(byMember.project.owner.id).toBe(String(member._id));
+    expect(await projectTasks(byMember.project)).toHaveLength(3);
+    const customer = await person('customer');
+    const gone = await person('staff', { team: 'operations', active: false });
+    await status(403, () => useIt(customer, t, { clientId: 'custproj-0001' }), /staff/);
+    await status(403, () => useIt(gone, t, { clientId: 'goneproj-0001' }), /staff/);
     await status(400, () => useIt(head, t, { clientId: undefined }), /Reload/);
     await status(400, () => useIt(head, t, { clientId: 'x'.repeat(60) }), /Reload/);
     await status(400, () => useIt(head, { id: String(t.id).replace(/.$/, (c) => (c === 'a' ? 'b' : 'a')) }), /no longer exists/);
@@ -185,15 +192,22 @@ describe('starting a project from a template', () => {
 });
 
 describe('the template list and deleting', () => {
-  it('heads and the admin see them; others see none; the admin or its author deletes', async () => {
+  it('all active staff and the admin see them; customers and inactive staff see none; the admin or its author deletes', async () => {
     const t = await save(head, await fittingJob());
     expect((await templates.listJobTemplates(await as(otherHead))).templates).toEqual([
       expect.objectContaining({ id: t.id, name: 'Fitting job', taskCount: 3, can: { delete: false } }),
     ]);
     expect((await templates.listJobTemplates(await as(head))).templates[0].can.delete).toBe(true);
-    expect((await templates.listJobTemplates(await as(member))).templates).toEqual([]);
+    expect((await templates.listJobTemplates(await as(member))).templates).toEqual([
+      expect.objectContaining({ id: t.id, can: { delete: false } }),
+    ]);
+    const customer = await person('customer');
+    const gone = await person('staff', { team: 'operations', active: false });
+    expect((await templates.listJobTemplates(await as(customer))).templates).toEqual([]);
+    expect((await templates.listJobTemplates(await as(gone))).templates).toEqual([]);
     await status(403, async () => templates.deleteJobTemplate(await as(otherHead), t.id, req), /Only the admin/);
-    await status(404, async () => templates.deleteJobTemplate(await as(member), t.id, req));
+    await status(403, async () => templates.deleteJobTemplate(await as(member), t.id, req), /Only the admin/);
+    await status(404, async () => templates.deleteJobTemplate(await as(customer), t.id, req));
     await templates.deleteJobTemplate(await as(admin), t.id, req);
     expect(await StaffJobTemplate.countDocuments()).toBe(0);
     await status(404, async () => templates.deleteJobTemplate(await as(head), t.id, req));
