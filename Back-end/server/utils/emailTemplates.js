@@ -1030,19 +1030,55 @@ const STATUS_COPY = {
     heading: 'Your return is complete ↩️',
     blurb: 'We\'ve completed your return. Any eligible refund is processed to your original payment method and you\'ll get a separate confirmation once it\'s on its way.',
   },
+  // ── Courier steps recorded by operations in the team panel (one parcel each) ──
+  out_for_delivery: {
+    subject: (ref) => `Out for delivery today — ${ref}`,
+    heading: 'Your order is out for delivery 📦',
+    blurb: 'Your parcel is out for delivery today. Please keep your phone handy so the courier can reach you.',
+  },
+  delivery_failed: {
+    subject: (ref) => `Delivery attempt missed — ${ref}`,
+    heading: "We couldn't deliver your parcel today",
+    blurb: "The courier tried to deliver your parcel but couldn't complete the delivery. They usually try again on the next working day. If you need to change anything, please contact us.",
+  },
+  // ── Payment axis ──
+  payment_failed: {
+    subject: (ref) => `Your payment didn't go through — ${ref}`,
+    heading: "Your payment didn't go through",
+    blurb: "Your payment for this order didn't go through, so the order is not confirmed yet. If any money left your account, your bank returns it automatically, usually within 5–7 working days.",
+  },
+  // The Razorpay refund was created; the money is not in the customer's account yet.
+  // The `refunded` email above follows when Razorpay confirms it (refund.processed).
+  refund_initiated: {
+    subject: (ref) => `Refund started — ${ref}`,
+    heading: "We've started your refund 💳",
+    blurb: "We've started your refund to your original payment method. It usually reaches your account in 5–7 working days, depending on your bank. We'll email you again once it's done.",
+  },
 };
 
+/** Statuses that are about one courier step on one parcel (see STATUS_COPY). */
+const PARCEL_STEP_STATUSES = new Set(['out_for_delivery', 'delivery_failed']);
+/** Statuses whose email carries the tracking block (number, courier, links). */
+const TRACKING_STATUSES = new Set(['shipped', ...PARCEL_STEP_STATUSES]);
+/** ₹1,234.50 — the rupee format every other customer email here uses. */
+const formatRupees = (n) =>
+  `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 /**
- * Fulfillment status-change email (shipped / delivered / cancelled / refunded).
+ * Fulfillment status-change email (shipped / delivered / cancelled / refunded, plus
+ * out_for_delivery / delivery_failed / payment_failed / refund_initiated).
  * The delivered variant lists the order's line items (name, qty, thumbnail).
  * @param {Object} params
  * @param {Object} params.order - Order document
  * @param {Object} [params.user] - User document (name)
  * @param {string} params.status - New status
  * @param {Object} [params.company] - Company info (name, email)
+ * @param {{amount: number}|null} [params.refund] - refund_initiated: the amount in ₹
+ * @param {string} [params.note] - delivery_failed: the note operations recorded on the
+ *   step (already shown to the customer on the order page)
  * @returns {Object} - { subject, text, html }
  */
-export const orderStatusEmail = ({ order, user = null, status, company = {}, payment = null, shipment = null }) => {
+export const orderStatusEmail = ({ order, user = null, status, company = {}, payment = null, shipment = null, refund = null, note = '' }) => {
   /*
     PARTIAL SHIPMENT. `shipment` present means this email is about ONE parcel of an
     order going out in several. The customer must be told which box this is, what is in
@@ -1157,6 +1193,12 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
   const parcelRef = isPartial && parcelIndex > 0
     ? `Parcel ${parcelIndex}${parcelCount > 1 ? ` of ${parcelCount}` : ''}`
     : null;
+  /*
+    The partial-parcel wording ("Parcel 2 of 3 is on its way", "still to come") is the
+    shipped / delivered story. A courier step (out for delivery, missed delivery) keeps
+    its own copy and only names which box it is about.
+  */
+  const partialCopy = !!parcelRef && (status === 'shipped' || status === 'delivered');
 
   // A parcel email always lists its contents — that IS the message. The order-level
   // email keeps its original behaviour of listing only on delivery.
@@ -1179,7 +1221,7 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
   // only the legacy single-parcel case, and using them for parcel 2 would hand the
   // customer parcel 1's AWB.
   const src = shipment || order;
-  const showTracking = status === 'shipped' && !!src.trackingNumber;
+  const showTracking = TRACKING_STATUSES.has(status) && !!src.trackingNumber;
   const carrierName = src.carrier?.name;
   const trackingUrl = src.carrier?.trackingUrl;
   const hasSlip = status === 'shipped' && !!src.shippingSlip?.url;
@@ -1192,7 +1234,7 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
   const trackPageUrl = trackOrderUrl(
     trackingNumber && trackingNumber === order.trackingNumber ? trackingNumber : undefined);
 
-  const subject = isPartial && parcelRef
+  const subject = partialCopy
     ? (status === 'delivered'
         ? `${parcelRef} delivered — ${ref}`
         : `${parcelRef} is on its way — ${ref}`)
@@ -1211,7 +1253,7 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
     Without it the customer opens a box with 2 of their 3 items and assumes something
     was lost; with it, the short delivery is expected.
   */
-  const stillToComeText = isPartial && stillToCome.length
+  const stillToComeText = partialCopy && stillToCome.length
     ? '\n\nStill to come in a separate parcel:\n' +
       stillToCome
         .map((line) =>
@@ -1221,14 +1263,37 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
 
   // Partial parcels get their own wording; a single-parcel order keeps the copy it
   // always had.
-  const heading = isPartial && parcelRef
+  const heading = partialCopy
     ? (status === 'delivered' ? `${parcelRef} delivered ✅` : `${parcelRef} is on its way 🚚`)
     : copy.heading;
-  const blurb = isPartial && parcelRef
+  // Amount in the refund-started line when we know it (Razorpay's created refund).
+  const refundAmount = Number(refund?.amount);
+  const refundBlurb = status === 'refund_initiated' && Number.isFinite(refundAmount) && refundAmount > 0
+    ? `We've started a refund of ${formatRupees(refundAmount)} to your original payment method. It usually reaches your account in 5–7 working days, depending on your bank. We'll email you again once it's done.`
+    : null;
+  const blurb = partialCopy
     ? (status === 'delivered'
         ? `Part of your order has arrived — this is ${parcelRef.toLowerCase()}. Here's what was in it:`
         : `Your order is coming in more than one parcel. This is ${parcelRef.toLowerCase()}, and the rest follows separately. Here's what's inside:`)
-    : copy.blurb;
+    : (refundBlurb || copy.blurb) +
+      (parcelRef && PARCEL_STEP_STATUSES.has(status) ? ` This is about ${parcelRef.toLowerCase()} of your order.` : '');
+
+  // delivery_failed: what operations noted on the step ("customer not reachable") —
+  // the same text the customer already sees under the parcel on their order page.
+  const stepNote = status === 'delivery_failed' ? String(note || '').trim() : '';
+  const stepNoteText = stepNote ? `\n\nCourier note: ${stepNote}` : '';
+
+  /*
+    payment_failed: where to finish paying. A signed-in customer can retry from their
+    own order page (its Pay button re-opens Razorpay for this order). A guest has no
+    account page, so they are sent to the shop to place the order again.
+  */
+  const origin = storefrontOrigin();
+  const payUrl = status === 'payment_failed' && origin
+    ? (order.user ? `${origin}/orders/${order._id}` : origin)
+    : null;
+  const payLabel = order.user ? 'Complete your payment' : 'Place your order again';
+  const payText = payUrl ? `\n\n${payLabel}: ${payUrl}` : '';
 
   const trackingText = showTracking
     ? '\n\nTracking details:' +
@@ -1243,7 +1308,7 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
   // already billed, and any cancellation charge it levies for unwinding the loan, stay
   // with the bank — neither we nor Razorpay can reverse them. Told here, in the email
   // that announces the refund, so the shortfall is never a surprise.
-  const emiPlan = status === 'refunded' ? describeEmiPlan(payment) : null;
+  const emiPlan = status === 'refunded' || status === 'refund_initiated' ? describeEmiPlan(payment) : null;
   const emiText = emiPlan
     ? `\n\nPaid via ${emiPlan}. Your bank refunds the principal only — interest already billed on this EMI plan, and any cancellation charge your bank applies, are set by the bank and are not refundable.`
     : '';
@@ -1262,7 +1327,7 @@ Hi ${name},
 
 ${blurb}
 
-Order: ${ref}${trackingText}${itemsText}${stillToComeText}${emiText}${unboxingText}
+Order: ${ref}${stepNoteText}${payText}${trackingText}${itemsText}${stillToComeText}${emiText}${unboxingText}
 
 Questions? Contact us at ${supportEmail}.
 
@@ -1290,7 +1355,7 @@ ${companyName}
     : '';
 
   // HTML twin of stillToComeText — see the note there for why it earns its place.
-  const stillToComeTable = isPartial && stillToCome.length
+  const stillToComeTable = partialCopy && stillToCome.length
     ? `<div style="margin-top:20px;padding:14px 18px;background:#fbfbfb;border:1px dashed #ddd;border-radius:8px;">
         <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#888;">Still to come in a separate parcel</p>
         ${stillToCome.map((line) => `<p style="margin:2px 0;font-size:14px;color:#555;">${esc(lineName(line))}${line.kind === 'reward' ? ' (free gift you won)' : ''} &times; ${line.quantity}</p>`).join('')}
@@ -1334,6 +1399,8 @@ ${companyName}
       <p>Hi ${name},</p>
       <p>${blurb}</p>
       <p style="color:#555;">Order: <strong>${ref}</strong></p>
+      ${stepNote ? `<p style="margin:12px 0;padding:12px 16px;background:#f7f7f7;border-radius:8px;font-size:14px;color:#555;">Courier note: ${esc(stepNote)}</p>` : ''}
+      ${payUrl ? `<p style="margin:20px 0;"><a href="${esc(payUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:15px;font-weight:600;">${payLabel}</a></p>` : ''}
       ${emiBlock}
       ${trackingBlock}
       ${itemsTable}

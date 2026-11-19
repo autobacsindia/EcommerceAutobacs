@@ -88,17 +88,23 @@ const handlers = {
     await emailExtraChargeReceipt(job.data.extraId);
   },
 
+  // `refundId` + `amount` ride only on refund_initiated (one email per Razorpay refund).
   'send-order-status-email': async (job) => {
-    const { orderId, status } = job.data;
-    await emailOrderStatusUpdate(orderId, status);
+    const { orderId, status, refundId, amount } = job.data;
+    await emailOrderStatusUpdate(orderId, status, {
+      occurrence: refundId || null,
+      refund: amount != null ? { amount } : null,
+    });
   },
 
   // One parcel of a split shipment. Same sender as the order-level email, but keyed on
   // the shipment id — which is the only reason a SECOND parcel's "shipped" email is
   // sent at all rather than swallowed by the order-level idempotency guard.
+  // `occurrence` + `note` ride only on a courier step (out_for_delivery /
+  // delivery_failed): the parcel's step number, so a second attempt emails again.
   'send-shipment-email': async (job) => {
-    const { orderId, shipmentId, kind } = job.data;
-    await emailOrderStatusUpdate(orderId, kind, { shipmentId });
+    const { orderId, shipmentId, kind, occurrence, note } = job.data;
+    await emailOrderStatusUpdate(orderId, kind, { shipmentId, occurrence: occurrence ?? null, note: note || '' });
   },
 
   // A parcel's tracking/courier was corrected after it shipped. Idempotent per value
