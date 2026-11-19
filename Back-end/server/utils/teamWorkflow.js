@@ -13,6 +13,7 @@
 
 import { shippedQuantityByItem, deliveredQuantityByItem, SHIPMENT_STATUS } from './orderFulfilment.js';
 import { cancelledQuantityByItem } from './orderCancellation.js';
+import { isSplit, partsState, partsView, waitingText } from './supplierParts.js';
 
 export const STOCK = Object.freeze({
   PENDING: 'pending',
@@ -100,6 +101,17 @@ export function lineStage(order, wfLine, quantities = null) {
     return (q.delivered.get(id) || 0) >= live ? STAGE.DELIVERED : STAGE.SHIPPED;
   }
 
+  // Bought from several suppliers (utils/supplierParts.js): the line follows its
+  // active parts — any payment waiting → Payment Pending; every part paid →
+  // Ordered From Supplier; otherwise still to order. Our warehouse / out of stock
+  // override the parts, which then stay only as history.
+  if (isSplit(wfLine) && wfLine.stock !== STOCK.OWN_STOCK && wfLine.stock !== STOCK.OUT_OF_STOCK) {
+    const parts = partsState(wfLine.parts);
+    if (parts.paymentPending) return STAGE.PAYMENT_PENDING;
+    if (parts.allOrdered) return STAGE.WITH_SUPPLIER;
+    return STAGE.TO_SHIP;
+  }
+
   // A supplier payment raised and not yet paid (paymentRequestService sets and
   // clears this). Once paid, the line is ordered from that supplier.
   if (wfLine.supplierPaymentAt && wfLine.stock !== STOCK.OUT_OF_STOCK) return STAGE.PAYMENT_PENDING;
@@ -153,7 +165,21 @@ export function workflowView(order) {
       if (order.status !== 'delivered') stage = STAGE.CANCELLED;
       else if (stage !== STAGE.CANCELLED) stage = STAGE.DELIVERED;
     }
-    return { ...l, itemId: idOf(l.itemId), stage, stageLabel: STAGE_LABELS[stage] };
+    const split = isSplit(l) && !finished;
+    const parts = split ? partsState(l.parts) : null;
+    // "Payment Pending (1 of 2 parts)": how far a split line's parts have got.
+    const partsNote = parts && parts.active.length > 1 && [STAGE.PAYMENT_PENDING, STAGE.TO_SHIP].includes(stage)
+      ? ` (${parts.active.length - parts.waiting.length} of ${parts.active.length} parts ordered)` : '';
+    return {
+      ...l,
+      itemId: idOf(l.itemId),
+      stage,
+      stageLabel: `${STAGE_LABELS[stage]}${partsNote}`,
+      split: isSplit(l),
+      supplierParts: partsView(l),
+      // A split line ships only once EVERY active part is paid: what it still waits for.
+      partsWaiting: parts && !parts.allOrdered && [STAGE.TO_SHIP, STAGE.PAYMENT_PENDING].includes(stage) ? waitingText(l.parts) || 'a supplier part' : '',
+    };
   });
 
   const inTransit = finished ? [] : (order.shipments || []).filter((s) => s.status === SHIPMENT_STATUS.SHIPPED);

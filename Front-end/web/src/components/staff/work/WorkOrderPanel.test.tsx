@@ -340,6 +340,28 @@ describe('WorkOrderPanel', () => {
     expect(JSON.parse((fetchMock.mock.calls[0][1].body as FormData).get('itemIds') as string)).toEqual(['i2']);
   });
 
+  it('an item split across suppliers waits in "Ready to dispatch" until every part is paid', async () => {
+    const two = {
+      ...base, canShip: true, lines: [
+        { ...base.lines[0], stage: 'to_ship' as const, actions: ['supplier_parts' as const], split: true,
+          partsWaiting: 'Locking mount from Mount Co (not paid yet)',
+          supplierParts: [
+            { id: 'a', what: 'Jerry can', supplierName: 'Trek N Trade', status: 'active' as const, state: 'ordered' as const, paymentRef: '', orderedAt: null, createdAt: null, createdByName: '', replacedAt: null, replacedByName: '', replacedWith: null, replaces: null, reasonCode: '', reason: '' },
+            { id: 'b', what: 'Locking mount', supplierName: 'Mount Co', status: 'active' as const, state: 'to_order' as const, paymentRef: '', orderedAt: null, createdAt: null, createdByName: '', replacedAt: null, replacedByName: '', replacedWith: null, replaces: null, reasonCode: '', reason: '' },
+          ] },
+        { ...base.lines[0], itemId: 'i2', name: 'Floor mat', stage: 'with_supplier' as const, actions: ['ship' as const] },
+      ],
+    };
+    get.mockImplementation((url: string) => Promise.resolve(url.startsWith('/payment-requests/order/')
+      ? { requests: [], deals: [] }
+      : { success: true, order: two }));
+    renderPanel();
+    const held = await screen.findByRole('list', { name: 'Waiting for the supplier balance' });
+    expect(held).toHaveTextContent('Snorkel: Waiting for every supplier part — Locking mount from Mount Co (not paid yet)');
+    expect(screen.getByText('Suppliers for this item')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Request payment to Mount Co' })).toBeInTheDocument();
+  });
+
   it('records "Our warehouse" on an item', async () => {
     get.mockResolvedValue({ success: true, order: { ...base, lines: [{ ...base.lines[0], actions: ['in_stock', 'own_stock', 'ordered', 'out_of_stock'] }] } });
     post.mockResolvedValue({ success: true, order: base });

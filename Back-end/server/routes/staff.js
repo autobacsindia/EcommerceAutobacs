@@ -1,4 +1,5 @@
 import * as extraCharges from '../services/orderExtraChargeService.js';
+import * as supplierParts from '../services/supplierPartsService.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, staffOrAdmin } from '../middleware/authMiddleware.js';
@@ -48,6 +49,10 @@ import {
   validateShipWithProof,
   validateDispatchOwnStock,
   validateWorkLineOnly,
+  validateAddSupplierPart,
+  validateEditSupplierPart,
+  validateChangeSupplier,
+  validateRemoveSupplierPart,
   validateEditParcel,
   validateParcelStep,
   validateParcelEta,
@@ -696,6 +701,31 @@ router.post(
     res.json({ success: true, order: await dispatchOwnStock(req.user, req.params.id, { itemIds, courierCode, courierName, courierUrl, trackingNumber }, req.files || [], req) });
   }),
 );
+
+// ── Supplier parts: one item from several suppliers / change a supplier with a reason (procurement) ──
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/parts  { supplierName, what? }
+router.post('/work/orders/:id/lines/:itemId/parts', validateAddSupplierPart, validateRequest, asyncHandler(async (req, res) => {
+  const { supplierName, what } = req.body;
+  res.json({ success: true, order: await supplierParts.addSupplierPart(req.user, req.params.id, req.params.itemId, { supplierName, what }, req) });
+}));
+
+// @route  PATCH /staff/work/orders/:id/lines/:itemId/parts/:partId  { what?, supplierName? (only before any payment) }
+router.patch('/work/orders/:id/lines/:itemId/parts/:partId', validateEditSupplierPart, validateRequest, asyncHandler(async (req, res) => {
+  const { supplierName, what } = req.body;
+  res.json({ success: true, order: await supplierParts.editSupplierPart(req.user, req.params.id, req.params.itemId, req.params.partId, { supplierName, what }, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/parts/:partId/change  { supplierName, what?, reasonCode, reasonNote? }
+router.post('/work/orders/:id/lines/:itemId/parts/:partId/change', validateChangeSupplier, validateRequest, asyncHandler(async (req, res) => {
+  const { supplierName, what, reasonCode, reasonNote } = req.body;
+  res.json({ success: true, order: await supplierParts.changeSupplier(req.user, req.params.id, req.params.itemId, req.params.partId, { supplierName, what, reasonCode, reasonNote }, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/parts/:partId/remove  { note? } — a part added by mistake, never paid
+router.post('/work/orders/:id/lines/:itemId/parts/:partId/remove', validateRemoveSupplierPart, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await supplierParts.removeSupplierPart(req.user, req.params.id, req.params.itemId, req.params.partId, { note: req.body.note }, req) });
+}));
 
 // @route  POST /staff/work/orders/:id/lines/:itemId/undo-stock — take back In Stock / Out of Stock (30 min)
 router.post('/work/orders/:id/lines/:itemId/undo-stock', validateWorkLineOnly, validateRequest, asyncHandler(async (req, res) => {

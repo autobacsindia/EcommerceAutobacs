@@ -36,7 +36,8 @@ export function OwesBadge({ balances }: { balances?: CreditBalance[] }) {
 }
 
 /**
- * On a paid supplier payment whose items the customer cancelled: "Supplier must refund"
+ * On a paid supplier payment whose items the customer cancelled — or whose supplier
+ * procurement changed (staff/work/SupplierParts): "Supplier must refund"
  * (procurement), or where the claim stands. Accounts approves it on the Supplier credit tab.
  */
 export function SupplierRefundLine({ requestId, refund, currency, bill }: {
@@ -48,6 +49,8 @@ export function SupplierRefundLine({ requestId, refund, currency, bill }: {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const changed = refund.why === 'supplier_changed';
+  const after = changed ? 'Supplier changed after paying' : 'Cancelled after paying';
   if (refund.claim) {
     return (
       <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
@@ -57,9 +60,9 @@ export function SupplierRefundLine({ requestId, refund, currency, bill }: {
     );
   }
   if (!refund.savedSupplier) {
-    return <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">Cancelled after paying. Save this supplier in the directory to record the refund they owe.</p>;
+    return <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{after}. Save this supplier in the directory to record the refund they owe.</p>;
   }
-  if (!refund.canClaim) return <p className="text-sm text-gray-600">Cancelled after paying — procurement records what the supplier owes.</p>;
+  if (!refund.canClaim) return <p className="text-sm text-gray-600">{after} — procurement records what the supplier owes.</p>;
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     setBusy(true);
@@ -83,7 +86,7 @@ export function SupplierRefundLine({ requestId, refund, currency, bill }: {
   }
   return (
     <form onSubmit={submit} aria-label="Supplier must refund" className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">
-      <p className="text-emerald-900">The customer cancelled after we paid. How much must the supplier give back? (at most {money(bill, currency)})</p>
+      <p className="text-emerald-900">{changed ? 'We changed supplier after paying this one.' : 'The customer cancelled after we paid.'} How much must the supplier give back? (at most {money(bill, currency)})</p>
       <div className="flex flex-wrap gap-2">
         <input aria-label={`Refund amount (${currency})`} className={`${input} max-w-[10rem]`} required type="number" min="0.01" max={bill} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <input aria-label="Note" className={`${input} flex-1`} maxLength={1000} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />

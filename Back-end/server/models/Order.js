@@ -257,6 +257,36 @@ const OrderSchema = new mongoose.Schema({
         accountsApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         accountsApprovedAt: Date,
         cancellationId: { type: mongoose.Schema.Types.ObjectId },
+        // Bought from more than one supplier, or the supplier was changed (see
+        // utils/supplierParts.js). Absent on a line never split: that line reads as
+        // one implicit part from supplierName / supplierPayment* above. Parts are never
+        // deleted — a changed supplier stays as "replaced", with who, when and why.
+        // `partsRev` is the compare-and-set version for every write to `parts`.
+        parts: {
+          type: [{
+            _id: { type: mongoose.Schema.Types.ObjectId, required: true },
+            what: { type: String, trim: true, maxlength: 120 },
+            supplierName: { type: String, trim: true, maxlength: 120 },
+            status: { type: String, enum: ['active', 'replaced', 'removed'], default: 'active' },
+            // A supplier payment raised and not yet paid (PR number), and when it was paid.
+            paymentAt: Date,
+            paymentRef: { type: String, trim: true, maxlength: 20 },
+            orderedAt: Date,
+            orderedRef: { type: String, trim: true, maxlength: 20 },
+            createdAt: Date,
+            createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            createdByName: String,
+            replaces: mongoose.Schema.Types.ObjectId,
+            replacedAt: Date,
+            replacedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            replacedByName: String,
+            replacedWith: mongoose.Schema.Types.ObjectId,
+            reasonCode: { type: String, maxlength: 40 },
+            reasonNote: { type: String, maxlength: 300 },
+          }],
+          default: undefined,
+        },
+        partsRev: { type: Number, default: undefined },
         _id: false
       }],
       default: undefined

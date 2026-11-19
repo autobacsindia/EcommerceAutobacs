@@ -320,6 +320,8 @@ export async function create(actor, input = {}, req) {
     const line = byId.get(id);
     if (!line) throw fail('That item is not on this order.', 400);
     if (line.stage === STAGE.OWN_STOCK) throw fail('This item ships from our warehouse — there is no supplier to pay.', 409);
+    // Bought from several suppliers: each part is paid with its own supplier payment.
+    if (line.split) throw fail('This item is split across suppliers — pay each part with its own supplier payment.', 409);
     if (!DEALABLE.has(line.stage)) throw fail(`This item is "${line.stageLabel}" — a supplier deal is only for items not yet shipped.`, 409);
   }
   // A plain (one-off) supplier payment already covers it: one way to pay per item.

@@ -115,6 +115,10 @@ const PaymentRequestSchema = new mongoose.Schema(
     orderNumber: { type: String, default: '' },
     itemIds: [{ type: mongoose.Schema.Types.ObjectId }],
     itemNames: [{ type: String }],
+    // The supplier part of the (one) item this pays for, when the item is bought from
+    // several suppliers (Order.workflow.lines[].parts). Absent: the item's first part.
+    partId: { type: mongoose.Schema.Types.ObjectId, default: undefined },
+    partWhat: { type: String, default: undefined, maxlength: 120 },
     customer: {
       name: { type: String, default: '' },
       phone: { type: String, default: '' },

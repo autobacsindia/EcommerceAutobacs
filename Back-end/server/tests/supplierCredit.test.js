@@ -201,7 +201,7 @@ describe('Supplier credit', () => {
     // The order panel offers "Supplier must refund" on the paid payment.
     const panel = (await procurement.session.get(`/payment-requests/order/${order._id}`)).body;
     const line = panel.requests.find((p) => p.id === pr.id);
-    expect(line.supplierRefund).toEqual({ claim: null, canClaim: true, savedSupplier: true });
+    expect(line.supplierRefund).toEqual({ claim: null, canClaim: true, savedSupplier: true, why: 'cancelled' });
 
     const claim = await procurement.session.post('/suppliers/credit/claims', { paymentRequestId: pr.id, note: 'Order cancelled by customer' });
     expect(claim.status).toBe(201);

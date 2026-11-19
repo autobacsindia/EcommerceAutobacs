@@ -58,6 +58,9 @@ import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from './orderTrackingService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
+import {
+  isSplit, lineSupplierName, partPaymentRaised, partPaymentPaid, partPaymentCleared,
+} from '../utils/supplierParts.js';
 import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
 import { SHIPMENT_STATUS, rewardShipped } from '../utils/orderFulfilment.js';
 import { istDay, parseEtaDay, etaDayProblem, etaState, etaSummary, formatEtaDay, MAX_ETA_HISTORY } from '../utils/parcelEta.js';
@@ -197,11 +200,32 @@ function lineActions(u, order, line) {
       default: break;
     }
   }
+  if (line.split) splitLineActions(line, out);
+  if (can.procurement(u) && PART_STAGES.has(line.stage)) out.push('supplier_parts');
   if (line.stage === STAGE.CUSTOMER_DECISION && can.decide(u, order)) out.push('wait', 'refund');
   if (mayUndoStock(u, line)) out.push('stock_undo');
   if (undoableDecision(u, order, line)) out.push('decision_undo');
   if (line.stage === STAGE.ACCOUNTS_APPROVAL && !line.accountsApprovedAt && can.accounts(u)) out.push('approve', 'reject');
   return out;
+}
+
+/**
+ * Stages in which procurement may split a line across suppliers or change a
+ * supplier (services/supplierPartsService.js re-checks on submit).
+ */
+export const PART_STAGES = new Set([STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.PAYMENT_PENDING, STAGE.WITH_SUPPLIER]);
+
+/**
+ * A line bought from several suppliers moves only through its parts' payments:
+ * no manual "In stock" / "Ordered" marks, no "Our warehouse" once a part is
+ * paid for or being paid, and no supplier parcel until every part is paid.
+ */
+function splitLineActions(line, out) {
+  const drop = new Set(['in_stock', 'ordered']);
+  const parts = (line.supplierParts || []).filter((p) => p.status === 'active');
+  if (parts.some((p) => p.state === 'ordered' || p.state === 'payment_pending')) drop.add('own_stock');
+  if (line.partsWaiting) drop.add('ship');
+  for (let i = out.length - 1; i >= 0; i -= 1) if (drop.has(out[i])) out.splice(i, 1);
 }
 
 export const HISTORY_LABELS = {
@@ -230,6 +254,10 @@ export const HISTORY_LABELS = {
   decision_undone: 'Customer decision undone',
   dispatch_edited: 'Dispatch details corrected',
   eta_set: 'Expected delivery date set',
+  part_added: 'Supplier part added',
+  part_edited: 'Supplier part corrected',
+  part_removed: 'Supplier part removed',
+  supplier_changed: 'Supplier changed',
 };
 
 /** A saved rupee amount, or null when the order never stored one (old imports). */
@@ -300,9 +328,13 @@ function detail(u, o) {
       return {
         ...l,
         stock: wl?.stock || null,
-        supplierName: wl?.supplierName || '',
+        supplierName: (wl?.split ? lineSupplierName(wl.parts) : wl?.supplierName) || '',
         paymentInitiatedAt: wl?.paymentInitiatedAt || null,
         supplierPaymentRef: wl?.supplierPaymentAt ? wl.supplierPaymentRef || '' : '',
+        // Bought from several suppliers / supplier changed (utils/supplierParts.js).
+        split: !!wl?.split,
+        supplierParts: wl?.supplierParts || [],
+        partsWaiting: wl?.partsWaiting || '',
         refundRequestedAt: wl?.refundRequestedAt || null,
         accountsApprovedAt: wl?.accountsApprovedAt || null,
         unshipped: unshippedQuantity(o, l.itemId),
@@ -586,6 +618,40 @@ async function loadLine(orderId, itemId) {
 
 const RACE = 'Someone else just updated this item. Refresh and try again.';
 
+// For services/supplierPartsService.js, which works on the same lines.
+export { loadLine as loadWorkflowLine, refreshOpen as refreshWorkflowOpen, event as workflowEvent, can as workflowCan, RACE as WORKFLOW_RACE };
+
+/**
+ * Write a split line's new parts array — compare-and-set on `partsRev`, so a
+ * payment event and a person changing a supplier at the same moment cannot
+ * overwrite each other (the loser re-reads and tries again, or is told to refresh).
+ */
+export async function writeLineParts(orderId, itemId, line, parts, { set = {}, unset = [], expect = {} } = {}, evt) {
+  return orderRepository.updateWorkflowLineIf(
+    orderId, itemId,
+    { ...expect, partsRev: line.partsRev ?? null },
+    {
+      // The line's own supplierName mirrors its first active part (returns and chat read it).
+      set: { ...set, parts, partsRev: (line.partsRev || 0) + 1, ...(lineSupplierName(parts) && { supplierName: lineSupplierName(parts) }) },
+      unset,
+    },
+    evt,
+  );
+}
+
+/** Apply a payment event to a split line's parts, retrying a lost compare-and-set a few times. */
+async function onSplitLine(actor, orderId, itemId, change, evt) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { line } = await loadLine(orderId, itemId);
+    if (!isSplit(line)) return false;
+    const parts = change(line.parts);
+    if (!parts) return true; // nothing to do for this part (already moved on)
+    const updated = await writeLineParts(orderId, itemId, line, parts, {}, evt(line));
+    if (updated) return true;
+  }
+  throw new Error('parts changed under us three times');
+}
+
 /**
  * Lines a supplier parcel may take: anything not out of stock, refunded, already
  * shipped — or from our own warehouse, which has its own dispatch (dispatchOwnStock).
@@ -602,11 +668,19 @@ const SHIP_STAGES = new Set([STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLI
 */
 
 /** A supplier payment was raised for these lines: they read "Payment Pending". */
-export async function markPaymentPending(actor, orderId, itemId, { supplierName, ref } = {}, req) {
+export async function markPaymentPending(actor, orderId, itemId, { supplierName, ref, partId } = {}, req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can update stock.', 403);
   const { line } = await loadLine(orderId, itemId);
   if (![STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER, STAGE.PAYMENT_PENDING].includes(line.stage)) return;
   const supplier = String(supplierName || '').trim().slice(0, 120);
+  if (isSplit(line)) {
+    await onSplitLine(actor, orderId, itemId,
+      (parts) => partPaymentRaised(parts, { partId, ref, supplierName: supplier }),
+      (l) => event(actor, 'payment_pending', { itemId: l.itemId, note: [ref, supplier].filter(Boolean).join(' · ') }));
+    await refreshOpen(orderId);
+    auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_payment_pending', itemId: String(itemId), ref, partId: partId ? String(partId) : undefined });
+    return;
+  }
   const updated = await orderRepository.updateWorkflowLineIf(
     orderId, itemId,
     { stock: line.stock, refundRequestedAt: line.refundRequestedAt || null, accountsApprovedAt: null },
@@ -627,10 +701,16 @@ export async function markPaymentPending(actor, orderId, itemId, { supplierName,
  * Best-effort by design — the payment is already recorded; a failure here is
  * logged and the line can be moved by hand. Never throws.
  */
-export async function markPaidOrdered(actor, orderId, itemIds, supplierName) {
+export async function markPaidOrdered(actor, orderId, itemIds, supplierName, { ref, partId } = {}) {
   for (const itemId of itemIds) {
     try {
       const { line } = await loadLine(orderId, itemId);
+      if (isSplit(line)) {
+        await onSplitLine(actor, orderId, itemId, (parts) => partPaymentPaid(parts, { partId, ref }),
+          (l) => event(actor, 'stock_ordered', { itemId: l.itemId, note: `Supplier paid${ref ? ` · ${ref}` : ''}${supplierName ? ` · ${supplierName}` : ''}` }));
+        enqueue(WORKFLOW_CHAT_JOB, { event: 'ordered', orderId: String(orderId), itemId: String(itemId), supplier: String(supplierName || ''), by: actor.name });
+        continue;
+      }
       if (line.stage !== STAGE.PAYMENT_PENDING) continue;
       const supplier = String(supplierName || line.supplierName || '').trim().slice(0, 120);
       await orderRepository.updateWorkflowLineIf(
@@ -651,10 +731,15 @@ export async function markPaidOrdered(actor, orderId, itemIds, supplierName) {
 }
 
 /** The payment was cancelled or declined: the lines go back to where they were. Never throws. */
-export async function clearPaymentPending(actor, orderId, itemIds, reason) {
+export async function clearPaymentPending(actor, orderId, itemIds, reason, { ref, partId } = {}) {
   for (const itemId of itemIds) {
     try {
       const { line } = await loadLine(orderId, itemId);
+      if (isSplit(line)) {
+        await onSplitLine(actor, orderId, itemId, (parts) => partPaymentCleared(parts, { partId, ref }),
+          (l) => event(actor, 'payment_cleared', { itemId: l.itemId, note: reason }));
+        continue;
+      }
       if (!line.supplierPaymentAt) continue;
       await orderRepository.updateWorkflowLineIf(
         orderId, itemId,
@@ -680,6 +765,8 @@ export async function clearPaymentPending(actor, orderId, itemIds, reason) {
 /** May `u` undo this line's stock decision (In Stock / Our Warehouse / Out of Stock) now? */
 function mayUndoStock(u, line) {
   if (!can.procurement(u) || line.supplierPaymentAt || line.refundRequestedAt) return false;
+  // A split line's stock follows its supplier parts; undo would orphan them.
+  if (line.split) return false;
   if (!((line.stage === STAGE.TO_SHIP && line.stock === STOCK.IN_STOCK)
     || (line.stage === STAGE.OWN_STOCK && line.stock === STOCK.OWN_STOCK)
     || (line.stage === STAGE.CUSTOMER_DECISION && line.stock === STOCK.OUT_OF_STOCK))) return false;
@@ -968,7 +1055,8 @@ export async function setPaymentInitiated(actor) {
  */
 function parcelLines(o, stages, itemIds, refusal) {
   const view = workflowView(o);
-  const eligible = view.lines.filter((l) => stages.has(l.stage));
+  // A line bought from several suppliers waits until every active part is paid.
+  const eligible = view.lines.filter((l) => stages.has(l.stage) && !l.partsWaiting);
   const wanted = itemIds.length ? eligible.filter((l) => itemIds.map(String).includes(l.itemId)) : eligible;
   if (itemIds.length && wanted.length !== new Set(itemIds.map(String)).size) throw fail(refusal, 409);
   const lines = wanted

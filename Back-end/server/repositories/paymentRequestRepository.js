@@ -139,13 +139,13 @@ const paymentRequestRepository = {
   // Supplier requests only: an expense linked to the order (a courier charge) never holds its items.
   findOpenForOrder: (orderId, session = null) => PaymentRequest.find({
     order: { $eq: orderId, $type: 'objectId' }, kind: 'supplier', status: { $in: ['submitted', 'approved', 'on_hold'] },
-  }).select('number status itemIds').session(session).lean(),
+  }).select('number status itemIds partId').session(session).lean(),
 
   /** Every supplier request for an order, for the order panel. */
   findForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' } })
     .sort({ createdAt: -1 })
     .limit(200) // bounded: one order's payments, far above any real order
-    .select('number status kind category team amount currency foreignAmount itemIds itemNames payee.name payment createdAt requestedBy requestedByName deal part credit supplier')
+    .select('number status kind category team amount currency foreignAmount itemIds itemNames partId partWhat payee.name payment createdAt requestedBy requestedByName deal part credit supplier')
     .lean(),
 
   /**

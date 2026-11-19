@@ -5,6 +5,7 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import type { WorkOrder } from '@/components/staff/work/types';
 import OrderJourney from './OrderJourney';
+import { SupplierChanges } from '@/components/staff/work/SupplierParts';
 
 /**
  * The journey tracker on the admin order page. It reads the same team-workflow
@@ -22,5 +23,31 @@ export default function AdminOrderJourney({ orderId }: { orderId: string }) {
   if (q.isError) return <p className="text-sm text-gray-500">The team journey is not available for this order.</p>;
   if (!q.data?.order) return null;
   // The summary above already shows the customer, money and paid date.
-  return <OrderJourney order={q.data.order} showFacts={false} />;
+  const order = q.data.order;
+  // Items bought from several suppliers, or whose supplier was changed: who supplies
+  // what now, and the change history ("G S Enterprises → Trek N Trade · by … · why").
+  const supplied = order.lines.filter((l) => l.split && (l.supplierParts ?? []).length > 0);
+  return (
+    <>
+      <OrderJourney order={order} showFacts={false} />
+      {supplied.length > 0 && (
+        <section className="mt-4 space-y-3 rounded-lg bg-white p-4 shadow" aria-label="Suppliers">
+          <h2 className="text-sm font-semibold text-gray-900">Suppliers</h2>
+          {supplied.map((l) => (
+            <div key={l.itemId} className="space-y-2 border-t border-gray-100 pt-2 first:border-0 first:pt-0">
+              <p className="text-sm font-medium text-gray-900">{l.variantLabel ? `${l.name} — ${l.variantLabel}` : l.name}</p>
+              <ul className="space-y-0.5 text-sm text-gray-700">
+                {(l.supplierParts ?? []).filter((p) => p.status === 'active').map((p) => (
+                  <li key={p.id}>{p.what ? `${p.what}: ` : ''}<span className="font-medium">{p.supplierName}</span>
+                    <span className="text-gray-500"> · {p.state === 'ordered' ? 'ordered' : p.state === 'payment_pending' ? `payment pending${p.paymentRef ? ` (${p.paymentRef})` : ''}` : 'to order'}</span>
+                  </li>
+                ))}
+              </ul>
+              <SupplierChanges parts={l.supplierParts ?? []} />
+            </div>
+          ))}
+        </section>
+      )}
+    </>
+  );
 }

@@ -17,7 +17,34 @@ export type LineStage =
 
 export type LineAction =
   | 'in_stock' | 'own_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'dispatch_own' | 'wait' | 'refund' | 'approve' | 'reject'
-  | 'payment_initiated' | 'payment_undo' | 'stock_undo' | 'decision_undo';
+  | 'payment_initiated' | 'payment_undo' | 'stock_undo' | 'decision_undo'
+  /** Procurement may split the item across suppliers / change a supplier (Back-end supplierPartsService). */
+  | 'supplier_parts';
+
+/**
+ * One supplier part of an order line (Back-end utils/supplierParts.js partsView).
+ * A line never split has at most one, with id "main".
+ */
+export type SupplierPart = {
+  id: string;
+  what: string;
+  supplierName: string;
+  status: 'active' | 'replaced' | 'removed';
+  /** Where an active part stands; a replaced/removed part repeats its status. */
+  state: 'to_order' | 'payment_pending' | 'ordered' | 'replaced' | 'removed';
+  paymentRef: string;
+  orderedAt: string | null;
+  createdAt: string | null;
+  createdByName: string;
+  replacedAt: string | null;
+  replacedByName: string;
+  /** The part that took over from this one (supplier changed). */
+  replacedWith: string | null;
+  replaces: string | null;
+  reasonCode: string;
+  /** "Supplier refunded — out of stock" (a removed part: the note). */
+  reason: string;
+};
 
 /** A parcel in transit against its expected delivery date (Back-end utils/parcelEta.js). */
 export type EtaState = 'none' | 'upcoming' | 'due_today' | 'overdue';
@@ -77,6 +104,11 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     accountsApprovedAt: string | null;
     unshipped: number;
     actions: LineAction[];
+    /** Bought from several suppliers / supplier changed. Absent from an older server. */
+    split?: boolean;
+    supplierParts?: SupplierPart[];
+    /** A split line waiting for some parts to be paid before it can ship ('' when none). */
+    partsWaiting?: string;
   })[];
   parcels: {
     id: string;

@@ -23,6 +23,7 @@ import {
 import ParcelEta from './ParcelEta';
 import { LinePrice, OrderMoneySummary } from './OrderMoney';
 import SaleHistory from './SaleHistory';
+import SupplierParts from './SupplierParts';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 import OrderJourney from '@/components/orders/OrderJourney';
 import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
@@ -176,6 +177,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const busy = act.isPending;
   // Accounts / admin only (the server sends null to other teams).
   const priceOf = new Map((o.money?.lines ?? []).map((l) => [l.itemId, l]));
+  // Bought from several suppliers: it ships once every part is paid (the server refuses earlier).
+  for (const l of o.lines) if (l.partsWaiting) heldBack.set(l.itemId, `Waiting for every supplier part — ${l.partsWaiting}`);
 
   function lineButtons(line: WorkOrder['lines'][number]) {
     const has = (x: LineAction) => line.actions.includes(x);
@@ -280,7 +283,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                       <CopyId value={line.sku} label="SKU" />
                     </p>
                   )}
-                  {line.supplierName && line.stage === 'with_supplier' && <p className="text-xs text-gray-500">Supplier: {line.supplierName}</p>}
+                  {line.supplierName && line.stage === 'with_supplier' && !line.split && <p className="text-xs text-gray-500">Supplier: {line.supplierName}</p>}
                   {line.paymentInitiatedAt && line.stage === 'to_ship' && (
                     <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
                       <CheckCircle2 className="h-3 w-3" /> Supplier payment initiated · {formatDateTimeIST(line.paymentInitiatedAt)}
@@ -291,6 +294,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
               </div>
               {line.actions.length > 0 && lineButtons(line)}
               <LineSupplierPayment order={o} line={line} requests={supplierPayments.data?.requests ?? []} deals={supplierPayments.data?.deals ?? []} />
+              {!(supplierPayments.data?.deals ?? []).some((d) => d.itemIds.includes(line.itemId)) && (
+                <SupplierParts order={o} line={line} requests={supplierPayments.data?.requests ?? []} onDone={done} />
+              )}
               {noteFor?.itemId === line.itemId && (
                 <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); act.mutate({ path: `/lines/${line.itemId}/refund`, body: { approve: false, note: note.trim() } }); }}>
                   <textarea className={input} rows={2} required maxLength={500} placeholder="Why are you sending it back? (sales will see this)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Reason" />
@@ -539,7 +545,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
  * records them in stock. Out-of-stock and refunded items never show here.
  */
 function ShipForm({ order, held, onShipped, onError }: { order: WorkOrder; held: Map<string, string>; onShipped: (r: OrderResponse) => void; onError: (m: string) => void }) {
-  const offered = order.lines.filter((l) => l.actions.includes('ship') && l.unshipped > 0);
+  // A split item waiting for some supplier parts has no 'ship' action, but is listed (not tickable) with why.
+  const offered = order.lines.filter((l) => (l.actions.includes('ship') || (l.partsWaiting && held.has(l.itemId))) && l.unshipped > 0);
   // Ready to go now; the rest wait for their supplier balance (shown, not tickable).
   const shippable = offered.filter((l) => !held.has(l.itemId));
   const waiting = offered.filter((l) => held.has(l.itemId));
