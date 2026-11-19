@@ -20,11 +20,22 @@ const subscriptionDueRepository = {
     { new: true, runValidators: true },
   ).lean(),
 
+  /**
+   * Record one paid cycle and move the due date on — only if nobody changed the
+   * item since `rev`, it is still verified and live, and this cycle (its due day)
+   * is not already recorded. Returns the updated item, or null if any of that moved.
+   */
+  recordCycle: (id, { rev, dueDate }, cycle, nextDueDate, entry) => SubscriptionDue.findOneAndUpdate(
+    { _id: id, rev, archived: false, status: 'verified', variableAmount: true, dueDate, 'cycles.dueDate': { $ne: dueDate } },
+    { $set: { dueDate: nextDueDate }, $inc: { rev: 1 }, $push: { cycles: cycle, history: entry } },
+    { new: true, runValidators: true },
+  ).lean(),
+
   /** Keyset page: `query` already carries the "after the cursor" clause. */
   page: (query, { sort, limit }) => SubscriptionDue.find(query)
     .sort(sort)
     .limit(limit)
-    .select('-history -files.publicId -files.provider')
+    .select('-history -cycles -files.publicId -files.provider')
     .lean(),
 
   /** How many match, counted over at most `cap` rows. */

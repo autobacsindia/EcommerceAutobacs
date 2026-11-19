@@ -9,6 +9,16 @@
  *   see                    accounts and admin: every team; a team: its own
  *   edit / delete          whoever added it, their team head, accounts, admin
  *   verify / reject        accounts (and admin)
+ *   record a bill          whoever may edit it — usage-based, verified items only
+ *
+ * ── USAGE-BASED BILLS ("Amount varies") ─────────────────────────────────────────
+ * Some tools charge what you used (MongoDB Atlas, Railway…). For those
+ * `variableAmount` is on and `amount` is only the ESTIMATE ("~USD 100"). When a
+ * cycle is due, someone records the real bill — the actual amount (> 0) and the
+ * invoice, both required — which adds it to `cycles` (the paid history: Oct
+ * USD 95, Nov USD 112…) and moves the due date on one month / year. The actual
+ * amount, never the estimate, is what is recorded as paid. A fixed-amount item
+ * has no such step and behaves exactly as before.
  *
  * ── EDITING A VERIFIED ITEM ─────────────────────────────────────────────────────
  * Accounts verified a bill: this amount, in this currency, on this day, paid this
@@ -56,7 +66,7 @@ export const KINDS = Object.freeze({ monthly: 'Monthly subscription', yearly: 'Y
 export const METHODS = Object.freeze({ card: 'Card', upi: 'UPI', bank_transfer: 'Bank transfer' });
 export const STATUS_LABELS = Object.freeze({ pending: 'Waiting for check', verified: 'Verified', rejected: 'Rejected' });
 /** The fields accounts verified: changing one puts a verified item back to "waiting for check". */
-export const CHECKED_FIELDS = Object.freeze(['amount', 'currency', 'dueDate', 'kind', 'payment.method', 'payment.cardLast4', 'payment.autoDebit']);
+export const CHECKED_FIELDS = Object.freeze(['amount', 'currency', 'dueDate', 'kind', 'variableAmount', 'payment.method', 'payment.cardLast4', 'payment.autoDebit']);
 
 // ── Who ───────────────────────────────────────────────────────────────────────
 
@@ -94,6 +104,22 @@ export function addDays(ymd, days) {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+/**
+ * The next due day one month / year on. A day the next month lacks clamps to its
+ * last day (31 Jan → 28 Feb; 29 Feb → 28 Feb next year). `anchorDay` is the
+ * bill's usual day (from its first recorded cycle): a due day clamped to a short
+ * month's end goes back to it (31 Oct → 30 Nov → 31 Dec, not 30 Dec).
+ */
+export function nextDueDate(ymd, kind, anchorDay = null) {
+  const [y, m, dueDay] = ymd.split('-').map(Number);
+  const monthEnd = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const d = dueDay === monthEnd && anchorDay > dueDay ? anchorDay : dueDay;
+  const months = kind === 'yearly' ? 12 : 1;
+  const ty = y + Math.floor((m - 1 + months) / 12);
+  const tm = ((m - 1 + months) % 12) + 1;
+  const last = new Date(Date.UTC(ty, tm, 0)).getUTCDate();
+  return `${ty}-${String(tm).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
 /** "2 Dec 2026" */
 export const dayText = (ymd) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
@@ -116,9 +142,9 @@ function cleanName(v) {
   return noCard(name);
 }
 
-function cleanAmount(v) {
+function cleanAmount(v, what = 'the amount on the bill') {
   const n = Math.round(Number(v) * 100) / 100;
-  if (!filled(v) || !Number.isFinite(n) || n <= 0) throw fail('Enter the amount on the bill (more than 0).', 400);
+  if (!filled(v) || !Number.isFinite(n) || n <= 0) throw fail(`Enter ${what} (more than 0).`, 400);
   if (n > MAX_AMOUNT) throw fail('That amount looks too large — check it.', 400);
   return n;
 }
@@ -199,7 +225,8 @@ function cleanFields(input, { partial = false } = {}) {
     if (!partial && out.purpose.length < 3) throw fail('Say what it is for (e.g. hosts the website backend).', 400);
   }
   if (has('kind')) out.kind = cleanKind(input.kind);
-  if (has('amount')) out.amount = cleanAmount(input.amount);
+  if (has('variableAmount')) out.variableAmount = truthy(input.variableAmount);
+  if (has('amount')) out.amount = cleanAmount(input.amount, out.variableAmount ?'the estimated amount' : 'the amount on the bill');
   if (has('currency')) out.currency = cleanCurrency(input.currency);
   if (has('dueDate')) out.dueDate = cleanDueDate(input.dueDate);
   if (has('payment')) out.payment = cleanPayment(input.payment || {});
@@ -212,6 +239,13 @@ function cleanFields(input, { partial = false } = {}) {
     out.notes = noCard(value);
   }
   return out;
+}
+
+/** A one-time purchase is paid once — it cannot be usage-based. */
+function checkVariable(variableAmount, kind) {
+  if (variableAmount && kind === 'one_time') {
+    throw fail('A one-time purchase cannot be usage-based — choose monthly or yearly, or untick "Amount varies".', 400);
+  }
 }
 
 // ── Files ────────────────────────────────────────────────────────────────────
@@ -247,12 +281,14 @@ async function discard(files) {
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
 const money = (r) => `${r.currency} ${Number(r.amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+/** "USD 20", or "~USD 100 (estimate)" for a usage-based bill. */
+const billMoney = (r) => (r.variableAmount ? `~${money(r)} (estimate)` : money(r));
 /** "auto-debit, card 4007", "UPI", "bank transfer" */
 const howPaid = (p = {}) => [
   p.autoDebit ? 'auto-debit' : '',
   p.method === 'card' ? `card ${p.cardLast4 || ''}`.trim() : (METHODS[p.method] || '').replace('Bank', 'bank'),
 ].filter(Boolean).join(', ');
-const what = (r) => `${r.name} (${r.number}) — ${money(r)}${r.kind === 'one_time' ? '' : r.kind === 'yearly' ? '/year' : '/month'}, due ${dayText(r.dueDate)}, ${howPaid(r.payment)}`;
+const what = (r) => `${r.name} (${r.number}) — ${billMoney(r)}${r.kind === 'one_time' ? '' : r.kind === 'yearly' ? '/year' : '/month'}, due ${dayText(r.dueDate)}, ${howPaid(r.payment)}`;
 
 /**
  * One thread per item in #accounts (who checks it) and the item's team space
@@ -283,6 +319,7 @@ export function shape(r, viewer, { now = new Date() } = {}) {
     delete: mayChange(viewer, r),
     verify: !r.archived && mayCheck(viewer) && r.status === 'pending',
     reject: !r.archived && mayCheck(viewer) && r.status !== 'rejected',
+    recordBill: Boolean(r.variableAmount) && r.status === 'verified' && mayChange(viewer, r),
   };
   return {
     id: idOf(r._id),
@@ -294,6 +331,8 @@ export function shape(r, viewer, { now = new Date() } = {}) {
     kind: r.kind,
     kindLabel: KINDS[r.kind] || r.kind,
     amount: r.amount,
+    // On: `amount` is the estimate, and each cycle's real bill is in `cycles`.
+    variableAmount: Boolean(r.variableAmount),
     currency: r.currency,
     // A rough guide for a foreign bill, worked out now — never stored.
     approxInr: r.currency === BASE_CURRENCY ? null : roughInr(r.amount, r.currency),
@@ -320,6 +359,20 @@ export function shape(r, viewer, { now = new Date() } = {}) {
     rev: r.rev,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    ...(r.cycles ? {
+      cycles: r.cycles.map((c) => ({
+        id: idOf(c._id),
+        dueDate: c.dueDate,
+        amount: c.amount,
+        currency: c.currency,
+        estimate: c.estimate ?? null,
+        approxInr: c.currency === BASE_CURRENCY ? null : roughInr(c.amount, c.currency),
+        note: c.note || '',
+        paidByName: c.paidByName || '',
+        paidAt: c.paidAt,
+        invoices: (c.invoices || []).map((f) => ({ id: idOf(f._id), name: f.name, contentType: f.contentType, bytes: f.bytes })),
+      })),
+    } : {}),
     ...(r.history ? { history: r.history.map((h) => ({ at: h.at, byName: h.byName, role: h.role, action: h.action, note: h.note })) } : {}),
     can,
   };
@@ -350,6 +403,7 @@ export async function create(actor, input = {}, invoices = [], req) {
   if (!isAdmin(actor) && !isActiveStaff(actor)) throw fail('Only active staff add subscriptions.', 403);
   const team = teamFor(actor, input.team);
   const fields = cleanFields(input);
+  checkVariable(fields.variableAmount, fields.kind);
   const stored = await storeInvoices(invoices, actor);
   let doc;
   try {
@@ -367,7 +421,7 @@ export async function create(actor, input = {}, invoices = [], req) {
     await discard(stored);
     throw err;
   }
-  auditLogger.logAction(req, 'CREATE', 'SubscriptionDue', doc._id, { name: doc.name, team, amount: doc.amount, currency: doc.currency, dueDate: doc.dueDate });
+  auditLogger.logAction(req, 'CREATE', 'SubscriptionDue', doc._id, { name: doc.name, team, amount: doc.amount, variableAmount: doc.variableAmount, currency: doc.currency, dueDate: doc.dueDate });
   await tellChat(doc, 'added', `🗓️ New subscription to check: ${what(doc)}. Added by ${doc.addedByName} (${STAFF_TEAM_LABELS[team]}). Accounts: please verify or reject.`);
   return shape(doc, actor);
 }
@@ -381,6 +435,9 @@ function describeChanges(before, set) {
   if (set.amount !== undefined || set.currency !== undefined) {
     const after = { amount: set.amount ?? before.amount, currency: set.currency ?? before.currency };
     if (after.amount !== before.amount || after.currency !== before.currency) parts.push(`amount ${money(before)} → ${money(after)}`);
+  }
+  if (set.variableAmount !== undefined && set.variableAmount !== Boolean(before.variableAmount)) {
+    parts.push(set.variableAmount ? 'now usage-based (amount is an estimate)' : 'now a fixed amount');
   }
   if (set.dueDate !== undefined && set.dueDate !== before.dueDate) parts.push(`due ${dayText(before.dueDate)} → ${dayText(set.dueDate)}`);
   if (set.kind !== undefined && set.kind !== before.kind) parts.push(`type ${KINDS[before.kind]} → ${KINDS[set.kind]}`);
@@ -414,8 +471,10 @@ export async function update(actor, id, input = {}, invoices = [], req) {
     } else set[k] = v;
   }
   if (filled(input.team) && seesAll(actor)) set.team = teamFor(actor, input.team, r.team);
+  checkVariable(set.variableAmount ?? Boolean(r.variableAmount), set.kind ?? r.kind);
   // Drop fields that did not change, so "saved without changes" does not reset a verification.
-  for (const k of Object.keys(set)) if (same(get(r, k), set[k])) delete set[k];
+  // (An item from before "Amount varies" existed has no variableAmount: that is false.)
+  for (const k of Object.keys(set)) if (same(k === 'variableAmount' ? Boolean(r.variableAmount) : get(r, k), set[k])) delete set[k];
 
   const removeIds = new Set((Array.isArray(input.removeFileIds) ? input.removeFileIds : []).map(String));
   const removing = (r.files || []).filter((f) => removeIds.has(idOf(f._id)));
@@ -464,6 +523,49 @@ export async function archive(actor, id, input = {}, req) {
   if (!updated) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'DELETE', 'SubscriptionDue', id, { change: 'archived', name: r.name, reason });
   await tellChat(updated, 'archived', `🗑️ ${actor.name || 'Someone'} deleted ${updated.name} (${updated.number}) from the subscriptions list${reason ? `: “${reason}”` : ''}.`);
+  return shape(updated, actor);
+}
+
+// ── A usage-based bill's cycle ───────────────────────────────────────────────
+
+/**
+ * Record this cycle's real bill for a usage-based item: the actual amount (> 0,
+ * in the item's currency) and the invoice — both required. Adds it to the paid
+ * history and moves the due date on one month / year. Once per cycle: a double
+ * click, a retry or a stale screen records it once (409 for the other).
+ * Input: rev, amount, note?; files: the invoice(s).
+ */
+export async function recordBill(actor, id, input = {}, invoices = [], req) {
+  const r = await loadVisible(actor, id);
+  if (!mayChange(actor, r)) throw fail('Only the person who added this, their team head, or accounts can record its bill.', 403);
+  if (!r.variableAmount) throw fail('This one has a fixed amount — there is no bill amount to enter.', 400);
+  if (r.kind === 'one_time') throw fail('A one-time purchase has no monthly bill.', 400);
+  if (r.status !== 'verified') throw fail('Accounts must verify this subscription before its bills are recorded.', 400);
+  const rev = revOf(input, r);
+  if (rev !== r.rev) throw fail(MOVED, 409);
+  const amount = cleanAmount(input.amount, `this ${r.kind === 'yearly' ? "year's" : "month's"} actual bill amount`);
+  const note = noCard(text(input.note, 500));
+  const newFiles = (invoices || []).filter((f) => f?.buffer?.length);
+  if (!newFiles.length) throw fail('Attach the invoice for this bill.', 400);
+
+  const stored = await storeInvoices(newFiles, actor);
+  const cycle = {
+    dueDate: r.dueDate, amount, currency: r.currency, estimate: r.amount, invoices: stored, note,
+    paidBy: actor._id, paidByName: actor.name || '', paidAt: new Date(),
+  };
+  const anchorDay = r.cycles?.length ? Number(r.cycles[0].dueDate.slice(8, 10)) : null;
+  const next = nextDueDate(r.dueDate, r.kind, anchorDay);
+  const paid = { amount, currency: r.currency };
+  const updated = await subscriptionDueRepository.recordCycle(
+    id, { rev, dueDate: r.dueDate }, cycle, next,
+    entry(actor, 'bill recorded', `bill for ${dayText(r.dueDate)}: ${money(paid)} (estimate ${money(r)}); next due ${dayText(next)}`),
+  ).catch(async (err) => { await discard(stored); throw err; });
+  if (!updated) {
+    await discard(stored);
+    throw fail(MOVED, 409);
+  }
+  auditLogger.logAction(req, 'UPDATE', 'SubscriptionDue', id, { change: 'bill recorded', cycleDueDate: r.dueDate, amount, currency: r.currency, estimate: r.amount, nextDueDate: next });
+  await tellChat(updated, 'bill', `🧾 ${actor.name || 'Someone'} recorded the ${r.name} (${r.number}) bill due ${dayText(r.dueDate)}: ${money(paid)} (estimate ${money(r)}), invoice attached. Next due ${dayText(next)}.`);
   return shape(updated, actor);
 }
 
@@ -569,7 +671,7 @@ export function options(actor) {
 /** One invoice, streamed through us (never a public link). */
 export async function getFile(actor, id, fileId) {
   const r = await loadVisible(actor, id);
-  const f = (r.files || []).find((x) => idOf(x._id) === String(fileId));
+  const f = [...(r.files || []), ...(r.cycles || []).flatMap((c) => c.invoices || [])].find((x) => idOf(x._id) === String(fileId));
   if (!f) throw fail('File not found.', 404);
   const buffer = await readPrivateAsset(f, async (url) => {
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
@@ -579,4 +681,4 @@ export async function getFile(actor, id, fileId) {
   return { buffer, contentType: f.contentType, name: f.name || `${r.number}-invoice` };
 }
 
-export const _test = { mayChange, canSee, describeChanges, howPaid };
+export const _test = { mayChange, canSee, describeChanges, howPaid, billMoney };

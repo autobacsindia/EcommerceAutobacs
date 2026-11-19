@@ -70,6 +70,12 @@ router.post('/:id/archive', asyncHandler(async (req, res) => {
   res.json({ success: true, item: await subs.archive(req.user, req.params.id, req.body || {}, req) });
 }));
 
+// POST /subscription-dues/:id/bills — multipart: rev, amount (this cycle's ACTUAL bill), note?, invoice (required).
+//   Usage-based items only: records the cycle as paid and moves the due date on.
+router.post('/:id/bills', concurrentUploadGuard, attachmentSizeGuard, uploadSubscriptionInvoices, handleAttachmentError, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, item: await subs.recordBill(req.user, req.params.id, req.body || {}, req.files || [], req) });
+}));
+
 router.post('/:id/verify', asyncHandler(async (req, res) => {
   res.json({ success: true, item: await subs.verify(req.user, req.params.id, req.body, req) });
 }));

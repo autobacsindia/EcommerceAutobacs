@@ -19,8 +19,10 @@ export type Subscription = {
   teamLabel: string;
   kind: SubscriptionKind;
   kindLabel: string;
-  /** As billed, in `currency`. */
+  /** As billed, in `currency`. For a usage-based bill (`variableAmount`) this is the ESTIMATE. */
   amount: number;
+  /** "Amount varies (usage-based)": each cycle's actual bill is recorded in `cycles`. */
+  variableAmount: boolean;
   currency: string;
   /** A rough rupee guide for a foreign bill, worked out by the server on read — never stored. */
   approxInr: number | null;
@@ -45,8 +47,25 @@ export type Subscription = {
   rev: number;
   createdAt: string;
   updatedAt: string;
+  /** The paid history of a usage-based bill, oldest first (one item read only — never in the list). */
+  cycles?: BillCycle[];
   history?: { at: string; byName: string; role: string; action: string; note: string }[];
-  can: { edit: boolean; delete: boolean; verify: boolean; reject: boolean };
+  can: { edit: boolean; delete: boolean; verify: boolean; reject: boolean; recordBill: boolean };
+};
+
+/** One cycle of a usage-based bill as actually paid: "Nov 2026 — USD 112 (estimate USD 100)". */
+export type BillCycle = {
+  id: string;
+  /** The cycle's due day, YYYY-MM-DD. */
+  dueDate: string;
+  amount: number;
+  currency: string;
+  estimate: number | null;
+  approxInr: number | null;
+  note: string;
+  paidByName: string;
+  paidAt: string;
+  invoices: { id: string; name: string; contentType: string; bytes: number }[];
 };
 
 export type SubscriptionOptions = {
@@ -88,6 +107,9 @@ export const getSubscriptionOptions = () => apiClient.get<{ options: Subscriptio
 export const saveSubscription = (form: FormData, id?: string) => (id
   ? postForm<{ item: Subscription }>(`/subscription-dues/${encodeURIComponent(id)}`, form, 'PUT')
   : postForm<{ item: Subscription }>('/subscription-dues', form));
+/** Record this cycle's actual bill (usage-based only): rev, amount, note?, invoice files (required). */
+export const recordBill = (id: string, form: FormData) =>
+  postForm<{ item: Subscription }>(`/subscription-dues/${encodeURIComponent(id)}/bills`, form);
 export const verifySubscription = (s: Pick<Subscription, 'id' | 'rev'>) =>
   apiClient.post<{ item: Subscription }>(`/subscription-dues/${encodeURIComponent(s.id)}/verify`, { rev: s.rev });
 export const rejectSubscription = (s: Pick<Subscription, 'id' | 'rev'>, reason: string) =>
@@ -97,10 +119,17 @@ export const archiveSubscription = (s: Pick<Subscription, 'id' | 'rev'>, reason:
 export const invoiceHref = (id: string, fileId: string) =>
   `/api/v1/subscription-dues/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`;
 
-/** "USD 20" / "₹1,500" */
-export const billText = (s: Pick<Subscription, 'amount' | 'currency'>) => (s.currency === 'INR'
+/** "USD 20" / "₹1,500"; a usage-based bill's estimate is "~USD 100". */
+export const billText = (s: Pick<Subscription, 'amount' | 'currency'> & { variableAmount?: boolean }) => `${s.variableAmount ? '~' : ''}${s.currency === 'INR'
   ? `₹${Number(s.amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-  : `${s.currency} ${Number(s.amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
+  : `${s.currency} ${Number(s.amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`}`;
+
+/** " (estimate)" after a usage-based bill's amount; '' for a fixed one. */
+export const estimateText = (s: Pick<Subscription, 'variableAmount'>) => (s.variableAmount ? ' (estimate)' : '');
+
+/** "Nov 2026" — the month a cycle was due in. */
+export const monthText = (ymd: string) =>
+  new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-IN', { timeZone: 'UTC', month: 'short', year: 'numeric' });
 
 /** "about ₹1,760" — a label only; '' for rupees or a currency with no rough rate. */
 export const approxText = (approxInr: number | null | undefined) =>

@@ -79,6 +79,7 @@ async function signIn(email) {
     del: (url, body = {}) => agent.post(`${BASE}${url}/archive`).set('X-XSRF-TOKEN', csrf).send(body),
     add: (fields, files) => multipart('post')('', fields, files),
     edit: (id, fields, files) => multipart('put')(`/${id}`, fields, files),
+    bill: (id, fields, files) => multipart('post')(`/${id}/bills`, fields, files),
   };
 }
 let n = 0;
@@ -451,6 +452,157 @@ describe('Subscriptions & dues', () => {
       }
       expect(seen).toHaveLength(64);
       expect(new Set(seen).size).toBe(64);
+    });
+  });
+
+  describe('usage-based bills (amount varies)', () => {
+    const ATLAS = { ...RAILWAY, name: 'MongoDB Atlas', amount: 100, variableAmount: true, dueDate: '2026-10-31' };
+    const INVOICE = [{ buffer: PDF, name: 'oct.pdf', type: 'application/pdf' }];
+    const verified = async (over = {}) => {
+      const item = await add(dev, { ...ATLAS, ...over });
+      const v = await accounts.s.post(`/${item.id}/verify`, { rev: item.rev });
+      expect(v.status).toBe(200);
+      return v.body.item;
+    };
+
+    it('the amount is saved as an estimate; old items and unticked ones are fixed', async () => {
+      const item = await add(dev, ATLAS);
+      expect(item).toMatchObject({ variableAmount: true, amount: 100 });
+      expect((await add(dev)).variableAmount).toBe(false);
+      // An item saved before the tick box existed has no field at all: it reads as fixed.
+      const legacy = await SubscriptionDue.create({
+        number: 'SD-0999', name: 'Old', team: 'developer', kind: 'monthly', amount: 5, currency: 'USD', dueDate: in30,
+        payment: { method: 'upi' }, addedBy: dev.user._id, addedByName: 'Dev',
+      });
+      await SubscriptionDue.updateOne({ _id: legacy._id }, { $unset: { variableAmount: 1 } });
+      const read = (await dev.s.get(`/${legacy._id}`)).body.item;
+      expect(read.variableAmount).toBe(false);
+      expect(read.can.recordBill).toBe(false);
+    });
+
+    it('still needs an estimate above 0, and a one-time purchase cannot vary', async () => {
+      let res = await dev.s.add({ ...ATLAS, amount: 0 });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/estimated amount/);
+      res = await dev.s.add({ ...ATLAS, kind: 'one_time' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/one-time/);
+      const fixedOnce = await add(dev, { kind: 'one_time' });
+      res = await dev.s.edit(fixedOnce.id, { variableAmount: true, rev: fixedOnce.rev });
+      expect(res.status).toBe(400);
+      expect(await SubscriptionDue.countDocuments({ variableAmount: true })).toBe(0);
+    });
+
+    it('records the actual bill with its invoice, moves the due date on, and keeps a history', async () => {
+      let item = await verified();
+      expect(item.can.recordBill).toBe(true);
+      for (const [amount, due] of [[95, '2026-10-31'], [112.456, '2026-11-30'], [104, '2026-12-31']]) {
+        expect(item.dueDate).toBe(due);
+        const res = await dev.s.bill(item.id, { amount, rev: item.rev }, INVOICE);
+        expect(res.status).toBe(201);
+        item = res.body.item;
+      }
+      // 31 Oct → 30 Nov → 31 Dec → 31 Jan: a short month clamps, and the next one is not stuck on the 30th.
+      expect(item.dueDate).toBe('2027-01-31');
+      expect(item.status).toBe('verified');
+      expect(item.amount).toBe(100); // the estimate is untouched
+      const full = (await dev.s.get(`/${item.id}`)).body.item;
+      expect(full.cycles.map((c) => [c.dueDate, c.amount, c.estimate, c.currency, c.paidByName])).toEqual([
+        ['2026-10-31', 95, 100, 'USD', 'Dev'],
+        ['2026-11-30', 112.46, 100, 'USD', 'Dev'],
+        ['2026-12-31', 104, 100, 'USD', 'Dev'],
+      ]);
+      expect(full.cycles.every((c) => c.invoices.length === 1)).toBe(true);
+      expect(full.history.filter((h) => h.action === 'bill recorded')).toHaveLength(3);
+      // The invoice of a cycle downloads like any other; a list row carries no cycles.
+      const dl = await dev.s.get(`/${item.id}/files/${full.cycles[0].invoices[0].id}`);
+      expect(dl.status).toBe(200);
+      expect((await dev.s.get()).body.items[0]).not.toHaveProperty('cycles');
+    });
+
+    it('a yearly bill moves on a year (29 Feb clamps to 28 Feb)', () => {
+      expect(svc.nextDueDate('2028-02-29', 'yearly')).toBe('2029-02-28');
+      expect(svc.nextDueDate('2026-12-15', 'monthly')).toBe('2027-01-15');
+      expect(svc.nextDueDate('2027-01-31', 'monthly')).toBe('2027-02-28');
+      expect(svc.nextDueDate('2027-02-28', 'monthly', 31)).toBe('2027-03-31');
+      // A due day someone moved by hand mid-month is kept, whatever the first cycle said.
+      expect(svc.nextDueDate('2027-02-05', 'monthly', 31)).toBe('2027-03-05');
+    });
+
+    it.each([
+      ['no amount', {}, INVOICE, /actual bill amount/],
+      ['a zero amount', { amount: 0 }, INVOICE, /actual bill amount/],
+      ['a negative amount', { amount: -3 }, INVOICE, /actual bill amount/],
+      ['words for an amount', { amount: 'about 100' }, INVOICE, /actual bill amount/],
+      ['no invoice', { amount: 95 }, [], /invoice/],
+    ])('refuses a bill with %s, and records nothing', async (_, fields, files, message) => {
+      const item = await verified();
+      const res = await dev.s.bill(item.id, { ...fields, rev: item.rev }, files);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(message);
+      const raw = await SubscriptionDue.findById(item.id).lean();
+      expect(raw.cycles).toHaveLength(0);
+      expect(raw.dueDate).toBe('2026-10-31');
+      expect(stored.size).toBe(0);
+    });
+
+    it('a fixed-amount subscription has no bill step', async () => {
+      const item = await add(dev);
+      const v = (await accounts.s.post(`/${item.id}/verify`, { rev: item.rev })).body.item;
+      expect(v.can.recordBill).toBe(false);
+      const res = await dev.s.bill(v.id, { amount: 20, rev: v.rev }, INVOICE);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/fixed amount/);
+      expect((await SubscriptionDue.findById(v.id).lean()).dueDate).toBe(in30);
+    });
+
+    it('only once accounts has verified it, and only by whoever may edit it', async () => {
+      const pending = await add(dev, ATLAS);
+      expect(pending.can.recordBill).toBe(false);
+      let res = await dev.s.bill(pending.id, { amount: 95, rev: pending.rev }, INVOICE);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/verify/);
+
+      const item = await verified();
+      expect((await dev2.s.bill(item.id, { amount: 95, rev: item.rev }, INVOICE)).status).toBe(403);
+      expect((await marketing.s.bill(item.id, { amount: 95, rev: item.rev }, INVOICE)).status).toBe(404);
+      expect((await former.s.bill(item.id, { amount: 95, rev: item.rev }, INVOICE)).status).toBe(403);
+      res = await accounts.s.bill(item.id, { amount: 95, rev: item.rev }, INVOICE);
+      expect(res.status).toBe(201);
+      expect(stored.size).toBe(1);
+    });
+
+    it('a double click or a stale screen records the cycle once (409), and keeps no stray file', async () => {
+      const item = await verified();
+      const [a, b] = await Promise.all([
+        dev.s.bill(item.id, { amount: 95, rev: item.rev }, INVOICE),
+        dev.s.bill(item.id, { amount: 95, rev: item.rev }, INVOICE),
+      ]);
+      expect([a.status, b.status].sort()).toEqual([201, 409]);
+      const raw = await SubscriptionDue.findById(item.id).lean();
+      expect(raw.cycles).toHaveLength(1);
+      expect(stored.size).toBe(1);
+      // Without a rev, the cycle's due day still guards it: the moved-on item is a new cycle.
+      const res = await dev.s.bill(item.id, { amount: 99 }, INVOICE);
+      expect(res.status).toBe(201);
+      expect(res.body.item.dueDate).toBe('2026-12-31');
+    });
+
+    it('ticking or unticking "amount varies" on a verified item sends it back for check', async () => {
+      const item = await verified();
+      const e = (await dev.s.edit(item.id, { variableAmount: false, rev: item.rev })).body.item;
+      expect(e).toMatchObject({ variableAmount: false, status: 'pending' });
+      const raw = await SubscriptionDue.findById(item.id).lean();
+      expect(raw.history.at(-1).note).toMatch(/now a fixed amount/);
+    });
+
+    it('chat says the estimate, then the actual bill', async () => {
+      const item = await verified();
+      await dev.s.bill(item.id, { amount: 112, rev: item.rev }, INVOICE);
+      const channel = await ChatChannel.findOne({ key: 'team:accounts' }).lean();
+      const texts = (await ChatMessage.find({ channel: channel._id, kind: 'system' }).sort({ createdAt: 1 }).lean()).map((m) => m.text);
+      expect(texts[0]).toMatch(/MongoDB Atlas \(SD-0001\) — ~USD 100 \(estimate\)\/month/);
+      expect(texts.at(-1)).toMatch(/recorded the MongoDB Atlas \(SD-0001\) bill due 31 Oct 2026: USD 112 \(estimate USD 100\), invoice attached\. Next due 30 Nov 2026/);
     });
   });
 
