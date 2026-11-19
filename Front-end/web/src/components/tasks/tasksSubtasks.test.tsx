@@ -203,7 +203,7 @@ describe('sub-tasks under a task', () => {
   });
 
   it('ticking one moves it against its own revision', async () => {
-    serve({ tasks: { t1: parent }, subtasks: [sub()] });
+    serve({ tasks: { t1: parent }, subtasks: [sub({ dueOn: '2026-12-01' })] });
     patch.mockResolvedValue({ task: sub({ status: 'done' }) });
     wrap(<TaskDetail id="t1" base="/team/tasks" onClose={() => {}} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Mark T-21 complete' }));
@@ -222,9 +222,7 @@ describe('sub-tasks under a task', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Who does the sub-task' }));
     fireEvent.click(await screen.findByRole('option', { name: /Arun/ }));
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
-    // The parent has no date (made before dates were required): one must be picked.
-    fireEvent.submit(box.closest('form')!);
-    expect(post).not.toHaveBeenCalled();
+    // The parent has no date: the sub-task may have none too (it starts in To Do); one is picked here.
     fireEvent.click(screen.getByRole('button', { name: /Due date/ }));
     fireEvent.change(screen.getByLabelText('Sub-task due date'), { target: { value: todayIST() } });
     fireEvent.submit(box.closest('form')!);
@@ -262,7 +260,7 @@ describe('asking first', () => {
   const parent = task({ subtasks: { total: 3, done: 1 } });
 
   it('completing a task with open sub-tasks asks; "no" sends nothing, "yes" completes it', async () => {
-    serve({ tasks: { t1: parent }, subtasks: [] });
+    serve({ tasks: { t1: { ...parent, dueOn: '2026-12-01' } }, subtasks: [] });
     patch.mockResolvedValue({ task: { ...parent, status: 'done' } });
     wrap(<TaskDetail id="t1" base="/team/tasks" onClose={() => {}} />);
     const status = await screen.findByRole('combobox', { name: 'Status' });

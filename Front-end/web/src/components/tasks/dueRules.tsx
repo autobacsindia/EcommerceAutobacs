@@ -3,7 +3,8 @@
 /**
  * Due-date rules in the panel (the server's are in Back-end/server/services/taskDueRules.js):
  *
- *   1. every task needs a due date
+ *   1. outside a project, a task needs a due date to leave To Do (DuePrompt.tsx);
+ *      in a project it is optional; a repeating task always has one
  *   2. more than `approvalAfterDays` (9) days away → a manager approves it
  *   3. each priority has a latest date (High: today or tomorrow …)
  *

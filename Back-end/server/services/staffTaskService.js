@@ -211,6 +211,46 @@ export function placeOf({ status, dueOn, dueTime, completedAt, archivedAt }) {
   return { bucket: 'open', rank: dueKey(dueOn, dueTime) || NO_DUE };
 }
 
+/*
+  When a task needs a due date (asked for by the owner, 2026-11):
+    - A task in a project (or a sub-task of one) never does: dates there are
+      optional and can be added later, whatever column it is in.
+    - Any other task may sit in To Do without one (the backlog), but needs one
+      to move on: In progress or Complete. The board asks "When will this be
+      done?" and sends the date with the move.
+    - A repeating task always does: the next copy is dated from it.
+  Checked only on a change that leads there (a move, a date taken off, a task
+  taken out of its project), so an older task already under way with no date
+  can still be edited.
+*/
+export const NEEDS_DUE_TO_START = 'Pick a due date before moving this task out of To Do.';
+const NEEDS_DUE_TO_KEEP = 'This task is under way, so it needs a due date. Pick another date instead of taking it off.';
+const NEEDS_DUE_OUTSIDE_PROJECT = 'Outside a project, a task under way needs a due date. Pick one first.';
+const REPEAT_NEEDS_DUE = 'A repeating task needs a due date.';
+
+/** Must a task with this status, in (or out of) a project, have a due date? */
+export const dueRequired = ({ status, inProject }) => !inProject && shownStatus(status) !== 'todo';
+
+/** Is `t` (with `set` applied) in a project — its own, or its main task's? */
+async function inProjectNow(t, set) {
+  const project = set.project !== undefined ? set.project : t.project;
+  if (project) return true;
+  if (!t.parent?.task) return false;
+  const parent = await staffTaskRepository.findById(t.parent.task);
+  return !!parent?.project;
+}
+
+/** Refuse an update that would leave a task without the date it needs. */
+async function refuseMissingDue(t, set) {
+  if (set.dueOn !== undefined ? set.dueOn : t.dueOn) return;
+  const repeat = set.repeat !== undefined ? set.repeat : t.repeat;
+  if (repeat && (set.dueOn !== undefined || set.repeat !== undefined)) throw fail(REPEAT_NEEDS_DUE, 400);
+  if (set.status === undefined && set.dueOn === undefined && set.project === undefined) return;
+  if (!dueRequired({ status: set.status ?? t.status, inProject: await inProjectNow(t, set) })) return;
+  const why = set.dueOn !== undefined ? NEEDS_DUE_TO_KEEP : set.status !== undefined ? NEEDS_DUE_TO_START : NEEDS_DUE_OUTSIDE_PROJECT;
+  throw fail(why, 400);
+}
+
 // ── Input ───────────────────────────────────────────────────────────────────
 
 export function cleanTitle(raw) {
@@ -1003,11 +1043,10 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const dueOn = cleanDueOn(input.dueOn);
   const dueTime = cleanDueTime(input.dueTime);
   if (dueTime && !dueOn) throw fail('Pick a due date before a time.', 400);
-  if (!dueOn) throw fail('Pick a due date. Every task needs one.', 400);
   const startOn = cleanStartOn(input.startOn);
   checkDates(startOn, dueOn);
-  // Too late for its priority → refused here, before anything is written.
-  const { needsApproval } = checkDue({ dueOn, priority, today: todayIST(), rules: await getTaskRules() });
+  // Too late for its priority → refused here, before anything is written. No date: nothing to check.
+  const { needsApproval } = dueOn ? checkDue({ dueOn, priority, today: todayIST(), rules: await getTaskRules() }) : { needsApproval: false };
   const tags = cleanTags(input.tags);
   const checklist = cleanChecklist(input.checklist);
   const estimateMinutes = cleanEstimate(input.estimateMinutes);
@@ -1016,6 +1055,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
   const parent = input.parentId ? await loadParent(actor, input.parentId) : null;
   const repeat = cleanRepeat(input.repeat, dueOn);
+  if (repeat && !dueOn) throw fail(REPEAT_NEEDS_DUE, 400);
   if (repeat && parent) throw fail('A sub-task can’t repeat. Make the main task repeat instead.', 400);
   const askedPersonal = input.personal === true || input.personal === 'true';
   if (askedPersonal && parent && !parent.personal) throw fail('A sub-task of a shared task can’t be personal.', 400);
@@ -1045,6 +1085,10 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
     if (stage.type === 'done') throw fail('Start the task in a status that isn’t done.', 400);
   }
   const startStatus = stage ? stage.type : status;
+  // Outside a project only To Do may wait for a date (see dueRequired).
+  if (!dueOn && dueRequired({ status: startStatus, inProject: !!project || !!parent?.project })) {
+    throw fail(NEEDS_DUE_TO_START, 400);
+  }
   const keyFor = (who) => (!clientId ? undefined : many ? `${clientId}.${idOf(who[0]._id)}` : clientId);
   const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, rows.map(keyFor)) : [];
   const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
@@ -1235,8 +1279,11 @@ async function applyUpdate(actor, t, input, req) {
     const was = dueKey(t.dueOn, t.dueTime);
     const next = dueKey(dueOn, dueTime);
     if (next !== was) {
-      needEdit();
-      if (!dueOn) throw fail('A task needs a due date. Pick another date instead of taking it off.', 400);
+      // Whoever may move the task gives it its first date as they move it out of To Do
+      // ("When will this be done?"): the move needs one, so it can't be the giver's alone.
+      const datingAMove = !t.dueOn && !!dueOn && has('status') && canSetStatus(actor, t);
+      if (!datingAMove) needEdit();
+      // Taking a date off is allowed where a date is optional; the end of applyUpdate checks that.
       if (dueOn !== (t.dueOn || null)) set.dueOn = dueOn;
       if (dueTime !== (t.dueTime || null)) set.dueTime = dueTime;
       note('due', was || 'none', next || 'none');
@@ -1257,7 +1304,11 @@ async function applyUpdate(actor, t, input, req) {
   */
   const dayMoved = set.dueOn !== undefined;
   const nextDue = dayMoved ? set.dueOn : t.dueOn;
-  if ((dayMoved || set.priority !== undefined) && nextDue) {
+  if (dayMoved && !nextDue && t.dueApproval?.status) {
+    // The date was taken off: nothing is left to approve.
+    set.dueApproval = null;
+    note('due_approval', APPROVAL_LABELS[t.dueApproval.status], 'not needed');
+  } else if ((dayMoved || set.priority !== undefined) && nextDue) {
     const { needsApproval } = checkDue({ dueOn: nextDue, priority: set.priority ?? t.priority, today: todayIST(), rules: await getTaskRules() });
     if (dayMoved && needsApproval && !t.personal) {
       set.dueApproval = approvalFor(actor, t, nextDue, now);
@@ -1389,6 +1440,8 @@ async function applyUpdate(actor, t, input, req) {
     set.stage = null;
     set.stageName = null;
   }
+
+  await refuseMissingDue(t, set);
 
   if (!entries.length) {
     // A retried "done" whose next copy was never made (the first attempt died after its write) makes it now.

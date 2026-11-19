@@ -183,7 +183,7 @@ describe('the Tasks page', () => {
     fireEvent.change(input, { target: { value: 'Ring the courier' } });
     // No date yet: nothing is sent, and it says why.
     fireEvent.submit(input.closest('form')!);
-    expect(within(input.closest('form')!).getByText(/every task needs one/)).toBeInTheDocument();
+    expect(within(input.closest('form')!).getByText(/a task in In progress needs one/)).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
     fireEvent.change(within(input.closest('form')!).getByLabelText('Due date'), { target: { value: todayIST() } });
     fireEvent.submit(input.closest('form')!);
@@ -365,6 +365,73 @@ describe('the board', () => {
     expect([...(pick as HTMLSelectElement).options].map((o) => o.value)).not.toContain('waiting');
     fireEvent.change(pick, { target: { value: 'in_progress' } });
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'in_progress' }));
+  });
+
+  describe('a task with no date (To Do is the backlog)', () => {
+    const undated = () => task({ dueOn: null, dueToday: false });
+    const asked = () => screen.queryByRole('dialog', { name: 'When will this be done?' });
+
+    it('dragging it out of To Do asks "When will this be done?"; Cancel leaves it, a date moves it in one change', async () => {
+      patch.mockResolvedValue({ task: task({ status: 'in_progress', rev: 4 }) });
+      await board([undated()]);
+      await screen.findByText('Call Bosch');
+      fireEvent.drop(col('In progress'), { dataTransfer: dt('t1') });
+      const dialog = await screen.findByRole('dialog', { name: 'When will this be done?' });
+      expect(within(dialog).getByText(/needs a due date to move to/)).toHaveTextContent('In progress');
+      const move = within(dialog).getByRole('button', { name: 'Move to In progress' });
+      expect(move).toBeDisabled();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(asked()).toBeNull());
+      expect(patch).not.toHaveBeenCalled();
+      expect(within(col('To do')).getByText('Call Bosch')).toBeInTheDocument();
+
+      fireEvent.drop(col('In progress'), { dataTransfer: dt('t1') });
+      const again = await screen.findByRole('dialog', { name: 'When will this be done?' });
+      // High priority: today or tomorrow.
+      fireEvent.change(within(again).getByLabelText('Due date'), { target: { value: todayIST() } });
+      fireEvent.click(within(again).getByRole('button', { name: 'Move to In progress' }));
+      await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'in_progress', dueOn: todayIST() }));
+      expect(patch).toHaveBeenCalledTimes(1);
+      expect(asked()).toBeNull();
+    });
+
+    it('the tick (Complete) asks too; a task that has a date just moves', async () => {
+      patch.mockResolvedValue({ task: task({ status: 'done', rev: 4 }) });
+      await board([undated(), task({ id: 't2', code: 'T-8', title: 'Chase supplier' })]);
+      fireEvent.click(await screen.findByRole('button', { name: 'Mark T-8 complete' }));
+      await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t2', { rev: 3, status: 'done' }));
+      expect(asked()).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Mark T-7 complete' }));
+      expect(await screen.findByRole('dialog', { name: 'When will this be done?' })).toBeInTheDocument();
+      expect(patch).toHaveBeenCalledTimes(1);
+    });
+
+    it('a date later than its priority allows can\'t be used to move it', async () => {
+      await board([undated()]); // High priority: today or tomorrow
+      await screen.findByText('Call Bosch');
+      fireEvent.drop(col('Complete'), { dataTransfer: dt('t1') });
+      const dialog = await screen.findByRole('dialog', { name: 'When will this be done?' });
+      fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: '2099-01-01' } });
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(/High tasks must be due/);
+      expect(within(dialog).getByRole('button', { name: 'Move to Complete' })).toBeDisabled();
+    });
+
+    it('"+ Add task" in To Do saves with no date; in In progress it still needs one', async () => {
+      post.mockResolvedValue({ task: undated() });
+      await board([]);
+      fireEvent.click(within(col('To do')).getByRole('button', { name: /Add task/ }));
+      const input = screen.getByLabelText('New task in To do');
+      fireEvent.change(input, { target: { value: 'Someday: new signage' } });
+      fireEvent.submit(input.closest('form')!);
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.not.objectContaining({ dueOn: expect.anything() })));
+      expect(post.mock.calls[0][1]).toMatchObject({ title: 'Someday: new signage' });
+
+      fireEvent.click(within(col('In progress')).getByRole('button', { name: /Add task/ }));
+      const doing = screen.getByLabelText('New task in In progress');
+      fireEvent.change(doing, { target: { value: 'Ring the courier' } });
+      expect(within(doing.closest('form')!).getByRole('button', { name: 'Save' })).toBeDisabled();
+      expect(within(doing.closest('form')!).getByText(/a task in In progress needs one/)).toBeInTheDocument();
+    });
   });
 
   it('a task in both the open and the done list (just ticked) shows once, where the done list has it', async () => {
@@ -755,7 +822,7 @@ describe('the board card', () => {
     const card = await board([task({ priority: 'normal', dueOn: null, overdue: false, dueToday: false })]);
     expect(within(card).queryByText('Late')).toBeNull();
     expect(within(card).queryByTitle(/comments/)).toBeNull();
-    expect(within(card).getByText('No due date')).toBeInTheDocument();
+    expect(within(card).getByText('No date')).toBeInTheDocument();
     expect(within(card).getByText('Normal priority')).toBeInTheDocument();
     expect(within(card).getByText('No tags')).toBeInTheDocument();
   });

@@ -187,9 +187,10 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
   const estimateError = estimateMinutes === undefined ? '' : estimateProblem(estimateMinutes);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const datesBackwards = !!form.startOn && !!form.dueOn && form.startOn > form.dueOn;
-  // Every task needs a due date, within its priority's limit (dueRules.tsx; the server checks again).
+  // A new task starts in To Do, so the date is optional (DuePrompt.tsx asks for one when it moves on);
+  // a repeating task needs one. A date picked must be within its priority's limit (the server checks again).
   const rules = useTaskRules().data ?? DEFAULT_TASK_RULES;
-  const dueProblem = !form.dueOn || !!dueCheck(form.dueOn, form.priority, rules).tooLate;
+  const dueProblem = (!form.dueOn && !!repeat) || !!dueCheck(form.dueOn, form.priority, rules).tooLate;
   const manager = managesDue(me, chosen.map((id) => choices.find((p) => p.id === id)));
 
   const create = useMutation({
@@ -256,8 +257,8 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
             </select>
           </label>
           <label className="text-xs font-medium text-gray-500">
-            <span className="mb-1 flex items-center gap-1"><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date <span className="text-red-600" aria-hidden>*</span></span>
-            <input type="date" aria-label="Due date" required value={form.dueOn} min={form.startOn || undefined} onChange={(e) => set({ dueOn: e.target.value, ...(e.target.value ? {} : { dueTime: null }) })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            <span className="mb-1 flex items-center gap-1"><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date {repeat ? <span className="text-red-600" aria-hidden>*</span> : <span className="font-normal text-gray-400">(optional)</span>}</span>
+            <input type="date" aria-label="Due date" required={!!repeat} value={form.dueOn} min={form.startOn || undefined} onChange={(e) => set({ dueOn: e.target.value, ...(e.target.value ? {} : { dueTime: null }) })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
             {form.dueOn && (
               <DueTimeSelect value={form.dueTime} onChange={(dueTime) => set({ dueTime })} className="mt-1.5 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
             )}

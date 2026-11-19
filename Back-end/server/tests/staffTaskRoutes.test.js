@@ -76,6 +76,19 @@ describe('Staff task routes', () => {
     member = await makeUser('Arun', 'staff', { team: 'procurement', isHead: false, active: true });
   });
 
+  it('a To Do task saves with no date; moving it on without one is a 400 that says why, with one it moves', async () => {
+    const made = await head.session.post('/staff/tasks', { title: 'Backlog idea', assigneeId: String(member.user._id) });
+    expect(made.status).toBe(201);
+    const t = made.body.task;
+    expect(t).toMatchObject({ status: 'todo', dueOn: null });
+    const refused = await member.session.patch(`/staff/tasks/${t.id}`, { rev: t.rev, status: 'in_progress' });
+    expect(refused.status).toBe(400);
+    expect(refused.body.message).toMatch(/Pick a due date before moving this task out of To Do/);
+    const moved = await member.session.patch(`/staff/tasks/${t.id}`, { rev: t.rev, status: 'in_progress', dueOn: inDays(1) });
+    expect(moved.status).toBe(200);
+    expect(moved.body.task).toMatchObject({ status: 'in_progress', dueOn: inDays(1) });
+  });
+
   it('a head gives a task, the member sees it, moves it and comments; a retry is not a second task', async () => {
     const body = { title: 'Call Bosch about the order', assigneeId: String(member.user._id), priority: 'high', dueOn: inDays(1), clientId: 'route-12345678' };
     const created = await head.session.post('/staff/tasks', body);
@@ -428,7 +441,9 @@ describe('Staff task routes', () => {
 
   it('due dates over HTTP: required, limited by priority, approved by the head; the admin sets the rules', async () => {
     const owner = await makeUser('Owner', 'admin');
-    expect((await member.session.post('/staff/tasks', { title: 'No date' })).status).toBe(400);
+    // No date is fine in To Do; starting under way it is not.
+    expect((await member.session.post('/staff/tasks', { title: 'No date' })).status).toBe(201);
+    expect((await member.session.post('/staff/tasks', { title: 'No date', status: 'in_progress' })).status).toBe(400);
     expect((await member.session.post('/staff/tasks', { title: 'Too late', priority: 'high', dueOn: inDays(2) })).status).toBe(400);
     const far = (await member.session.post('/staff/tasks', { title: 'Far', dueOn: inDays(10) })).body.task;
     expect(far.dueApproval).toMatchObject({ status: 'pending' });

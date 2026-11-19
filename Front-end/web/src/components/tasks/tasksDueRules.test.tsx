@@ -2,8 +2,8 @@
  * Due-date rules on screen (the server's are tested in
  * Back-end/server/tests/staffTaskDueRules.test.js — the server decides; these pin
  * what the panel warns about and sends):
- *   - the new-task form can't be sent without a due date, or with one later
- *     than the priority allows; a far date says it will wait for approval
+ *   - the new-task form may be sent without a due date (it starts in To Do), not
+ *     with one later than the priority allows; a far date says it will wait for approval
  *     (not to the admin, who approves it there and then)
  *   - the task window shows where the date stands; a manager approves, or
  *     refuses with a reason; nobody else sees the buttons
@@ -118,10 +118,11 @@ describe('the new-task form', () => {
     return screen.getByRole('button', { name: 'Create task' });
   };
 
-  it('can\'t be sent without a due date', async () => {
+  it('a new task starts in To Do, so the date is optional', async () => {
     const create = await open();
-    expect(screen.getByLabelText('Due date')).toBeRequired();
-    expect(create).toBeDisabled();
+    expect(screen.getByLabelText('Due date')).not.toBeRequired();
+    expect(screen.getByText('(optional)')).toBeInTheDocument();
+    expect(create).toBeEnabled();
     fireEvent.change(screen.getByLabelText('Due date'), { target: { value: TODAY } });
     expect(create).toBeEnabled();
   });
