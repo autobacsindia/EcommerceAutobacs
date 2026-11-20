@@ -6,8 +6,8 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { Download, Loader2 } from 'lucide-react';
 import { errorMessage, money, paymentKeys, type SupplierRefund } from './api';
 import {
-  creditKeys, creditReportHref, decideCredit, getOwing, getPendingCredit, getSupplierCredit, istToday, newFormKey,
-  claimRefund, recordRepayment, writeOff, type CreditBalance, type CreditEntry,
+  creditKeys, creditReportHref, decideCredit, editCredit, getOwing, getPendingCredit, getSupplierCredit, istToday, newFormKey,
+  claimRefund, recordRepayment, writeOff, type CreditBalance, type CreditEditInput, type CreditEntry,
 } from './credit';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
@@ -112,8 +112,10 @@ function EntryActions({ e }: { e: CreditEntry }) {
     setBusy(true);
     setError('');
     try {
-      await decideCredit(e.id, action, note);
-      await Promise.all([qc.invalidateQueries({ queryKey: creditKeys.all }), qc.invalidateQueries({ queryKey: paymentKeys.all })]);
+      // The version on screen: if it was edited since, the server says "check it again".
+      await decideCredit(e.id, action, note, e.rev);
+      // ['suppliers'] covers the credit lists and the directory's "Owes us" chip.
+      await Promise.all([qc.invalidateQueries({ queryKey: ['suppliers'] }), qc.invalidateQueries({ queryKey: paymentKeys.all })]);
     } catch (err) {
       setError(errorMessage(err, 'Could not save that. Please try again.'));
     } finally {
@@ -132,9 +134,122 @@ function EntryActions({ e }: { e: CreditEntry }) {
   );
 }
 
+/**
+ * Edit an entry. Waiting for accounts: changed in place. Approved: the note / reference
+ * in place, and a new amount becomes a correction that accounts approves. A reason always.
+ */
+function EditEntryForm({ e, onDone, onCancel }: { e: CreditEntry; onDone: (msg: string) => void; onCancel: () => void }) {
+  const qc = useQueryClient();
+  const [formKey] = useState(newFormKey);
+  const approved = e.status === 'approved';
+  const repaid = e.kind === 'repaid';
+  const startAmount = approved && e.correctedAmount != null ? e.correctedAmount : e.amount;
+  const [amount, setAmount] = useState(String(startAmount));
+  const [currency, setCurrency] = useState(e.currency);
+  const [date, setDate] = useState(e.date);
+  const [reference, setReference] = useState(e.reference);
+  const [note, setNote] = useState(e.note);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const id = (f: string) => `cr-edit-${f}-${e.id}`;
+
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    setBusy(true);
+    setError('');
+    const body: CreditEditInput = { reason, rev: e.rev, formKey, note };
+    if (Number(amount) !== startAmount) body.amount = Number(amount);
+    if (repaid) body.reference = reference;
+    if (!approved && repaid) { body.currency = currency; body.date = date; }
+    try {
+      const res = await editCredit(e.id, body);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['suppliers'] }), qc.invalidateQueries({ queryKey: paymentKeys.all })]);
+      onDone(res.correction
+        ? `Correction of ${res.correction.amountText} sent to accounts to approve.`
+        : approved ? 'Saved.' : 'Saved — still waiting for accounts.');
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save it. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} aria-label={`Edit ${e.kindLabel}`} className="mt-2 space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+      {approved && (
+        <p className="text-blue-900">
+          This entry is approved, so it is not rewritten. A new amount becomes a <strong>correction</strong> for the difference, which accounts approves.
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {!approved && repaid && (
+          <div>
+            <label className={label} htmlFor={id('cur')}>Currency</label>
+            <input id={id('cur')} className={input} required maxLength={3} value={currency} onChange={(ev) => setCurrency(ev.target.value.toUpperCase())} />
+          </div>
+        )}
+        <div>
+          <label className={label} htmlFor={id('amt')}>{approved ? 'Correct amount' : 'Amount'} ({e.currency})</label>
+          <input id={id('amt')} className={input} required inputMode="decimal" type="number" min={approved ? '0' : '0.01'} step="0.01" value={amount} onChange={(ev) => setAmount(ev.target.value)} />
+          {approved && <p className="mt-1 text-xs text-gray-500">Now {e.correctedAmountText || e.amountText}. 0 cancels it out.</p>}
+        </div>
+        {!approved && repaid && (
+          <div>
+            <label className={label} htmlFor={id('date')}>Date received</label>
+            <input id={id('date')} className={input} required type="date" max={istToday()} value={date} onChange={(ev) => setDate(ev.target.value)} />
+          </div>
+        )}
+      </div>
+      {repaid && (
+        <div>
+          <label className={label} htmlFor={id('ref')}>UTR / reference</label>
+          <input id={id('ref')} className={input} maxLength={120} value={reference} onChange={(ev) => setReference(ev.target.value)} />
+        </div>
+      )}
+      <div>
+        <label className={label} htmlFor={id('note')}>Note</label>
+        <input id={id('note')} className={input} maxLength={1000} value={note} onChange={(ev) => setNote(ev.target.value)} />
+      </div>
+      <div>
+        <label className={label} htmlFor={id('why')}>Why are you changing it?</label>
+        <input id={id('why')} className={input} required maxLength={1000} placeholder="e.g. Supplier's credit note says ₹25,000" value={reason} onChange={(ev) => setReason(ev.target.value)} />
+      </div>
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-red-700">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {approved ? 'Save' : 'Save changes'}
+        </button>
+        <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+/** "Changes": who changed this entry, when, why, and old → new. */
+function EditHistory({ edits }: { edits: CreditEntry['edits'] }) {
+  if (!edits?.length) return null;
+  return (
+    <details className="mt-1 text-xs text-gray-600">
+      <summary className="cursor-pointer select-none text-blue-700">Changes ({edits.length})</summary>
+      <ul className="mt-1 space-y-1">
+        {edits.map((x, i) => (
+          <li key={i} className="rounded bg-gray-50 p-2">
+            <p className="font-medium text-gray-800">{x.byName} · {new Date(x.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</p>
+            {x.changes.map((c) => <p key={c.field}>{c.field}: {c.from || '—'} → {c.to || '—'}</p>)}
+            <p className="italic">Reason: {x.reason}</p>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 /** One ledger row: what, how much (+ / −), why, who, and its trail. */
 export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupplier?: boolean }) {
   const plus = e.signedAmount > 0;
+  const [editing, setEditing] = useState(false);
+  const [notice, setNotice] = useState('');
   return (
     <li className="rounded-lg border border-gray-200 bg-white p-3" aria-label={`${e.kindLabel} ${e.amountText}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -152,7 +267,10 @@ export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupp
             ].filter(Boolean).join(' · ')}
             {e.order?.number && <CopyId value={e.order.number} label="Order number" />}
           </p>
+          {e.correctionOf && <p className="text-xs text-gray-600">Corrects a “{e.correctionOf.kindLabel}” entry</p>}
           {e.note && <p className="text-sm text-gray-700">{e.note}</p>}
+          {e.correctedAmountText && <p className="text-xs font-medium text-blue-800">Corrected to {e.correctedAmountText}</p>}
+          {e.correctionPending && <p className="text-xs text-amber-700">A correction is waiting for accounts</p>}
           <p className="text-xs text-gray-500">
             {e.createdByName || 'System'} · {day(e.createdAt)}
             {e.decidedByName && e.status !== 'pending' && ` · ${e.statusLabel.toLowerCase()} by ${e.decidedByName}`}
@@ -163,7 +281,20 @@ export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupp
           {plus ? '+' : '−'}{e.amountText}
         </p>
       </div>
-      <EntryActions e={e} />
+      <EditHistory edits={e.edits} />
+      {notice && <p role="status" className="mt-1 text-sm text-green-800">{notice}</p>}
+      {editing
+        ? <EditEntryForm e={e} onDone={(m) => { setEditing(false); setNotice(m); }} onCancel={() => setEditing(false)} />
+        : (
+          <>
+            <EntryActions e={e} />
+            {e.can.edit && (
+              <button type="button" onClick={() => { setEditing(true); setNotice(''); }} className="mt-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+                Edit
+              </button>
+            )}
+          </>
+        )}
     </li>
   );
 }

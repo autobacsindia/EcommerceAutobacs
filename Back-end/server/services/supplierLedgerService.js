@@ -31,6 +31,17 @@ import { itemsCancelled } from './supplierAdvanceGuard.js';
  *   • One currency at a time: THB credit pays only THB bills.
  *   • Every action is idempotent: one row per cause (unique `key`).
  *
+ * Editing (owner, 2026-11-19):
+ *   • A PENDING entry is edited in place by whoever raised it (or the admin), with a
+ *     reason; it stays waiting for accounts, and its `rev` goes up so an approval of
+ *     the old version is refused ("this entry was changed — check it again").
+ *   • An APPROVED entry's money is never rewritten: "edit" raises a correction
+ *     (correction_up / correction_down, linked by `correctionOf`) for the difference,
+ *     which accounts approves like any other. Its note / reference may be fixed in place.
+ *       approved refund ₹30,000, should be ₹25,000 → correction_down ₹5,000 (pending)
+ *   • Every edit keeps who, when, why and what changed (old → new) in `edits`.
+ *   • What the supplier owes is still Σ approved rows — corrections included.
+ *
  * Amounts in and out of this module are in units of the currency (rupees, baht);
  * everything inside is integer hundredths ("paise").
  */
@@ -54,6 +65,8 @@ export const KIND_LABELS = Object.freeze({
   credit_used: 'Credit used on a payment',
   credit_restored: 'Credit given back',
   written_off: 'Written off',
+  correction_up: 'Correction (owes us more)',
+  correction_down: 'Correction (owes us less)',
 });
 export const STATUS_LABELS = Object.freeze({
   pending: 'Waiting for accounts', approved: 'Approved', declined: 'Declined', cancelled: 'Cancelled',
@@ -93,6 +106,15 @@ function cleanFormKey(v) {
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(k)) throw fail('This form is out of date — refresh the page and try again.', 400);
   return k;
 }
+
+/** The version of an entry the form was opened on (see `rev` in the model). */
+function cleanRev(v) {
+  const n = Number(v);
+  if (v === '' || v == null || !Number.isInteger(n) || n < 0) throw fail('This form is out of date — refresh the page and try again.', 400);
+  return n;
+}
+/** Rows from before `rev` existed have none — they are version 0. */
+const revFilter = (rev) => (rev ? { rev } : { rev: { $in: [0, null] } });
 
 /** 'YYYY-MM-DD', not in the future, within a year. */
 function cleanDay(v, now = Date.now()) {
@@ -153,9 +175,38 @@ export async function balancesForSuppliers(supplierIds) {
 
 // ── Shape ────────────────────────────────────────────────────────────────────
 
-export function shape(e, viewer) {
+/** Which entries can be changed, and how (see the header). */
+const EDITABLE_PENDING = Object.freeze(['refund_due', 'repaid']);
+const CORRECTABLE = Object.freeze(['refund_due', 'repaid', 'written_off']);
+const mayCorrect = (u, e) => (e.kind === 'written_off' ? isAdmin(u) : mayPropose(u));
+
+/**
+ * For one approved entry: its amount after its approved corrections, and whether a
+ * correction of it is still waiting. `corrections` = that entry's live correction rows.
+ */
+function correctedState(e, corrections = []) {
+  let deltaPaise = 0;
+  let pending = false;
+  for (const c of corrections) {
+    if (c.status === 'approved') deltaPaise += c.amountPaise * (LEDGER_SIGN[c.kind] || 0);
+    else if (c.status === 'pending') pending = true;
+  }
+  // The row adds sign × amount to the balance; its corrections add deltaPaise more.
+  return { effectivePaise: e.amountPaise + (LEDGER_SIGN[e.kind] || 0) * deltaPaise, pending, corrected: deltaPaise !== 0 };
+}
+
+const canEdit = (e, viewer, mine, fix) => {
+  if (e.correctionOf) return false;
+  if (e.status === 'pending') return EDITABLE_PENDING.includes(e.kind) && mayPropose(viewer) && (mine || isAdmin(viewer));
+  if (e.status === 'approved') return CORRECTABLE.includes(e.kind) && mayCorrect(viewer, e) && !fix?.pending;
+  return false;
+};
+
+/** `fixes`: Map entryId → its live corrections (forSupplier passes it; elsewhere absent). */
+export function shape(e, viewer, fixes = null) {
   const mine = idOf(e.createdBy) === idOf(viewer?._id);
   const pending = e.status === 'pending';
+  const fix = e.status === 'approved' && fixes ? correctedState(e, fixes.get(idOf(e._id))) : null;
   return {
     id: idOf(e._id),
     kind: e.kind,
@@ -179,10 +230,18 @@ export function shape(e, viewer) {
     decidedAt: e.decidedAt || null,
     decisionNote: e.decisionNote || '',
     history: (e.history || []).map((h) => ({ at: h.at, byName: h.byName, action: h.action, note: h.note })),
+    rev: e.rev || 0,
+    correctionOf: e.correctionOf ? { id: idOf(e.correctionOf), kindLabel: KIND_LABELS[e.correctionOfKind] || '' } : null,
+    // An approved entry after its approved corrections (null when never corrected).
+    correctedAmount: fix?.corrected ? fromPaise(fix.effectivePaise) : null,
+    correctedAmountText: fix?.corrected ? moneyOf(fix.effectivePaise, e.currency) : '',
+    correctionPending: !!fix?.pending,
+    edits: (e.edits || []).map((x) => ({ at: x.at, byName: x.byName, reason: x.reason, changes: (x.changes || []).map((c) => ({ field: c.field, from: c.from, to: c.to })) })),
     can: {
       approve: pending && mayDecide(viewer) && (!mine || isAdmin(viewer)),
       decline: pending && mayDecide(viewer),
       cancel: pending && (mine || isAdmin(viewer)),
+      edit: canEdit(e, viewer, mine, fix),
     },
   };
 }
@@ -210,10 +269,19 @@ export async function forSupplier(actor, supplierId, params = {}) {
     }),
     f.after ? null : supplierLedgerRepository.balances(s._id),
   ]);
+  // The corrections of this page's approved entries: one query on the supplier's index.
+  const approvedIds = page.items.filter((e) => e.status === 'approved' && CORRECTABLE.includes(e.kind)).map((e) => e._id);
+  const fixes = new Map();
+  if (approvedIds.length) {
+    for (const c of await supplierLedgerRepository.correctionsFor([s._id], approvedIds)) {
+      const k = idOf(c.correctionOf);
+      fixes.set(k, [...(fixes.get(k) || []), c]);
+    }
+  }
   return {
     supplier: { id: idOf(s._id), name: s.name },
     ...(rows ? { balances: balanceRows(rows).map(balanceView) } : {}),
-    entries: page.items.map((e) => shape(e, actor)),
+    entries: page.items.map((e) => shape(e, actor, fixes)),
     nextAfter: page.nextCursor,
     can: { propose: mayPropose(actor), writeOff: isAdmin(actor) },
   };
@@ -312,8 +380,8 @@ async function insertOnce(doc, session = null) {
  * A claim for at most what the payment was for (the bill — credit used on it counts),
  * one live claim per payment. Waits for accounts.
  */
-export async function claimRefund(actor, requestId, input = {}, req) {
-  if (!mayPropose(actor)) throw fail('Only procurement raises a supplier refund.', 403);
+/** A paid supplier payment whose items were cancelled — what a refund claim may be for. */
+async function claimablePayment(requestId) {
   if (!isId(requestId)) throw fail('Payment not found.', 404);
   const r = await paymentRequestRepository.findById(requestId);
   if (!r || r.kind !== 'supplier') throw fail('Payment not found.', 404);
@@ -325,8 +393,17 @@ export async function claimRefund(actor, requestId, input = {}, req) {
   if (!r.order || !itemsCancelled(order, r.itemIds)) {
     throw fail(`${r.number}: the item is not cancelled — a refund is raised only when the customer's order (or the item) was cancelled.`, 409);
   }
+  return r;
+}
+
+/** What a payment was for, in paise of its currency (credit used on it counts). */
+const billPaiseOf = (r) => toPaise(((r.currency || BASE_CURRENCY) === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0) + (Number(r.credit?.amount) || 0));
+
+export async function claimRefund(actor, requestId, input = {}, req) {
+  if (!mayPropose(actor)) throw fail('Only procurement raises a supplier refund.', 403);
+  const r = await claimablePayment(requestId);
   const currency = r.currency || BASE_CURRENCY;
-  const billPaise = toPaise((currency === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0) + (Number(r.credit?.amount) || 0));
+  const billPaise = billPaiseOf(r);
   const amountPaise = input.amount == null || input.amount === '' ? billPaise : cleanAmountPaise(input.amount);
   if (amountPaise > billPaise) throw fail(`The refund cannot be more than what ${r.number} was for (${moneyOf(billPaise, currency)}).`, 400);
   const s = await supplierRepository.findById(r.supplier);
@@ -411,7 +488,8 @@ export async function writeOff(actor, supplierId, input = {}, req) {
 
 // ── Decide ───────────────────────────────────────────────────────────────────
 
-const MOVED = 'This entry has just been decided by someone else. Refresh to see where it is now.';
+const MOVED = 'This entry has just been decided or changed by someone else. Refresh to see where it is now.';
+const CHANGED = 'This entry was changed after you opened it — check it again.';
 /** A declined / cancelled entry gives up its key so a corrected one can be raised. */
 const retiredKey = (e, how) => `${e.key}#${how}:${idOf(e._id)}`;
 
@@ -422,11 +500,18 @@ async function loadEntry(id) {
   return e;
 }
 
-export async function approve(actor, id, { note } = {}, req) {
+export async function approve(actor, id, { note, rev } = {}, req) {
   if (!mayDecide(actor)) throw fail('Only accounts approves supplier credit.', 403);
   const e0 = await loadEntry(id);
   if (e0.status !== 'pending') throw fail(MOVED, 409);
   if (idOf(e0.createdBy) === idOf(actor._id) && !isAdmin(actor)) throw fail('Someone else in accounts has to approve what you raised.', 403);
+  // The version the approver saw: an edit since then must be looked at first.
+  if (rev !== undefined && rev !== null && rev !== '' && cleanRev(rev) !== (e0.rev || 0)) throw fail(CHANGED, 409);
+  if (e0.correctionOf) {
+    const orig = await supplierLedgerRepository.findById(e0.correctionOf);
+    if (orig?.status !== 'approved') throw fail('The entry this corrects is no longer approved — decline this correction.', 409);
+  }
+  const casFilter = { _id: e0._id, status: 'pending', ...revFilter(e0.rev || 0) };
   const update = {
     $set: { status: 'approved', decidedBy: actor._id, decidedByName: actor.name || '', decidedAt: new Date(), decisionNote: text(note, 1000) },
     $push: { history: historyEntry(actor, 'approved', note) },
@@ -440,9 +525,9 @@ export async function approve(actor, id, { note } = {}, req) {
       if (e0.amountPaise > owed) {
         throw fail(`${e0.supplierName} now owes us ${moneyOf(owed, e0.currency)} — this ${moneyOf(e0.amountPaise, e0.currency)} cannot be approved. Decline it, and raise the right amount.`, 409);
       }
-      return supplierLedgerRepository.decide(e0._id, ['pending'], update, session);
+      return supplierLedgerRepository.updateWhere(casFilter, update, session);
     })
-    : await supplierLedgerRepository.decide(e0._id, ['pending'], update);
+    : await supplierLedgerRepository.updateWhere(casFilter, update);
   if (!e) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'APPROVE', 'SupplierLedgerEntry', e._id, { kind: e.kind, amountPaise: e.amountPaise, currency: e.currency });
   return shape(e, actor);
@@ -474,6 +559,201 @@ export async function cancel(actor, id, { note } = {}, req) {
   if (idOf(e0.createdBy) !== idOf(actor._id) && !isAdmin(actor)) throw fail('Only whoever raised it (or the admin) can cancel it.', 403);
   if (e0.status !== 'pending') throw fail(MOVED, 409);
   return close(actor, e0, 'cancelled', note, req);
+}
+
+// ── Edit ─────────────────────────────────────────────────────────────────────
+
+const has = (input, k) => input[k] !== undefined && input[k] !== null;
+
+/** An approved entry's new amount: 0 is allowed (cancels it out entirely). */
+const cleanAmountOrZero = (v) => (v !== '' && Number(v) === 0 ? 0 : cleanAmountPaise(v));
+
+/** Collects field changes as people read them: { field: 'Amount', from: '₹30,000', to: '₹28,000' }. */
+function changeList() {
+  const set = {};
+  const changes = [];
+  return {
+    set,
+    changes,
+    add(path, field, from, to, shown = (v) => v) {
+      if (String(from ?? '') === String(to ?? '')) return;
+      if (path) set[path] = to;
+      changes.push({ field, from: String(shown(from) ?? ''), to: String(shown(to) ?? '') });
+    },
+  };
+}
+
+const editRecord = (actor, reason, changes, formKey) => ({
+  at: new Date(), by: actor._id, byName: actor.name || '', reason, changes, formKey,
+});
+
+/**
+ * Edit a supplier credit entry. Pending: changed in place (it stays waiting for
+ * accounts). Approved: the note / reference in place; a new amount raises a
+ * correction for the difference, waiting for accounts. A reason is required; the
+ * form's `rev` must be the entry's current one; a double submit (same formKey) saves once.
+ * → { entry, correction? }
+ */
+export async function edit(actor, id, input = {}, req) {
+  if (!mayPropose(actor)) throw fail('Only procurement (or the admin) edits supplier credit.', 403);
+  const e0 = await loadEntry(id);
+  const reason = text(input.reason, 1000);
+  if (!reason) throw fail('Say why it is changed.', 400);
+  const formKey = cleanFormKey(input.formKey);
+  // A double click: the first submit was saved — the same answer, not a second change.
+  if ((e0.edits || []).some((x) => x.formKey === formKey)) {
+    const fixRow = await supplierLedgerRepository.findByKey(`fix:${formKey}`);
+    return { entry: shape(e0, actor), ...(fixRow ? { correction: shape(fixRow, actor) } : {}) };
+  }
+  const rev = cleanRev(input.rev);
+  if (rev !== (e0.rev || 0)) throw fail(CHANGED, 409);
+  if (e0.correctionOf) throw fail('A correction cannot be edited — cancel it (while it is waiting) and edit the original entry again.', 409);
+  if (e0.status === 'pending') return { entry: await editPending(actor, e0, input, { reason, formKey, rev }, req) };
+  if (e0.status === 'approved') return correctApproved(actor, e0, input, { reason, formKey, rev }, req);
+  throw fail(`This entry is ${(STATUS_LABELS[e0.status] || e0.status).toLowerCase()} — raise a new one instead.`, 409);
+}
+
+async function editPending(actor, e0, input, { reason, formKey, rev }, req) {
+  if (idOf(e0.createdBy) !== idOf(actor._id) && !isAdmin(actor)) throw fail('Only whoever raised it (or the admin) can edit it.', 403);
+  if (!EDITABLE_PENDING.includes(e0.kind)) throw fail('This entry cannot be edited.', 409);
+  const c = changeList();
+  let newClaimNumber = '';
+  if (e0.kind === 'repaid') {
+    const currency = has(input, 'currency') ? cleanCurrency(input.currency) : e0.currency;
+    const amountPaise = has(input, 'amount') ? cleanAmountPaise(input.amount) : e0.amountPaise;
+    if (has(input, 'date')) c.add('date', 'Date paid back', e0.date, cleanDay(input.date));
+    if (has(input, 'reference')) c.add('reference', 'Reference', e0.reference, text(input.reference, 120));
+    if (currency !== e0.currency || amountPaise !== e0.amountPaise) {
+      const owed = await owedPaise(e0.supplier, currency);
+      if (amountPaise > owed) {
+        throw fail(owed > 0
+          ? `${e0.supplierName} owes us ${moneyOf(owed, currency)} — a repayment cannot be more than that.`
+          : `${e0.supplierName} owes us nothing in ${currency}.`, 409);
+      }
+    }
+    c.add('currency', 'Currency', e0.currency, currency);
+    if (amountPaise !== e0.amountPaise || currency !== e0.currency) {
+      c.set.amountPaise = amountPaise;
+      c.changes.push({ field: 'Amount', from: moneyOf(e0.amountPaise, e0.currency), to: moneyOf(amountPaise, currency) });
+    }
+  } else {
+    // refund_due: the payment it is for (re-checked), and the amount (at most that payment's bill).
+    const moving = has(input, 'paymentRequestId') && String(input.paymentRequestId) !== '' && String(input.paymentRequestId) !== idOf(e0.paymentRequest);
+    const r = moving ? await claimablePayment(input.paymentRequestId) : await paymentRequestRepository.findById(e0.paymentRequest);
+    if (!r) throw fail('The payment this claim is for was not found.', 404);
+    if (moving) {
+      if (idOf(r.supplier) !== idOf(e0.supplier)) throw fail(`${r.number} was paid to a different supplier — raise a claim on it there instead.`, 409);
+      c.add('paymentRequest', 'Payment', e0.paymentRequestNumber, r.number);
+      c.set.paymentRequest = r._id;
+      c.set.paymentRequestNumber = r.number;
+      c.set.order = r.order || null;
+      c.set.orderNumber = r.orderNumber || '';
+      c.set.key = `due:${idOf(r._id)}`;
+      newClaimNumber = r.number;
+    }
+    const currency = r.currency || BASE_CURRENCY;
+    const amountPaise = has(input, 'amount') ? cleanAmountPaise(input.amount) : Math.min(e0.amountPaise, billPaiseOf(r));
+    if (amountPaise > billPaiseOf(r)) throw fail(`The refund cannot be more than what ${r.number} was for (${moneyOf(billPaiseOf(r), currency)}).`, 400);
+    c.add('currency', 'Currency', e0.currency, currency);
+    if (amountPaise !== e0.amountPaise || currency !== e0.currency) {
+      c.set.amountPaise = amountPaise;
+      c.changes.push({ field: 'Amount', from: moneyOf(e0.amountPaise, e0.currency), to: moneyOf(amountPaise, currency) });
+    }
+  }
+  if (has(input, 'note')) c.add('note', 'Note', e0.note, text(input.note, 1000));
+  if (!c.changes.length) throw fail('Nothing was changed.', 400);
+  const update = {
+    $set: c.set,
+    $inc: { rev: 1 },
+    $push: { edits: editRecord(actor, reason, c.changes, formKey), history: historyEntry(actor, 'edited', reason) },
+  };
+  let e;
+  try {
+    e = await supplierLedgerRepository.updateWhere({ _id: e0._id, status: 'pending', ...revFilter(rev) }, update);
+  } catch (err) {
+    if (isDuplicate(err)) throw fail(`${newClaimNumber || 'That payment'} already has a refund claim — edit that one instead.`, 409);
+    throw err;
+  }
+  if (!e) {
+    // Lost the race — to our own double click (saved: same answer) or to someone else.
+    const now = await supplierLedgerRepository.findById(e0._id);
+    if ((now?.edits || []).some((x) => x.formKey === formKey)) return shape(now, actor);
+    throw fail(CHANGED, 409);
+  }
+  auditLogger.logAction(req, 'UPDATE', 'SupplierLedgerEntry', e._id, { edit: c.changes, reason, kind: e.kind });
+  return shape(e, actor);
+}
+
+async function correctApproved(actor, e0, input, { reason, formKey, rev }, req) {
+  if (!CORRECTABLE.includes(e0.kind)) throw fail('Credit used or given back follows its payment — correct the payment instead.', 409);
+  if (!mayCorrect(actor, e0)) throw fail('Only the admin corrects a write-off.', 403);
+  if (has(input, 'currency') && cleanCurrency(input.currency) !== e0.currency) {
+    throw fail('The currency of an approved entry cannot change — correct its amount to 0, then raise a new entry in the right currency.', 409);
+  }
+  if (has(input, 'paymentRequestId') && String(input.paymentRequestId) !== '' && String(input.paymentRequestId) !== idOf(e0.paymentRequest)) {
+    throw fail('The payment of an approved claim cannot change — correct its amount to 0 and raise a claim on the right payment.', 409);
+  }
+  const c = changeList();
+  if (has(input, 'note')) c.add('note', 'Note', e0.note, text(input.note, 1000));
+  if (has(input, 'reference') && e0.kind === 'repaid') c.add('reference', 'Reference', e0.reference, text(input.reference, 120));
+  const newPaise = has(input, 'amount') ? cleanAmountOrZero(input.amount) : null;
+  const billPaise = newPaise != null && e0.kind === 'refund_due' && e0.paymentRequest
+    ? billPaiseOf(await paymentRequestRepository.findById(e0.paymentRequest) || {}) : null;
+  const fixKey = `fix:${formKey}`;
+
+  const done = await supplierLedgerRepository.inTransaction(async (session) => {
+    const existing = await supplierLedgerRepository.findByKey(fixKey, session);
+    if (existing) return { entry: await supplierLedgerRepository.findById(e0._id, session), correction: existing, created: false };
+    await supplierLedgerRepository.lockSupplier(e0.supplier, session);
+    const changes = [...c.changes];
+    let correction = null;
+    if (newPaise != null) {
+      const state = correctedState(e0, await supplierLedgerRepository.correctionsFor([e0.supplier], [e0._id], session));
+      if (state.pending) throw fail('A correction of this entry is already waiting for accounts — wait for it, or cancel it first.', 409);
+      if (newPaise !== state.effectivePaise) {
+        if (billPaise != null && newPaise > billPaise) throw fail(`The refund cannot be more than what ${e0.paymentRequestNumber} was for (${moneyOf(billPaise, e0.currency)}).`, 400);
+        // + the supplier owes us more after the fix, − less.
+        const deltaPaise = (LEDGER_SIGN[e0.kind] || 0) * (newPaise - state.effectivePaise);
+        const kind = deltaPaise > 0 ? 'correction_up' : 'correction_down';
+        if (kind === 'correction_down') {
+          const owed = await owedPaise(e0.supplier, e0.currency, session);
+          if (-deltaPaise > owed) throw fail(`${e0.supplierName} owes us ${moneyOf(owed, e0.currency)} — this correction would take it below zero.`, 409);
+        }
+        const fromTo = `${moneyOf(state.effectivePaise, e0.currency)} → ${moneyOf(newPaise, e0.currency)}`;
+        correction = await supplierLedgerRepository.create({
+          supplier: e0.supplier, supplierName: e0.supplierName, kind, currency: e0.currency, amountPaise: Math.abs(deltaPaise),
+          status: 'pending', key: fixKey, correctionOf: e0._id, correctionOfKind: e0.kind,
+          order: e0.order || null, orderNumber: e0.orderNumber || '',
+          paymentRequest: e0.paymentRequest || null, paymentRequestNumber: e0.paymentRequestNumber || '',
+          note: text(`${KIND_LABELS[e0.kind]} ${fromTo}: ${reason}`, 1000),
+          createdBy: actor._id, createdByName: actor.name || '',
+          history: [historyEntry(actor, 'raised', `Correction ${fromTo}: ${reason}`)],
+        }, session);
+        changes.push({ field: 'Amount', from: moneyOf(state.effectivePaise, e0.currency), to: `${moneyOf(newPaise, e0.currency)} (correction waiting for accounts)` });
+      }
+    }
+    if (!changes.length) throw fail('Nothing was changed.', 400);
+    const entry = await supplierLedgerRepository.updateWhere(
+      { _id: e0._id, status: 'approved', ...revFilter(rev) },
+      {
+        $set: c.set,
+        $inc: { rev: 1 },
+        $push: { edits: editRecord(actor, reason, changes, formKey), history: historyEntry(actor, correction ? 'correction raised' : 'edited', reason) },
+      },
+      session,
+    );
+    if (!entry) throw fail(CHANGED, 409);
+    return { entry, correction, created: true, changes };
+  });
+  if (done.created) {
+    auditLogger.logAction(req, 'UPDATE', 'SupplierLedgerEntry', done.entry._id, { edit: done.changes, reason, kind: done.entry.kind });
+    if (done.correction) {
+      auditLogger.logAction(req, 'CREATE', 'SupplierLedgerEntry', done.correction._id, {
+        kind: done.correction.kind, amountPaise: done.correction.amountPaise, currency: done.correction.currency, correctionOf: idOf(e0._id),
+      });
+    }
+  }
+  return { entry: shape(done.entry, actor), ...(done.correction ? { correction: shape(done.correction, actor) } : {}) };
 }
 
 // ── Use / restore (called by paymentRequestService) ──────────────────────────
@@ -546,6 +826,6 @@ export async function restoreCredit(request, note = '') {
 }
 
 export default {
-  forSupplier, pending, owing, report, claimRefund, recordRepayment, writeOff, approve, decline, cancel,
+  forSupplier, pending, owing, report, claimRefund, recordRepayment, writeOff, approve, decline, cancel, edit,
   checkCreditUse, useCredit, restoreCredit, claimsFor, balancesForSuppliers, owedPaise, shape,
 };

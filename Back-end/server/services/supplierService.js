@@ -5,8 +5,10 @@
  * ── WHO DOES WHAT (enforced here; the UI only reflects it) ──────────────────────
  *   add / edit / deactivate    procurement (and admin)
  *   see                        procurement, accounts, admin
- *   full account number        procurement and admin (to check it); accounts sees
- *                              the last 4 here and the full number on the payment
+ *   full account number        procurement and admin (to check and edit it);
+ *                              accounts with "Show number" (POST /:id/account-number),
+ *                              logged in the audit log each time (owner, 2026-11-19).
+ *                              Lists show the last 4 only. Nobody else, ever.
  *
  * Editing where the money goes stamps bankChangedAt, and payments raised soon
  * after carry a warning — see BANK_CHANGE_WARN_DAYS.
@@ -38,6 +40,8 @@ const isAdmin = (u) => u?.role === 'admin';
 const onTeam = (u, team) => u?.role === 'staff' && u.staff?.active === true && u.staff.team === team;
 export const mayEditSuppliers = (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT);
 const maySeeSuppliers = (u) => mayEditSuppliers(u) || onTeam(u, STAFF_TEAMS.ACCOUNTS);
+/** Who may see a supplier's full account number (accounts only by asking — revealAccount). */
+export const mayRevealAccount = maySeeSuppliers;
 
 export const nameKeyOf = (name) => String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
 const text = (v, max) => String(v ?? '').trim().slice(0, max);
@@ -111,7 +115,7 @@ export function shape(s, viewer) {
     bankChangedAt: s.bankChangedAt || null,
     bankChangedBy: s.bankChangedByName || '',
     updatedAt: s.updatedAt,
-    can: { edit: full },
+    can: { edit: full, revealAccount: !full && mayRevealAccount(viewer) && !!s.payment?.accountLast4 },
   };
 }
 
@@ -165,6 +169,23 @@ async function load(id, opts) {
   const s = await supplierRepository.findById(id, opts);
   if (!s) throw fail('Supplier not found.', 404);
   return s;
+}
+
+/**
+ * The full account number, for accounts (and procurement / admin) who ask to see it.
+ * Every reveal is written to the audit log: "<who> viewed the account number of <supplier>".
+ */
+export async function revealAccount(actor, id, req) {
+  if (!mayRevealAccount(actor)) throw fail('Not authorized.', 403);
+  const s = await load(id, { account: true });
+  const accountNumber = plainAccount(s);
+  if (!accountNumber) throw fail(`${s.name} has no bank account saved.`, 404);
+  // Logged before it is shown: no record, no number.
+  const logged = await auditLogger.logAction(req, 'VIEW_ACCOUNT_NUMBER', 'Supplier', s._id, {
+    summary: `${actor.name || 'Someone'} viewed the account number of ${s.name}`, team: actor.staff?.team || actor.role,
+  });
+  if (!logged) throw fail('Could not record this view — try again in a moment.', 503);
+  return { accountNumber };
 }
 
 export async function get(actor, id) {
@@ -255,4 +276,4 @@ export async function payeeFor(id, now = Date.now()) {
   };
 }
 
-export default { create, update, setActive, get, list, payeeFor, shape };
+export default { create, update, setActive, get, list, payeeFor, shape, revealAccount };

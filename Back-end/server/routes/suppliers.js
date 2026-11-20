@@ -46,12 +46,24 @@ for (const action of ['approve', 'decline', 'cancel']) {
   }));
 }
 
+// POST /suppliers/credit/:entryId/edit { reason, rev, formKey, amount?, currency?, date?, reference?, note?, paymentRequestId? }
+//   pending: changed in place; approved: a correction for the difference (both wait for accounts)
+router.post('/credit/:entryId/edit', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await credit.edit(req.user, req.params.entryId, req.body || {}, req)) });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, supplier: await suppliers.create(req.user, req.body, req) });
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
   res.json({ success: true, supplier: await suppliers.get(req.user, req.params.id) });
+}));
+
+// POST /suppliers/:id/account-number   the full number, once, logged ("X viewed …").
+// A POST so it is never prefetched, cached or replayed by a link.
+router.post('/:id/account-number', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await suppliers.revealAccount(req.user, req.params.id, req)) });
 }));
 
 router.put('/:id', asyncHandler(async (req, res) => {
