@@ -289,7 +289,7 @@
 .st-tile-media { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #f6f7f7; display: flex; align-items: center; justify-content: center; }
 .st-tile-img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; transition: transform 0.35s; }
 .st-tile:hover .st-tile-img { transform: scale(1.04); }
-.st-badge { position: absolute; top: 8px; left: 8px; padding: 4px 9px; border-radius: 4px; background: var(--g); color: #fff; font-size: 11px; font-weight: 700; }
+.st-badge { position: absolute; z-index: 2; top: 8px; left: 8px; padding: 4px 9px; border-radius: 4px; background: var(--g); color: #fff; font-size: 11px; font-weight: 700; }
 .st-tile-body { display: flex; flex-direction: column; gap: 5px; padding: 10px 2px 0; }
 .st-deal-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .st-off { display: inline-flex; padding: 3px 8px; border-radius: 4px; background: var(--red); color: #fff; font-size: 12px; font-weight: 700; }
@@ -921,12 +921,6 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
   background: radial-gradient(120% 90% at 50% 40%, #ffffff 0%, #eef0f3 60%, #d7dae0 100%); }
 .bfh-card-img { width: 100%; height: 100%; object-fit: contain; display: block; padding: 6px; transition: transform 0.4s; }
 .bfh-card:hover .bfh-card-img { transform: scale(1.04); }
-/* "₹0 DELIVERY" diagonal ribbon, clipped by the photo's rounded overflow. Never wraps,
-   never takes clicks; the Save tag sits above it (z-index), so it can only tuck under. */
-.bfh-card-ribbon { position: absolute; z-index: 1; top: 21px; right: -36px; width: 130px; transform: rotate(45deg);
-  background: linear-gradient(90deg, #15803d, #22c55e, #15803d); color: #fff; text-align: center; font-size: 9px; font-weight: 900; line-height: 1;
-  letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; padding: 5px 0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); pointer-events: none; }
 .bfh-card-tag { position: absolute; z-index: 2; top: 8px; left: 8px; background: #c8102e; color: #fff; border-radius: 6px; font-size: 12px; font-weight: 800; padding: 3px 8px; white-space: nowrap; box-shadow: 0 0 10px rgba(255, 45, 70, 0.6); }
 .bfh-card-body { display: block; padding: 9px 3px 0; color: #0f1115; }
 .bfh-card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; height: 34px; font-size: 13px; line-height: 17px; font-weight: 700; }
@@ -953,7 +947,6 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 /* Narrow cards (1024–1280px screens put ~175px under each): tighten, never wrap. */
 @container (max-width: 185px) {
   .bfh-card-tag { font-size: 10.5px; padding: 2px 6px; }
-  .bfh-card-ribbon { top: 18px; right: -38px; width: 120px; font-size: 8px; }
   .bfh-card-name { font-size: 12px; line-height: 16px; height: 32px; }
   .bfh-card-price b { font-size: 17px; }
   .bfh-card-check { font-size: 10px; gap: 3px; }
@@ -1041,7 +1034,7 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 }
 @media (max-width: 768px) {
   .bfh-inner { grid-template-columns: 1fr; padding: 22px 16px 128px; gap: 22px; }
-  .bfh-art { order: -1; min-height: 0; padding-top: 136px; }
+  .bfh-art { order: -1; min-height: 0; padding-top: 150px; }
   .bfh-tag { top: 0; width: 150px; height: 100px; padding-left: 20px; border-width: 2px; }
   .bfh-tag::before { left: 8px; width: 9px; height: 9px; margin-top: -4.5px; }
   .bfh-tag-up { font-size: 10px; }

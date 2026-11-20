@@ -122,6 +122,27 @@ describe('Gallery', () => {
     });
   });
 
+  describe('Black Friday ₹0 DELIVERY ribbon (owner, 2026-11-20)', () => {
+    it('zeroDelivery → the shared diagonal ribbon on both the phone carousel and the desktop photo', () => {
+      render(<Gallery images={makeImages(3)} name="Hilux GR kit" zeroDelivery onSale />);
+      const ribbons = screen.getAllByTestId('zero-delivery-ribbon');
+      expect(ribbons).toHaveLength(2);
+      expect(within(screen.getByTestId('gallery-carousel')).getByTestId('zero-delivery-ribbon')).toHaveTextContent(/₹0 Delivery/i);
+      expect(within(screen.getByTestId('gallery-zoom')).getByTestId('zero-delivery-ribbon').parentElement).toHaveClass('zd-ribbon-box');
+    });
+
+    it('moves the "1 / 3" counter off the top-right corner while the ribbon shows', () => {
+      render(<Gallery images={makeImages(3)} name="Hilux GR kit" zeroDelivery />);
+      expect(screen.getByText('1 / 3')).toHaveClass('bottom-4', 'left-4');
+    });
+
+    it('off by default: no ribbon, counter top-right', () => {
+      render(<Gallery images={makeImages(3)} name="Hilux GR kit" />);
+      expect(screen.queryByTestId('zero-delivery-ribbon')).not.toBeInTheDocument();
+      expect(screen.getByText('1 / 3')).toHaveClass('right-4', 'top-4');
+    });
+  });
+
   it('renders a thumbnail for every image, not just the first five', () => {
     // Regression lock: the previous gallery did `images.slice(0, 5)`, silently
     // dropping uploads 6+ with no way for merchandising to notice.

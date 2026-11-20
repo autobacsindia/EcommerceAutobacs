@@ -199,8 +199,6 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
                         featured={p.isFeatured}
                         campaignRate={campaignBadgeVisible ? campaignData?.rates?.[p._id] : null}
                         feeWaiver={fee.waivers?.products[p._id] ?? null}
-                        feeWaiverPending={fee.pending}
-                        feeOfferLive={fee.live}
                         priority={i < GRID_PRIORITY_IMAGES}
                       />
                     );

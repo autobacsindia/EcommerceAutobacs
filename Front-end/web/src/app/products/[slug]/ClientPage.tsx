@@ -21,6 +21,7 @@ import VehicleCards from '@/components/products/VehicleCards';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import Gallery from '@/components/products/redesign/Gallery';
+import { useCardFeeWaivers } from '@/hooks/queries/useCardFeeWaivers';
 import { variantImageIndex } from '@/lib/variantImage';
 import BuyBox, { type ProductVariant } from '@/components/products/redesign/BuyBox';
 import ConsultSpecialistBanner from '@/components/products/ConsultSpecialistBanner';
@@ -160,6 +161,15 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
     }
   }, [product?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Black Friday "₹0 DELIVERY" ribbon on the main photo — the cards' rule: only a simple
+  // product orderable now, and only when the server's fee waiver says the offer applies
+  // (it sends none for sold-out/backorder/variable, and none outside the offer).
+  const feeId = product && product.productType !== 'variable' && product.stock !== 'out' && product.stock !== 'backorder'
+    ? product._id
+    : '';
+  const fee = useCardFeeWaivers(feeId ? [feeId] : []);
+  const zeroDelivery = !!(feeId && fee.waivers?.products[feeId]);
+
   if (!product) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-obsidian">
@@ -250,7 +260,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             further down the page.
           */}
           <div>
-            <Gallery images={displayImages} name={product.name} onSale={onSale} jumpTo={variantSlide} />
+            <Gallery images={displayImages} name={product.name} onSale={onSale} jumpTo={variantSlide} zeroDelivery={zeroDelivery} />
           </div>
           <div>
             <BuyBox

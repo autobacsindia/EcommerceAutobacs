@@ -72,8 +72,6 @@ export default function ProductGrid({ products, loading }: ProductGridProps) {
           featured={product.isFeatured}
           campaignRate={badgeVisible ? campaignData?.rates?.[product._id] : null}
           feeWaiver={fee.waivers?.products[product._id] ?? null}
-          feeWaiverPending={fee.pending}
-          feeOfferLive={fee.live}
         />
       ))}
     </div>

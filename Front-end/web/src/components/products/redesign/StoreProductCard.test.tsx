@@ -2,10 +2,12 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import StoreProductCard from './StoreProductCard';
+import { FestivalThemeProvider } from '@/components/festival/FestivalThemeContext';
 import type { Product } from '@/lib/types';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => '/products',
 }));
 
 jest.mock('next/link', () => {
@@ -296,61 +298,45 @@ describe('Black Friday ₹0 delivery (owner, 2026-11-20)', () => {
     discount: 9000, save: 12223.5, shipping: 1024, packing: 500, handling: 28.8, other: 1670.7, total: 3223.5,
   };
   const kit = () => makeProduct({ price: 283000, originalPrice: 292000, slug: 'profender-thunder-series-hilux' });
+  const BF = { themeKey: 'blackfriday', startsAt: null, endsAt: null, live: true };
+  const inBlackFriday = (ui: React.ReactElement) => render(<FestivalThemeProvider theme={BF} initialLive>{ui}</FestivalThemeProvider>);
 
-  it('badge = discount + fees waived, floored, with "+"; ribbon + receipt; You pay = the card price', () => {
+  it('badge = discount + fees waived, floored, with "+"; the shared diagonal ribbon; no fee receipt box', () => {
     render(<StoreProductCard product={kit()} feeWaiver={waiver} />);
     expect(screen.getByTestId('card-save-badge')).toHaveTextContent('Save ₹12,223+');
-    expect(screen.getByTestId('zero-delivery-ribbon')).toHaveTextContent(/₹0 Delivery/i);
-    const receipt = screen.getByTestId('zero-delivery-receipt');
-    expect(receipt).toHaveTextContent(/Shipping\s*₹1,024\s*₹0/);
-    expect(receipt).toHaveTextContent(/Packing\s*₹500\s*₹0/);
-    expect(receipt).toHaveTextContent(/Handling\s*₹28\.80\s*₹0/);
-    expect(receipt).toHaveTextContent(/You pay\s*₹2,83,000/);
+    const ribbon = screen.getByTestId('zero-delivery-ribbon');
+    expect(ribbon).toHaveTextContent(/₹0 Delivery/i);
+    expect(ribbon).toHaveClass('zd-ribbon');
+    expect(ribbon.parentElement).toHaveClass('zd-ribbon-box');
+    // The receipt ("Shipping ₹1,024 ₹0 … You pay") was removed from grid cards (owner, 2026-11-20).
+    expect(screen.queryByText(/You pay/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Shipping$/)).not.toBeInTheDocument();
   });
 
-  it('no waiver → the plain "Save ₹9,000" card, no ribbon or receipt', () => {
+  it('no waiver → the plain "Save ₹9,000" card, no ribbon', () => {
     render(<StoreProductCard product={kit()} />);
     expect(screen.getByTestId('card-save-badge')).toHaveTextContent('Save ₹9,000');
     expect(screen.queryByTestId('zero-delivery-ribbon')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('zero-delivery-receipt')).not.toBeInTheDocument();
   });
 
-  it('figures loading → a same-size placeholder is reserved (no layout shift)', () => {
-    render(<StoreProductCard product={kit()} feeWaiverPending />);
-    expect(screen.getByTestId('zero-delivery-receipt-pending')).toHaveClass('h-[92px]');
-  });
-
-  it('sold out → no ₹0 delivery promise even if a waiver is passed', () => {
-    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock: 'out' })} feeWaiver={waiver} />);
+  it.each(['out', 'backorder'] as const)('%s → no ₹0 ribbon even if a waiver is passed', (stock) => {
+    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock })} feeWaiver={waiver} />);
     expect(screen.queryByTestId('zero-delivery-ribbon')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('zero-delivery-receipt')).not.toBeInTheDocument();
   });
 
-  it.each([
-    ['backorder', /On backorder/],
-    ['out', /Sold out for now/],
-  ] as const)('offer on, %s card → grey status line of the receipt\'s height; no ribbon, discount-only badge', (stock, text) => {
-    // The server sends no waiver for a product that cannot be ordered now; pass one anyway
-    // to prove the card itself refuses a ₹0 claim.
-    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock })} feeWaiver={waiver} feeOfferLive />);
-    const line = screen.getByTestId('zero-delivery-unavailable');
-    expect(line).toHaveTextContent(text);
-    expect(line).toHaveClass('h-[92px]');
-    expect(line).not.toHaveTextContent('₹0');
-    expect(screen.queryByTestId('zero-delivery-ribbon')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('zero-delivery-receipt')).not.toBeInTheDocument();
-    if (stock === 'backorder') expect(screen.getByTestId('card-save-badge')).toHaveTextContent('Save ₹9,000');
+  it('backorder keeps the discount-only badge (no "+")', () => {
+    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock: 'backorder' })} feeWaiver={waiver} />);
+    expect(screen.getByTestId('card-save-badge')).toHaveTextContent('Save ₹9,000');
   });
 
-  it('figures still loading → a backorder card shows its grey line at once (no placeholder flicker)', () => {
-    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock: 'backorder' })} feeWaiverPending />);
-    expect(screen.getByTestId('zero-delivery-unavailable')).toBeInTheDocument();
-    expect(screen.queryByTestId('zero-delivery-receipt-pending')).not.toBeInTheDocument();
+  it('Black Friday: the wishlist heart moves bottom-right (the ribbon owns the top-right corner)', () => {
+    inBlackFriday(<StoreProductCard product={kit()} feeWaiver={waiver} />);
+    expect(screen.getByRole('button', { name: /wishlist/i })).toHaveAttribute('data-wishlist-pos', 'bottom');
   });
 
-  it('offer off → a backorder card has no grey line (normal card)', () => {
-    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock: 'backorder' })} />);
-    expect(screen.queryByTestId('zero-delivery-unavailable')).not.toBeInTheDocument();
+  it('outside Black Friday the heart stays top-right', () => {
+    render(<StoreProductCard product={kit()} />);
+    expect(screen.getByRole('button', { name: /wishlist/i })).toHaveAttribute('data-wishlist-pos', 'top');
   });
 
   it('the card stays one link to the product and keeps its add-to-cart button', () => {

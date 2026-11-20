@@ -4,6 +4,7 @@ import { Expand } from 'lucide-react';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { usePrefersReducedMotion } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
+import { ZeroDeliveryRibbon } from '@/components/products/ZeroDeliveryRibbon';
 import { MAIN_IMAGE_SIZES, type GalleryImage } from './types';
 import { useSnapPager } from './useSnapPager';
 
@@ -17,6 +18,8 @@ interface GalleryCarouselProps {
   onActiveChange: (index: number) => void;
   onOpen: (index: number) => void;
   onSale?: boolean;
+  /** Black Friday: diagonal ₹0 DELIVERY ribbon on the photo's top-right corner. */
+  zeroDelivery?: boolean;
   className?: string;
 }
 
@@ -37,6 +40,7 @@ export default function GalleryCarousel({
   onActiveChange,
   onOpen,
   onSale,
+  zeroDelivery = false,
   className,
 }: GalleryCarouselProps) {
   const reduceMotion = usePrefersReducedMotion();
@@ -98,14 +102,22 @@ export default function GalleryCarousel({
           ))}
         </div>
 
+        {zeroDelivery && <ZeroDeliveryRibbon />}
+
         {onSale && (
-          <div className="pointer-events-none absolute left-4 top-4 grid h-14 w-14 place-items-center rounded-full bg-gold text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
+          <div className="pointer-events-none absolute left-4 top-4 z-[2] grid h-14 w-14 place-items-center rounded-full bg-gold text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
             Sale
           </div>
         )}
 
         {images.length > 1 && (
-          <div className="pointer-events-none absolute right-4 top-4 border border-hairline bg-obsidian/80 px-2.5 py-1 text-[10px] tracking-[0.16em] text-ink-muted backdrop-blur-sm">
+          // The top-right corner is the ribbon's while it shows; the counter moves bottom-left.
+          <div
+            className={cn(
+              'pointer-events-none absolute border border-hairline bg-obsidian/80 px-2.5 py-1 text-[10px] tracking-[0.16em] text-ink-muted backdrop-blur-sm',
+              zeroDelivery ? 'bottom-4 left-4' : 'right-4 top-4',
+            )}
+          >
             {active + 1} / {images.length}
           </div>
         )}
