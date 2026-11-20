@@ -9,8 +9,7 @@ import { festivalVars } from '@/components/festival/festivalStyle';
 import { countdownParts } from '@/components/festival/FestivalCountdown';
 import type { FestiveHeroPhoto } from './FestiveHome';
 import { useCardFeeWaivers } from '@/hooks/queries/useCardFeeWaivers';
-import { zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryReceipt';
-import { useCurrency } from '@/context/CurrencyContext';
+import BlackFridayHeroCard from './BlackFridayHeroCard';
 
 /**
  * The Black Friday hero ("neon" festival style): night stage, neon-red light
@@ -50,7 +49,6 @@ export default function BlackFridayHero({
   /** Only when checkout really waives shipping/packing/delivery (server flag). */
   showSeal?: boolean;
 }) {
-  const { formatPrice } = useCurrency();
   const copy = tokens.home;
   const [line1, line2, line3] = copy.heroTitle;
   const art = photos.slice(0, 3);
@@ -128,17 +126,13 @@ export default function BlackFridayHero({
           {art.length > 0 && (
             <div className={`bfh-cards bfh-cards-${art.length}`}>
               {art.map((p, k) => (
-                <Link key={`${p.href}-${k}`} href={p.href} className="bfh-card">
-                  <span className="bfh-card-media">
-                    <Img src={p.src} alt={p.name} className="bfh-card-img" sizes="(max-width: 768px) 30vw, 200px" priority={k === 0} />
-                  </span>
-                  {(() => {
-                    const label = zeroDeliverySaveLabel(p.id ? fee.waivers?.products[p.id] : null, (n) => formatPrice(n))
-                      ?? (p.save > 0 ? `Save ${formatPrice(p.save)}` : null);
-                    return label && <span className="bfh-card-tag">{label}</span>;
-                  })()}
-                  <span className="bfh-card-name">{p.name}</span>
-                </Link>
+                <BlackFridayHeroCard
+                  key={`${p.href}-${k}`}
+                  p={p}
+                  waiver={p.id ? fee.waivers?.products[p.id] ?? null : null}
+                  pending={fee.pending}
+                  priority={k === 0}
+                />
               ))}
             </div>
           )}

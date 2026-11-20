@@ -30,7 +30,7 @@ export function Stars({ rating, size = 14 }: { rating: number; size?: number }) 
  * catalogue's own numbers through CurrencyContext like the rest of the store.
  */
 export default function ProductTile({
-  p, badge, feeWaiver = null, feeWaiverPending = false,
+  p, badge, feeWaiver = null, feeWaiverPending = false, feeOfferLive = false,
 }: {
   p: StoreProduct;
   badge?: string;
@@ -38,26 +38,32 @@ export default function ProductTile({
   feeWaiver?: CardFeeWaiver | null;
   /** Offer live, figures loading: reserve the receipt's space (no CLS). */
   feeWaiverPending?: boolean;
+  /** The ₹0-delivery offer is on for this shelf: sold-out/backorder tiles get a grey line. */
+  feeOfferLive?: boolean;
 }) {
   const { formatPrice } = useCurrency();
   const off = discountPct(p);
   // The chip reads "Save ₹250", not "-5%" — display only, from the tile's own prices.
   // Black Friday: the badge also counts the delivery fees the offer waives ("Save ₹X+").
-  const saveLabel = zeroDeliverySaveLabel(feeWaiver, (n) => formatPrice(n)) ?? savingsLabel(p.price, p.originalPrice, (n) => formatPrice(n));
+  const saveLabel = zeroDeliverySaveLabel(p.stock === 'out' || p.stock === 'backorder' ? null : feeWaiver, (n) => formatPrice(n)) ?? savingsLabel(p.price, p.originalPrice, (n) => formatPrice(n));
   // Diwali offer (display mirror; the cart charges the server's figure) — an EXTRA %
   // on top of the price; the sale line and M.R.P. stay. Skipped for a variable product,
   // whose tile price is not one model's exact price.
   const offer = useFestivalOfferPrice(p.variable ? null : p.price, p.festivalOfferSetting);
   const exact = (n: number) => formatPrice(n, { exact: true });
+  const unavailable = p.stock === 'out' || p.stock === 'backorder' ? p.stock : null;
+  // A sold-out/backorder tile makes no ₹0 claim even if a waiver slipped through.
+  const waiver = unavailable ? null : feeWaiver;
+  const offerOn = feeOfferLive || feeWaiverPending || !!feeWaiver;
   return (
     <Link href={p.href} className="st-tile">
       <div className="st-tile-media">
         <Img src={p.image} alt={p.name} className="st-tile-img" sizes="(max-width: 768px) 45vw, 220px" />
         {badge && <span className="st-badge">{badge}</span>}
-        {feeWaiver && <ZeroDeliveryRibbon />}
+        {waiver && <ZeroDeliveryRibbon />}
       </div>
       <div className="st-tile-body">
-        {(off > 0 || feeWaiver) && (
+        {(off > 0 || waiver) && (
           <div className="st-deal-line">
             {saveLabel && <span className="st-off">{saveLabel}</span>}
             <span className="st-deal-label">{p.offerEndDate ? 'Limited time deal' : 'Deal'}</span>
@@ -79,8 +85,17 @@ export default function ProductTile({
           )}
         </div>
         <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" mrp={off > 0 ? p.originalPrice : null} />
-        <ZeroDeliveryReceipt waiver={feeWaiver} pending={feeWaiverPending} price={offer ? offer.finalPrice : p.price} format={exact} />
-        {p.brand && <div className="st-brand">by {p.brand}</div>}
+        <ZeroDeliveryReceipt
+          waiver={waiver}
+          pending={!unavailable && feeWaiverPending}
+          live={offerOn && !p.variable}
+          unavailable={p.variable ? null : unavailable}
+          price={offer ? offer.finalPrice : p.price}
+          format={exact}
+        />
+        {/* Black Friday: no "by Brand" line — only some deals have a brand, so it made
+            the tiles in a row uneven (owner, 2026-11-20). Back after the offer. */}
+        {p.brand && !offerOn && <div className="st-brand">by {p.brand}</div>}
       </div>
     </Link>
   );

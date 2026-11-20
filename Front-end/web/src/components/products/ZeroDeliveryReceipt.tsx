@@ -34,6 +34,7 @@ export function ZeroDeliveryRibbon() {
 // 5 rows × 15px + padding + the dashed tear line. Kept in one place so the skeleton
 // and the receipt are the same height.
 const BOX = 'mt-2 h-[92px] rounded-md border border-dashed border-emerald-600/40 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-[15px]';
+const GREY_BOX = 'mt-2 h-[92px] rounded-md border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] leading-[15px]';
 
 function Row({ label, amount, format }: { label: string; amount: number; format: (n: number) => string }) {
   return (
@@ -47,20 +48,44 @@ function Row({ label, amount, format }: { label: string; amount: number; format:
   );
 }
 
+/** Grey line in the receipt's place on a card that cannot be ordered now. */
+const UNAVAILABLE_COPY = {
+  backorder: ['On backorder', 'We confirm the delivery date before you pay.'],
+  out: ['Sold out for now', 'Back soon — check again later.'],
+} as const;
+
 export default function ZeroDeliveryReceipt({
   waiver,
   pending = false,
+  live = false,
+  unavailable = null,
   price,
   format,
 }: {
   waiver: CardFeeWaiver | null | undefined;
   /** Offer live, figures still loading: reserve the space. */
   pending?: boolean;
+  /** The ₹0-delivery offer is on for this grid (cards hold the receipt's space). */
+  live?: boolean;
+  /**
+   * The card cannot be ordered now. While the offer is on it gets a grey status line of
+   * the receipt's exact height (owner, 2026-11-20) — no ₹0 claim, and the row stays even.
+   */
+  unavailable?: 'out' | 'backorder' | null;
   /** The price the card shows: what the shopper pays, fees included. */
   price: number;
   /** The page's own formatter (CurrencyContext); pass an exact one so paise show. */
   format: (n: number) => string;
 }) {
+  if (!waiver && unavailable && (live || pending)) {
+    const [title, note] = UNAVAILABLE_COPY[unavailable];
+    return (
+      <div data-testid="zero-delivery-unavailable" className={`${GREY_BOX} flex flex-col justify-center`}>
+        <span className="font-bold text-ink-muted">{title}</span>
+        <span className="text-ink-muted">{note}</span>
+      </div>
+    );
+  }
   if (!waiver) {
     return pending ? <div aria-hidden data-testid="zero-delivery-receipt-pending" className={`${BOX} animate-pulse`} /> : null;
   }

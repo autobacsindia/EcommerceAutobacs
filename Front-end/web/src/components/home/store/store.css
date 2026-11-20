@@ -863,7 +863,7 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 .bfh-btn-red:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 12px 36px rgba(255, 45, 70, 0.6); }
 .bfh-btn-ghost { border: 1.5px solid rgba(255, 255, 255, 0.5); color: #fff; }
 .bfh-btn-ghost:hover { background: rgba(255, 255, 255, 0.08); }
-.bfh-btn:focus-visible, .bfh-card:focus-visible, .bfh-tag:focus-visible { outline: 3px solid #ffd23f; outline-offset: 3px; }
+.bfh-btn:focus-visible, .bfh-tag:focus-visible { outline: 3px solid #ffd23f; outline-offset: 3px; }
 
 .bfh-count { margin-top: 24px; }
 .bfh-count-label { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #ffd23f; margin-bottom: 8px; }
@@ -873,7 +873,7 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 .bfh-count-num { display: block; font-family: var(--font-montserrat), sans-serif; font-size: 28px; font-weight: 800; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
 .bfh-count-unit { margin-top: 5px; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #b9b9c2; }
 
-.bfh-art { position: relative; min-height: 460px; display: flex; align-items: flex-end; justify-content: center; }
+.bfh-art { position: relative; min-height: 630px; display: flex; align-items: flex-end; justify-content: center; }
 .bfh-tag { position: absolute; z-index: 3; top: 2%; left: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 220px; height: 150px; padding-left: 26px; border-radius: 14px 22px 22px 14px;
   background: rgba(10, 10, 12, 0.72); border: 3px solid #ff2d46; color: #fff; text-transform: uppercase; font-family: var(--font-montserrat), sans-serif;
   box-shadow: 0 0 18px rgba(255, 45, 70, 0.7), inset 0 0 18px rgba(255, 45, 70, 0.45); transform: rotate(-8deg); transform-origin: 18px 50%; }
@@ -895,16 +895,83 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 .bfh-cube-1 { left: 52%; top: 12%; transform: rotate(-14deg); }
 .bfh-cube-2 { right: 4%; top: 52%; width: 38px; height: 38px; font-size: 18px; transform: rotate(12deg); }
 
-.bfh-cards { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 16px; align-items: end; width: 100%; max-width: 600px; }
-.bfh-cards-1 { --n: 1; max-width: 230px; }
-.bfh-cards-2 { --n: 2; max-width: 420px; }
-.bfh-card { position: relative; display: block; padding: 6px; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px rgba(255, 45, 70, 0.55), 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 26px rgba(255, 45, 70, 0.28); transition: transform 0.25s; }
-.bfh-cards-3 .bfh-card:nth-child(2) { transform: translateY(-22px); }
-.bfh-card:hover { transform: translateY(-4px); }
-.bfh-cards-3 .bfh-card:nth-child(2):hover { transform: translateY(-26px); }
-.bfh-card-media { display: block; aspect-ratio: 4 / 5; border-radius: 11px; overflow: hidden; background: #fff; }
-.bfh-card-img { width: 100%; height: 100%; object-fit: contain; display: block; }
-.bfh-card-tag { position: absolute; top: 10px; left: 10px; background: #c8102e; color: #fff; border-radius: 6px; font-size: 12px; font-weight: 800; padding: 3px 8px; box-shadow: 0 0 10px rgba(255, 45, 70, 0.6); }
+/* ── Black Friday hero: full product cards, "corner ribbon" design (owner, 2026-11-20) ──
+   Photo on a light stage with the red Save tag (top-left) and the green ₹0 DELIVERY
+   ribbon (top-right), then a white panel: full name (2 lines), price + struck M.R.P.,
+   a 2×2 "₹0 fees" checklist and a full-width button. Every row has a FIXED height, so
+   the fee waiver arriving (or not) never moves anything (CLS). The card is a container,
+   so the panel tightens itself on narrow cards (1024–1280px screens) instead of wrapping. */
+.bfh-cards { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 14px; align-items: end; width: 100%; max-width: 690px; }
+.bfh-cards-1 { --n: 1; max-width: 250px; }
+.bfh-cards-2 { --n: 2; max-width: 470px; }
+.bfh-card { position: relative; display: flex; flex-direction: column; padding: 7px 7px 8px; border-radius: 18px; container-type: inline-size;
+  background: linear-gradient(180deg, #ffffff 0%, #ffffff 62%, #f4f5f7 100%);
+  box-shadow: 0 0 0 1.5px rgba(255, 45, 70, 0.8), 0 0 26px rgba(255, 45, 70, 0.42), 0 26px 50px rgba(0, 0, 0, 0.65);
+  transition: transform 0.25s cubic-bezier(.2, .8, .2, 1), box-shadow 0.25s; }
+.bfh-card::after { content: ''; position: absolute; left: 12%; right: 12%; bottom: -16px; height: 18px; border-radius: 50%; z-index: -1;
+  background: radial-gradient(closest-side, rgba(255, 45, 70, 0.6), transparent); filter: blur(4px); pointer-events: none; }
+.bfh-cards-3 .bfh-card:nth-child(2) { transform: translateY(-16px); }
+@media (hover: hover) and (min-width: 769px) {
+  .bfh-card:hover { transform: translateY(-5px); box-shadow: 0 0 0 2px rgba(255, 45, 70, 0.95), 0 0 36px rgba(255, 45, 70, 0.6), 0 30px 56px rgba(0, 0, 0, 0.7); }
+  .bfh-cards-3 .bfh-card:nth-child(2):hover { transform: translateY(-21px); }
+}
+.bfh-card-link { display: block; color: inherit; text-decoration: none; border-radius: 12px; }
+.bfh-card-link:focus-visible, .bfh-card-cta:focus-visible { outline: 3px solid #ffd23f; outline-offset: 2px; }
+.bfh-card-media { position: relative; display: block; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 40%, #ffffff 0%, #eef0f3 60%, #d7dae0 100%); }
+.bfh-card-img { width: 100%; height: 100%; object-fit: contain; display: block; padding: 6px; transition: transform 0.4s; }
+.bfh-card:hover .bfh-card-img { transform: scale(1.04); }
+/* "₹0 DELIVERY" diagonal ribbon, clipped by the photo's rounded overflow. Never wraps,
+   never takes clicks; the Save tag sits above it (z-index), so it can only tuck under. */
+.bfh-card-ribbon { position: absolute; z-index: 1; top: 21px; right: -36px; width: 130px; transform: rotate(45deg);
+  background: linear-gradient(90deg, #15803d, #22c55e, #15803d); color: #fff; text-align: center; font-size: 9px; font-weight: 900; line-height: 1;
+  letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; padding: 5px 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); pointer-events: none; }
+.bfh-card-tag { position: absolute; z-index: 2; top: 8px; left: 8px; background: #c8102e; color: #fff; border-radius: 6px; font-size: 12px; font-weight: 800; padding: 3px 8px; white-space: nowrap; box-shadow: 0 0 10px rgba(255, 45, 70, 0.6); }
+.bfh-card-body { display: block; padding: 9px 3px 0; color: #0f1115; }
+.bfh-card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; height: 34px; font-size: 13px; line-height: 17px; font-weight: 700; }
+.bfh-card:hover .bfh-card-name { color: #c8102e; }
+.bfh-card-price { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; height: 40px; margin-top: 5px; overflow: hidden; align-content: flex-start; }
+.bfh-card-price b { font-family: var(--font-montserrat), sans-serif; font-size: 19px; line-height: 24px; font-weight: 800; color: #0b0b0e; white-space: nowrap; }
+.bfh-card-mrp { font-size: 11px; line-height: 16px; color: #6b7280; white-space: nowrap; }
+.bfh-card-perks { display: block; height: 38px; margin-top: 4px; }
+.bfh-card-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 6px; }
+.bfh-card-check { display: flex; align-items: center; gap: 4px; font-size: 11px; line-height: 16px; font-weight: 700; color: #166534; white-space: nowrap; overflow: hidden; }
+.bfh-card-tick { flex: none; color: #16a34a; }
+.bfh-card-checks-pending { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #eef2ef, #e2e8e4, #eef2ef); }
+.bfh-card-status { display: block; font-size: 11.5px; line-height: 16px; font-weight: 600; color: #6b7280; }
+.bfh-card-cta { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; height: 44px; margin-top: 8px; padding: 0 8px;
+  border: 0; border-radius: 11px; cursor: pointer; color: #fff; text-align: left; text-decoration: none;
+  background: linear-gradient(180deg, #22c55e, #15803d); box-shadow: 0 6px 16px rgba(22, 163, 74, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  font-size: 12.5px; font-weight: 800; line-height: 1.1; letter-spacing: 0.04em; text-transform: uppercase; transition: filter 0.2s, transform 0.2s; }
+.bfh-card-cta:hover { filter: brightness(1.07); }
+.bfh-card-cta:active { transform: translateY(1px); }
+.bfh-card-cta:disabled { opacity: 0.7; cursor: progress; }
+.bfh-card-cta > svg { flex: none; }
+.bfh-card-cta-sub { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; opacity: 0.92; }
+.bfh-card-cta-quiet { justify-content: center; text-align: center; background: #111216; box-shadow: inset 0 0 0 1px rgba(255, 45, 70, 0.45); font-size: 11.5px; letter-spacing: 0.03em; }
+/* Narrow cards (1024–1280px screens put ~175px under each): tighten, never wrap. */
+@container (max-width: 185px) {
+  .bfh-card-tag { font-size: 10.5px; padding: 2px 6px; }
+  .bfh-card-ribbon { top: 18px; right: -38px; width: 120px; font-size: 8px; }
+  .bfh-card-name { font-size: 12px; line-height: 16px; height: 32px; }
+  .bfh-card-price b { font-size: 17px; }
+  .bfh-card-check { font-size: 10px; gap: 3px; }
+  .bfh-card-check .bfh-card-tick { width: 11px; height: 11px; }
+  .bfh-card-cta { font-size: 11px; gap: 5px; }
+}
+/* Wide cards (phones' swipe row, big screens): price and M.R.P. share one line. */
+@container (min-width: 240px) {
+  .bfh-card-price { height: 28px; }
+}
+/* Tablets (~145px cards): the checklist goes to one column of four, fixed height. */
+@container (max-width: 160px) {
+  .bfh-card-perks { height: 68px; }
+  .bfh-card-checks { grid-template-columns: 1fr; gap: 1px; }
+}
+@media (min-width: 1101px) {
+  .bfh-inner { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.1fr); }
+}
 .bfh-floor { position: absolute; left: 0; right: 0; bottom: -18px; height: 70px; z-index: 1; pointer-events: none; background: radial-gradient(ellipse 50% 55% at 50% 0%, rgba(255, 45, 70, 0.5), transparent 70%); }
 
 /* Offer cards under the category cards. */
@@ -947,10 +1014,8 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
   .bfh-seal { animation: bfh-bob 3.6s ease-in-out infinite; }
   .bfh-cube-1 { animation: bfh-float-a 4.2s ease-in-out infinite; }
   .bfh-cube-2 { animation: bfh-float-b 5s ease-in-out infinite; }
-  .bfh-card-media { animation: bfh-hover 5s ease-in-out infinite alternate; }
-  .bfh-card:nth-child(2) .bfh-card-media { animation-delay: -1.7s; }
-  .bfh-card:nth-child(3) .bfh-card-media { animation-delay: -3.3s; }
   .bfh-count-num { animation: bfh-flip 0.3s ease-out; }
+  .bfh-card-checks-pending { animation: bfh-pulse 1.1s ease-in-out infinite alternate; }
 }
 @keyframes bfh-in-left { from { transform: translateX(-36px) skewX(-9deg); } to { transform: translateX(0) skewX(-9deg); } }
 @keyframes bfh-in-right { from { transform: translateX(36px) skewX(-9deg); } to { transform: translateX(0) skewX(-9deg); } }
@@ -976,7 +1041,7 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 }
 @media (max-width: 768px) {
   .bfh-inner { grid-template-columns: 1fr; padding: 22px 16px 128px; gap: 22px; }
-  .bfh-art { order: -1; min-height: 0; padding-top: 118px; }
+  .bfh-art { order: -1; min-height: 0; padding-top: 136px; }
   .bfh-tag { top: 0; width: 150px; height: 100px; padding-left: 20px; border-width: 2px; }
   .bfh-tag::before { left: 8px; width: 9px; height: 9px; margin-top: -4.5px; }
   .bfh-tag-up { font-size: 10px; }
@@ -987,10 +1052,16 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
   .bfh-seal-mid { font-size: 10px; }
   .bfh-seal-truck { width: 28px; height: 14px; margin-top: 2px; }
   .bfh-cube, .bfh-sweep, .bfh-beam-3 { display: none; }
-  .bfh-cards { gap: 10px; }
-  .bfh-card { padding: 4px; border-radius: 12px; }
-  .bfh-cards-3 .bfh-card:nth-child(2) { transform: translateY(-12px); }
-  .bfh-card-tag { top: 6px; left: 6px; font-size: 10.5px; padding: 2px 6px; }
+  /* Phones: the three cards become a swipe row — one card and a peek of the next,
+     snapping into place — so price and button are always full size. */
+  .bfh-cards, .bfh-cards-1, .bfh-cards-2 { display: grid; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: min(72%, 270px); gap: 12px;
+    max-width: none; width: calc(100% + 32px); margin: 0 -16px; padding: 6px 16px 24px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory; scroll-padding-left: 16px; scrollbar-width: none; align-items: stretch; }
+  .bfh-cards::-webkit-scrollbar { display: none; }
+  .bfh-cards-1 { grid-auto-columns: min(86%, 300px); }
+  .bfh-card { scroll-snap-align: start; }
+  .bfh-cards-3 .bfh-card:nth-child(2) { transform: none; }
+  .bfh-card::after { display: none; }
   .bfh-title { margin: 10px 0 10px; }
   .bfh-t1 { font-size: 44px; }
   .bfh-t2 { font-size: 54px; }
@@ -1009,7 +1080,7 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 }
 /* Phones: the still set — no card float or beam pulse competing for a small GPU. */
 @media (max-width: 768px) and (prefers-reduced-motion: no-preference) {
-  .bfh-card-media, .bfh-beam, .bfh-cube-1, .bfh-cube-2 { animation: none; }
+  .bfh-beam, .bfh-cube-1, .bfh-cube-2 { animation: none; }
 }
 
 /* ── Black Friday: full-width night background ─────────────────────────────
@@ -1093,22 +1164,3 @@ html[data-festival-style='neon'] .sh-quad-media { outline-color: #ff2d46; }
 }
 @keyframes bfh-perks { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-/* ── Black Friday hero: dark "showroom" product cards ──────────────────────
-   Black frame, neon-red rim, a soft stage light behind the photo and the
-   product name underneath — so photos shot on any background read as part of
-   the neon stage instead of white cards pasted on it. Same box sizes as before
-   (the photo keeps its 4:5 box; the name is one fixed-height line), so nothing
-   moves while images load. */
-.bfh-card { padding: 8px 8px 0; background: linear-gradient(180deg, #17171c, #0b0b0e);
-  box-shadow: 0 0 0 1px rgba(255, 45, 70, 0.7), 0 0 22px rgba(255, 45, 70, 0.35), 0 24px 48px rgba(0, 0, 0, 0.7); }
-.bfh-card::after { content: ''; position: absolute; left: 12%; right: 12%; bottom: -14px; height: 18px; border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 45, 70, 0.55), transparent); filter: blur(4px); pointer-events: none; }
-.bfh-card-media { background: radial-gradient(120% 90% at 50% 40%, #ffffff 0%, #eceef2 55%, #c9ccd3 100%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
-.bfh-card-name { display: block; height: 38px; padding: 0 4px; line-height: 38px; color: #f4f4f8; font-size: 12.5px; font-weight: 700;
-  letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bfh-card:hover .bfh-card-name { color: #ffd23f; }
-@media (max-width: 768px) {
-  .bfh-card { padding: 4px 4px 0; }
-  .bfh-card-name { height: 26px; line-height: 26px; font-size: 10.5px; padding: 0 2px; }
-}
