@@ -368,6 +368,24 @@ export const validatePaymentInitiated = [
 
 export const validateWorkLineOnly = [...validateWorkLine];
 
+// Supplier parts (services/supplierPartsService.js re-checks every rule; these only bound the input).
+const partParam = param('partId').custom((v) => v === 'main' || isObjectId(v)).withMessage('Invalid supplier part');
+const partSupplier = (required) => (required ? body('supplierName') : body('supplierName').optional({ values: 'null' }))
+  .isString().withMessage('Enter the supplier').bail().trim().isLength({ min: required ? 1 : 0, max: 120 }).withMessage('Supplier name: up to 120 characters');
+const partWhat = body('what').optional({ values: 'null' }).isString().trim().isLength({ max: 120 }).withMessage('What is bought: up to 120 characters');
+
+export const validateAddSupplierPart = [...validateWorkLine, partSupplier(true), partWhat];
+export const validateEditSupplierPart = [...validateWorkLine, partParam, partSupplier(false), partWhat];
+export const validateChangeSupplier = [
+  ...validateWorkLine, partParam, partSupplier(true), partWhat,
+  body('reasonCode').isString().isLength({ max: 40 }).withMessage('Choose why the supplier is changing'),
+  body('reasonNote').optional({ values: 'null' }).isString().trim().isLength({ max: 300 }).withMessage('Reason: up to 300 characters'),
+];
+export const validateRemoveSupplierPart = [
+  ...validateWorkLine, partParam,
+  body('note').optional({ values: 'null' }).isString().trim().isLength({ max: 300 }).withMessage('Note: up to 300 characters'),
+];
+
 export const validateEditParcel = [
   ...validateWorkOrder,
   param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),

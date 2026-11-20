@@ -9,6 +9,7 @@ import { STAFF_TEAMS } from '../config/staff.js';
 import { keysetPage, plainQuery } from '../utils/listQuery.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
+import { requestPartReplaced } from '../utils/supplierParts.js';
 
 /**
  * Supplier credit — what a supplier owes us, kept as an immutable ledger
@@ -322,8 +323,10 @@ export async function claimRefund(actor, requestId, input = {}, req) {
     throw fail(`${r.number} was paid to details typed for that payment, not a saved supplier — save ${r.payee?.name || 'the supplier'} in the directory and pick it before raising a refund.`, 409);
   }
   const order = r.order ? await orderRepository.findForWorkflow(idOf(r.order)) : null;
-  if (!r.order || !itemsCancelled(order, r.itemIds)) {
-    throw fail(`${r.number}: the item is not cancelled — a refund is raised only when the customer's order (or the item) was cancelled.`, 409);
+  // The customer cancelled the item, or procurement changed the supplier of the part
+  // this paid for (utils/supplierParts.js): either way the supplier owes it back.
+  if (!r.order || (!itemsCancelled(order, r.itemIds) && !requestPartReplaced(order, r))) {
+    throw fail(`${r.number}: the item is not cancelled and its supplier was not changed — a refund is raised only then.`, 409);
   }
   const currency = r.currency || BASE_CURRENCY;
   const billPaise = toPaise((currency === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0) + (Number(r.credit?.amount) || 0));

@@ -51,6 +51,7 @@ import {
 import * as suppliers from './supplierService.js';
 import * as deals from './supplierDealService.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
+import { partForRequest, requestPartReplaced } from '../utils/supplierParts.js';
 import * as credit from './supplierLedgerService.js';
 import { projectForLink, projectCode } from './staffProjectService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
@@ -621,7 +622,9 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     ? deal.itemIds.map(idOf)
     : [...new Set((Array.isArray(input.itemIds) ? input.itemIds : [input.itemIds]).filter(Boolean).map(String))];
   if (!wanted.length) throw fail('Choose the item(s) this payment is for.', 400);
-  const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER).map((l) => l.itemId));
+  const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER
+    // A split item: one part's payment waiting does not stop paying another part.
+    || (l.split && l.stage === STAGE.PAYMENT_PENDING)).map((l) => l.itemId));
   // An item still at its stock check can be paid for too: raising the payment IS
   // "ordered from this supplier" (recorded below, once everything else checks out).
   const atCheck = new Set(view.lines.filter((l) => l.stage === STAGE.STOCK_CHECK).map((l) => l.itemId));
@@ -632,9 +635,10 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   if (wanted.some((id) => !payable.has(id) && !atCheck.has(id))) {
     throw fail('A supplier can only be paid for items not yet shipped (and not out of stock or being refunded).', 409);
   }
+  const target = supplierPartTarget(view, wanted, input.partId, deal);
   const open = await paymentRequestRepository.findOpenForOrder(order._id);
-  const busy = open.find((r) => (r.itemIds || []).some((id) => wanted.includes(idOf(id))));
-  if (busy) throw fail(`${busy.number} for this item is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
+  const busy = open.find((r) => clashes(r, wanted, target));
+  if (busy) throw fail(`${busy.number} for this ${target ? 'part' : 'item'} is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
   if (!deal) {
     // Paid in parts: every payment for the item goes through its deal, so the agreed total holds.
     const [dealt] = (await deals.forOrder(actor, idOf(order._id))).filter((d) => d.itemIds.some((id) => wanted.includes(id)));
@@ -691,7 +695,9 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     orderNumber: orderNumber(order),
     ...extra,
     itemIds: items.map((i) => i._id),
-    itemNames: items.map((i) => variantDisplayName(i.name, i.variantLabel)),
+    // A part of a split item names the part, so the slip says what was bought.
+    itemNames: items.map((i) => `${variantDisplayName(i.name, i.variantLabel)}${target?.part.what ? ` · part: ${target.part.what}` : ''}`),
+    ...(target ? { partId: target.part._id, partWhat: target.part.what || '' } : {}),
     customer: {
       name: order.shippingAddress?.fullName || order.user?.name || '',
       phone: order.shippingAddress?.phone || order.user?.phone || '',
@@ -715,7 +721,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   doc = await paymentRequestRepository.inTransaction(async (session) => {
     await orderRepository.bumpSupplierPayGuard(order._id, session);
     const live = await paymentRequestRepository.findOpenForOrder(order._id, session);
-    const clash = live.find((r) => (r.itemIds || []).some((id) => wanted.includes(idOf(id))));
+    const clash = live.find((r) => clashes(r, wanted, target));
     if (clash) throw fail(`${clash.number} for this item is already ${STATUS_LABELS[clash.status].toLowerCase()}.`, 409);
     if (!creditPaise) return paymentRequestRepository.create(fields, session);
     const used = await credit.useCredit(session, { supplierId, currency: money.currency, creditPaise, request: fields, actor });
@@ -735,7 +741,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const wf = await import('./teamWorkflowService.js'); // lazy: that module imports this one
   for (const itemId of doc.itemIds.map(idOf)) {
     try {
-      await wf.markPaymentPending(actor, idOf(order._id), itemId, { supplierName: payee.name, ref: doc.number }, req);
+      await wf.markPaymentPending(actor, idOf(order._id), itemId, { supplierName: payee.name, ref: doc.number, partId: doc.partId }, req);
     } catch (err) {
       console.error(`[PaymentRequest] ${doc.number}: could not mark ${itemId} payment pending:`, err.message);
     }
@@ -743,6 +749,32 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
+}
+
+/**
+ * The supplier part a payment is for, when its item is bought from several
+ * suppliers (utils/supplierParts.js); null for an ordinary item. A split item is
+ * paid one part at a time, and only a part with no payment yet.
+ */
+function supplierPartTarget(view, wanted, partId, deal) {
+  const split = view.lines.filter((l) => wanted.includes(l.itemId) && l.split);
+  if (!split.length) return null;
+  if (deal || wanted.length !== 1) {
+    throw fail('An item bought from several suppliers is paid one part at a time — raise the payment from its part.', 400);
+  }
+  const line = split[0];
+  const part = (line.parts || []).find((p) => idOf(p._id) === String(partId || ''));
+  if (!part) throw fail('Choose which supplier part this payment is for (refresh the order).', 400);
+  if (part.status !== 'active') throw fail('That supplier was changed — pay the new supplier from its part.', 409);
+  if (part.orderedAt) throw fail(`This part is already paid (${part.orderedRef || 'paid'}). For more from the same supplier, add another part.`, 409);
+  return { line, part };
+}
+
+/** Does an open request already cover what this one would pay for? (Per part on a split item.) */
+function clashes(r, wanted, target) {
+  if (!(r.itemIds || []).some((id) => wanted.includes(idOf(id)))) return false;
+  if (!target) return true;
+  return idOf(partForRequest(target.line.parts, r)?._id) === idOf(target.part._id);
 }
 
 /**
@@ -826,8 +858,9 @@ async function followOnOrder(r, actor, outcome) {
   try {
     const wf = await import('./teamWorkflowService.js');
     const ids = (r.itemIds || []).map(idOf);
-    if (outcome === 'paid') await wf.markPaidOrdered(actor, idOf(r.order), ids, r.payee?.name);
-    else await wf.clearPaymentPending(actor, idOf(r.order), ids, `${r.number} ${outcome}`);
+    const which = { ref: r.number, partId: r.partId ? idOf(r.partId) : undefined };
+    if (outcome === 'paid') await wf.markPaidOrdered(actor, idOf(r.order), ids, r.payee?.name, which);
+    else await wf.clearPaymentPending(actor, idOf(r.order), ids, `${r.number} ${outcome}`, which);
   } catch (err) {
     console.error(`[PaymentRequest] ${r.number}: order lines not updated after ${outcome}:`, err.message);
   }
@@ -868,6 +901,14 @@ function payPinned(r) {
  * payment could otherwise still be paid after the customer's order was cancelled.
  * An item with only some units cancelled is still live (supplierAdvanceGuard.itemsCancelled).
  */
+
+// Why a paid supplier PR is owed back, from ONE read of its order.
+async function paidRefundWhy(r) {
+  if (!r.order) return null;
+  const order = await orderRepository.findForWorkflow(idOf(r.order));
+  if (itemsCancelled(order, r.itemIds)) return 'cancelled';
+  return requestPartReplaced(order, r) ? 'supplier_changed' : null;
+}
 async function orderGone(r) {
   if (r.kind !== 'supplier' || !r.order) return false;
   return itemsCancelled(await orderRepository.findForWorkflow(idOf(r.order)), r.itemIds);
@@ -1010,6 +1051,25 @@ export async function cancel(actor, id, { note } = {}, req) {
   await followOnOrder(r, actor, 'cancelled');
   await tellChat(r, 'cancelled', `↩️ ${r.requestedByName} cancelled ${what(r)}.`);
   return shape(r, actor);
+}
+
+/**
+ * Procurement changed the supplier of the part this request pays for, before it
+ * was approved: the request is cancelled exactly as "Cancel" would (credit and
+ * line restored, chat told), by whoever on procurement makes the change — the
+ * change itself is the procurement decision. Only from "submitted": an approved
+ * request is accounts' call and must be declined by them.
+ */
+export async function cancelForSupplierChange(actor, id, note, req) {
+  const r0 = await loadVisible(actor, id);
+  if (r0.kind !== 'supplier') throw fail('Request not found.', 404);
+  if (!isAdmin(actor) && !onTeam(actor, STAFF_TEAMS.PROCUREMENT)) throw fail('Only procurement changes a supplier.', 403);
+  const r = await paymentRequestRepository.transition(id, ['submitted'], { status: 'cancelled' }, entry(actor, 'cancelled', note));
+  if (!r) return null;
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'cancelled', why: 'supplier_changed' });
+  await followOnOrder(r, actor, 'cancelled');
+  await tellChat(r, 'cancelled', `↩️ ${actor.name || 'Procurement'} changed the supplier — ${what(r)} cancelled.`);
+  return r;
 }
 
 /**
@@ -1350,10 +1410,12 @@ export async function get(actor, id) {
   // A part of a made-to-order deal: what it is part of (agreed total, paid before,
   // balance after, dates) — worked out from the deal, so every screen agrees.
   if (r.deal) out.deal = await dealSummaryOf(r);
-  // Paid, and the customer cancelled the items since: the supplier owes us a refund.
-  if (r.kind === 'supplier' && r.status === 'paid' && await orderGone(r)) {
+  // Paid, and the customer cancelled the items since — or procurement changed the
+  // supplier of the part it paid for: the supplier owes us a refund.
+  const why = r.kind === 'supplier' && r.status === 'paid' ? await paidRefundWhy(r) : null;
+  if (why) {
     const claim = (await credit.claimsFor([r._id])).get(idOf(r._id)) || null;
-    out.supplierRefund = { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier) };
+    out.supplierRefund = { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier), why };
   }
   return out;
 }
@@ -1449,9 +1511,11 @@ export async function forOrder(actor, orderId) {
     ? await Promise.all([orderRepository.findForWorkflow(orderId), credit.claimsFor(paidSupplier.map((r) => r._id))])
     : [null, new Map()];
   const refundOf = (r) => {
-    if (r.kind !== 'supplier' || r.status !== 'paid' || !itemsCancelled(order, r.itemIds)) return null;
+    if (r.kind !== 'supplier' || r.status !== 'paid') return null;
+    const why = itemsCancelled(order, r.itemIds) ? 'cancelled' : requestPartReplaced(order, r) ? 'supplier_changed' : null;
+    if (!why) return null;
     const claim = claims.get(idOf(r._id)) || null;
-    return { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier) };
+    return { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier), why };
   };
   return rows.map((r) => ({
     id: idOf(r._id), number: r.number, status: r.status, statusLabel: STATUS_LABELS[r.status],
@@ -1460,6 +1524,8 @@ export async function forOrder(actor, orderId) {
     amount: r.amount, currency: r.currency || BASE_CURRENCY, foreignAmount: r.foreignAmount ?? null, rupeesPending: rupeesPending(r),
     paidFrom: paidFromForeign(r) ? { currency: r.payment.fromAccount.currency, amount: r.payment.fromAccount.amount, label: r.payment.fromAccount.label || '' } : null,
     itemIds: (r.itemIds || []).map(idOf), itemNames: r.itemNames || [],
+    // The supplier part it pays for on a split item (null: the item's first part).
+    partId: r.partId ? idOf(r.partId) : null, partWhat: r.partWhat || '',
     payee: r.payee?.name || '', paidAt: r.payment?.paidAt || null, createdAt: r.createdAt,
     requestedByName: r.requestedByName || '',
     // Shown as an Edit button on the product line (the edit itself re-checks).

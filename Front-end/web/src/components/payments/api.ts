@@ -98,6 +98,9 @@ export type OrderPayment = {
   /** The viewer may still edit it (the requester or their team head while it waits for accounts; the admin until paid). */
   canEdit?: boolean;
   itemIds: string[]; itemNames: string[]; payee: string; paidAt: string | null; createdAt: string;
+  /** The supplier part it pays for on an item bought from several suppliers (null: the item's first part). */
+  partId?: string | null;
+  partWhat?: string;
   /** 'supplier' (for items) or 'expense' (linked to the order from its page). */
   kind?: 'supplier' | 'expense';
   categoryLabel?: string;
@@ -117,6 +120,8 @@ export type SupplierRefund = {
   canClaim: boolean;
   /** Paid to a saved supplier — a refund can only be claimed from one. */
   savedSupplier: boolean;
+  /** Why the supplier owes it back: the customer cancelled, or procurement changed the supplier. Absent from an older server. */
+  why?: 'cancelled' | 'supplier_changed';
 };
 
 /**

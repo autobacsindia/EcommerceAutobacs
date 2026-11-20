@@ -57,7 +57,8 @@ const BRANCH: StepKey[] = ['customer_decision', 'accounts_approval', 'cancelled'
 const ARRIVES_BY: Record<StepKey, string[]> = {
   paid: ['entered'],
   stock_check: ['entered', 'customer_waits', 'stock_undone', 'decision_undone'],
-  to_ship: ['stock_in_stock'],
+  // A changed supplier puts the item back to "to order" from the new one.
+  to_ship: ['stock_in_stock', 'supplier_changed'],
   own_stock: ['stock_own_stock'],
   payment_pending: ['payment_pending'],
   with_supplier: ['stock_ordered'],

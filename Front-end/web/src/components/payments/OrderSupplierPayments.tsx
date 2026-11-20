@@ -46,6 +46,8 @@ export default function LineSupplierPayment({ order, line, requests, deals = [] 
   const previous = [...requests].filter(live).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
   const refresh = () => qc.invalidateQueries({ queryKey: paymentKeys.forOrder(order.id) });
 
+  // Bought from several suppliers: each part shows its own payments (staff/work/SupplierParts).
+  if (line.split) return null;
   // Made to order, paid in parts: the deal card holds its payments (shown once, on its first item).
   if (deal) {
     if (deal.itemIds[0] !== line.itemId) {
@@ -65,31 +67,7 @@ export default function LineSupplierPayment({ order, line, requests, deals = [] 
   if (!mine.length && !canRaise) return null;
   return (
     <div className="space-y-2">
-      {mine.map((r) => (
-        <div key={r.id} className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
-          <Banknote className="h-4 w-4 text-emerald-700" />
-          <button type="button" onClick={() => setOpen({ id: r.id, edit: false })} className="font-medium text-blue-700 hover:underline">{r.number}</button>
-          <OrderTypeTag type="procurement" />
-          <span className="text-gray-700">{paymentMoney(r)} to {r.payee}</span>
-          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
-          {r.canEdit && (
-            <button type="button" onClick={() => setOpen({ id: r.id, edit: true })} aria-label={`Edit ${r.number}`}
-              className="ml-auto inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-              <Pencil className="h-3 w-3" /> Edit
-            </button>
-          )}
-          <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className={`${r.canEdit ? '' : 'ml-auto '}inline-flex items-center gap-1 text-xs text-gray-600 hover:underline`}>
-            <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
-          </a>
-          {r.credit && <span className="w-full text-xs text-emerald-800">{money(r.credit.amount, r.currency)} of it from supplier credit</span>}
-        </div>
-        {r.supplierRefund && (
-          <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'}
-            bill={Math.round(((r.currency && r.currency !== 'INR' ? r.foreignAmount ?? 0 : r.amount) + (r.credit?.amount || 0)) * 100) / 100} />
-        )}
-        </div>
-      ))}
+      {mine.map((r) => <SupplierPaymentRow key={r.id} r={r} onOpen={(edit) => setOpen({ id: r.id, edit })} />)}
       {canRaise && !raising && (
         <button type="button" onClick={() => setRaising(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-200"
           title="Only when ordering from a supplier — our own stock ships without this">
@@ -122,6 +100,39 @@ export default function LineSupplierPayment({ order, line, requests, deals = [] 
         />
       )}
       {open && <PaymentRequestDetail id={open.id} startEditing={open.edit} onClose={() => { setOpen(null); refresh(); }} />}
+    </div>
+  );
+}
+
+/**
+ * One supplier payment on an order line: number (opens it), amount and payee, its
+ * status, Edit while still editable, the slip / receipt — and, once paid for
+ * something cancelled or for a supplier that was changed, "Supplier must refund".
+ */
+export function SupplierPaymentRow({ r, onOpen, muted = false }: { r: OrderPayment; onOpen: (edit: boolean) => void; muted?: boolean }) {
+  return (
+    <div className="space-y-2">
+      <div className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${muted ? 'bg-gray-50/60' : 'bg-gray-50'}`}>
+        <Banknote className="h-4 w-4 text-emerald-700" />
+        <button type="button" onClick={() => onOpen(false)} className="font-medium text-blue-700 hover:underline">{r.number}</button>
+        <OrderTypeTag type="procurement" />
+        <span className="text-gray-700">{paymentMoney(r)} to {r.payee}</span>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
+        {r.canEdit && (
+          <button type="button" onClick={() => onOpen(true)} aria-label={`Edit ${r.number}`}
+            className="ml-auto inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+            <Pencil className="h-3 w-3" /> Edit
+          </button>
+        )}
+        <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className={`${r.canEdit ? '' : 'ml-auto '}inline-flex items-center gap-1 text-xs text-gray-600 hover:underline`}>
+          <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
+        </a>
+        {r.credit && <span className="w-full text-xs text-emerald-800">{money(r.credit.amount, r.currency)} of it from supplier credit</span>}
+      </div>
+      {r.supplierRefund && (
+        <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'}
+          bill={Math.round(((r.currency && r.currency !== 'INR' ? r.foreignAmount ?? 0 : r.amount) + (r.credit?.amount || 0)) * 100) / 100} />
+      )}
     </div>
   );
 }

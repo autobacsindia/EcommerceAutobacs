@@ -31,6 +31,8 @@ export type SupplierContext = {
   closedBy: string;
   /** Lines that can be paid for now (in stock / ordered, not shipped). */
   lines: { itemId: string; name: string }[];
+  /** The supplier part being paid, on an item bought from several suppliers (one item only). */
+  partId?: string;
   /**
    * One part of a supplier deal (made to order, paid in parts). The server pays
    * the deal's items and refuses an amount past the agreed total; these numbers
@@ -182,6 +184,7 @@ export default function PaymentRequestForm({
       form.append('orderId', supplier.orderId);
       if (deal) form.append('dealId', deal.id);
       else form.append('itemIds', JSON.stringify(itemIds));
+      if (supplier.partId) form.append('partId', supplier.partId);
       if (!picked && saveSupplier) form.append('saveSupplier', 'true');
     } else {
       form.append('category', chosen!.value);
