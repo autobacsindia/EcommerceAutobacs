@@ -7,6 +7,9 @@ import { tokenManager } from '@/lib/http/tokenManager';
 
 export type PaymentStatus = 'submitted' | 'approved' | 'on_hold' | 'paid' | 'declined' | 'cancelled';
 
+/** Why a payment is on hold, and who held it and when (null unless it is on hold now). */
+export type PaymentHold = { note: string; byName: string; role: string; at: string | null };
+
 export type PaymentRequest = {
   id: string;
   number: string;
@@ -54,10 +57,11 @@ export type PaymentRequest = {
   /** paidAt = when it was recorded; transactionAt = when the money moved (older records: absent). */
   payment: { method: string; reference: string; paidAt: string; transactionAt?: string | null; paidByName: string } | null;
   decisionNote: string;
+  hold?: PaymentHold | null;
   history: { at: string; byName: string; role: string; action: string; note: string }[];
   createdAt: string;
   can: {
-    approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean; edit?: boolean; editPayment?: boolean;
+    approve: boolean; decline: boolean; pay: boolean; hold: boolean; release?: boolean; cancel: boolean; edit?: boolean; editPayment?: boolean;
     /** An expense: may link it to an order, change or remove the link (any status — no money changes). */
     linkOrder?: boolean;
     /** May set, change or remove its project and other ID (any kind, any status — no money changes). */
@@ -90,6 +94,9 @@ export type PaymentRequest = {
 
 export type OrderPayment = {
   id: string; number: string; status: PaymentStatus; statusLabel: string;
+  /** Why it was declined or put on hold ('' otherwise). */
+  decisionNote?: string;
+  hold?: PaymentHold | null;
   /** Rupees (0 while `rupeesPending`). A foreign bill's own amount is `foreignAmount` in `currency`. */
   amount: number;
   currency?: string;
@@ -319,7 +326,7 @@ export type PaymentPerson = { id: string; name: string; team: string };
 export type ListFilterOptions = { categories: { value: string; label: string }[]; people: PaymentPerson[] };
 export const getListFilterOptions = () => apiClient.get<ListFilterOptions>('/payment-requests/filter-options');
 export const getRequest = (id: string) => apiClient.get<{ request: PaymentRequest }>(`/payment-requests/${id}`);
-export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'cancel', note = '') =>
+export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'release' | 'cancel', note = '') =>
   apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, { note });
 
 /** 'YYYY-MM-DD' → "8 Nov 2026" (a calendar day: no time zone shift). */

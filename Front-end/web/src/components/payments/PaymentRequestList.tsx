@@ -13,6 +13,7 @@ import {
 } from './api';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import { DealLine } from './DealSummary';
+import HoldLine from './HoldLine';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import { STAFF_TEAM_LABELS } from '@/lib/staffTeams';
 
@@ -188,6 +189,7 @@ export default function PaymentRequestList({
                     {r.teamLabel} · {r.requestedBy} · {formatDateIST(r.createdAt)}{r.order ? ` · ${r.order.number}` : ''}{r.project ? ` · ${r.project.code}` : ''}
                     {r.payment?.reference ? ` · Ref ${r.payment.reference}` : ''}
                   </p>
+                  <HoldLine hold={r.hold} className="mt-0.5" />
                 </div>
                 <span className="shrink-0 text-right text-sm font-semibold text-gray-900">
                   {amountText(r)}

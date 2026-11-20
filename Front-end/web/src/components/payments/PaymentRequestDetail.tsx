@@ -16,6 +16,7 @@ import OrderPicker from './OrderPicker';
 import DealSummaryBox from './DealSummary';
 import { SupplierRefundLine } from './SupplierCredit';
 import RichText from '@/components/ui/RichText';
+import { heldByText } from './HoldLine';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = MAX_ATTACHMENTS;
@@ -26,7 +27,7 @@ const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-
 const ACTION_LABELS: Record<string, string> = {
   // Who acted is shown beside each entry: accounts (who approved) or the admin (who paid).
   submitted: 'Raised', approved: 'Approved', declined: 'Declined',
-  on_hold: 'Put on hold', paid: 'Paid', cancelled: 'Cancelled', edited: 'Edited', payment_edited: 'Payment record corrected',
+  on_hold: 'Put on hold', released: 'Hold released', paid: 'Paid', cancelled: 'Cancelled', edited: 'Edited', payment_edited: 'Payment record corrected',
 };
 const FILE_LABELS = { bill: 'Bill / invoice', qr: 'Payment QR', proof: 'Payment screenshot' } as const;
 
@@ -185,7 +186,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
     setMode(null); setNote(''); setError(''); setProof([]);
   };
   const act = useMutation({
-    mutationFn: async (a: 'approve' | 'decline' | 'hold' | 'cancel' | 'pay') => {
+    mutationFn: async (a: 'approve' | 'decline' | 'hold' | 'release' | 'cancel' | 'pay') => {
       if (a !== 'pay') return (await actOn(id, a, note)).request;
       const form = new FormData();
       form.append('method', pay.method);
@@ -282,6 +283,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               {r.payment && <Row k="Transaction" v={formatDateTimeIST(r.payment.transactionAt || r.payment.paidAt)} />}
               {r.payment && <Row k="Recorded" v={formatDateTimeIST(r.payment.paidAt)} />}
               {r.decisionNote && ['declined', 'on_hold'].includes(r.status) && <Row k={r.status === 'declined' ? 'Reason' : 'On hold'} v={r.decisionNote} />}
+              {r.hold && heldByText(r.hold) && <Row k="Held" v={heldByText(r.hold).replace(/^Held /, '')} />}
             </dl>
 
             <div className="flex flex-wrap gap-2">
@@ -302,7 +304,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
             </div>
 
             {/* Actions — only what the server says this person may do now. */}
-            {(r.can.approve || r.can.decline || r.can.pay || r.can.hold || r.can.cancel || r.can.edit || r.can.editPayment) && (
+            {(r.can.approve || r.can.decline || r.can.pay || r.can.hold || r.can.release || r.can.cancel || r.can.edit || r.can.editPayment) && (
               <div className="space-y-3 rounded-xl border border-gray-200 p-4">
                 {mode === null && (
                   <div className="flex flex-wrap gap-2">
@@ -320,6 +322,12 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                     {r.can.approve && <button type="button" disabled={act.isPending} onClick={() => act.mutate('approve')} className={`${btn} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
                     {r.can.pay && <button type="button" onClick={() => setMode('pay')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>Record payment</button>}
                     {r.can.hold && <button type="button" onClick={() => setMode('hold')} className={`${btn} border border-orange-300 text-orange-800 hover:bg-orange-50`}>Put on hold</button>}
+                    {/* A held payment cannot be paid: releasing it is the way back to "approved". */}
+                    {r.can.release && (
+                      <button type="button" disabled={act.isPending}
+                        onClick={() => { if (window.confirm(`Release the hold on ${r.number}? It goes back to approved, and the admin can pay it.`)) act.mutate('release'); }}
+                        className={`${btn} bg-orange-600 text-white hover:bg-orange-700`}>Release hold</button>
+                    )}
                     {r.can.decline && <button type="button" onClick={() => setMode('decline')} className={`${btn} border border-red-300 text-red-700 hover:bg-red-50`}>Decline</button>}
                     {r.can.cancel && (
                       <button type="button" disabled={act.isPending} onClick={() => { if (window.confirm(`Cancel ${r.number}?`)) act.mutate('cancel'); }}

@@ -33,7 +33,7 @@ type Overview = {
   money: {
     /** `pending`: foreign bills in `n` but not in `amount` — their rupees are known when paid. */
     awaitingApproval: { n: number; amount: number; pending?: number };
-    toPay: { n: number; amount: number; pending?: number; onHold: number };
+    toPay: { n: number; amount: number; pending?: number; onHold: number; onHoldAmount?: number };
     paidThisMonth: {
       n: number; amount: number; byTeam: { team: string; label: string; n: number; amount: number }[];
       /** Paid from foreign-currency accounts: not rupees, so never in `amount`. */
@@ -186,7 +186,7 @@ function CompanyOverview() {
               {/* Not the admin's queue any more: accounts decides these. Shown
                   without the warning tone, because nothing here is theirs to do. */}
               <Tile label="Waiting for accounts to approve" value={data.money.awaitingApproval.n} sub={`${rupees(data.money.awaitingApproval.amount)}${foreignNote(data.money.awaitingApproval.pending)}`} href="/admin/payments" live={past} />
-              <Tile label="Approved — for you to pay" value={data.money.toPay.n} sub={`${rupees(data.money.toPay.amount)}${foreignNote(data.money.toPay.pending)}${data.money.toPay.onHold ? ` · ${data.money.toPay.onHold} on hold` : ''}`} href="/admin/payments" live={past} />
+              <Tile label="Approved — for you to pay" value={data.money.toPay.n} sub={`${rupees(data.money.toPay.amount)}${foreignNote(data.money.toPay.pending)}${data.money.toPay.onHold ? ` · ${data.money.toPay.onHold} on hold${data.money.toPay.onHoldAmount ? ` (${rupees(data.money.toPay.onHoldAmount)}, not counted)` : ''}` : ''}`} href="/admin/payments" live={past} />
               <Tile label="Item refunds to pay" value={data.money.itemRefundsToPay} sub="Approved by accounts, waiting for you" href="/admin/refunds" tone={data.money.itemRefundsToPay ? 'warn' : 'default'} live={past} />
               {/* A past day: the 1st of its month up to the end of that day ("Paid 1–5 Nov"). */}
               <Tile label={past ? `Paid ${dayLabel(data.day.monthFrom).split(' ')[0]}–${dayLabel(shown)}` : 'Paid this month'} value={rupees(data.money.paidThisMonth.amount)}

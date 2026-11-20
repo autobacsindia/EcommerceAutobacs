@@ -11,6 +11,7 @@ import PaymentRequestForm from './PaymentRequestForm';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import { SupplierRefundLine } from './SupplierCredit';
+import HoldLine from './HoldLine';
 
 type Line = WorkOrder['lines'][number];
 const live = (r: OrderPayment) => r.status !== 'declined' && r.status !== 'cancelled';
@@ -128,6 +129,8 @@ export function SupplierPaymentRow({ r, onOpen, muted = false }: { r: OrderPayme
           <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
         </a>
         {r.credit && <span className="w-full text-xs text-emerald-800">{money(r.credit.amount, r.currency)} of it from supplier credit</span>}
+        <HoldLine hold={r.hold} className="w-full" />
+        {r.status === 'declined' && r.decisionNote && <span className="w-full text-xs text-red-800">Declined: {r.decisionNote}</span>}
       </div>
       {r.supplierRefund && (
         <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'}
@@ -172,6 +175,8 @@ export function OrderOtherPayments({ order, requests }: { order: WorkOrder; requ
               <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">
                 <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
               </a>
+              <HoldLine hold={r.hold} className="w-full" />
+              {r.status === 'declined' && r.decisionNote && <span className="w-full text-xs text-red-800">Declined: {r.decisionNote}</span>}
             </li>
           ))}
         </ul>

@@ -54,7 +54,7 @@ export function describeAction(a) {
   }
   if (a.resource === 'PaymentRequest') {
     if (a.action === 'CREATE') return { text: `Raised a ${d.kind === 'supplier' ? 'supplier payment' : 'expense'} (₹${Number(d.amount || 0).toLocaleString('en-IN')})`, area: 'Payments' };
-    const words = { approved: 'Approved a payment', declined: 'Declined a payment', on_hold: 'Put a payment on hold', paid: 'Paid a payment', cancelled: 'Cancelled a payment request', edited: 'Edited a payment request' };
+    const words = { approved: 'Approved a payment', declined: 'Declined a payment', on_hold: 'Put a payment on hold', released: 'Released a payment hold', paid: 'Paid a payment', cancelled: 'Cancelled a payment request', edited: 'Edited a payment request' };
     return { text: words[d.change] || 'Updated a payment request', area: 'Payments' };
   }
   if (a.resource === 'User') {
@@ -176,11 +176,13 @@ export async function companyOverview(actor, now = Date.now(), { date } = {}) {
     // Accounts approved it; the money leaves on the ADMIN's action. Named for
     // who must act, not for who looked at it last — the old `withAccounts` was
     // written when accounts paid, and read as the opposite of what it counts.
+    // A held payment cannot be paid until it is released: counted apart, never in the figure to pay.
     toPay: {
-      n: (by.approved?.n || 0) + (by.on_hold?.n || 0),
-      amount: round2((by.approved?.amount || 0) + (by.on_hold?.amount || 0)),
-      pending: (by.approved?.pending || 0) + (by.on_hold?.pending || 0),
+      n: by.approved?.n || 0,
+      amount: round2(by.approved?.amount || 0),
+      pending: by.approved?.pending || 0,
       onHold: by.on_hold?.n || 0,
+      onHoldAmount: round2(by.on_hold?.amount || 0),
     },
     paidThisMonth: {
       n: paidThisMonth.reduce((s, r) => s + r.n, 0),

@@ -116,7 +116,8 @@ it('shows money waiting, paid this month by team, and item refunds still to pay'
 
   const { money } = await companyOverview(admin);
   expect(money.awaitingApproval).toEqual({ n: 1, amount: 1000, pending: 0 });
-  expect(money.toPay).toEqual({ n: 3, amount: 750, pending: 1, onHold: 1 });
+  // The held one is counted apart: it cannot be paid until released.
+  expect(money.toPay).toEqual({ n: 2, amount: 500, pending: 1, onHold: 1, onHoldAmount: 250 });
   expect(money.paidThisMonth).toMatchObject({ n: 1, amount: 4000, byTeam: [{ team: 'procurement', n: 1, amount: 4000 }] });
   expect(money.itemRefundsToPay).toBe(1);
 });

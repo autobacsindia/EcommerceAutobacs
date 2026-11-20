@@ -145,7 +145,7 @@ const paymentRequestRepository = {
   findForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' } })
     .sort({ createdAt: -1 })
     .limit(200) // bounded: one order's payments, far above any real order
-    .select('number status kind category team amount currency foreignAmount itemIds itemNames partId partWhat payee.name payment createdAt requestedBy requestedByName deal part credit supplier')
+    .select('number status decisionNote kind category team amount currency foreignAmount itemIds itemNames partId partWhat payee.name payment createdAt requestedBy requestedByName deal part credit supplier')
     .lean(),
 
   /**
@@ -161,6 +161,9 @@ const paymentRequestRepository = {
     .limit(limit)
     .select('-history -files.publicId -files.provider')
     .lean(),
+
+  /** Just the history of these requests — for the held rows of a list read without it (holdOf). */
+  findHistories: (ids) => PaymentRequest.find({ _id: { $in: ids } }).select('history').lean(),
 
   /** The paid requests recorded by one transfer (payBatch). */
   findPaidBatch: (batch) => PaymentRequest.find({ status: 'paid', 'payment.batch': batch }).select('_id number').lean(),
