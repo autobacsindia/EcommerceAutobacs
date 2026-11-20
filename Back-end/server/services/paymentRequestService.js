@@ -1414,7 +1414,7 @@ export async function get(actor, id) {
   // supplier of the part it paid for: the supplier owes us a refund.
   const why = r.kind === 'supplier' && r.status === 'paid' ? await paidRefundWhy(r) : null;
   if (why) {
-    const claim = (await credit.claimsFor([r._id])).get(idOf(r._id)) || null;
+    const claim = (await credit.claimsFor([r._id], actor)).get(idOf(r._id)) || null;
     out.supplierRefund = { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier), why };
   }
   return out;
@@ -1508,7 +1508,7 @@ export async function forOrder(actor, orderId) {
   // refund — procurement raises it from here (services/supplierLedgerService.js).
   const paidSupplier = rows.filter((r) => r.kind === 'supplier' && r.status === 'paid');
   const [order, claims] = paidSupplier.length
-    ? await Promise.all([orderRepository.findForWorkflow(orderId), credit.claimsFor(paidSupplier.map((r) => r._id))])
+    ? await Promise.all([orderRepository.findForWorkflow(orderId), credit.claimsFor(paidSupplier.map((r) => r._id), actor)])
     : [null, new Map()];
   const refundOf = (r) => {
     if (r.kind !== 'supplier' || r.status !== 'paid') return null;

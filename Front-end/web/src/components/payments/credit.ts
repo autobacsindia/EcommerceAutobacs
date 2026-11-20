@@ -1,4 +1,5 @@
 import apiClient from '@/lib/api-client';
+import { postForm } from './api';
 
 /**
  * Supplier credit — what a supplier owes us (Back-end services/supplierLedgerService.js).
@@ -9,6 +10,14 @@ import apiClient from '@/lib/api-client';
  */
 export type CreditKind = 'refund_due' | 'repaid' | 'credit_used' | 'credit_restored' | 'written_off' | 'correction_up' | 'correction_down';
 export type CreditStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
+
+export type RefundMethod = 'upi' | 'bank' | 'cash' | 'credit_note';
+export const REFUND_METHODS: { value: RefundMethod; label: string }[] = [
+  { value: 'upi', label: 'UPI' },
+  { value: 'bank', label: 'Bank transfer' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'credit_note', label: 'Credit note' },
+];
 
 export type CreditBalance = {
   currency: string;
@@ -35,6 +44,10 @@ export type CreditEntry = {
   date: string;
   reference: string;
   note: string;
+  /** A refund recorded on the order: how it came back ('' otherwise), and its proof. */
+  method?: RefundMethod | '';
+  methodLabel?: string;
+  files?: { id: string; name: string; contentType: string; bytes: number }[];
   createdByName: string;
   createdAt: string;
   decidedByName: string;
@@ -100,6 +113,17 @@ export const getOwing = () => apiClient.get<{ suppliers: OwingRow[]; capped: boo
 
 export const claimRefund = (body: { paymentRequestId: string; amount?: number; note?: string }) =>
   apiClient.post<{ entry: CreditEntry }>('/suppliers/credit/claims', body);
+/** "Supplier refunded" on the order: money back on one paid payment, with proof. Waits for accounts. */
+export const recordOrderRefund = (fields: {
+  paymentRequestId: string; amount: number; date: string; method: RefundMethod; reference: string; note: string; formKey: string;
+}, proof: File[] = []) => {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) form.append(k, String(v));
+  for (const f of proof) form.append('proof', f);
+  return postForm<{ entry: CreditEntry }>('/suppliers/credit/order-refunds', form);
+};
+/** A refund's proof, streamed through the API (never a public link). */
+export const creditFileHref = (entryId: string, fileId: string) => `/api/v1/suppliers/credit/${enc(entryId)}/files/${enc(fileId)}`;
 export const recordRepayment = (supplierId: string, body: { currency: string; amount: number; date: string; reference: string; note: string; formKey: string }) =>
   apiClient.post<{ entry: CreditEntry }>(`/suppliers/${enc(supplierId)}/credit/repayments`, body);
 export const writeOff = (supplierId: string, body: { currency: string; amount: number; note: string; formKey: string }) =>

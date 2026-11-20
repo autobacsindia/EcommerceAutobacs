@@ -114,9 +114,23 @@ export type OrderPayment = {
   supplierRefund?: SupplierRefund | null;
 };
 
+/**
+ * The claim on a paid supplier payment, and what has come back against it
+ * ("Supplier refunded" on the order). Every number is the server's.
+ */
+export type SupplierRefundClaim = {
+  id: string; status: 'pending' | 'approved'; amount: number; currency: string;
+  /** Approved refunds / refunds waiting for accounts / still to come back. */
+  refunded?: number; refundPending?: number; left?: number;
+  /** Every refund recorded on it (declined ones too — with why). */
+  refunds?: import('./credit').CreditEntry[];
+  /** Procurement (or the admin), while something is still to come back. */
+  canRecordRefund?: boolean;
+};
+
 /** A paid supplier payment whose items were cancelled: the refund claim on it (Back-end supplierLedgerService). */
 export type SupplierRefund = {
-  claim: { id: string; status: 'pending' | 'approved'; amount: number; currency: string } | null;
+  claim: SupplierRefundClaim | null;
   canClaim: boolean;
   /** Paid to a saved supplier — a refund can only be claimed from one. */
   savedSupplier: boolean;

@@ -32,8 +32,12 @@ const others = c(OTHER, 'Others', true);
 /** Team (config/staff.js STAFF_TEAMS value) → the options it may choose, in order. */
 export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
   procurement: Object.freeze([
+    // Buying stock for an order outside a supplier payment (owner, 2026-11-20).
+    c('product_purchase', 'Product purchase'),
     c('import_purchase', 'Import purchase'),
     c('forwarder_cha', 'Freight forwarder / CHA (customs agent)'),
+    // Courier / shipping cost of sending an order out.
+    c('dispatch', 'Dispatch (courier / shipping)'),
     others,
   ]),
   accounts: Object.freeze([

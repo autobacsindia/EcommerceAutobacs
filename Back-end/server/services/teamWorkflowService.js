@@ -202,6 +202,8 @@ function lineActions(u, order, line) {
   }
   if (line.split) splitLineActions(line, out);
   if (can.procurement(u) && PART_STAGES.has(line.stage)) out.push('supplier_parts');
+  // Accounts (or the admin) reviews a supplier change still waiting on this line.
+  if (can.accounts(u) && (line.parts || []).some((p) => p.reviewStatus === 'pending')) out.push('supplier_review');
   if (line.stage === STAGE.CUSTOMER_DECISION && can.decide(u, order)) out.push('wait', 'refund');
   if (mayUndoStock(u, line)) out.push('stock_undo');
   if (undoableDecision(u, order, line)) out.push('decision_undo');
@@ -626,7 +628,7 @@ export { loadLine as loadWorkflowLine, refreshOpen as refreshWorkflowOpen, event
  * payment event and a person changing a supplier at the same moment cannot
  * overwrite each other (the loser re-reads and tries again, or is told to refresh).
  */
-export async function writeLineParts(orderId, itemId, line, parts, { set = {}, unset = [], expect = {} } = {}, evt) {
+export async function writeLineParts(orderId, itemId, line, parts, { set = {}, unset = [], expect = {}, rootSet = {} } = {}, evt) {
   return orderRepository.updateWorkflowLineIf(
     orderId, itemId,
     { ...expect, partsRev: line.partsRev ?? null },
@@ -634,6 +636,7 @@ export async function writeLineParts(orderId, itemId, line, parts, { set = {}, u
       // The line's own supplierName mirrors its first active part (returns and chat read it).
       set: { ...set, parts, partsRev: (line.partsRev || 0) + 1, ...(lineSupplierName(parts) && { supplierName: lineSupplierName(parts) }) },
       unset,
+      rootSet,
     },
     evt,
   );

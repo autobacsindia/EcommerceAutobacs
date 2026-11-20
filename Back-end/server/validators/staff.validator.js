@@ -381,6 +381,11 @@ export const validateChangeSupplier = [
   body('reasonCode').isString().isLength({ max: 40 }).withMessage('Choose why the supplier is changing'),
   body('reasonNote').optional({ values: 'null' }).isString().trim().isLength({ max: 300 }).withMessage('Reason: up to 300 characters'),
 ];
+export const validateReviewSupplierChange = [
+  ...validateWorkLine, partParam,
+  body('decision').isIn(['approve', 'reject']).withMessage('Approve or reject it'),
+  body('note').optional({ values: 'null' }).isString().trim().isLength({ max: 300 }).withMessage('Reason: up to 300 characters'),
+];
 export const validateRemoveSupplierPart = [
   ...validateWorkLine, partParam,
   body('note').optional({ values: 'null' }).isString().trim().isLength({ max: 300 }).withMessage('Note: up to 300 characters'),

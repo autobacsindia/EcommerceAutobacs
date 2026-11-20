@@ -7,8 +7,10 @@ import { Download, Loader2 } from 'lucide-react';
 import { errorMessage, money, paymentKeys, type SupplierRefund } from './api';
 import {
   creditKeys, creditReportHref, decideCredit, editCredit, getOwing, getPendingCredit, getSupplierCredit, istToday, newFormKey,
-  claimRefund, recordRepayment, writeOff, type CreditBalance, type CreditEditInput, type CreditEntry,
+  claimRefund, recordRepayment, recordOrderRefund, creditFileHref, writeOff, REFUND_METHODS,
+  type CreditBalance, type CreditEditInput, type CreditEntry, type RefundMethod,
 } from './credit';
+import type { SupplierRefundClaim } from './api';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -51,14 +53,7 @@ export function SupplierRefundLine({ requestId, refund, currency, bill }: {
   const [error, setError] = useState('');
   const changed = refund.why === 'supplier_changed';
   const after = changed ? 'Supplier changed after paying' : 'Cancelled after paying';
-  if (refund.claim) {
-    return (
-      <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-        Supplier must refund {money(refund.claim.amount, refund.claim.currency)} ·{' '}
-        {refund.claim.status === 'approved' ? 'approved — counted as supplier credit' : 'waiting for accounts'}
-      </p>
-    );
-  }
+  if (refund.claim) return <ClaimProgress requestId={requestId} claim={refund.claim} />;
   if (!refund.savedSupplier) {
     return <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{after}. Save this supplier in the directory to record the refund they owe.</p>;
   }
@@ -95,6 +90,133 @@ export function SupplierRefundLine({ requestId, refund, currency, bill }: {
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="rounded-lg bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">Send to accounts</button>
         <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-100">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The claim on a paid supplier payment, and what came back against it:
+ *   "Supplier must refund ₹2,065 · approved"
+ *   "Refunded ₹1,000 on 22 Nov 2026 · UPI UTR998877 · approved by Fathima KA"
+ *   "₹1,065 still to come back"  [Supplier refunded]   (procurement)
+ * Accounts approves each refund on "Waiting for your approval" (or Supplier credit).
+ */
+export function ClaimProgress({ requestId, claim }: { requestId: string; claim: SupplierRefundClaim }) {
+  const [open, setOpen] = useState(false);
+  const refunds = claim.refunds || [];
+  const left = claim.left ?? claim.amount;
+  return (
+    <div role="status" className="space-y-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+      <p>
+        Supplier must refund {money(claim.amount, claim.currency)} ·{' '}
+        {claim.status === 'approved' ? 'approved — counted as supplier credit' : 'waiting for accounts'}
+      </p>
+      {refunds.length > 0 && (
+        <ul className="space-y-1" aria-label="Refunds from the supplier">
+          {refunds.map((r) => <RefundRow key={r.id} r={r} />)}
+        </ul>
+      )}
+      {refunds.length > 0 && (
+        <p className="font-semibold">
+          {left > 0 ? `${money(left, claim.currency)} still to come back` : 'Fully refunded'}
+          {(claim.refundPending ?? 0) > 0 && <span className="font-normal"> · {money(claim.refundPending ?? 0, claim.currency)} waiting for accounts</span>}
+        </p>
+      )}
+      {claim.canRecordRefund && !open && (
+        <button type="button" onClick={() => setOpen(true)} className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-semibold text-emerald-900 hover:bg-emerald-100">
+          Supplier refunded
+        </button>
+      )}
+      {claim.canRecordRefund && open && <RecordRefundForm requestId={requestId} currency={claim.currency} left={left} onDone={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+const REFUND_STATUS: Record<CreditEntry['status'], string> = {
+  pending: 'waiting for accounts',
+  approved: 'approved',
+  declined: 'rejected',
+  cancelled: 'withdrawn',
+};
+
+const REFUND_TEXT: Record<CreditEntry['status'], string> = {
+  pending: 'text-amber-800', approved: 'text-green-800', declined: 'text-red-700', cancelled: 'text-gray-500',
+};
+
+function RefundRow({ r }: { r: CreditEntry }) {
+  const how = [r.methodLabel, r.reference].filter(Boolean).join(' ');
+  const who = r.status === 'pending' ? `recorded by ${r.createdByName}` : r.decidedByName ? `${REFUND_STATUS[r.status]} by ${r.decidedByName}` : REFUND_STATUS[r.status];
+  return (
+    <li className={r.status === 'declined' || r.status === 'cancelled' ? 'text-gray-500' : ''}>
+      <span className={r.status === 'approved' ? 'font-semibold' : ''}>
+        {r.status === 'approved' ? 'Refunded' : 'Refund'} {money(r.amount, r.currency)}{r.date ? ` on ${day(r.date)}` : ''}
+      </span>
+      {how && <> · {how}</>} · <span className={REFUND_TEXT[r.status]}>{who}</span>
+      {(r.files || []).map((f) => (
+        <a key={f.id} href={creditFileHref(r.id, f.id)} target="_blank" rel="noopener noreferrer" className="ml-2 underline">Proof</a>
+      ))}
+      {r.status === 'declined' && r.decisionNote && <span className="block text-red-700">Why: {r.decisionNote}</span>}
+    </li>
+  );
+}
+
+/** Procurement: the supplier gave (part of) the money back. Waits for accounts. */
+function RecordRefundForm({ requestId, currency, left, onDone }: { requestId: string; currency: string; left: number; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [formKey] = useState(newFormKey);
+  const [amount, setAmount] = useState(String(left));
+  const [date, setDate] = useState(istToday());
+  const [method, setMethod] = useState<RefundMethod>('upi');
+  const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
+  const [proof, setProof] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      // The same formKey on a retry: the server saves it once.
+      await recordOrderRefund({ paymentRequestId: requestId, amount: Number(amount), date, method, reference, note, formKey }, proof);
+      await Promise.all([qc.invalidateQueries({ queryKey: paymentKeys.all }), qc.invalidateQueries({ queryKey: creditKeys.all })]);
+      onDone();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save it. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const refLabel = method === 'credit_note' ? 'Credit note number' : method === 'cash' ? 'Receipt number (optional)' : 'UTR / reference';
+  return (
+    <form onSubmit={submit} aria-label="Supplier refunded" className="space-y-2 rounded-lg border border-emerald-200 bg-white p-3 text-sm text-gray-900">
+      <p>What did the supplier give back? At most {money(left, currency)} is still to come back. A part is fine.</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="block"><span className={label}>Amount ({currency})</span>
+          <input className={input} required type="number" min="0.01" max={left} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </label>
+        <label className="block"><span className={label}>Date it came back</span>
+          <input className={input} required type="date" max={istToday()} value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+        <label className="block"><span className={label}>How</span>
+          <select className={input} value={method} onChange={(e) => setMethod(e.target.value as RefundMethod)}>
+            {REFUND_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </label>
+        <label className="block"><span className={label}>{refLabel}</span>
+          <input className={input} required={method !== 'cash'} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} />
+        </label>
+      </div>
+      <label className="block"><span className={label}>Proof (optional)</span>
+        <input aria-label="Proof" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setProof(Array.from(e.target.files || []))} className="text-sm" />
+      </label>
+      <input aria-label="Note" className={input} maxLength={1000} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+      {error && <p role="alert" className="text-red-700">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="rounded-lg bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">Send to accounts</button>
+        <button type="button" onClick={onDone} className="rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-100">Cancel</button>
       </div>
     </form>
   );
@@ -266,9 +388,13 @@ export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupp
               e.paymentRequest && `payment ${e.paymentRequest.number}`,
               e.order?.number && `order ${e.order.number}`,
               e.date && `repaid ${day(e.date)}`,
+              e.methodLabel && `by ${e.methodLabel}`,
               e.reference && `ref ${e.reference}`,
             ].filter(Boolean).join(' · ')}
             {e.order?.number && <CopyId value={e.order.number} label="Order number" />}
+            {(e.files || []).map((f) => (
+              <a key={f.id} href={creditFileHref(e.id, f.id)} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-700 underline">Proof</a>
+            ))}
           </p>
           {e.correctionOf && <p className="text-xs text-gray-600">Corrects a “{e.correctionOf.kindLabel}” entry</p>}
           {e.note && <p className="text-sm text-gray-700">{e.note}</p>}

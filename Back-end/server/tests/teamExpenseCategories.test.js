@@ -140,6 +140,10 @@ describe('Expense options per team, and foreign-currency bills', () => {
       expect(cfg.categoryLabel('fuel')).toBe('Fuel');
       expect(cfg.categoryLabel('supplier')).toBe('Supplier payment');
       expect(cfg.categoryLabel('forwarder_cha')).toBe('Freight forwarder / CHA (customs agent)');
+      expect(cfg.categoryLabel('product_purchase')).toBe('Product purchase');
+      expect(cfg.categoryLabel('dispatch')).toBe('Dispatch (courier / shipping)');
+      // The Payments filter (admin / accounts) offers the new ones too.
+      expect(cfg.filterCategories().map((x) => x.value)).toEqual(expect.arrayContaining(['product_purchase', 'dispatch']));
       expect(cfg.categoryLabel('mystery')).toBe('mystery');
       // A value off the team's list (an old record) keeps the old "details required" rule.
       expect(cfg.noteRequiredFor('procurement', 'fuel')).toBe(true);
@@ -160,7 +164,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
       expect(sneaky.body.options.team).toBe('operations');
 
       const proc = (await procurement.session.get('/payment-requests/expense-options')).body.options;
-      expect(proc.categories.map((c) => c.value)).toEqual(['import_purchase', 'forwarder_cha', 'other']);
+      expect(proc.categories.map((c) => c.value)).toEqual(['product_purchase', 'import_purchase', 'forwarder_cha', 'dispatch', 'other']);
       expect(proc.currencies.map((c) => c.code)).toEqual(expect.arrayContaining(['INR', 'THB', 'USD', 'CNY', 'EUR', 'JPY']));
       expect(proc.currencies[0].code).toBe('INR');
 
@@ -181,7 +185,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
     it('refuses another team’s option with a 400 that says what this team can claim', async () => {
       const res = await expense(procurement.session, { category: 'fuel', description: 'Diesel' });
       expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/Procurement can claim: Import purchase, Freight forwarder \/ CHA \(customs agent\), Others/);
+      expect(res.body.message).toMatch(/Procurement can claim: Product purchase, Import purchase, Freight forwarder \/ CHA \(customs agent\), Dispatch \(courier \/ shipping\), Others/);
       expect((await expense(ops.session, { category: 'import_purchase', description: 'x'.repeat(5) })).status).toBe(400);
       expect((await expense(marketing.session, { category: 'purchase', description: 'Old option' })).status).toBe(400);
       expect((await expense(ops.session, { description: 'No category' })).status).toBe(400);
@@ -193,7 +197,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
       const cases = [
         [ops, 'fuel'], [ops, 'food'], [ops, 'travel'],
         [marketing, 'meta_ads'], [marketing, 'google_ads'], [marketing, 'claude'],
-        [procurement, 'import_purchase'], [procurement, 'forwarder_cha'],
+        [procurement, 'import_purchase'], [procurement, 'forwarder_cha'], [procurement, 'product_purchase'], [procurement, 'dispatch'],
         [developer, 'hosting'], [developer, 'ai_tools'],
         [gtm, 'customer_travel'], [gtm, 'samples'],
       ];

@@ -32,6 +32,9 @@ export const PART_STATUS = Object.freeze({
   REMOVED: 'removed',   // added by mistake, never paid — kept as history
 });
 
+/** Accounts' review of a supplier change. Absent on changes made before reviews existed. */
+export const REVIEW = Object.freeze({ PENDING: 'pending', APPROVED: 'approved', REJECTED: 'rejected' });
+
 /** Why a supplier was changed: a common reason, plus the person's own words. */
 export const CHANGE_REASONS = Object.freeze({
   supplier_refunded: 'Supplier refunded',
@@ -203,6 +206,10 @@ export function replacePart(parts, partId, { supplierName, what, reasonCode, rea
     replacedByName: who(actor).byName,
     replacedWith: fresh._id,
     ...reason,
+    // Accounts reviews every supplier change (owner, 2026-11-20). The change itself
+    // takes effect now — procurement keeps buying; the money it causes (the new PR,
+    // the old supplier's refund) waits for accounts on its own.
+    reviewStatus: REVIEW.PENDING,
   } : p));
   return { parts: [...next, fresh], old, part: fresh, reason };
 }
@@ -316,5 +323,41 @@ export function partsView(wfLine) {
     replaces: p.replaces ? idOf(p.replaces) : null,
     reasonCode: p.reasonCode || '',
     reason: p.status === PART_STATUS.REPLACED ? reasonText(p) : p.reasonNote || '',
+    review: p.reviewStatus ? {
+      status: p.reviewStatus,
+      byName: p.reviewedByName || '',
+      at: p.reviewedAt || null,
+      note: p.reviewNote || '',
+    } : null,
   }));
 }
+
+/**
+ * Accounts approves or rejects a supplier change (the replaced part carries it).
+ * Rejecting needs a reason — procurement and the admin read it. Nobody reviews
+ * their own change except the admin. Decided once: a second decision is refused.
+ */
+export function reviewPart(parts, partId, { decision, note }, actor, { now = new Date(), isAdmin = false } = {}) {
+  const part = findPart(parts, partId);
+  if (!part || part.status !== PART_STATUS.REPLACED || !part.reviewStatus) throw new PartError('That supplier change was not found.', 404);
+  if (part.reviewStatus !== REVIEW.PENDING) throw new PartError('This supplier change has already been reviewed. Refresh to see it.');
+  if (!isAdmin && idOf(part.replacedBy) && idOf(part.replacedBy) === idOf(actor?._id)) {
+    throw new PartError('Someone else has to review a supplier change you made.', 403);
+  }
+  if (decision !== 'approve' && decision !== 'reject') throw new PartError('Approve or reject it.', 400);
+  const reviewNote = clean(note, NOTE_MAX);
+  if (decision === 'reject' && reviewNote.length < 3) throw new PartError('Say why it is rejected — procurement sees this.', 400);
+  const next = parts.map((p) => (p === part ? {
+    ...p,
+    reviewStatus: decision === 'approve' ? REVIEW.APPROVED : REVIEW.REJECTED,
+    reviewedAt: now,
+    reviewedBy: who(actor).by,
+    reviewedByName: who(actor).byName,
+    reviewNote,
+  } : p));
+  return { parts: next, part };
+}
+
+/** Does any line of this order still have a supplier change waiting for accounts? */
+export const hasPendingReview = (order) => (order?.workflow?.lines || [])
+  .some((l) => (l.parts || []).some((p) => p.reviewStatus === REVIEW.PENDING));

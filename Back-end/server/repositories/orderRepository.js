@@ -1492,7 +1492,7 @@ class OrderRepository extends BaseRepository {
    * @param {object|null} event             workflow.history entry (null: none)
    * @returns {Promise<object|null>} the updated order (lean), or null if the line moved
    */
-  async updateWorkflowLineIf(orderId, itemId, expect, { set = {}, unset = [] } = {}, event) {
+  async updateWorkflowLineIf(orderId, itemId, expect, { set = {}, unset = [], rootSet = {} } = {}, event) {
     const itemOid = new mongoose.Types.ObjectId(String(itemId));
     const lineMatch = { itemId: itemOid, ...expect };
     const arrayFilter = Object.fromEntries(Object.entries(lineMatch).map(([k, v]) => [`l.${k}`, v]));
@@ -1501,6 +1501,8 @@ class OrderRepository extends BaseRepository {
     if (Object.keys(set).length) {
       update.$set = Object.fromEntries(Object.entries(set).map(([k, v]) => [`workflow.lines.$[l].${k}`, v]));
     }
+    // Order-level fields written in the same update (e.g. workflow.reviewPendingAt).
+    if (Object.keys(rootSet).length) update.$set = { ...(update.$set || {}), ...rootSet };
     if (unset.length) {
       update.$unset = Object.fromEntries(unset.map((k) => [`workflow.lines.$[l].${k}`, '']));
     }
@@ -1510,6 +1512,30 @@ class OrderRepository extends BaseRepository {
       update,
       { new: true, arrayFilters: [arrayFilter] },
     ).lean();
+  }
+
+  /**
+   * Clear an order's "supplier change waiting for review" mark — only when no part
+   * on any line is still pending. One atomic update: a change made at the same
+   * moment keeps the mark (its part is pending, so the filter does not match).
+   */
+  clearReviewPendingIfNone(orderId) {
+    return Order.updateOne(
+      { _id: orderId, 'workflow.reviewPendingAt': { $type: 'date' }, 'workflow.lines.parts.reviewStatus': { $ne: 'pending' } },
+      { $unset: { 'workflow.reviewPendingAt': '' } },
+    );
+  }
+
+  /**
+   * Orders with a supplier change waiting for accounts — a keyset page read
+   * (utils/listQuery.js keysetPage) riding workflow_review_pending.
+   */
+  pageReviewPending(query, { sort, limit }) {
+    return Order.find(query)
+      .sort(sort)
+      .limit(limit)
+      .select('wpId createdAt items._id items.name workflow.reviewPendingAt workflow.lines.itemId workflow.lines.parts')
+      .lean();
   }
 
   /**

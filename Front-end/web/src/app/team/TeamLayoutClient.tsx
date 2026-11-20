@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee } from 'lucide-react';
+import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -74,7 +74,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   // Procurement: one "Orders" item, with "To do" and "All in progress" tabs (the
   // latter is the "Order processing" list) — two items for one job confused people.
   if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Orders', icon: PackageSearch }, delivered);
-  if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refunds', icon: Wallet }, paid, delivered);
+  // Accounts decides what procurement and every team raise: one list across orders.
+  if (team === 'accounts') nav.push({ href: '/team/approvals', label: 'Waiting for approval', icon: ClipboardCheck }, { href: '/team/refunds', label: 'Refunds', icon: Wallet }, paid, delivered);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid, delivered);
   if (team === 'marketing') nav.push(...MARKETING_AREAS.map(({ href, label, icon }) => ({ href, label, icon })));
   /*

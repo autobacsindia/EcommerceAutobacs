@@ -61,6 +61,23 @@ const EditSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/** How a supplier gave money back (a refund recorded from the order page). */
+export const REFUND_METHODS = Object.freeze(['upi', 'bank', 'cash', 'credit_note']);
+
+/** A proof file (UPI screenshot, bank statement, credit note) — stored privately, streamed through us. */
+const FileSchema = new mongoose.Schema(
+  {
+    publicId: { type: String, required: true },
+    provider: { type: String, required: true },
+    contentType: { type: String, required: true },
+    bytes: { type: Number, required: true },
+    name: { type: String, default: '', maxlength: 200 },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    uploadedAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const SupplierLedgerEntrySchema = new mongoose.Schema(
   {
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
@@ -90,6 +107,10 @@ const SupplierLedgerEntrySchema = new mongoose.Schema(
     date: { type: String, default: '' },
     reference: { type: String, default: '', maxlength: 120 },
     note: { type: String, default: '', maxlength: 1000 },
+    // A repayment recorded on the order ("Supplier refunded"): how it came back, and
+    // its proof. `paymentRequest` then names the paid supplier payment it refunds.
+    method: { type: String, enum: [...REFUND_METHODS, ''], default: '' },
+    files: { type: [FileSchema], default: [] },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     createdByName: { type: String, default: '' },

@@ -7,7 +7,7 @@ import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ScanSearch, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
-  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer, Clapperboard } from 'lucide-react';
+  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer, Clapperboard, ClipboardCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
@@ -131,6 +131,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/team-activity', label: 'Team activity', icon: Timer },
       { href: '/admin/pop-ups', label: 'Pop-up check', icon: BellRing },
       { href: '/admin/payments', label: 'Payments', icon: CreditCard },
+      // What accounts decides — payments, supplier refunds / credit, supplier changes — across orders.
+      { href: '/admin/approvals', label: 'Waiting for approval', icon: ClipboardCheck },
       { href: '/admin/suppliers', label: 'Suppliers', icon: Factory },
       { href: '/admin/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
       { href: '/admin/price-calculator', label: 'Price calculator', icon: Calculator },
