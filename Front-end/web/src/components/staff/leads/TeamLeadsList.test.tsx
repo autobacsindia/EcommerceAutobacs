@@ -216,3 +216,11 @@ describe('follow-up status', () => {
     await waitFor(() => expect(new URLSearchParams(listCalls().at(-1)!.split('?')[1]).get('followUp')).toBe('no_response'));
   });
 });
+
+it('does not show the lead score number to sales staff (it only drives the "Hottest first" sort)', async () => {
+  serve([{ leads: [LEAD({ score: 51 })], nextCursor: null }]);
+  renderList();
+  const [card] = await screen.findAllByTestId('lead-card');
+  expect(within(card).queryByText('51')).not.toBeInTheDocument();
+  expect(within(card).queryByTitle(/Lead score/)).not.toBeInTheDocument();
+});
