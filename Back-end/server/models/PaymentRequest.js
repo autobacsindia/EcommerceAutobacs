@@ -242,6 +242,13 @@ PaymentRequestSchema.index(
   { reference: 1, createdAt: -1 },
   { name: 'payment_request_reference', partialFilterExpression: { reference: { $gt: '' } } }
 );
+// The slip reader's duplicate-UTR check: "is this UTR on a paid payment already?"
+// Without it every slip read scanned every paid payment (measured: 16,000 docs read
+// for 20,000 payments → 0 with it). Only rows that have a reference.
+PaymentRequestSchema.index(
+  { 'payment.reference': 1 },
+  { name: 'payment_request_paid_reference', partialFilterExpression: { 'payment.reference': { $gt: '' } } }
+);
 // A double-submitted expense / supplier request is saved once. `$type`, never `$ne`.
 PaymentRequestSchema.index(
   { requestedBy: 1, clientId: 1 },
