@@ -5,7 +5,6 @@ import mongoose from 'mongoose';
 import * as dbHandler from './db-handler.js';
 import Reel from '../models/Reel.js';
 import { toProductBlock, clampLimit, recordView } from '../services/reelService.js';
-import { reelMediaUrls } from '../utils/reelMedia.js';
 import { REEL_STATUS, reelViewKey } from '../config/reels.js';
 
 /** Just enough of ioredis for recordView: SET … EX … NX, INCR, MGET. */
@@ -52,22 +51,6 @@ describe('toProductBlock', () => {
 describe('clampLimit', () => {
   it.each([[undefined, 10], ['5', 5], ['20', 20], ['21', 20], ['0', 10], ['abc', 10], ['-1', 10]])('%s → %s', (raw, want) => {
     expect(clampLimit(raw)).toBe(want);
-  });
-});
-
-describe('reelMediaUrls', () => {
-  beforeAll(() => { process.env.CLOUDINARY_CLOUD_NAME = 'c1'; });
-
-  it('derives HLS/mp4/poster from the public id', () => {
-    expect(reelMediaUrls({ publicId: 'autobacs/reels/u_1/a', version: 5, durationSec: 1 })).toEqual({
-      hlsUrl: 'https://res.cloudinary.com/c1/video/upload/sp_auto/v5/autobacs/reels/u_1/a.m3u8',
-      mp4Url: 'https://res.cloudinary.com/c1/video/upload/c_limit,w_720,q_auto/v5/autobacs/reels/u_1/a.mp4',
-      posterUrl: 'https://res.cloudinary.com/c1/video/upload/so_0,c_limit,w_720,q_auto/v5/autobacs/reels/u_1/a.jpg',
-    });
-  });
-
-  it.each(['', '../x', 'a?b=1', 'a b', null])('refuses an unsafe id %p', (id) => {
-    expect(reelMediaUrls({ publicId: id })).toBeNull();
   });
 });
 

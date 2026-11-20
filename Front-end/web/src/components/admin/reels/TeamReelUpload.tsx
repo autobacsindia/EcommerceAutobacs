@@ -7,7 +7,8 @@ import { adminKeys, reelKeys } from '@/hooks/queries/keys';
 import { formatCurrency } from '@/lib/utils';
 import { CAPTION_MAX, createTeamReel, errorText } from './api';
 import {
-  ACCEPTED_VIDEO_TYPES, checkVideoFile, getReelUploadSignature, readVideoDuration, uploadVideoToCloudinary,
+  ACCEPTED_VIDEO_TYPES, WRONG_TYPE_MESSAGE, checkVideoFile, getReelUploadTarget, readVideoDuration, uploadVideoToStorage,
+  videoTypeOf,
 } from './videoUpload';
 
 interface ProductHit { _id: string; name: string; price: number; images?: (string | { url?: string })[] }
@@ -22,8 +23,8 @@ const firstImage = (p: ProductHit): string | null => {
 type Stage = 'idle' | 'signing' | 'uploading' | 'saving';
 
 /**
- * "Upload team reel": the video goes browser → Cloudinary (signed), then only
- * its public id + product id + caption go to our API. Team reels skip review.
+ * "Upload team reel": the video goes browser → Cloudflare R2 (presigned PUT), then
+ * only its storage key + product id + caption go to our API. Team reels skip review.
  */
 export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
   const ids = useId();
@@ -72,8 +73,8 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
     setError(null);
     setDone(false);
     if (!f) return;
-    if (!ACCEPTED_VIDEO_TYPES.includes(f.type)) {
-      setError('Please pick an MP4, MOV or WebM video.');
+    if (!videoTypeOf(f)) {
+      setError(WRONG_TYPE_MESSAGE);
       return;
     }
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -90,16 +91,16 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
       let publicId = uploaded?.file === file ? uploaded.publicId : null;
       if (!publicId) {
         setStage('signing');
-        const sig = await getReelUploadSignature();
-        const problem = checkVideoFile(file, sig);
+        const target = await getReelUploadTarget(file);
+        const problem = checkVideoFile(file, target);
         if (problem) throw new Error(problem);
         const duration = await readVideoDuration(file);
-        if (duration !== null && sig.maxDurationSec && duration > sig.maxDurationSec + 0.5) {
-          throw new Error(`This video is ${Math.round(duration)} seconds long. Reels can be up to ${sig.maxDurationSec} seconds.`);
+        if (duration !== null && target.maxDurationSec && duration > target.maxDurationSec + 0.5) {
+          throw new Error(`This video is ${Math.round(duration)} seconds long. Reels can be up to ${target.maxDurationSec} seconds.`);
         }
         setStage('uploading');
         setProgress(0);
-        ({ publicId } = await uploadVideoToCloudinary(file, sig, setProgress));
+        ({ publicId } = await uploadVideoToStorage(file, target, setProgress));
         setUploaded({ file, publicId });
       }
       setStage('saving');
@@ -150,8 +151,11 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
               </button>
             )}
           </div>
-          <input ref={fileRef} id={`${ids}-file`} type="file" accept={ACCEPTED_VIDEO_TYPES.join(',')} disabled={busy}
+          <input ref={fileRef} id={`${ids}-file`} type="file" accept={[...ACCEPTED_VIDEO_TYPES, '.mp4', '.mov', '.m4v'].join(',')} disabled={busy}
             onChange={(e) => pickFile(e.target.files?.[0] ?? null)} className="mt-2 block w-full max-w-[180px] text-xs" />
+          <p className="mt-1 max-w-[180px] text-xs text-gray-500">
+            MP4 or MOV, up to 60 seconds. iPhone: set Camera → Formats → Most Compatible.
+          </p>
         </div>
 
         <div className="space-y-4">

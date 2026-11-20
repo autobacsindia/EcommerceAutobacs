@@ -49,16 +49,53 @@ export const REEL_DURATION_TOLERANCE_SEC = 0.5;
 /** Hard cap on upload size, bytes. Checked again on the real asset — see reelMediaService. */
 export const REEL_MAX_BYTES = intFromEnv('REEL_MAX_BYTES', 100 * 1024 * 1024);
 
-/** Formats Cloudinary will accept on the signed upload. */
-export const REEL_ALLOWED_FORMATS = Object.freeze(['mp4', 'mov', 'webm', 'm4v', '3gp']);
+/**
+ * Upload types we hand out a target for, and the extension each maps to. The
+ * extension comes from this allowlist, never from the uploaded filename.
+ *
+ * MP4 and MOV only: both are ISO base media, which is what lets the server read the
+ * clip's real length and codec back out of storage (services/storage/mp4Probe.js).
+ * The declared type is a hint — the bytes are checked at submit.
+ */
+export const REEL_UPLOAD_TYPES = Object.freeze({
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/x-m4v': 'm4v',
+});
 
 /**
- * Cloudinary base folder. Each uploader gets their own sub-folder (`<base>/u_<userId>`)
- * baked into the signature, which is how `POST /reels` proves the asset is theirs:
- * a public id outside the caller's folder is refused.
+ * The type every reel is served as, whatever the uploader stored. MOV and MP4 are the
+ * same ISO container, and an H.264 MOV labelled `video/mp4` plays everywhere, whereas
+ * `video/quicktime` is refused by some browsers' type check. Forcing it also means a
+ * stored object can never be served as anything executable.
+ */
+export const REEL_PLAYBACK_CONTENT_TYPE = 'video/mp4';
+
+/**
+ * Video codecs accepted. H.264 only, so every reel plays on every phone and browser
+ * without transcoding. iPhone's default "High Efficiency" (HEVC) is refused with a
+ * clear message; the mobile app asks the photo picker for an H.264 copy instead.
+ */
+export const REEL_ALLOWED_CODECS = Object.freeze(['avc1', 'avc3']);
+
+/**
+ * Where reels live in the PRIVATE R2 bucket. Each uploader gets their own prefix
+ * (`<base>/u_<userId>`) and every upload a fresh nonce folder under it, so
+ * `POST /reels` can prove the object is the caller's own: a key outside the caller's
+ * prefix is refused. The private bucket has no public address — playback is a
+ * presigned GET, which also keeps pending reels out of public reach.
  */
 export const REEL_FOLDER = 'autobacs/reels';
 export const REEL_TEAM_FOLDER = `${REEL_FOLDER}/team`;
+
+/** The slot name in every reel key (`<prefix>/<24hex>/video-<16hex>.<ext>`). */
+export const REEL_UPLOAD_SLOT = 'video';
+
+/**
+ * How long a playback link stays valid, seconds. Feed responses are `no-store`, so a
+ * fresh link is minted on every read; this only has to outlast one viewing session.
+ */
+export const REEL_PLAYBACK_TTL_SEC = intFromEnv('REEL_PLAYBACK_TTL_SECONDS', 6 * 60 * 60);
 
 /** Feed / list page sizes. The contract promises limit ≤ 20. */
 export const REEL_PAGE_DEFAULT = 10;
@@ -102,7 +139,8 @@ export default {
   REEL_TRANSITIONS,
   REEL_MAX_DURATION_SEC,
   REEL_MAX_BYTES,
-  REEL_ALLOWED_FORMATS,
+  REEL_UPLOAD_TYPES,
+  REEL_ALLOWED_CODECS,
   REEL_FOLDER,
   REEL_PAGE_DEFAULT,
   REEL_PAGE_MAX,

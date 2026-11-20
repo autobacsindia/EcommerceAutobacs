@@ -7,19 +7,29 @@
  * money side — a reel tap crediting a suspended affiliate, the buyer themselves, or
  * beating a code the buyer typed.
  *
- * Cloudinary is mocked; whether a REAL upload passes verifyUploadedVideo is not proven
- * here (see the reels-backend notes).
+ * R2 is mocked with an in-memory object store holding structurally real MP4s
+ * (tests/helpers/mp4Fixture.js); the verification edge cases live in reelMedia.test.js.
+ * Whether a REAL R2 bucket honours the signed size is not proven here.
  */
 import { jest } from '@jest/globals';
+import { makeMp4 } from './helpers/mp4Fixture.js';
 
-const cloudinaryMock = {
-  config: jest.fn(),
-  url: jest.fn(() => ''),
-  utils: { api_sign_request: jest.fn() },
-  api: { resource: jest.fn(), delete_resources: jest.fn() },
-  uploader: { destroy: jest.fn(), upload_stream: jest.fn() },
+const store = new Map();
+const r2 = {
+  putObject: jest.fn(),
+  headObject: jest.fn(),
+  objectExists: jest.fn(),
+  getObjectBuffer: jest.fn(),
+  getObjectHead: jest.fn(),
+  getObjectRange: jest.fn(),
+  deleteObject: jest.fn(),
+  deleteObjects: jest.fn(),
+  presignPut: jest.fn(),
+  presignGet: jest.fn(),
+  listKeys: jest.fn(),
+  resetClient: jest.fn(),
 };
-jest.unstable_mockModule('../config/cloudinary.js', () => ({ default: cloudinaryMock }));
+jest.unstable_mockModule('../services/storage/r2Provider.js', () => ({ ...r2, default: r2 }));
 
 const { default: request } = await import('supertest');
 const { default: bcrypt } = await import('bcryptjs');
@@ -88,6 +98,14 @@ const mkProduct = (overrides = {}) => {
   });
 };
 
+const NONCE = '1'.repeat(24);
+/** A key exactly as the upload target mints it (`<prefix>/<24hex>/video-<16hex>.mp4`). */
+const reelKey = (prefix, n = 1) => `${prefix}/${NONCE}/video-${String(n).padStart(16, '0')}.mp4`;
+const userPrefix = (u) => `autobacs/reels/u_${u._id}`;
+const TEAM = 'autobacs/reels/team';
+/** Put a clip in the fake bucket; returns its key. */
+const upload = (key, opts) => { store.set(key, makeMp4(opts)); return key; };
+
 let reelSeq = 0;
 const mkReel = (creator, product, overrides = {}) => {
   reelSeq += 1;
@@ -96,7 +114,7 @@ const mkReel = (creator, product, overrides = {}) => {
     creator: creator?._id ?? null,
     uploadedBy: creator?._id ?? new mongoose.Types.ObjectId(),
     product: product._id,
-    media: { publicId: `autobacs/reels/u_x/r${reelSeq}`, durationSec: 20, version: 1 },
+    media: { publicId: reelKey(TEAM, reelSeq), durationSec: 20 },
     caption: `reel ${reelSeq}`,
     status,
     approvedAt: status === REEL_STATUS.APPROVED ? new Date(Date.now() - reelSeq * 1000) : null,
@@ -125,11 +143,6 @@ const mkAffiliate = async (user, overrides = {}) => {
   return affiliate;
 };
 
-/** Default Cloudinary answer: a real 20s video in the asked-for folder. */
-const videoResource = (publicId, over = {}) => ({
-  public_id: publicId, resource_type: 'video', format: 'mp4', version: 1700000000,
-  duration: 20, bytes: 5_000_000, width: 720, height: 1280, ...over,
-});
 
 describe('Reels API', () => {
   let admin; let creator; let buyer;
@@ -146,12 +159,15 @@ describe('Reels API', () => {
 
   beforeEach(async () => {
     process.env.FRONTEND_URL = 'https://shop.example.com';
-    process.env.CLOUDINARY_CLOUD_NAME = 'democloud';
-    process.env.CLOUDINARY_API_KEY = 'key123';
-    process.env.CLOUDINARY_API_SECRET = 'secret';
-    cloudinaryMock.utils.api_sign_request.mockReturnValue('sig-abc');
-    cloudinaryMock.api.resource.mockImplementation(async (id) => videoResource(id));
-    cloudinaryMock.uploader.destroy.mockResolvedValue({ result: 'ok' });
+    store.clear();
+    r2.presignPut.mockImplementation(async ({ key }) => ({ url: `https://r2.example/put/${key}?sig=p`, key, expiresIn: 900 }));
+    r2.presignGet.mockImplementation(async ({ key }) => `https://r2.example/get/${key}?sig=g`);
+    r2.headObject.mockImplementation(async ({ key }) => (store.has(key) ? { key, bytes: store.get(key).length } : null));
+    r2.getObjectRange.mockImplementation(async ({ key, start, length }) => {
+      const b = store.get(key) || Buffer.alloc(0);
+      return b.subarray(start, Math.min(b.length, start + length));
+    });
+    r2.deleteObject.mockImplementation(async ({ key }) => { store.delete(key); return true; });
 
     admin = await mkUser('Admin', 'admin@example.com', 'admin');
     creator = await mkUser('Rahul Creator', 'rahul@example.com', 'customer', { phone: '9876543210' });
@@ -187,9 +203,11 @@ describe('Reels API', () => {
         availability: 'low', hasVariants: false, festivalPrice: null,
       });
       expect(reel.creator).toEqual({ id: String(creator._id), name: 'Rahul Creator', avatarUrl: null });
-      expect(reel.hlsUrl).toBe('https://res.cloudinary.com/democloud/video/upload/sp_auto/v1/autobacs/reels/u_x/r' + reel.caption.split(' ')[1] + '.m3u8');
-      expect(reel.mp4Url).toMatch(/\/video\/upload\/c_limit,w_720,q_auto\/v1\/.+\.mp4$/);
-      expect(reel.posterUrl).toMatch(/\/video\/upload\/so_1,c_limit,w_720,q_auto\/v1\/.+\.jpg$/);
+      // Served as uploaded from the private bucket via a signed link; no HLS / poster.
+      expect(reel.mp4Url).toBe(`https://r2.example/get/${reelKey(TEAM, reel.caption.split(' ')[1])}?sig=g`);
+      expect(reel.hlsUrl).toBeNull();
+      expect(reel.posterUrl).toBeNull();
+      expect(r2.presignGet).toHaveBeenCalledWith(expect.objectContaining({ scope: 'private', contentType: 'video/mp4' }));
       expect(reel.shareUrl).toBe(`https://shop.example.com/products/${p.slug}`);
       expect(reel.viewerLiked).toBe(false);
       expect(reel).not.toHaveProperty('rejectReason');
@@ -297,37 +315,52 @@ describe('Reels API', () => {
   // ── Upload ──────────────────────────────────────────────────────────────────
 
   describe('upload', () => {
-    it('signs a direct upload into the caller’s own folder; never streams video through us', async () => {
+    it('hands out a presigned R2 PUT into the caller’s own folder; never streams video through us', async () => {
       const me = await signIn(creator.email);
-      const res = await me.post('/reels/upload-signature', {});
+      const res = await me.post('/reels/upload-signature', { contentType: 'video/mp4', size: 5_000_000 });
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({
-        cloudName: 'democloud', apiKey: 'key123', signature: 'sig-abc', resourceType: 'video',
-        folder: `autobacs/reels/u_${creator._id}`, maxDurationSec: 60,
-        uploadUrl: 'https://api.cloudinary.com/v1_1/democloud/video/upload',
-      });
-      expect(res.body.params).toMatchObject({ folder: res.body.folder, eager: 'sp_auto/m3u8', timestamp: String(res.body.timestamp) });
-      // Exactly the params handed back are the ones that were signed.
-      expect(cloudinaryMock.utils.api_sign_request).toHaveBeenCalledWith(res.body.params, 'secret');
+      expect(res.headers['cache-control']).toMatch(/no-store/);
+      expect(res.body).toMatchObject({ method: 'PUT', contentType: 'video/mp4', maxDurationSec: 60 });
+      expect(res.body.publicId).toMatch(new RegExp(`^autobacs/reels/u_${creator._id}/[0-9a-f]{24}/video-[0-9a-f]{16}\\.mp4$`));
+      expect(res.body.uploadUrl).toBe(`https://r2.example/put/${res.body.publicId}?sig=p`);
+      expect(r2.presignPut).toHaveBeenCalledWith(expect.objectContaining({ scope: 'private', contentLength: 5_000_000 }));
+      // Nothing Cloudinary-shaped leaks into the contract any more.
+      expect(res.body).not.toHaveProperty('signature');
+      expect(res.body).not.toHaveProperty('cloudName');
+    });
+
+    it('refuses a non-MP4/MOV type or an oversize file before signing', async () => {
+      const me = await signIn(creator.email);
+      expect((await me.post('/reels/upload-signature', { contentType: 'video/webm', size: 10 })).status).toBe(400);
+      const big = await me.post('/reels/upload-signature', { contentType: 'video/mp4', size: 500 * 1024 * 1024 });
+      expect(big.status).toBe(400);
+      expect(big.body.message).toMatch(/too big/);
+      expect((await me.post('/reels/upload-signature', {})).status).toBe(400);
+      expect(r2.presignPut).not.toHaveBeenCalled();
     });
 
     it('refuses the team folder to a customer, and needs sign-in', async () => {
+      const body = { contentType: 'video/mp4', size: 10 };
       const me = await signIn(creator.email);
-      expect((await me.post('/reels/upload-signature', { team: true })).status).toBe(403);
-      expect((await (await anonymous()).post('/reels/upload-signature', {})).status).toBe(401);
+      expect((await me.post('/reels/upload-signature', { ...body, team: true })).status).toBe(403);
+      expect((await (await anonymous()).post('/reels/upload-signature', body)).status).toBe(401);
       const staff = await signIn(admin.email);
-      const team = await staff.post('/reels/upload-signature', { team: true });
-      expect(team.body.folder).toBe('autobacs/reels/team');
+      const team = await staff.post('/reels/upload-signature', { ...body, team: true });
+      expect(team.body.publicId.startsWith(`${TEAM}/`)).toBe(true);
+      const adminRoute = await staff.post('/admin/reels/upload-signature', body);
+      expect(adminRoute.body.publicId.startsWith(`${TEAM}/`)).toBe(true);
     });
 
     it('creates a pending reel from a verified upload, and a retry returns the same reel', async () => {
       const p = await mkProduct();
       const me = await signIn(creator.email);
-      const publicId = `autobacs/reels/u_${creator._id}/clip1`;
+      const publicId = upload(reelKey(userPrefix(creator)), { durationSec: 20 });
 
       const first = await me.post('/reels', { publicId, productId: String(p._id), caption: '  Great   fit  ' });
       expect(first.status).toBe(201);
       expect(first.body.reel).toMatchObject({ status: 'pending', caption: 'Great fit', durationSec: 20, rejectReason: null });
+      // The creator can watch their own pending reel.
+      expect(first.body.reel.mp4Url).toBe(`https://r2.example/get/${publicId}?sig=g`);
 
       const retry = await me.post('/reels', { publicId, productId: String(p._id), caption: 'x' });
       expect(retry.status).toBe(200);
@@ -338,57 +371,77 @@ describe('Reels API', () => {
       expect((await (await anonymous()).get('/reels')).body.reels).toHaveLength(0);
     });
 
-    it('refuses an upload outside the caller’s folder (someone else’s video)', async () => {
+    it('refuses an upload outside the caller’s folder (someone else’s video), and leaves it alone', async () => {
       const p = await mkProduct();
       const me = await signIn(buyer.email);
-      const res = await me.post('/reels', { publicId: `autobacs/reels/u_${creator._id}/clip1`, productId: String(p._id) });
+      const theirs = upload(reelKey(userPrefix(creator)));
+      const res = await me.post('/reels', { publicId: theirs, productId: String(p._id) });
       expect(res.status).toBe(403);
-      expect(cloudinaryMock.api.resource).not.toHaveBeenCalled();
+      expect(r2.headObject).not.toHaveBeenCalled();
+      expect(store.has(theirs)).toBe(true);
       // u_<id> must not prefix-match u_<id>9.
-      const res2 = await me.post('/reels', { publicId: `autobacs/reels/u_${buyer._id}9/clip`, productId: String(p._id) });
+      const res2 = await me.post('/reels', { publicId: reelKey(`${userPrefix(buyer)}9`), productId: String(p._id) });
       expect(res2.status).toBe(403);
     });
 
-    it('refuses a clip over 60 seconds and deletes the asset', async () => {
+    it('a second account cannot claim a video already posted by someone else', async () => {
+      const p = await mkProduct();
+      const publicId = upload(reelKey(userPrefix(creator)));
+      expect((await (await signIn(creator.email)).post('/reels', { publicId, productId: String(p._id) })).status).toBe(201);
+      expect((await (await signIn(buyer.email)).post('/reels', { publicId, productId: String(p._id) })).status).toBe(403);
+    });
+
+    it('refuses a clip over 60 seconds and deletes the file', async () => {
       const p = await mkProduct();
       const me = await signIn(creator.email);
-      const publicId = `autobacs/reels/u_${creator._id}/long`;
-      cloudinaryMock.api.resource.mockResolvedValueOnce(videoResource(publicId, { duration: 75 }));
+      const publicId = upload(reelKey(userPrefix(creator)), { durationSec: 75 });
       const res = await me.post('/reels', { publicId, productId: String(p._id) });
       expect(res.status).toBe(400);
       expect(res.body.message).toMatch(/60 seconds/);
-      expect(cloudinaryMock.uploader.destroy).toHaveBeenCalledWith(publicId, expect.objectContaining({ resource_type: 'video' }));
+      expect(store.has(publicId)).toBe(false);
       expect(await Reel.countDocuments()).toBe(0);
     });
 
     it.each([
-      ['not a video', { resource_type: 'image' }, 400],
-      ['unknown duration', { duration: undefined }, 400],
-      ['too large', { bytes: 500 * 1024 * 1024 }, 400],
-    ])('refuses an asset that is %s', async (_label, over, status) => {
+      ['not a video', () => Buffer.from('<html><script>alert(1)</script></html>'), /MP4 or MOV/],
+      ['HEVC', () => makeMp4({ codec: 'hvc1' }), /Most Compatible/],
+      ['unreadable', () => makeMp4({ rawDuration: 0 }), /could not read/],
+    ])('refuses an upload that is %s', async (_label, bytes, msg) => {
       const p = await mkProduct();
       const me = await signIn(creator.email);
-      const publicId = `autobacs/reels/u_${creator._id}/bad`;
-      cloudinaryMock.api.resource.mockResolvedValueOnce(videoResource(publicId, over));
-      expect((await me.post('/reels', { publicId, productId: String(p._id) })).status).toBe(status);
+      const publicId = reelKey(userPrefix(creator));
+      store.set(publicId, bytes());
+      const res = await me.post('/reels', { publicId, productId: String(p._id) });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(msg);
       expect(await Reel.countDocuments()).toBe(0);
     });
 
-    it('400s a missing asset and 503s when Cloudinary is down (never accepts unchecked)', async () => {
+    it('refuses an oversize file by its stored size', async () => {
       const p = await mkProduct();
       const me = await signIn(creator.email);
-      const publicId = `autobacs/reels/u_${creator._id}/x`;
-      cloudinaryMock.api.resource.mockRejectedValueOnce({ error: { http_code: 404 } });
+      const publicId = upload(reelKey(userPrefix(creator)));
+      r2.headObject.mockResolvedValueOnce({ key: publicId, bytes: 500 * 1024 * 1024 });
       expect((await me.post('/reels', { publicId, productId: String(p._id) })).status).toBe(400);
-      cloudinaryMock.api.resource.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+      expect(await Reel.countDocuments()).toBe(0);
+    });
+
+    it('400s a missing file and 503s when storage is down (never accepts unchecked)', async () => {
+      const p = await mkProduct();
+      const me = await signIn(creator.email);
+      const publicId = reelKey(userPrefix(creator));
+      expect((await me.post('/reels', { publicId, productId: String(p._id) })).status).toBe(400);
+      upload(publicId);
+      r2.headObject.mockRejectedValueOnce(new Error('ETIMEDOUT'));
       expect((await me.post('/reels', { publicId, productId: String(p._id) })).status).toBe(503);
       expect(await Reel.countDocuments()).toBe(0);
+      expect(store.has(publicId)).toBe(true);
     });
 
     it('refuses an inactive or unknown product', async () => {
       const draft = await mkProduct({ isActive: false });
       const me = await signIn(creator.email);
-      const publicId = `autobacs/reels/u_${creator._id}/x`;
+      const publicId = upload(reelKey(userPrefix(creator)));
       expect((await me.post('/reels', { publicId, productId: String(draft._id) })).status).toBe(400);
       expect((await me.post('/reels', { publicId, productId: 'nope' })).status).toBe(400);
     });
@@ -523,14 +576,14 @@ describe('Reels API', () => {
       const p = await mkProduct();
       const staff = await signIn(admin.email);
       const res = await staff.post('/admin/reels', {
-        publicId: 'autobacs/reels/team/seed1', productId: String(p._id), caption: 'Launch', creatorUserId: String(creator._id),
+        publicId: upload(reelKey(TEAM, 901)), productId: String(p._id), caption: 'Launch', creatorUserId: String(creator._id),
       });
       expect(res.status).toBe(201);
       expect(res.body.reel).toMatchObject({ status: 'approved', creator: { id: String(creator._id) } });
-      const unnamed = await staff.post('/admin/reels', { publicId: 'autobacs/reels/team/seed2', productId: String(p._id) });
+      const unnamed = await staff.post('/admin/reels', { publicId: upload(reelKey(TEAM, 902)), productId: String(p._id) });
       expect(unnamed.body.reel.creator).toEqual({ id: null, name: 'Autobacs India', avatarUrl: null });
       // A team upload must come from the team folder.
-      const foreign = await staff.post('/admin/reels', { publicId: `autobacs/reels/u_${creator._id}/c`, productId: String(p._id) });
+      const foreign = await staff.post('/admin/reels', { publicId: upload(reelKey(userPrefix(creator))), productId: String(p._id) });
       expect(foreign.status).toBe(403);
       expect((await (await anonymous()).get('/reels')).body.reels).toHaveLength(2);
     });

@@ -7,7 +7,7 @@ import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, adminOrMarketing } from '../middleware/authMiddleware.js';
 import reelService from '../services/reelService.js';
-import { buildUploadSignature } from '../services/reelMediaService.js';
+import { buildUploadTarget } from '../services/reelMediaService.js';
 
 const router = express.Router();
 router.use(protect, adminOrMarketing);
@@ -23,9 +23,12 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, ...page });
 }));
 
-// POST /admin/reels/upload-signature — team uploads go to the shared team folder
+// POST /admin/reels/upload-signature { contentType, size } — presigned R2 PUT into the shared team prefix
 router.post('/upload-signature', asyncHandler(async (req, res) => {
-  res.json({ success: true, ...buildUploadSignature({ userId: req.user._id, team: true }) });
+  const target = await buildUploadTarget({
+    userId: req.user._id, team: true, contentType: req.body?.contentType, size: req.body?.size,
+  });
+  res.json({ success: true, ...target });
 }));
 
 // POST /admin/reels { publicId, productId, caption, creatorUserId? } — approved immediately

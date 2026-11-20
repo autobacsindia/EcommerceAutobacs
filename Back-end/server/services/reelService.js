@@ -21,7 +21,7 @@ import userRepository from '../repositories/userRepository.js';
 import affiliateRepository from '../repositories/affiliateRepository.js';
 import { resolveBuyerIdentity, isSelfReferral } from './affiliateAttributionService.js';
 import { resolvePublicFestivalOffer } from './festivalOfferService.js';
-import { verifyUploadedVideo, reelFolderFor } from './reelMediaService.js';
+import { verifyUploadedVideo, reelFolderFor, reelPlaybackUrls } from './reelMediaService.js';
 import { getRedisClient as getCounterRedis } from '../middleware/rate-limit/redisClient.js';
 import { AFFILIATE_STATUS } from '../config/affiliate.js';
 import {
@@ -41,7 +41,6 @@ import {
   reelViewSeenKey,
 } from '../config/reels.js';
 import { encodeCursor, decodeCursor, afterClause } from '../utils/listQuery.js';
-import { reelMediaUrls } from '../utils/reelMedia.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { applyFestivalOffer, resolveFestivalSetting } from '../utils/festivalOffer.js';
 import { storefrontOrigin } from '../utils/storefrontUrl.js';
@@ -122,8 +121,8 @@ const toCreatorBlock = (user) => (user
  * Public shape of a reel (the contract's `Reel`). `withModeration` adds the fields only
  * the creator and staff may see.
  */
-function toReel(reel, { product, creator, liked, withModeration = false }) {
-  const urls = reelMediaUrls(reel.media) || { hlsUrl: null, mp4Url: null, posterUrl: null };
+async function toReel(reel, { product, creator, liked, withModeration = false }) {
+  const urls = await reelPlaybackUrls(reel.media);
   const origin = storefrontOrigin();
   const out = {
     id: String(reel._id),
@@ -182,6 +181,7 @@ async function hydrate(rows, { viewerId = null, publicOnly = true, withModeratio
   for (const r of rows) {
     const p = products.get(String(r.product));
     if (publicOnly && !p) continue; // invariant 1: inactive/draft/deleted product → hidden
+    // Not awaited here: playback links are signed locally (no network) and in parallel.
     out.push(toReel(r, {
       product: toProductBlock(p, { festivalLive, now }),
       creator: toCreatorBlock(r.creator ? creatorById.get(String(r.creator)) : null),
@@ -189,7 +189,7 @@ async function hydrate(rows, { viewerId = null, publicOnly = true, withModeratio
       withModeration,
     }));
   }
-  return out;
+  return Promise.all(out);
 }
 
 // ── Public reads ──────────────────────────────────────────────────────────────

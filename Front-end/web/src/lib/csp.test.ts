@@ -13,11 +13,11 @@ const directive = (csp: string, name: string) =>
   csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `)) || '';
 
 describe('media-src', () => {
-  test('lets a lesson video play from the private bucket', async () => {
+  test('lets a lesson video or a shoppable reel play from the private bucket', async () => {
     expect(directive(await buildStrictCsp('n0nc3'), 'media-src')).toMatch(/r2\.cloudflarestorage\.com/);
   });
 
-  test('lets a reel or team-chat video play from Cloudinary', async () => {
+  test('lets an older team-chat video play from Cloudinary', async () => {
     expect(directive(await buildStrictCsp('n0nc3'), 'media-src')).toContain('https://res.cloudinary.com');
   });
 });

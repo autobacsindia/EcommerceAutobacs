@@ -1,12 +1,13 @@
 /**
- * Team reel upload: video goes straight to Cloudinary with the backend's
- * signature; only { publicId, productId, caption, creatorUserId? } reach our API.
+ * Team reel upload: video goes straight to Cloudflare R2 with the backend's
+ * presigned PUT; only { publicId, productId, caption, creatorUserId? } reach our API.
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TeamReelUpload from './TeamReelUpload';
-import { checkVideoFile, signedFields, uploadTarget } from './videoUpload';
+import { checkVideoFile, videoTypeOf, type ReelUploadTarget } from './videoUpload';
+import type * as VideoUpload from './videoUpload';
 
 const getMock = jest.fn();
 const postMock = jest.fn();
@@ -25,13 +26,14 @@ jest.mock('./videoUpload', () => {
   return {
     ...actual,
     readVideoDuration: (...a: unknown[]) => durationMock(...a),
-    uploadVideoToCloudinary: (...a: unknown[]) => uploadMock(...a),
+    uploadVideoToStorage: (...a: unknown[]) => uploadMock(...a),
   };
 });
 
-const SIG = {
-  cloudName: 'demo', apiKey: 'k', timestamp: 1, signature: 's', folder: 'reels', resourceType: 'video',
-  maxBytes: 100 * 1024 * 1024, maxDurationSec: 60,
+const SIG: ReelUploadTarget = {
+  method: 'PUT', uploadUrl: 'https://bucket.acct.r2.cloudflarestorage.com/autobacs/reels/team/k.mp4?X-Amz-Signature=s',
+  headers: { 'Content-Type': 'video/mp4' }, publicId: 'autobacs/reels/team/k.mp4', contentType: 'video/mp4',
+  expiresIn: 900, maxBytes: 100 * 1024 * 1024, maxDurationSec: 60,
 };
 
 function renderUpload() {
@@ -75,11 +77,11 @@ it('needs a video and a product before anything is uploaded', async () => {
 it('rejects a non-video file without asking for a signature', async () => {
   renderUpload();
   fireEvent.change(screen.getByLabelText('Video'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
-  expect(await screen.findByRole('alert')).toHaveTextContent('MP4, MOV or WebM');
+  expect(await screen.findByRole('alert')).toHaveTextContent('MP4 or MOV');
   expect(postMock).not.toHaveBeenCalled();
 });
 
-it('uploads to Cloudinary then saves only the ids and caption', async () => {
+it('uploads to R2 then saves only the ids and caption', async () => {
   postMock.mockImplementation((url: string) => Promise.resolve(url === '/reels/upload-signature' ? SIG : { id: 'r9', status: 'approved' }));
   uploadMock.mockResolvedValue({ publicId: 'reels/abc123' });
   renderUpload();
@@ -91,7 +93,7 @@ it('uploads to Cloudinary then saves only the ids and caption', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent('Reel published');
   expect(uploadMock).toHaveBeenCalledTimes(1);
   expect(uploadMock.mock.calls[0][1]).toEqual(SIG);
-  expect(postMock).toHaveBeenCalledWith('/reels/upload-signature', { team: true });
+  expect(postMock).toHaveBeenCalledWith('/reels/upload-signature', { team: true, contentType: 'video/mp4', size: 1 });
   expect(postMock).toHaveBeenCalledWith('/admin/reels', { publicId: 'reels/abc123', productId: 'p1', caption: 'Clear at night' });
 });
 
@@ -132,12 +134,49 @@ it('checkVideoFile enforces type and size', () => {
   expect(checkVideoFile(new File(['x'], 'a.mp4', { type: 'video/mp4' }), { maxBytes: 10 })).toBeNull();
 });
 
-it('sends every signed param verbatim and only posts to Cloudinary', () => {
-  const params = { allowed_formats: 'mp4,mov,webm', eager: 'sp_auto', eager_async: 'true', folder: 'reels/team', timestamp: '1' };
-  expect(signedFields({ folder: 'x', timestamp: 9, params })).toEqual(Object.entries(params));
-  // Bare contract shape (no params) falls back to folder + timestamp.
-  expect(signedFields({ folder: 'reels', timestamp: 9 })).toEqual([['folder', 'reels'], ['timestamp', '9']]);
+it('videoTypeOf takes MP4/MOV by label, or by extension when the browser gives no label', () => {
+  const f = (name: string, type: string) => new File(['x'], name, { type });
+  expect(videoTypeOf(f('a.mov', 'video/quicktime'))).toBe('video/quicktime');
+  expect(videoTypeOf(f('a.MOV', ''))).toBe('video/quicktime');
+  expect(videoTypeOf(f('a.mp4', 'application/octet-stream'))).toBe('video/mp4');
+  expect(videoTypeOf(f('a.webm', 'video/webm'))).toBeNull();
+  expect(videoTypeOf(f('a.mp4', 'text/html'))).toBeNull();
+  expect(videoTypeOf(f('a.exe', ''))).toBeNull();
+});
 
-  expect(uploadTarget({ cloudName: 'demo', uploadUrl: 'https://api.cloudinary.com/v1_1/demo/video/upload' })).toBe('https://api.cloudinary.com/v1_1/demo/video/upload');
-  expect(uploadTarget({ cloudName: 'demo', uploadUrl: 'https://evil.example.com/upload' })).toBe('https://api.cloudinary.com/v1_1/demo/video/upload');
+describe('uploadVideoToStorage', () => {
+  // The module mock above swaps this out for the component tests; test the real one.
+  const { uploadVideoToStorage } = jest.requireActual<typeof VideoUpload>('./videoUpload');
+  type FakeXhr = {
+    open: jest.Mock; setRequestHeader: jest.Mock; send: jest.Mock; abort: jest.Mock;
+    upload: { onprogress?: (e: { lengthComputable: boolean; loaded: number; total: number }) => void };
+    status: number; onload?: () => void; onerror?: () => void; onabort?: () => void;
+  };
+  let xhr: FakeXhr;
+  const RealXhr = global.XMLHttpRequest;
+  beforeEach(() => {
+    xhr = { open: jest.fn(), setRequestHeader: jest.fn(), send: jest.fn(), abort: jest.fn(), upload: {}, status: 0 };
+    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = jest.fn(() => xhr);
+  });
+  afterEach(() => { global.XMLHttpRequest = RealXhr; });
+
+  it('PUTs the raw file with the signed type and resolves with the key', async () => {
+    const file = video();
+    const progress = jest.fn();
+    const p = uploadVideoToStorage(file, SIG, progress);
+    expect(xhr.open).toHaveBeenCalledWith('PUT', SIG.uploadUrl);
+    expect(xhr.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'video/mp4');
+    expect(xhr.send).toHaveBeenCalledWith(file);
+    xhr.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
+    expect(progress).toHaveBeenCalledWith(50);
+    xhr.status = 200; xhr.onload?.();
+    await expect(p).resolves.toEqual({ publicId: SIG.publicId });
+  });
+
+  it('explains an expired link (403) and refuses a non-https target', async () => {
+    const p = uploadVideoToStorage(video(), SIG);
+    xhr.status = 403; xhr.onload?.();
+    await expect(p).rejects.toThrow(/expired/);
+    await expect(uploadVideoToStorage(video(), { ...SIG, uploadUrl: 'http://evil.example/x' })).rejects.toThrow(/misconfigured/);
+  });
 });

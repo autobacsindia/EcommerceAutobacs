@@ -168,11 +168,21 @@ export const getObjectBuffer = async ({ key, scope }) => {
  * absent key gets "no signature" rather than an exception — absence is already
  * caught by the separate existence check.
  */
-export const getObjectHead = async ({ key, scope, bytes = 512 }) => {
+export const getObjectHead = async ({ key, scope, bytes = 512 }) =>
+  getObjectRange({ key, scope, start: 0, length: bytes });
+
+/**
+ * Read `length` bytes starting at `start` (fewer at the end of the object).
+ * Same missing-object and error semantics as getObjectHead. Used to read an MP4's
+ * `moov` box wherever it sits without downloading the clip (services/storage/mp4Probe.js).
+ */
+export const getObjectRange = async ({ key, scope, start = 0, length = 512 }) => {
   const bucket = bucketFor(scope);
+  const from = Math.max(0, Math.floor(start));
+  const to = from + Math.max(1, Math.floor(length)) - 1;
   try {
     const r = await client().send(new GetObjectCommand({
-      Bucket: bucket, Key: key, Range: `bytes=0-${Math.max(0, bytes - 1)}`,
+      Bucket: bucket, Key: key, Range: `bytes=${from}-${to}`,
     }));
     return Buffer.from(await r.Body.transformToByteArray());
   } catch (err) {
@@ -250,13 +260,23 @@ export const deleteObjects = async ({ keys = [], scope }) => {
  * Public delivery adds a third: the image Worker clamps every served
  * Content-Type to an image allowlist and sends `X-Content-Type-Options: nosniff`.
  */
-export const presignPut = async ({ key, scope, contentType, expiresIn }) => {
+export const presignPut = async ({ key, scope, contentType, expiresIn, contentLength }) => {
   if (!key) throw new AppError('[Storage] presignPut requires a key', 500);
   const bucket = bucketFor(scope);
   const cfg = r2Config();
   const url = await getSignedUrl(
     client(),
-    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: contentType,
+      // Optional exact size. The presigner signs `content-length` by default (it
+      // does NOT sign content-type, which is why the type is unenforced), so a
+      // body of any other length fails the signature check. Used by reels to
+      // refuse an oversized upload before the bytes are stored; the HEAD at
+      // submit time is still the control of record.
+      ...(Number.isSafeInteger(contentLength) && contentLength > 0 ? { ContentLength: contentLength } : {}),
+    }),
     { expiresIn: expiresIn || cfg.signedPutTtlSeconds },
   );
   return { url, key, bucket, expiresIn: expiresIn || cfg.signedPutTtlSeconds };
@@ -316,5 +336,5 @@ export const listKeys = async ({ prefix = '', scope, limit = Infinity }) => {
 
 export default {
   putObject, headObject, objectExists, getObjectBuffer, getObjectHead,
-  deleteObject, deleteObjects, presignPut, presignGet, listKeys, resetClient,
+  deleteObject, deleteObjects, presignPut, presignGet, listKeys, resetClient, getObjectRange,
 };
