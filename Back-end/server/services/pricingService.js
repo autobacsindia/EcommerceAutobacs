@@ -36,7 +36,10 @@ import { CAMPAIGN_REASON } from '../config/campaign.js';
 import { resolveLinePercent, lineDiscountPaise, apportionCap } from '../utils/productTiers.js';
 import { applyFestivalOffer, resolveFestivalSetting } from '../utils/festivalOffer.js';
 import { isOfferLiveForPricing } from './festivalOfferService.js';
-import deliveryFeeService from './deliveryFeeService.js';
+import deliveryFeeService, { OFFER_ERROR } from './deliveryFeeService.js';
+
+/** Shown when a delivery-dependent saving (free-delivery coupon) is tried before a PIN. */
+export const PIN_REQUIRED_MESSAGE = 'Enter your delivery PIN code first to use this free-delivery coupon';
 
 // Buyer-facing rejection reasons (all whitelisted in errorMiddleware so they survive).
 const REASON = {
@@ -247,6 +250,7 @@ class PricingService {
           shippingSize: product.shippingSize || null,
           listedSize: product.listedSize || null,
           shippingClass: product.shippingClass || null,
+          packingFee: product.packingFee ?? null,
         },
         categories: product.categories || [],
         brandSlug: product.brandSlug || null,
@@ -695,6 +699,20 @@ class PricingService {
       now,
       session,
     });
+    /*
+      PIN first (Sachin, 2026-11-20). A free-delivery coupon's whole value IS the
+      delivery fees, and those are unknown until a PIN prices them — so, like the Black
+      Friday offer, it is refused (reported here, a hard 400 at checkout through
+      assertCouponApplied) rather than shown as "applied, ₹0 saved". ₹/% coupons do not
+      depend on delivery and stay usable without a PIN. Only while fees are charged:
+      with fees switched off there is nothing for the coupon to waive either way.
+    */
+    if (couponFreeShipping && deliveryFees?.needsPin) {
+      couponFreeShipping = false;
+      appliedCoupon = null;
+      couponError = PIN_REQUIRED_MESSAGE;
+      couponErrorCode = OFFER_ERROR.PIN_REQUIRED;
+    }
     const shippingPaise = deliveryFees ? deliveryFees.totalPaise : 0;
     const offerWaives = Boolean(deliveryFees?.offer.applied);
     const shippingWaivePaise = offerWaives || couponFreeShipping ? shippingPaise : 0;
@@ -764,7 +782,13 @@ class PricingService {
         festival: fromPaise(festivalSavingsPaise),
         coupon: fromPaise(goodsCouponPaise),
         karma: fromPaise(karmaDiscountPaise),
-        total: fromPaise(catalogSavingsPaise + festivalSavingsPaise + goodsCouponPaise + karmaDiscountPaise),
+        // Sachin's breakdown (2026-11-20): "Discount" = every goods saving above
+        // (MRP − price, festival, coupon, karma); "Additional savings (delivery fees
+        // waived)" = the fees the Black Friday offer or a free-delivery coupon zeroed.
+        // 0 until a PIN prices the fees — nothing is shown that was not computed.
+        discount: fromPaise(catalogSavingsPaise + festivalSavingsPaise + goodsCouponPaise + karmaDiscountPaise),
+        deliveryFees: fromPaise(shippingWaivePaise),
+        total: fromPaise(catalogSavingsPaise + festivalSavingsPaise + goodsCouponPaise + karmaDiscountPaise + shippingWaivePaise),
       },
       /*
         Per-line festival offer, for the cart/checkout to render (original price, %,

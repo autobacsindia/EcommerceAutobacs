@@ -101,7 +101,7 @@ describe('fees switched ON', () => {
     await feesOn();
     const q = await quote(p, { deliveryPin: '400001' });
     const fees = q.deliveryFees;
-    expect(fees.lines.map((l) => l.code)).toEqual(['shipping', 'packing', 'insurance', 'payment', 'gst']);
+    expect(fees.lines.map((l) => l.code)).toEqual(['shipping', 'packing', 'payment', 'gst']);
     const sum = fees.lines.reduce((a, l) => a + l.amount, 0);
     expect(fees.total).toBeCloseTo(sum, 2);
     expect(q.shippingCost).toBe(fees.total);
@@ -434,7 +434,7 @@ describe('Maybach conversion kit to Kochi, no size data', () => {
     expect(line(fees, 'handling')).toBeCloseTo(124.2, 2);
     expect(line(fees, 'shipping')).toBe(4416);
     expect(line(fees, 'packing')).toBe(1500);
-    expect(line(fees, 'insurance')).toBe(505);
+    expect(line(fees, 'insurance')).toBe(0); // removed 2026-11-20 (was ₹505)
     // Capped, and no Razorpay GST stacked under our GST line.
     expect(line(fees, 'payment')).toBe(999);
     const beforeGst = fees.lines.filter((l) => l.code !== 'gst').reduce((a, l) => a + l.amount, 0);
@@ -442,7 +442,7 @@ describe('Maybach conversion kit to Kochi, no size data', () => {
     // Owner's body-kit range.
     expect(fees.total).toBeGreaterThanOrEqual(5000);
     expect(fees.total).toBeLessThanOrEqual(10000);
-    expect(fees.total).toBeCloseTo(9114.56, 2);
+    expect(fees.total).toBeCloseTo(8518.66, 2);
   });
 
   it('the order charges the same capped fees (server recomputes, Razorpay amount includes them)', async () => {
@@ -452,8 +452,8 @@ describe('Maybach conversion kit to Kochi, no size data', () => {
     const order = await orderService.createOrder(user._id, [{ product: kit._id, quantity: 1 }], { ...ADDRESS, postalCode: '682019' }, {});
     const stored = await Order.findById(order._id).lean();
     expect(stored.deliveryFees.lines.find((l) => l.code === 'payment').amount).toBe(999);
-    expect(stored.deliveryFees.charged).toBeCloseTo(9114.56, 2);
-    expect(stored.totalAmount).toBeCloseTo(505000 + 9114.56, 2);
+    expect(stored.deliveryFees.charged).toBeCloseTo(8518.66, 2);
+    expect(stored.totalAmount).toBeCloseTo(505000 + 8518.66, 2);
   });
 
   it('a raised cap and real band rate flow straight through (admin edits, no deploy)', async () => {

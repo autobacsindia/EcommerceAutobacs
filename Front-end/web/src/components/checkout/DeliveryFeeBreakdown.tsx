@@ -27,15 +27,47 @@ interface Props {
   /** Cart / first checkout step: a PIN box (no address chosen yet). */
   pinInput?: { value: string; onChange: (pin: string) => void };
   format?: (n: number) => string;
+  /** The quote's server-computed savings: drives the "Total savings" breakdown. */
+  savings?: SavingsBreakdown | null;
   /** Test seam — forces the no-motion rendering. */
   reducedMotionOverride?: boolean;
 }
 
 const defaultFormat = (n: number) => formatRupees(n ?? 0, { exact: true });
 
+export interface SavingsBreakdown { discount?: number; deliveryFees?: number; total: number }
+
+export const PIN_FIRST_MESSAGE = 'Enter your PIN code first to see your delivery fees and savings';
+
+/**
+ * Sachin's lines: delivery fees waived · goods discount · total. Every figure is the
+ * server's (`quote.savings`); the browser never adds them up.
+ */
+function savingsRows(savings: SavingsBreakdown | null | undefined, feeSaving: number) {
+  if (savings && typeof savings.deliveryFees === 'number') {
+    return [
+      { label: 'Shipping & fees waived', amount: savings.deliveryFees, total: false },
+      ...((savings.discount ?? 0) > 0 ? [{ label: 'Discount', amount: savings.discount as number, total: false }] : []),
+      { label: 'Total savings', amount: savings.total, total: true },
+    ];
+  }
+  return [{ label: 'Total savings', amount: feeSaving, total: true }];
+}
+
+/** Bring the PIN box (cart) or the address PIN field (checkout) into view and focus it. */
+function focusPinField() {
+  if (typeof document === 'undefined') return;
+  const el = document.querySelector<HTMLInputElement>('#delivery-pin, [data-delivery-pin], input[name="postalCode"]');
+  if (!el) return;
+  el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  el.focus({ preventScroll: true });
+}
+
 export default function DeliveryFeeBreakdown({
-  fees, loading = false, requested, onRequestChange, pinInput, format = defaultFormat, reducedMotionOverride,
+  fees, loading = false, requested, onRequestChange, pinInput, format = defaultFormat, savings, reducedMotionOverride,
 }: Props) {
+  // "Apply" tapped before a PIN: the fees are unknown, so the offer waits for one.
+  const [pinHint, setPinHint] = useState(false);
   if (fees === undefined) return null; // no quote yet
   if (fees === null) {
     return (
@@ -94,7 +126,12 @@ export default function DeliveryFeeBreakdown({
       {offer.available && !waived && (
         <button
           type="button"
-          onClick={() => onRequestChange(true)}
+          onClick={() => {
+            // PIN first: without one there are no fees to waive (the server refuses too).
+            if (fees.needsPin) { setPinHint(true); focusPinField(); return; }
+            setPinHint(false);
+            onRequestChange(true);
+          }}
           disabled={pending}
           aria-busy={pending}
           className="w-full mt-2 rounded-lg bg-[#E3132C] hover:bg-[#c40f25] text-[#fff] font-display font-extrabold uppercase tracking-[0.08em] py-3.5 px-4 shadow-lg shadow-red-600/30 ring-2 ring-[#E3132C]/30 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait transition-colors"
@@ -105,12 +142,17 @@ export default function DeliveryFeeBreakdown({
         </button>
       )}
 
+      {fees.needsPin && (pinHint || offer.error === 'pin_required') && (
+        <p role="alert" data-testid="offer-needs-pin" className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-display text-amber-800">
+          {PIN_FIRST_MESSAGE}
+        </p>
+      )}
+
       {waived && (
-        <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-green-600/40 bg-green-600/10 px-3 py-2">
+        <div className="mt-2 rounded-lg border border-green-600/40 bg-green-600/10 px-3 py-2" data-testid="offer-applied">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-display font-bold text-green-700">
-            {fees.needsPin
-              ? 'Black Friday offer applied — every delivery fee will be ₹0'
-              : `Black Friday offer applied — you saved ${format(offer.saving)}`}
+            Black Friday offer applied — every delivery fee is ₹0
           </span>
           <button
             type="button"
@@ -119,6 +161,15 @@ export default function DeliveryFeeBreakdown({
           >
             Remove
           </button>
+        </div>
+        <dl className="mt-2 space-y-1 text-sm font-display" data-testid="savings-breakdown">
+          {savingsRows(savings, offer.saving).map((r) => (
+            <div key={r.label} className={`flex justify-between text-green-700 ${r.total ? 'border-t border-green-600/30 pt-1 font-bold' : ''}`}>
+              <dt>{r.label}</dt>
+              <dd>{format(r.amount)}</dd>
+            </div>
+          ))}
+        </dl>
         </div>
       )}
 
@@ -131,6 +182,7 @@ export default function DeliveryFeeBreakdown({
       <FeeOfferCelebration
         applied={waived}
         saving={offer.saving}
+        rows={savingsRows(savings, offer.saving)}
         format={format}
         reducedMotionOverride={reducedMotionOverride}
       />
@@ -143,11 +195,13 @@ export default function DeliveryFeeBreakdown({
  * still has it applied says nothing). Dismissible, never blocks checkout, and all
  * motion sits behind prefers-reduced-motion.
  */
+type SavingsRow = { label: string; amount: number; total: boolean };
+
 function FeeOfferCelebration({
-  applied, saving, format, reducedMotionOverride,
-}: { applied: boolean; saving: number; format: (n: number) => string; reducedMotionOverride?: boolean }) {
+  applied, saving, rows, format, reducedMotionOverride,
+}: { applied: boolean; saving: number; rows: SavingsRow[]; format: (n: number) => string; reducedMotionOverride?: boolean }) {
   const [shown, setShown] = useState(false);
-  const [frozenSaving, setFrozenSaving] = useState(0);
+  const [frozenRows, setFrozenRows] = useState<SavingsRow[]>([]);
   // "Worth celebrating" = applied with a real saving. A tap before the PIN is known
   // (saving 0) celebrates once the PIN prices the fees, not before.
   const worth = applied && saving > 0;
@@ -155,11 +209,11 @@ function FeeOfferCelebration({
 
   useEffect(() => {
     if (worth && !wasWorth.current) {
-      setFrozenSaving(saving);
+      setFrozenRows(rows);
       setShown(true);
     }
     wasWorth.current = worth;
-  }, [worth, saving]);
+  }, [worth, saving, rows]);
 
   useEffect(() => {
     if (!shown) return;
@@ -206,9 +260,14 @@ function FeeOfferCelebration({
         <PartyPopper size={34} className={`mx-auto mb-3 text-[#E3132C] ${reduced ? '' : 'animate-bounce'}`} />
         <p className="text-xs font-display font-bold uppercase tracking-[0.2em] text-[#E3132C]">Black Friday</p>
         <h2 id="fee-offer-title" className="mt-1 text-xl font-display font-extrabold">Congratulations!</h2>
-        <p className="mt-2 text-lg font-display">
-          You saved <span className="font-extrabold text-[#F5B54A]">{format(frozenSaving)}</span>
-        </p>
+        <dl className="mt-3 space-y-1 text-left text-sm font-display">
+          {frozenRows.map((r) => (
+            <div key={r.label} className={`flex justify-between gap-3 ${r.total ? 'border-t border-white/20 pt-1.5 text-lg font-extrabold text-[#F5B54A]' : 'text-white/85'}`}>
+              <dt>{r.total ? 'You saved' : r.label}</dt>
+              <dd>{format(r.amount)}</dd>
+            </div>
+          ))}
+        </dl>
         <p className="mt-1 text-xs text-white/70 font-display">Every delivery fee is ₹0 on this order.</p>
         <button
           type="button"

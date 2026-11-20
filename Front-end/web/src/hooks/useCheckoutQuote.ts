@@ -68,6 +68,10 @@ export interface CheckoutQuote {
     festival?: number;
     coupon: number;
     karma: number;
+    /** Goods discount: MRP − price + festival + coupon + karma (server). */
+    discount?: number;
+    /** Delivery fees the Black Friday offer / a free-delivery coupon waived (server). */
+    deliveryFees?: number;
     total: number;
   };
   /**
@@ -119,6 +123,7 @@ export interface FestivalOfferQuoteLine {
 }
 
 export interface DeliveryFeeLine {
+  // 'insurance' is no longer charged (2026-11-20) but orders placed before carry it.
   code: 'shipping' | 'packing' | 'handling' | 'docket' | 'fuel' | 'remote' | 'insurance' | 'payment' | 'gst';
   label: string;
   amount: number;

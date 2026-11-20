@@ -42,6 +42,10 @@ jest.mock('@/hooks/useErrorHandler', () => ({
   useErrorHandler: () => ({ handleError: jest.fn() }),
 }));
 
+// Black Friday ₹0-delivery card figures: not what these tests exercise.
+jest.mock('@/hooks/queries/useCardFeeWaivers', () => ({
+  useCardFeeWaivers: () => ({ waivers: null, pending: false }),
+}));
 jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
   useCampaignProductRates: () => ({ data: null }),
 }));

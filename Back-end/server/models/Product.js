@@ -356,6 +356,10 @@ const ProductSchema = new mongoose.Schema({
   // when the size changes). See utils/shippingClass.js.
   shippingClass: { type: String, enum: [...SHIPPING_CLASSES, null], default: null },
   shippingClassSource: { type: String, enum: [...SHIPPING_CLASS_SOURCES, null], default: null },
+  // ₹ per unit to pack THIS product, replacing the size-class packing rate on the
+  // Delivery fees page. For big items whose real crate costs far more than their class
+  // rate (a Profender suspension kit is "large" = ₹500). null = use the class rate.
+  packingFee: { type: Number, min: 0, max: 100000, default: null },
 
   // SEO metadata overrides (meta title/description, canonical, OG image,
   // noindex, internal focus keyword). All optional — blank fields fall back to

@@ -20,6 +20,8 @@ import {
   lineSavings,
   type ProductRate,
 } from '@/hooks/queries/useCampaignProductRates';
+import type { CardFeeWaiver } from '@/hooks/queries/useCardFeeWaivers';
+import ZeroDeliveryReceipt, { ZeroDeliveryRibbon, zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryReceipt';
 
 /**
  * Storefront product card — white tile in the home page's style. Self-contained client island —
@@ -34,6 +36,8 @@ export default function StoreProductCard({
   campaignRate,
   className,
   priority = false,
+  feeWaiver,
+  feeWaiverPending = false,
 }: {
   product: Product;
   featured?: boolean;
@@ -53,6 +57,14 @@ export default function StoreProductCard({
    * lazy image is not even requested until layout has run.
    */
   priority?: boolean;
+  /**
+   * Black Friday: what the offer waives on this product (server figures, batch-fetched by
+   * the grid via `useCardFeeWaivers`). Adds the ₹0 receipt + ribbon and folds the fees
+   * into the red "Save ₹X+" badge. null/undefined = the plain card.
+   */
+  feeWaiver?: CardFeeWaiver | null;
+  /** Offer live, figures loading: reserve the receipt's space so the grid doesn't shift. */
+  feeWaiverPending?: boolean;
 }) {
   const router = useRouter();
   const url = productUrl(product);
@@ -85,7 +97,12 @@ export default function StoreProductCard({
 
   const onSale = !isVariable && !!product.originalPrice && product.originalPrice > product.price;
   // Rupees saved against the M.R.P. ("Save ₹250"), not a percentage — display only.
-  const saveLabel = onSale ? savingsLabel(product.price, product.originalPrice, (n) => formatPrice(n)) : null;
+  // Black Friday: a sold-out or variable card advertises no ₹0 delivery (nothing to check
+  // out / no single box). Otherwise the badge also counts the fees the offer waives.
+  const waiver = !isVariable && product.stock !== 'out' ? feeWaiver ?? null : null;
+  const waiverPending = !waiver && !isVariable && product.stock !== 'out' && feeWaiverPending;
+  const saveLabel = zeroDeliverySaveLabel(waiver, (n) => formatPrice(n))
+    ?? (onSale ? savingsLabel(product.price, product.originalPrice, (n) => formatPrice(n)) : null);
   // Diwali offer — an EXTRA % on top of the price shown; the sale badge and M.R.P.
   // strike-through stay exactly as they are. For a variable product every model is
   // priced with its own Diwali choice and the cheapest result is the true "From" price.
@@ -215,7 +232,7 @@ export default function StoreProductCard({
               {saveLabel}
             </span>
           )}
-          {featured && !onSale && !outOfStock && (
+          {featured && !onSale && !waiver && !outOfStock && (
             <span className="rounded-md bg-gold px-2 py-1 text-[11px] font-bold text-white">
               ★ Top pick
             </span>
@@ -236,6 +253,7 @@ export default function StoreProductCard({
         >
           <Heart className={cn('h-4 w-4 transition-colors', wished ? 'fill-[#cc0c39] text-danger' : 'text-ink-muted')} />
         </button>
+        {waiver && <ZeroDeliveryRibbon />}
       </div>
 
       {/* Body */}
@@ -321,6 +339,12 @@ export default function StoreProductCard({
             {isVariable ? <SlidersHorizontal className="h-4 w-4" /> : backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
           </button>
         </div>
+        <ZeroDeliveryReceipt
+          waiver={waiver}
+          pending={waiverPending}
+          price={festivalOffer?.finalPrice ?? product.price}
+          format={(n) => formatPrice(n, { exact: true })}
+        />
       </div>
     </>
   );

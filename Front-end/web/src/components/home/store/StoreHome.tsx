@@ -158,7 +158,7 @@ export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
   const showcase = pickHeroShowcase(data.deals, data.featured);
   const source = slides.find((s) => s.id === 'deals') ?? slides[0];
   const photos: FestiveHeroPhoto[] = showcase.length >= HERO_SHOWCASE
-    ? showcase.map((p) => ({ src: p.image, href: p.href, name: p.name, save: savingsAmount(p.price, p.originalPrice) }))
+    ? showcase.map((p) => ({ src: p.image, href: p.href, name: p.name, save: savingsAmount(p.price, p.originalPrice), id: p.variable ? undefined : p.id }))
     : (source?.images ?? []).map((img) => ({ ...img, save: saveByHref.get(img.href) ?? 0 }));
   return {
     photos,

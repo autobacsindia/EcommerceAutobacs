@@ -8,6 +8,8 @@ import type { PublicFestivalTheme } from '@/lib/festival/festivalTheme';
 import { festivalVars } from '@/components/festival/festivalStyle';
 import { countdownParts } from '@/components/festival/FestivalCountdown';
 import type { FestiveHeroPhoto } from './FestiveHome';
+import { useCardFeeWaivers } from '@/hooks/queries/useCardFeeWaivers';
+import { zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryReceipt';
 import { useCurrency } from '@/context/CurrencyContext';
 
 /**
@@ -52,6 +54,8 @@ export default function BlackFridayHero({
   const copy = tokens.home;
   const [line1, line2, line3] = copy.heroTitle;
   const art = photos.slice(0, 3);
+  // Black Friday: "Save ₹X+" also counts the delivery fees waived (server figures).
+  const fee = useCardFeeWaivers(art.map((p) => p.id ?? '').filter(Boolean));
   const seal = showSeal ? tokens.freeDeliverySeal : undefined;
   // While checkout really waives the fees (the same server check as the seal) the
   // offer covers the whole catalogue, so the stat says so with the real count.
@@ -128,7 +132,11 @@ export default function BlackFridayHero({
                   <span className="bfh-card-media">
                     <Img src={p.src} alt={p.name} className="bfh-card-img" sizes="(max-width: 768px) 30vw, 200px" priority={k === 0} />
                   </span>
-                  {p.save > 0 && <span className="bfh-card-tag">Save {formatPrice(p.save)}</span>}
+                  {(() => {
+                    const label = zeroDeliverySaveLabel(p.id ? fee.waivers?.products[p.id] : null, (n) => formatPrice(n))
+                      ?? (p.save > 0 ? `Save ${formatPrice(p.save)}` : null);
+                    return label && <span className="bfh-card-tag">{label}</span>;
+                  })()}
                   <span className="bfh-card-name">{p.name}</span>
                 </Link>
               ))}

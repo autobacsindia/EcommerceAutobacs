@@ -11,6 +11,13 @@ export const getPublicDeliveryFees = async (_req, res) => {
   res.json({ success: true, deliveryFees: await resolvePublicDeliveryFeeConfig() });
 };
 
+// @route GET /delivery-fees/card-waivers?ids=a,b,c  (display only: the product cards'
+// "Save ₹X+" badge and ₹0 receipt; checkout re-prices from the PIN)
+export const getCardFeeWaivers = async (req, res) => {
+  const ids = String(req.query.ids || '').split(',');
+  res.json({ success: true, waivers: await deliveryFeeService.cardFeeWaivers(ids) });
+};
+
 // @route GET /delivery-fees/admin
 export const getDeliveryFeeAdmin = async (_req, res) => {
   res.json({ success: true, config: await deliveryFeeService.getAdminDeliveryFeeConfig() });

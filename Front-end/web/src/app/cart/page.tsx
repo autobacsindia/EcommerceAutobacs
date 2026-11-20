@@ -587,6 +587,7 @@ function CartPageContent() {
                   loading={quoteLoading}
                   requested={offerRequested}
                   onRequestChange={setOfferRequested}
+                  savings={quote?.savings ?? null}
                   pinInput={{ value: deliveryPin, onChange: setDeliveryPin }}
                   format={(n) => formatPrice(n, { exact: true })}
                 />

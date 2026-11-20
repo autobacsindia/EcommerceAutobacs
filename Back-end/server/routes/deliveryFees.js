@@ -5,11 +5,14 @@
  * public browsing limiter, like /festival-offer).
  */
 import express from 'express';
+import { query } from 'express-validator';
+import { validateRequest } from '../middleware/validateRequest.js';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { cacheMiddleware } from '../middleware/cacheControl.js';
 import {
   getPublicDeliveryFees,
+  getCardFeeWaivers,
   getDeliveryFeeAdmin,
   updateDeliveryFeeAdmin,
   listRemotePins,
@@ -20,6 +23,14 @@ import {
 const router = express.Router();
 
 router.get('/public', cacheMiddleware('static-data'), asyncHandler(getPublicDeliveryFees));
+
+// One request per product grid (ids capped at MAX_CARD_FEE_IDS in the service).
+router.get(
+  '/card-waivers',
+  query('ids').optional().isString().isLength({ max: 2000 }).withMessage('Too many product ids in one request'),
+  validateRequest,
+  asyncHandler(getCardFeeWaivers),
+);
 
 router.get('/admin', protect, admin, asyncHandler(getDeliveryFeeAdmin));
 router.put('/admin', protect, admin, asyncHandler(updateDeliveryFeeAdmin));

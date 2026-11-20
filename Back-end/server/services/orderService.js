@@ -9,7 +9,7 @@ import campaignMemberRepository from '../repositories/campaignMemberRepository.j
 import karmaLedgerRepository from '../repositories/karmaLedgerRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import pricingService from './pricingService.js';
-import deliveryFeeService from './deliveryFeeService.js';
+import deliveryFeeService, { OFFER_ERROR } from './deliveryFeeService.js';
 import { toPaise } from '../utils/money.js';
 import { resolveAttribution } from './affiliateAttributionService.js';
 import AppError from '../utils/AppError.js';
@@ -156,7 +156,7 @@ class OrderService {
       the fees they were told were waived: refuse with 409 and the new total, so the
       checkout re-quotes and shows them the change before they pay.
     */
-    if (quote.deliveryFeeBlock?.offer.error) {
+    if (quote.deliveryFeeBlock?.offer.error === OFFER_ERROR.ENDED) {
       throw new AppError(
         `The Black Friday offer has ended. Delivery fees of ₹${quote.deliveryFeeBlock.total} now apply — please review your new total.`,
         409,
@@ -231,6 +231,13 @@ class OrderService {
               deliveryFees: deliveryFeeService.toOrderSnapshot(quote.deliveryFeeBlock, toPaise(quote.shippingCost)),
             }),
             tax: quote.tax,
+            ...(quote.savings && {
+              savings: {
+                discount: quote.savings.discount,
+                deliveryFees: quote.savings.deliveryFees,
+                total: quote.savings.total,
+              },
+            }),
             discount: quote.discount,
             couponCode: appliedCode,
             couponDiscount: quote.couponDiscount,

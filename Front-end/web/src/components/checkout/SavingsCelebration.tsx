@@ -156,6 +156,12 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
               <dd>{formatPrice(savings.coupon)}</dd>
             </div>
           )}
+          {(savings.deliveryFees ?? 0) > 0 && (
+            <div className="flex justify-between text-emerald-700">
+              <dt>Shipping &amp; fees waived</dt>
+              <dd>{formatPrice(savings.deliveryFees!)}</dd>
+            </div>
+          )}
           {savings.karma > 0 && (
             <div className="flex justify-between text-ink-muted">
               <dt>Karma points</dt>

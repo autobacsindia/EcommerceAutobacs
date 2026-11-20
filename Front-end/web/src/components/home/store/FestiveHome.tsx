@@ -46,6 +46,8 @@ export interface FestiveHeroPhoto {
   name: string;
   /** Real rupees saved on that product (M.R.P. − price), 0 when it is not on sale. */
   save: number;
+  /** Product id (simple products only), for the Black Friday ₹0-delivery saving. */
+  id?: string;
 }
 
 export function FestiveHero({

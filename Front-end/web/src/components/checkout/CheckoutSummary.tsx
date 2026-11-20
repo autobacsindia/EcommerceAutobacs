@@ -179,6 +179,7 @@ export default function CheckoutSummary({ items, isAuthenticated, deliveryPin, o
             loading={loading}
             requested={offerRequested}
             onRequestChange={setOfferRequested}
+            savings={quote?.savings ?? null}
           />
         </div>
         <div className="flex justify-between border-t border-hairline pt-3 mt-3">

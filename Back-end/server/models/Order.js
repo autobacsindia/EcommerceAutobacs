@@ -633,6 +633,21 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false }),
     default: undefined,
   },
+  /*
+    What the customer saved, as the server computed it at checkout (Sachin's breakdown):
+    `discount` = MRP − price + festival + coupon + karma; `deliveryFees` = fees waived by
+    the Black Friday offer or a free-delivery coupon; `total` = both. Snapshotted so the
+    order page, invoice and email never re-derive it from today's catalogue. Absent on
+    older orders.
+  */
+  savings: {
+    type: new mongoose.Schema({
+      discount: { type: Number, min: 0, default: 0 },
+      deliveryFees: { type: Number, min: 0, default: 0 },
+      total: { type: Number, min: 0, default: 0 },
+    }, { _id: false }),
+    default: undefined,
+  },
   tax: {
     type: Number,
     default: 0

@@ -72,7 +72,7 @@ describe('offer OFF = prices exactly as today', () => {
     for (const q of [neverSaved, switchedOff, ended]) {
       expect(q.subtotal).toBe(200000);
       expect(q.totalAmount).toBe(200000);
-      expect(q.savings).toEqual({ catalog: 30000, festival: 0, coupon: 0, karma: 0, total: 30000 });
+      expect(q.savings).toEqual({ catalog: 30000, festival: 0, coupon: 0, karma: 0, discount: 30000, deliveryFees: 0, total: 30000 });
       expect(q.festivalOfferLines).toEqual([]);
       expect(q.orderItems.map((i) => i.price)).toEqual([40000, 120000]);
       expect(q.orderItems.every((i) => i.festivalOffer === null)).toBe(true);

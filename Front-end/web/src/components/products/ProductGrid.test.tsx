@@ -62,6 +62,9 @@ jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
   useCampaignProductRates: () => ({ data: null }),
 }));
 
+jest.mock('@/hooks/queries/useCardFeeWaivers', () => ({
+  useCardFeeWaivers: () => ({ waivers: null, pending: false }),
+}));
 jest.mock('@/hooks/queries/useCampaign', () => ({
   useCampaignBadgeVisible: () => true,
 }));

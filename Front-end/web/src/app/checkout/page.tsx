@@ -911,6 +911,7 @@ function CheckoutPageContent() {
                   loading={reviewQuoteLoading}
                   requested={offerRequested}
                   onRequestChange={setOfferRequested}
+                  savings={reviewQuote?.savings ?? null}
                   pinInput={{ value: deliveryPin, onChange: setDeliveryPin }}
                 />
               </div>

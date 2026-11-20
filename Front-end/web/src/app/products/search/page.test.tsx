@@ -49,6 +49,10 @@ jest.mock('@/context/CurrencyContext', () => ({
 // exercises search results, not campaign eligibility, and renders no QueryClientProvider.
 // Spread the real modules so only the network-backed hooks are stubbed — see the
 // same note in src/app/offers/page.test.tsx.
+// Black Friday ₹0-delivery card figures: not what these tests exercise.
+jest.mock('@/hooks/queries/useCardFeeWaivers', () => ({
+  useCardFeeWaivers: () => ({ waivers: null, pending: false }),
+}));
 jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
   ...jest.requireActual('@/hooks/queries/useCampaignProductRates'),
   useCampaignProductRates: jest.fn(() => ({ data: null })),

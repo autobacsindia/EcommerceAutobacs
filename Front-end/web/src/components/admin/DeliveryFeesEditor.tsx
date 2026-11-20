@@ -26,7 +26,6 @@ interface RateCard {
   freight: { minimum: number; docket: number; otherCharges: number; fuel: number; hamaliPerKg: number };
   packing: { small: number; medium: number; large: number; xl: number };
   remoteAreaFee: number;
-  insurancePercent: number;
   paymentFeePercent: number;
   paymentFeeGstPercent: number;
   paymentFeeMax: number;
@@ -98,7 +97,6 @@ const FIELDS: { title: string; rows: [string, string, string][] }[] = [
     title: 'Other fees',
     rows: [
       ['remoteAreaFee', 'Remote area fee (₹)', 'Courier ODA charge, only for PINs on the list below.'],
-      ['insurancePercent', 'Insurance (% of goods value)', 'VRL freight-on-value: 0.1.'],
       ['paymentFeePercent', 'Razorpay fee (%)', 'Your real Razorpay rate.'],
       ['paymentFeeGstPercent', 'GST on Razorpay fee (%)', 'Added to the fee only when "GST on delivery fees" is off — otherwise that one GST line covers it (no double GST).'],
       ['paymentFeeMax', 'Maximum payment fee (₹)', 'The payment fee never goes above this. 0 = no limit.'],

@@ -528,7 +528,7 @@ export const generateInvoicePdf = async (order, user = null) => {
         y += 6;
         const pad = 10;
         const rowH = 14;
-        const boxH = pad * 2 + 16 + 12 + feeView.lines.length * rowH + 18;
+        const boxH = pad * 2 + 16 + 12 + feeView.lines.length * rowH + 6 + feeView.savingsLines.length * 15;
         if (y + boxH > doc.page.height - 130) { doc.addPage(); y = 50; }
         const top = y;
         const inner = RIGHT - LEFT - pad * 2;
@@ -554,9 +554,14 @@ export const generateInvoicePdf = async (order, user = null) => {
             .text(`${rs(0)} (Black Friday offer)`, zeroX, by, { width: 150, align: 'right', lineBreak: false });
           by += rowH;
         }
-        doc.font(FONT_BOLD).fontSize(10.5).fillColor('#15803d')
-          .text(`You saved ${rs(feeView.saving)} with the Black Friday offer`, LEFT + pad, by + 3,
-            { width: inner, align: 'right', lineBreak: false });
+        // Savings breakdown: delivery fees waived · discount · total savings.
+        by += 4;
+        for (const s of feeView.savingsLines) {
+          doc.font(s.total ? FONT_BOLD : FONT).fontSize(s.total ? 10.5 : 9).fillColor('#15803d')
+            .text(`${s.label}:`, LEFT + pad, by, { width: zeroX - LEFT - pad + 40, align: 'right', lineBreak: false });
+          doc.text(rs(s.amount), zeroX + 40, by, { width: 110, align: 'right', lineBreak: false });
+          by += 15;
+        }
         y = top + boxH + 6;
       }
 

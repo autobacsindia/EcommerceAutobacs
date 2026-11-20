@@ -15,7 +15,6 @@
  *                     hamali per kg (fixed charges once per shipment)
  *   packing      = per-unit box/crate cost for the product's size class
  *   remote area  = the courier's ODA charge, only for a PIN on the stored list
- *   insurance    = % of the goods value (VRL "freight on value")
  *   payment fee  = the Razorpay MDR (+ GST on it) on what the customer pays
  *   GST on fees  = optional, at the configured rate (composite supply — the
  *                  accountant decides; admin toggle)
@@ -38,7 +37,6 @@ export const FEE_LINES = Object.freeze([
   { code: 'docket', label: 'Docket / Processing fee' },
   { code: 'fuel', label: 'Fuel surcharge' },
   { code: 'remote', label: 'Remote area fee' },
-  { code: 'insurance', label: 'Insurance fee' },
   { code: 'payment', label: 'Platform / Payment fee' },
   { code: 'gst', label: 'GST on fees' },
 ]);
@@ -87,7 +85,6 @@ export const DEFAULT_RATE_CARD = Object.freeze({
     xl: 1500,
   }),
   remoteAreaFee: 750,               // ODA, e.g. Jalpaiguri
-  insurancePercent: 0.1,            // freight-on-value
   paymentFeePercent: 2,             // Razorpay standard MDR
   paymentFeeGstPercent: 18,         // GST Razorpay charges on its MDR (see the payment fee note below)
   paymentFeeMax: 999,               // ₹ cap on the payment fee; 0 = no cap. A ₹5,05,000 kit at 2% is ₹10,100.
@@ -199,7 +196,10 @@ export function computeDeliveryFees({ lines, goodsPaise, isRemote = null, distan
     // Packing follows the stored class (also when the box is measured), then the class
     // that chose the box (category guess), else the box's own weight.
     const cls = line.product?.shippingClass || boxClass || classForKg(kg);
-    packingPaise += toPaise(card.packing[cls]) * qty;
+    // A product's own packing fee (admin-set) replaces the class rate.
+    const own = line.product?.packingFee;
+    const unitPacking = typeof own === 'number' && Number.isFinite(own) && own >= 0 ? own : card.packing[cls];
+    packingPaise += toPaise(unitPacking) * qty;
     boxSources.push(source);
   }
 
@@ -222,7 +222,6 @@ export function computeDeliveryFees({ lines, goodsPaise, isRemote = null, distan
   }
   amounts.packing = packingPaise;
   amounts.remote = isRemote === true ? toPaise(card.remoteAreaFee) : 0;
-  amounts.insurance = pct(goodsPaise, card.insurancePercent);
 
   const beforePayment = sum(amounts);
   // Payment fee: Razorpay's MDR on what passes through it (goods + the fees above).
@@ -279,5 +278,16 @@ function round6(n) {
 }
 
 export const isValidPin = (pin) => typeof pin === 'string' && /^[1-9]\d{5}$/.test(pin);
+
+/**
+ * A product's packing-fee override from an admin form: '' / null → null (use the class
+ * rate); a number 0–1,00,000 → rounded to paise; anything else → undefined (invalid).
+ */
+export function normalizePackingFee(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100000) return undefined;
+  return Math.round(n * 100) / 100;
+}
 
 export default { computeDeliveryFees, bandFor, slabRateFor, haversineKm, resolveBox, unitChargedKg, DEFAULT_RATE_CARD, FEE_LINES, FEE_CODES, isValidPin };

@@ -26,6 +26,7 @@ const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
  *   saving: number,                   // Black Friday saving (0 when not waived)
  *   couponSaving: number,             // free-delivery coupon reduction (no offer)
  *   payable: { products: number, gst: number, fees: number, total: number },
+ *   savingsLines: Array<{label:string, amount:number, total?:boolean}>,  // Black Friday only
  * }}
  */
 export function deliveryFeeBreakdown(order) {
@@ -39,12 +40,28 @@ export function deliveryFeeBreakdown(order) {
   const charged = waived ? 0 : r2(fees.charged);
   const orderTotal = r2(order.totalAmount);
 
+  const saving = waived ? r2(fees.offer?.saving ?? total) : 0;
+  // Sachin's breakdown, from the order's own savings snapshot: delivery fees waived,
+  // the goods discount, and the total. Older orders (no snapshot) get the fee saving.
+  const snap = order.savings;
+  let savingsLines = [];
+  if (waived && snap) {
+    savingsLines = [
+      { label: 'Shipping & fees waived', amount: r2(snap.deliveryFees) },
+      ...(r2(snap.discount) > 0 ? [{ label: 'Discount', amount: r2(snap.discount) }] : []),
+      { label: 'Total savings', amount: r2(snap.total), total: true },
+    ];
+  } else if (waived) {
+    savingsLines = [{ label: 'Total savings', amount: saving, total: true }];
+  }
+
   return {
     waived,
     lines,
     total,
     charged,
-    saving: waived ? r2(fees.offer?.saving ?? total) : 0,
+    saving,
+    savingsLines,
     couponSaving: !waived && charged < total ? r2(total - charged) : 0,
     payable: {
       // What the customer paid for the goods: the order total minus the fees they
