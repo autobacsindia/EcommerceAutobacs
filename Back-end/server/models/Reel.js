@@ -14,9 +14,11 @@ import {
  * price can never leave a reel advertising the old one, and checkout keeps recomputing
  * every figure exactly as for any other cart.
  *
- * Video bytes live in Cloudinary. Only the public id (and the facts we verified about
- * the asset before accepting it) are stored; every playable URL is derived from the
- * public id at read time (utils/reelMedia.js).
+ * Video bytes live in the PRIVATE Cloudflare R2 bucket. `media.publicId` holds the R2
+ * object key (the field keeps its old name so the API contract and the unique index
+ * are unchanged). Only the key and the facts we verified about the file before
+ * accepting it are stored; the playback URL is a presigned GET minted at read time
+ * (services/reelMediaService.js reelPlaybackUrls).
  *
  * Counters: `likeCount` and `reportCount` are maintained by the repository alongside
  * the unique ReelLike / ReelReport rows, which are the truth. Views are NOT here — they

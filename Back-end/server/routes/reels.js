@@ -19,7 +19,7 @@ import {
 } from '../middleware/rateLimitMiddleware.js';
 import { getClientIp } from '../middleware/rate-limit/clientIp.js';
 import reelService from '../services/reelService.js';
-import { buildUploadSignature } from '../services/reelMediaService.js';
+import { buildUploadTarget } from '../services/reelMediaService.js';
 import { REF_COOKIE_NAME, ATTRIBUTION_WINDOW_DAYS } from '../config/affiliate.js';
 
 const router = express.Router();
@@ -47,16 +47,21 @@ router.get('/mine', protect, asyncHandler(async (req, res) => {
   res.json({ success: true, ...page });
 }));
 
-// POST /reels/upload-signature — signed params for a direct client → Cloudinary upload
-// Body { team: true } asks for the shared team folder (admin panel's team upload) —
-// only for the same people who may moderate reels; anyone else gets a 403.
+// POST /reels/upload-signature { contentType, size, team? } — a presigned R2 PUT
+// for one video, into a fresh folder under the caller's own prefix. The client PUTs
+// the raw file to `uploadUrl`, then sends `publicId` (the key) to POST /reels.
+// `team: true` asks for the shared team prefix (admin panel's team upload) — only for
+// the same people who may moderate reels; anyone else gets a 403.
 router.post('/upload-signature', protect, reelUploadRateLimit, asyncHandler(async (req, res) => {
   noStore(res);
   const team = req.body?.team === true;
   if (team && !canModerateReels(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
-  res.json({ success: true, ...buildUploadSignature({ userId: req.user._id, team }) });
+  const target = await buildUploadTarget({
+    userId: req.user._id, team, contentType: req.body?.contentType, size: req.body?.size,
+  });
+  res.json({ success: true, ...target });
 }));
 
 // POST /reels { publicId, productId, caption } — submit an uploaded video for review

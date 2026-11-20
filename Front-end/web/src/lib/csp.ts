@@ -157,10 +157,11 @@ function buildPolicy(scriptSrc: string): string {
     // Training videos in the staff Lesson Library play straight from the private
     // bucket by a short-lived link. Without this they fall back to default-src and
     // the player silently shows nothing. Team-chat videos do the same (the API
-    // checks access, then redirects to a private link).
-    // res.cloudinary.com: shoppable reels (admin review queue) stream their MP4
-    // from Cloudinary, as do chat videos stored before / without R2. Without it
-    // the <video> silently stays black.
+    // checks access, then redirects to a private link). Shoppable reels too:
+    // their MP4 lives in the private bucket and every read mints a signed link,
+    // so the admin review queue's <video> needs this origin.
+    // res.cloudinary.com: chat videos stored before / without R2 only (reels no
+    // longer use Cloudinary). Left for the Cloudinary removal to drop.
     `media-src 'self' ${R2_UPLOAD_ORIGIN} https://res.cloudinary.com`,
     "frame-ancestors 'none'",
     "object-src 'none'",
