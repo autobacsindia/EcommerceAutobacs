@@ -51,6 +51,34 @@ const adminRecipients = () => {
   return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))].filter((to) => !isCareersMailbox(to));
 };
 
+/**
+ * Where day-to-day ORDER alerts go: new paid order, customer cancellation, and
+ * return requested. Money/approval/review alerts (refund failed, refund ready to
+ * pay, return refunded, new review) stay on the admin list.
+ *
+ *   OPS_NOTIFICATION_EMAILS=ops@autobacsindia.com
+ *
+ * Unset or blank → the admin list, exactly as before, so nothing moves until the
+ * variable is set. Same clean-up as consultationRecipients (trim, lower-case
+ * de-dupe, careers mailbox removed); if nothing usable is left, fall back to the
+ * admin list so an order alert is never silently dropped.
+ */
+const opsRecipients = () => {
+  const raw = (process.env.OPS_NOTIFICATION_EMAILS || '').trim();
+  if (!raw) return adminRecipients();
+  const seen = new Set();
+  const list = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((to) => {
+      const key = to.toLowerCase();
+      if (!to || seen.has(key) || isCareersMailbox(to)) return false;
+      seen.add(key);
+      return true;
+    });
+  return list.length ? list : adminRecipients();
+};
+
 /** Default inbox for new consultation requests (sales leads). */
 export const DEFAULT_CONSULTATION_RECIPIENT = 'sales@autobacsindia.com';
 
@@ -172,6 +200,9 @@ const alertBanner = (title, subtitle) =>
  * low-volume internal alerts).
  */
 const sendToAdmins = (message, context) => sendToInboxes(adminRecipients(), message, context);
+
+/** Same contract as sendToAdmins, for the day-to-day order alerts (see opsRecipients). */
+const sendToOps = (message, context) => sendToInboxes(opsRecipients(), message, context);
 
 /** Same contract as sendToAdmins, for an explicit recipient list and email purpose. */
 const sendToInboxes = async (recipients, { subject, text, html, replyTo }, context, purpose) => {
@@ -412,7 +443,7 @@ export const emailAdminOrderPlacedAlert = async (orderId) => {
     adminLink
   );
 
-  return sendToAdmins({ subject, text, html }, `order-placed ${orderId}`);
+  return sendToOps({ subject, text, html }, `order-placed ${orderId}`);
 };
 
 /**
@@ -508,7 +539,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
     banner
   );
 
-  return sendToAdmins({ subject, text, html }, `order-cancelled ${orderId}`);
+  return sendToOps({ subject, text, html }, `order-cancelled ${orderId}`);
 };
 
 /**
@@ -648,7 +679,7 @@ export const emailAdminReturnAlert = async (returnId) => {
     adminLink
   );
 
-  return sendToAdmins({ subject, text, html }, `return ${returnId}`);
+  return sendToOps({ subject, text, html }, `return ${returnId}`);
 };
 
 /**
