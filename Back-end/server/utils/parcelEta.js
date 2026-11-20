@@ -21,6 +21,23 @@ export const ETA_MAX_DAYS = 60;
 /** Date changes kept per parcel (newest). */
 export const MAX_ETA_HISTORY = 20;
 
+/**
+ * Why a parcel is overdue — procurement (or the admin) says so once the date has
+ * passed, so the admin can see the cause without chasing anyone. A quick pick
+ * plus a note; "Other" needs the note, since the pick alone says nothing.
+ */
+export const OVERDUE_REASONS = Object.freeze({
+  supplier_delay: 'Supplier delay',
+  courier_delay: 'Courier delay',
+  customer_unreachable: 'Customer unreachable',
+  address_issue: 'Address issue',
+  other: 'Other',
+});
+export const OVERDUE_REASON_CODES = Object.freeze(Object.keys(OVERDUE_REASONS));
+export const MAX_OVERDUE_NOTE = 300;
+/** Reason changes kept per parcel (newest). */
+export const MAX_OVERDUE_REASON_HISTORY = 20;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -77,19 +94,44 @@ export function etaState(parcel, today) {
 }
 
 /**
+ * The parcel's reason for being overdue, or null. A reason belongs to the date it
+ * explained (`forDay`): once the date is changed — or the parcel is delivered —
+ * it stops being the current reason (it stays in the history), so a parcel that
+ * goes overdue again on its new date needs a fresh one.
+ */
+export function currentOverdueReason(parcel) {
+  const r = parcel?.overdueReason;
+  if (!r?.code || !parcel.eta?.day || r.forDay !== parcel.eta.day) return null;
+  return r;
+}
+
+/** "Courier delay — stuck at the hub" (the label alone when there is no note). */
+export function overdueReasonText(r) {
+  if (!r?.code) return '';
+  const label = OVERDUE_REASONS[r.code] || 'Other';
+  return r.note ? `${label} — ${r.note}` : label;
+}
+
+/**
  * One order's parcels in transit, summed up for its list row: how many are
- * overdue / due today / have no date, and the earliest date set. null when no
- * parcel is in transit.
+ * overdue / due today / have no date, the earliest date set, how many overdue
+ * parcels still have no reason, and the first reason given (the badge's hover).
+ * null when no parcel is in transit.
  */
 export function etaSummary(shipments, today) {
   let inTransit = 0;
-  const out = { overdue: 0, dueToday: 0, missing: 0, earliest: null };
+  const out = { overdue: 0, dueToday: 0, missing: 0, earliest: null, noReason: 0, reason: null };
   for (const s of shipments || []) {
     const state = etaState(s, today);
     if (!state) continue;
     inTransit += 1;
-    if (state === 'overdue') out.overdue += 1;
-    else if (state === 'due_today') out.dueToday += 1;
+    if (state === 'overdue') {
+      out.overdue += 1;
+      const r = currentOverdueReason(s);
+      if (!r) out.noReason += 1;
+      else out.reason ??= { text: overdueReasonText(r), by: r.byName || '', at: r.at || null };
+    }
+    if (state === 'due_today') out.dueToday += 1;
     else if (state === 'none') out.missing += 1;
     if (s.eta?.day && (!out.earliest || s.eta.day < out.earliest)) out.earliest = s.eta.day;
   }

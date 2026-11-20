@@ -23,6 +23,7 @@ import {
   EMPTY_PARTNER, appendPartner, partnerFromParcel, partnerProblem, useDeliveryPartners, type DeliveryPartnerValue,
 } from '@/lib/deliveryPartners';
 import ParcelEta from './ParcelEta';
+import ParcelOverdueReason from './ParcelOverdueReason';
 import { LinePrice, OrderMoneySummary } from './OrderMoney';
 import SaleHistory from './SaleHistory';
 import SupplierParts from './SupplierParts';
@@ -377,6 +378,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                     <ParcelEta parcel={p} saving={etaMutation.isPending}
                       onSave={(date, previousDate) => etaMutation.mutate({ shipmentId: p.id, date, previousDate })} />
                   )}
+                  <ParcelOverdueReason orderId={orderId} parcel={p} />
                   <div className="flex flex-wrap gap-2 pt-1">
                     {o.canContactCustomer && o.customer.phone && p.status !== 'lost' && (
                       <a className={`${btn} bg-[#25D366] text-white hover:bg-[#1ebe5b]`} target="_blank" rel="noopener noreferrer"

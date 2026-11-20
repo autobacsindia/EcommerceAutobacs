@@ -1580,6 +1580,26 @@ class OrderRepository extends BaseRepository {
     ).lean();
   }
 
+  /**
+   * Save a parcel's reason for being overdue — only while it is still in transit
+   * on the same expected date the person saw (`etaDay`), so a date changed or a
+   * delivery marked meanwhile is not explained by a stale reason. null when the
+   * parcel no longer matches.
+   */
+  async setShipmentOverdueReasonIf(orderId, shipmentId, etaDay, { reason, change, event, maxHistory }) {
+    return Order.findOneAndUpdate(
+      { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, status: 'shipped', 'eta.day': etaDay } } },
+      {
+        $set: { 'shipments.$.overdueReason': reason },
+        $push: {
+          'shipments.$.overdueReasonHistory': { $each: [change], $slice: -maxHistory },
+          'workflow.history': { $each: [event], $slice: -300 },
+        },
+      },
+      { new: true },
+    ).lean();
+  }
+
   /** Append a workflow history event (actions not tied to one line: shipped, delivered). */
   async pushWorkflowEvent(orderId, event) {
     return Order.updateOne(

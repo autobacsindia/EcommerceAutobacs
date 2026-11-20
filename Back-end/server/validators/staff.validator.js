@@ -10,6 +10,7 @@ import mongoose from 'mongoose';
 import { STAFF_TEAM_VALUES, STAFF_USERNAME_PATTERN, STAFF_USERNAME_HINT, GTM_SUB_ROLE_VALUES } from '../config/staff.js';
 import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../config/commonPasswords.js';
 import { PARCEL_STEP_VALUES, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
+import { OVERDUE_REASON_CODES, MAX_OVERDUE_NOTE } from '../utils/parcelEta.js';
 import { CARRIERS, MAX_CUSTOM_CARRIER_URL } from '../services/orderTrackingService.js';
 
 /**
@@ -406,6 +407,14 @@ export const validateParcelEta = [
   param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
   body('date').isString().matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Choose a valid date'),
   body('previousDate').optional({ values: 'null' }).isString().isLength({ max: 10 }).withMessage('Refresh the order and try again'),
+];
+
+export const validateOverdueReason = [
+  ...validateWorkOrder,
+  param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
+  body('code').isIn(OVERDUE_REASON_CODES).withMessage('Choose a reason'),
+  body('note').optional({ values: 'null' }).isString().isLength({ max: MAX_OVERDUE_NOTE }).withMessage(`Keep the note under ${MAX_OVERDUE_NOTE} characters`),
+  body('expectedDate').optional({ values: 'null' }).isString().isLength({ max: 10 }).withMessage('Refresh the order and try again'),
 ];
 
 export const validateParcelStep = [
