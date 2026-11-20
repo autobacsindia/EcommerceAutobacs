@@ -63,7 +63,10 @@ import {
 } from '../utils/supplierParts.js';
 import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
 import { SHIPMENT_STATUS, rewardShipped } from '../utils/orderFulfilment.js';
-import { istDay, parseEtaDay, etaDayProblem, etaState, etaSummary, formatEtaDay, MAX_ETA_HISTORY } from '../utils/parcelEta.js';
+import {
+  istDay, parseEtaDay, etaDayProblem, etaState, etaSummary, formatEtaDay, MAX_ETA_HISTORY,
+  OVERDUE_REASONS, MAX_OVERDUE_NOTE, MAX_OVERDUE_REASON_HISTORY, currentOverdueReason, overdueReasonText,
+} from '../utils/parcelEta.js';
 import { PARCEL_STEP_VALUES, PARCEL_STEP_LABELS, TRACKING_EVENT_STATUS, MAX_PARCEL_STEPS, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
@@ -98,6 +101,8 @@ const can = {
   /** The customer's decision: the sales person on the order, or any sales head (website orders have no seller). */
   /** The expected delivery date on a parcel: whoever chases the courier — procurement or operations. */
   planDelivery: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT) || onTeam(u, STAFF_TEAMS.OPERATIONS),
+  /** Why a parcel is overdue: procurement chases the supplier and courier; the admin reads it. */
+  explainOverdue: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT),
   decide: (u, order) => isAdmin(u)
     || isHeadOf(u, STAFF_TEAMS.SALES)
     || (onTeam(u, STAFF_TEAMS.SALES) && order.salesUser && idOf(order.salesUser) === idOf(u._id)),
@@ -127,7 +132,9 @@ const QUEUES = {
   // GTM head and leads only — executives and support do not take customer decisions.
   decisions: { team: 'sales', allowed: (u) => isAdmin(u) || canSell(u) },
   refunds: { team: 'accounts', allowed: can.accounts },
-  deliveries: { team: 'operations', allowed: can.operations },
+  // Procurement reads it too: it is where they find overdue parcels to explain.
+  // What they may DO on a parcel is still decided per action (canMarkDelivered …).
+  deliveries: { team: 'operations', allowed: can.planDelivery },
 };
 
 // ── Shapes ─────────────────────────────────────────────────────────────────────
@@ -256,6 +263,7 @@ export const HISTORY_LABELS = {
   decision_undone: 'Customer decision undone',
   dispatch_edited: 'Dispatch details corrected',
   eta_set: 'Expected delivery date set',
+  overdue_reason_set: 'Reason for overdue given',
   part_added: 'Supplier part added',
   part_edited: 'Supplier part corrected',
   part_removed: 'Supplier part removed',
@@ -304,6 +312,11 @@ function moneyOf(o) {
 }
 
 const photoPath = (orderId, shipmentId) => `/api/v1/staff/work/orders/${orderId}/parcels/${shipmentId}/photo`;
+
+const overdueReasonView = (r) => (r ? {
+  code: r.code, label: OVERDUE_REASONS[r.code] || 'Other', note: r.note || '', text: overdueReasonText(r),
+  by: r.byName || '', at: r.at || null,
+} : null);
 
 /** The full order for the detail view, with the actions this person may take. */
 function detail(u, o) {
@@ -376,6 +389,12 @@ function detail(u, o) {
       etaState: etaState(s, today),
       etaHistory: (s.etaHistory || []).slice().reverse().map((h) => ({ from: h.from || '', to: h.to, by: h.byName || '', at: h.at })),
       canSetEta: s.status === SHIPMENT_STATUS.SHIPPED && can.planDelivery(u),
+      // Why it is overdue (only while it is): the current reason, every one given, and who may give it.
+      overdueReason: overdueReasonView(currentOverdueReason(s)),
+      overdueReasonHistory: (s.overdueReasonHistory || []).slice().reverse().map((h) => ({
+        code: h.code, label: OVERDUE_REASONS[h.code] || 'Other', note: h.note || '', forDate: h.forDay || '', by: h.byName || '', at: h.at,
+      })),
+      canExplainOverdue: etaState(s, today) === 'overdue' && can.explainOverdue(u),
     })),
     cancellations: (o.cancellations || []).map((c) => ({
       id: idOf(c._id),
@@ -1455,6 +1474,44 @@ export async function setParcelEta(actor, orderId, shipmentId, { date, previousD
   if (!updated) throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
 
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_eta', shipmentId: String(shipmentId), from: current || null, to: day });
+  return getOrder(actor, orderId);
+}
+
+/**
+ * Procurement / admin: why this parcel is past its expected delivery date. A pick
+ * from OVERDUE_REASONS plus a note ("Other" needs the note). Only while the parcel
+ * is in transit AND overdue. The reason is tied to the date it explains, so a new
+ * date or a delivery makes it history; every save is kept (who, when, what).
+ * `expectedDate` is the date this screen showed — saved only if it still is.
+ */
+export async function setParcelOverdueReason(actor, orderId, shipmentId, { code, note, expectedDate } = {}, req) {
+  if (!can.explainOverdue(actor)) throw fail('Only procurement or an admin can give the reason for overdue.', 403);
+  if (!Object.hasOwn(OVERDUE_REASONS, code)) throw fail('Choose a reason.', 400);
+  const text = String(note ?? '').trim();
+  if (text.length > MAX_OVERDUE_NOTE) throw fail(`Keep the note under ${MAX_OVERDUE_NOTE} characters.`, 400);
+  if (code === 'other' && !text) throw fail('Say what the reason is.', 400);
+
+  const o = await orderRepository.findForWorkflow(orderId);
+  if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
+  const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
+  if (!parcel) throw fail('Parcel not found on this order.', 404);
+  if (etaState(parcel, istDay()) !== 'overdue') throw fail('A reason can only be given while the parcel is overdue.', 409);
+  const day = parcel.eta.day;
+  if (expectedDate != null && String(expectedDate) !== day) throw fail('The expected delivery date just changed. Refresh and try again.', 409);
+
+  const at = new Date();
+  const who = { by: actor._id, byName: actor.name };
+  const updated = await orderRepository.setShipmentOverdueReasonIf(orderId, shipmentId, day, {
+    reason: { code, note: text, forDay: day, ...who, byTeam: actorTeam(actor), at },
+    change: { code, note: text, forDay: day, ...who, at },
+    event: event(actor, 'overdue_reason_set', {
+      note: `Parcel ${parcel.sequence}: ${overdueReasonText({ code, note: text })}`,
+    }),
+    maxHistory: MAX_OVERDUE_REASON_HISTORY,
+  });
+  if (!updated) throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
+
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_overdue_reason', shipmentId: String(shipmentId), code, forDay: day });
   return getOrder(actor, orderId);
 }
 

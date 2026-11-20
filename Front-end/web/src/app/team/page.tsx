@@ -51,7 +51,11 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
       return list;
     }
     case 'procurement':
-      return [{ href: '/team/procurement', title: 'Orders', text: 'Check stock for each paid order, record the supplier, upload the supplier\'s photo when dispatched.', icon: PackageSearch }, PAID, DELIVERED];
+      return [
+        { href: '/team/procurement', title: 'Orders', text: 'Check stock for each paid order, record the supplier, upload the supplier\'s photo when dispatched.', icon: PackageSearch },
+        { href: '/team/deliveries', title: 'Deliveries', text: 'Parcels on their way. Give the reason when one is overdue.', icon: Truck },
+        PAID, DELIVERED,
+      ];
     case 'accounts':
       return [
         { href: '/team/refunds', title: 'Refunds', text: 'Cancelled orders to approve, and returned items to pay back.', icon: Wallet },

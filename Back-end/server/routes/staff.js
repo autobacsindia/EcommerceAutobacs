@@ -56,6 +56,7 @@ import {
   validateEditParcel,
   validateParcelStep,
   validateParcelEta,
+  validateOverdueReason,
   validateCustomerDecision,
   validateRefundReview,
   validateRefundRetry,
@@ -94,6 +95,7 @@ import {
   markDelivered,
   addParcelStep,
   setParcelEta,
+  setParcelOverdueReason,
   undoDelivered,
 } from '../services/teamWorkflowService.js';
 import {
@@ -621,11 +623,15 @@ router.get('/extra-charges/:id/receipt', validateExtraChargeId, validateRequest,
 // @route  GET /staff/work?queue=procurement|decisions|refunds|deliveries&cursor=
 router.get('/work', validateWorkQueue, validateRequest, asyncHandler(async (req, res) => {
   const { queue, cursor, q, step, source, sort, eta, from, to, min, max } = req.query;
+  // Staff-only parcel notes (expected date, reason for overdue): never cached anywhere.
+  res.set('Cache-Control', 'private, no-store');
   res.json({ success: true, ...(await listQueue(req.user, queue, { cursor, q, step, source, sort, eta, from, to, min, max })) });
 }));
 
 // @route  GET /staff/work/orders/:id — one order, with the actions this person may take
 router.get('/work/orders/:id', validateWorkOrder, validateRequest, asyncHandler(async (req, res) => {
+  // Staff-only parcel notes (expected date, reason for overdue): never cached anywhere.
+  res.set('Cache-Control', 'private, no-store');
   res.json({ success: true, order: await getWorkOrder(req.user, req.params.id) });
 }));
 
@@ -778,6 +784,13 @@ router.post('/work/orders/:id/parcels/:shipmentId/steps', validateParcelStep, va
 router.put('/work/orders/:id/parcels/:shipmentId/eta', validateParcelEta, validateRequest, asyncHandler(async (req, res) => {
   const { date, previousDate } = req.body;
   res.json({ success: true, order: await setParcelEta(req.user, req.params.id, req.params.shipmentId, { date, previousDate }, req) });
+}));
+
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/overdue-reason  { code, note?, expectedDate? } — procurement / admin: why it is overdue
+router.put('/work/orders/:id/parcels/:shipmentId/overdue-reason', validateOverdueReason, validateRequest, asyncHandler(async (req, res) => {
+  const { code, note, expectedDate } = req.body;
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, order: await setParcelOverdueReason(req.user, req.params.id, req.params.shipmentId, { code, note, expectedDate }, req) });
 }));
 
 // @route  POST /staff/work/orders/:id/undo-delivered  { shipmentId } — operations / admin: back in transit

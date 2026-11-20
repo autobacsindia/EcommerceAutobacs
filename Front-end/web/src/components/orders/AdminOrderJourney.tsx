@@ -6,6 +6,8 @@ import { staffKeys } from '@/hooks/queries/keys';
 import type { WorkOrder } from '@/components/staff/work/types';
 import OrderJourney from './OrderJourney';
 import { SupplierChanges } from '@/components/staff/work/SupplierParts';
+import ParcelOverdueReason from '@/components/staff/work/ParcelOverdueReason';
+import { formatEtaDay } from '@/components/staff/work/ParcelEta';
 
 /**
  * The journey tracker on the admin order page. It reads the same team-workflow
@@ -30,6 +32,7 @@ export default function AdminOrderJourney({ orderId }: { orderId: string }) {
   return (
     <>
       <OrderJourney order={order} showFacts={false} />
+      <OverdueParcels order={order} />
       {supplied.length > 0 && (
         <section className="mt-4 space-y-3 rounded-lg bg-white p-4 shadow" aria-label="Suppliers">
           <h2 className="text-sm font-semibold text-gray-900">Suppliers</h2>
@@ -49,5 +52,28 @@ export default function AdminOrderJourney({ orderId }: { orderId: string }) {
         </section>
       )}
     </>
+  );
+}
+
+/**
+ * Parcels past their expected delivery date, or ever explained: the reason for
+ * overdue (procurement's, or the admin's own — the server decides who may edit).
+ */
+function OverdueParcels({ order }: { order: WorkOrder }) {
+  const parcels = order.parcels.filter((p) => p.etaState === 'overdue' || (p.overdueReasonHistory ?? []).length > 0);
+  if (!parcels.length) return null;
+  return (
+    <section className="mt-4 space-y-3 rounded-lg bg-white p-4 shadow" aria-label="Overdue parcels">
+      <h2 className="text-sm font-semibold text-gray-900">Overdue parcels</h2>
+      {parcels.map((p) => (
+        <div key={p.id} className="space-y-1 border-t border-gray-100 pt-2 first:border-0 first:pt-0">
+          <p className="text-sm text-gray-900">
+            Parcel {p.sequence}{p.courier ? ` · ${p.courier}` : ''}{p.eta?.date ? ` · expected ${formatEtaDay(p.eta.date)}` : ''}
+            {p.etaState === 'overdue' && <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800 ring-1 ring-red-300">Overdue</span>}
+          </p>
+          <ParcelOverdueReason orderId={order.id} parcel={p} />
+        </div>
+      ))}
+    </section>
   );
 }

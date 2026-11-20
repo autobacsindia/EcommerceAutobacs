@@ -337,8 +337,8 @@ describe('the deliveries list', () => {
 
     const { orders } = await wf.listQueue(ops, 'deliveries', {});
     const rowOf = (id) => orders.find((o) => o.id === id);
-    expect(rowOf(due.id).eta).toEqual({ overdue: 0, dueToday: 1, missing: 0, earliest: today() });
-    expect(rowOf(none.id).eta).toEqual({ overdue: 0, dueToday: 0, missing: 1, earliest: null });
+    expect(rowOf(due.id).eta).toEqual({ overdue: 0, dueToday: 1, missing: 0, earliest: today(), noReason: 0, reason: null });
+    expect(rowOf(none.id).eta).toEqual({ overdue: 0, dueToday: 0, missing: 1, earliest: null, noReason: 0, reason: null });
 
     const ids = async (eta) => (await wf.listQueue(ops, 'deliveries', { eta })).orders.map((o) => o.id);
     expect(await ids('due_today')).toEqual([due.id]);
@@ -354,7 +354,7 @@ describe('the deliveries list', () => {
       { status: 'shipped', eta: { day: '2026-10-30' } },
       { status: 'delivered', eta: { day: '2026-10-20' } },
     ], t);
-    expect(s).toEqual({ overdue: 1, dueToday: 0, missing: 0, earliest: '2026-10-25' });
+    expect(s).toEqual({ overdue: 1, dueToday: 0, missing: 0, earliest: '2026-10-25', noReason: 1, reason: null });
     expect(etaSummary([{ status: 'delivered' }], t)).toBeNull();
     expect(rowMatches({ eta: s }, readListFilters({ eta: 'overdue' }))).toBe(true);
     expect(rowMatches({ eta: null }, readListFilters({ eta: 'overdue' }))).toBe(false);

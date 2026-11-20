@@ -73,7 +73,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   }
   // Procurement: one "Orders" item, with "To do" and "All in progress" tabs (the
   // latter is the "Order processing" list) — two items for one job confused people.
-  if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Orders', icon: PackageSearch }, delivered);
+  // Procurement also reads Deliveries: it is where overdue parcels wait for a reason.
+  if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Orders', icon: PackageSearch }, { href: '/team/deliveries', label: 'Deliveries', icon: Truck }, delivered);
   // Accounts decides what procurement and every team raise: one list across orders.
   if (team === 'accounts') nav.push({ href: '/team/approvals', label: 'Waiting for approval', icon: ClipboardCheck }, { href: '/team/refunds', label: 'Refunds', icon: Wallet }, paid, delivered);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid, delivered);

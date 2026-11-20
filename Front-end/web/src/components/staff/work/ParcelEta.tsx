@@ -44,7 +44,17 @@ export function EtaBadge({ state }: { state: EtaState | null | undefined }) {
 /** A list row's summary of its parcels in transit — the most urgent wins. */
 export function EtaRowBadge({ eta }: { eta: WorkRow['eta'] }) {
   if (!eta) return null;
-  if (eta.overdue) return <span className={`${pill} ${TONE.overdue}`}>Overdue{eta.overdue > 1 ? ` · ${eta.overdue} parcels` : ''}</span>;
+  if (eta.overdue) {
+    // Hover: why (the first reason given), or that nobody has said yet.
+    const why = eta.reason ? `Reason: ${eta.reason.text}${eta.reason.by ? ` (${eta.reason.by})` : ''}` : 'No reason for overdue yet';
+    const missing = eta.noReason ?? 0;
+    return (
+      <span className={`${pill} ${TONE.overdue}`} title={why} aria-label={`Overdue. ${why}`}>
+        Overdue{eta.overdue > 1 ? ` · ${eta.overdue} parcels` : ''}
+        {missing > 0 && <span className="font-normal">· no reason</span>}
+      </span>
+    );
+  }
   if (eta.dueToday) return <span className={`${pill} ${TONE.due_today}`}>Due today</span>;
   if (eta.earliest) return <span className={`${pill} ${TONE.upcoming}`}><CalendarClock className="h-3 w-3" /> Expected {formatEtaDay(eta.earliest)}</span>;
   if (eta.missing) return <span className={`${pill} ${TONE.none}`}>No delivery date</span>;

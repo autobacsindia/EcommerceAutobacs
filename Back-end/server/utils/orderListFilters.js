@@ -19,13 +19,14 @@ import { listDateOf } from './orderListDate.js';
  *   from / to — the order's list date: when it was paid, or placed while unpaid
  *            (YYYY-MM-DD, India time, both days included; utils/orderListDate.js)
  *   min / max — the order total, rupees, inclusive
- *   eta    — 'due_today' | 'overdue' | 'none': a parcel in transit whose expected
- *            delivery date is today / has passed / was never set (work lists only)
+ *   eta    — 'due_today' | 'overdue' | 'overdue_no_reason' | 'none': a parcel in
+ *            transit whose expected delivery date is today / has passed / has
+ *            passed and nobody said why / was never set (work lists only)
  */
 export const LIST_SORTS = Object.freeze(['newest', 'oldest', 'amount_desc', 'amount_asc']);
 export const LIST_SOURCES = Object.freeze(['website', 'sales']);
-export const LIST_ETA = Object.freeze(['due_today', 'overdue', 'none']);
-const ETA_COUNT = { due_today: 'dueToday', overdue: 'overdue', none: 'missing' };
+export const LIST_ETA = Object.freeze(['due_today', 'overdue', 'overdue_no_reason', 'none']);
+const ETA_COUNT = { due_today: 'dueToday', overdue: 'overdue', overdue_no_reason: 'noReason', none: 'missing' };
 const STAGES = new Set(Object.values(STAGE));
 
 export function readListFilters({ q, step, source, sort, eta, from, to, min, max } = {}) {
