@@ -21,6 +21,8 @@ jest.mock('@/lib/analytics', () => ({
 // Mock the heavy presentational children so the test focuses on ClientPage's own
 // data-driven sections (description, features, why-choose, specifications).
 jest.mock('@/components/products/redesign/Gallery', () => () => <div data-testid="gallery" />);
+// Black Friday fee waivers: a data hook (QueryClient) the page uses for the photo ribbon.
+jest.mock('@/hooks/queries/useCardFeeWaivers', () => ({ useCardFeeWaivers: () => ({ waivers: null, pending: false }) }));
 jest.mock('@/components/products/redesign/BuyBox', () => () => <div data-testid="buybox" />);
 jest.mock('@/components/products/StickyCartBar', () => () => <div data-testid="sticky-cart" />);
 jest.mock('@/components/products/VehicleCards', () => () => <div data-testid="vehicle-cards" />);

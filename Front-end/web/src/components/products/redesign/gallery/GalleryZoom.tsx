@@ -6,6 +6,7 @@ import EnhancedImage from '@/components/layout/EnhancedImage';
 import cloudinaryLoader from '@/lib/cloudinaryLoader';
 import { useCanHover, usePrefersReducedMotion } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
+import { ZeroDeliveryRibbon } from '@/components/products/ZeroDeliveryRibbon';
 import { MAIN_IMAGE_SIZES, ZOOM_FACTOR, ZOOM_SOURCE_WIDTH, type GalleryImage } from './types';
 
 interface GalleryZoomProps {
@@ -13,6 +14,8 @@ interface GalleryZoomProps {
   /** Marks the PDP's LCP element. Only ever true for the first image. */
   priority?: boolean;
   onSale?: boolean;
+  /** Black Friday: diagonal ₹0 DELIVERY ribbon on the photo's top-right corner. */
+  zeroDelivery?: boolean;
   /** Click / Enter / Space — the keyboard- and touch-reachable equivalent. */
   onOpen: () => void;
 }
@@ -44,7 +47,7 @@ interface GalleryZoomProps {
  *      over it when it arrives — and there is only ever one element whose
  *      transform-origin must track the cursor.
  */
-export default function GalleryZoom({ image, priority, onSale, onOpen }: GalleryZoomProps) {
+export default function GalleryZoom({ image, priority, onSale, zeroDelivery = false, onOpen }: GalleryZoomProps) {
   const canHover = useCanHover();
   const reduceMotion = usePrefersReducedMotion();
 
@@ -198,8 +201,11 @@ export default function GalleryZoom({ image, priority, onSale, onOpen }: Gallery
         )}
       </div>
 
+      {/* Outside the zoom layer, so it stays put while the photo magnifies. */}
+      {zeroDelivery && <ZeroDeliveryRibbon />}
+
       {onSale && (
-        <div className="pointer-events-none absolute left-5 top-5 grid h-16 w-16 place-items-center rounded-full bg-gold text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
+        <div className="pointer-events-none absolute left-5 top-5 z-[2] grid h-16 w-16 place-items-center rounded-full bg-gold text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
           Sale
         </div>
       )}

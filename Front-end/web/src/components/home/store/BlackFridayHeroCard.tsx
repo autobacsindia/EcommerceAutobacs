@@ -9,7 +9,7 @@ import { useCurrency } from '@/context/CurrencyContext';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
 import type { CardFeeWaiver } from '@/hooks/queries/useCardFeeWaivers';
-import { zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryReceipt';
+import { ZeroDeliveryRibbon, zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryRibbon';
 import { savingsAmount } from '@/lib/savings';
 import type { FestiveHeroPhoto } from './FestiveHome';
 
@@ -97,9 +97,8 @@ export default function BlackFridayHeroCard({
       <Link href={p.href} className="bfh-card-link">
         <span className="bfh-card-media">
           <Img src={p.src} alt={p.name} className="bfh-card-img" sizes="(max-width: 768px) 70vw, 210px" priority={priority} />
-          {/* Clipped to the photo's rounded top-right corner; absolutely placed (no CLS)
-              and pointer-events:none, so the card stays one link. */}
-          {free && <span className="bfh-card-ribbon" data-testid="bfh-zero-delivery">₹0 Delivery</span>}
+          {/* The shared diagonal ribbon (same as grid cards and the product page). */}
+          {free && <ZeroDeliveryRibbon testId="bfh-zero-delivery" />}
           {saveLabel && <span className="bfh-card-tag">{saveLabel}</span>}
         </span>
         <span className="bfh-card-body">

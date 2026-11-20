@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
   useSearchParams: jest.fn(),
+  usePathname: () => '/products/p1',
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -35,7 +36,15 @@ jest.mock('react-hot-toast', () => {
 // ── Child components (rendered as lightweight stubs) ──
 jest.mock('@/components/products/redesign/Gallery', () => ({
   __esModule: true,
-  default: () => <div data-testid="gallery">Gallery</div>,
+  default: ({ zeroDelivery }: { zeroDelivery?: boolean }) => (
+    <div data-testid="gallery" data-zero-delivery={zeroDelivery ? 'yes' : 'no'}>Gallery</div>
+  ),
+}));
+// Black Friday ₹0-delivery figures: the server decides; the page only passes it on.
+let mockFeeWaivers: { live: boolean; products: Record<string, unknown> } | null = null;
+const mockFeeIds: string[][] = [];
+jest.mock('@/hooks/queries/useCardFeeWaivers', () => ({
+  useCardFeeWaivers: (ids: string[]) => { mockFeeIds.push(ids); return { waivers: mockFeeWaivers, pending: false }; },
 }));
 jest.mock('@/components/products/QuestionForm', () => ({ __esModule: true, default: () => <div /> }));
 jest.mock('@/components/products/QuestionList', () => ({ __esModule: true, default: () => <div /> }));
@@ -94,6 +103,30 @@ describe('ClientPage', () => {
       formatPrice: (price: number) => `₹${price.toLocaleString()}`,
     });
     (apiClient.get as jest.Mock).mockResolvedValue({ product: mockProduct });
+  });
+
+  describe('Black Friday ₹0 DELIVERY ribbon on the main photo (owner, 2026-11-20)', () => {
+    afterEach(() => { mockFeeWaivers = null; mockFeeIds.length = 0; });
+
+    it('orderable product + server waiver → the gallery shows the ribbon', async () => {
+      mockFeeWaivers = { live: true, products: { p1: { save: 500 } } };
+      renderPDP(<ClientPage slug="p1" />);
+      await waitFor(() => expect(screen.getByTestId('gallery')).toHaveAttribute('data-zero-delivery', 'yes'));
+      expect(mockFeeIds.at(-1)).toEqual(['p1']);
+    });
+
+    it('offer off (no waiver) → no ribbon', async () => {
+      renderPDP(<ClientPage slug="p1" />);
+      await waitFor(() => expect(screen.getByTestId('gallery')).toHaveAttribute('data-zero-delivery', 'no'));
+    });
+
+    it.each(['backorder', 'out'])('%s product → no ribbon and no waiver request for it', async (stock) => {
+      mockFeeWaivers = { live: true, products: { p1: { save: 500 } } };
+      (apiClient.get as jest.Mock).mockResolvedValue({ product: { ...mockProduct, stock } });
+      renderPDP(<ClientPage slug="p1" />);
+      await waitFor(() => expect(screen.getByTestId('gallery')).toHaveAttribute('data-zero-delivery', 'no'));
+      expect(mockFeeIds.at(-1)).toEqual([]);
+    });
   });
 
   it('renders product details after loading', async () => {

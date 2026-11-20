@@ -752,3 +752,21 @@ html[data-festival-style='neon'] .st-h3::before {
     font-size: 16px;
   }
 }
+
+/* ── Black Friday "₹0 DELIVERY" diagonal corner ribbon (components/products/ZeroDeliveryRibbon.tsx) ──
+   One look for hero cards, grid cards, shelf tiles and the product page photo. The box
+   fills the photo, clips the band to its rounded top-right corner and is a size
+   container, so the band scales to the photo. Geometry: a band W wide, H tall, rotated
+   45° with its centre on the corner's diagonal at C from each edge:
+   top = C − H/2, right = C − W/2. */
+.zd-ribbon-box { position: absolute; inset: 0; z-index: 1; overflow: hidden; border-radius: inherit; pointer-events: none; container-type: inline-size; }
+.zd-ribbon { position: absolute; top: 16.5px; right: -27px; width: 100px; padding: 3px 0; transform: rotate(45deg);
+  background: linear-gradient(90deg, #15803d, #22c55e, #15803d); color: #fff; text-align: center;
+  font-size: 7px; font-weight: 900; line-height: 1; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+@container (min-width: 200px) {
+  .zd-ribbon { top: 19px; right: -34px; width: 124px; padding: 4px 0; font-size: 9px; letter-spacing: 0.04em; }
+}
+@container (min-width: 380px) {
+  .zd-ribbon { top: 27px; right: -46px; width: 170px; padding: 6px 0; font-size: 12px; letter-spacing: 0.05em; }
+}

@@ -52,6 +52,7 @@ export default function Gallery({
   name,
   onSale,
   jumpTo = null,
+  zeroDelivery = false,
 }: {
   images: GalleryImage[];
   name: string;
@@ -62,6 +63,8 @@ export default function Gallery({
    * behaviour for a model with no photo of its own.
    */
   jumpTo?: number | null;
+  /** Black Friday: the diagonal ₹0 DELIVERY ribbon on the main photo (caller applies the rule). */
+  zeroDelivery?: boolean;
 }) {
   const [active, setActive] = useState(0);
 
@@ -117,6 +120,7 @@ export default function Gallery({
         onActiveChange={setActive}
         onOpen={openLightbox}
         onSale={onSale}
+        zeroDelivery={zeroDelivery}
       />
 
       <div className="hidden lg:block">
@@ -124,6 +128,7 @@ export default function Gallery({
           image={images[safeActive]}
           priority={safeActive === 0}
           onSale={onSale}
+          zeroDelivery={zeroDelivery}
           onOpen={() => openLightbox(safeActive)}
         />
       </div>

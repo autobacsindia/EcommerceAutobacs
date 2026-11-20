@@ -21,7 +21,8 @@ import {
   type ProductRate,
 } from '@/hooks/queries/useCampaignProductRates';
 import type { CardFeeWaiver } from '@/hooks/queries/useCardFeeWaivers';
-import ZeroDeliveryReceipt, { ZeroDeliveryRibbon, zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryReceipt';
+import { ZeroDeliveryRibbon, zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryRibbon';
+import { useFestival } from '@/components/festival/FestivalThemeContext';
 
 /**
  * Storefront product card — white tile in the home page's style. Self-contained client island —
@@ -37,8 +38,6 @@ export default function StoreProductCard({
   className,
   priority = false,
   feeWaiver,
-  feeWaiverPending = false,
-  feeOfferLive = false,
 }: {
   product: Product;
   featured?: boolean;
@@ -60,14 +59,10 @@ export default function StoreProductCard({
   priority?: boolean;
   /**
    * Black Friday: what the offer waives on this product (server figures, batch-fetched by
-   * the grid via `useCardFeeWaivers`). Adds the ₹0 receipt + ribbon and folds the fees
-   * into the red "Save ₹X+" badge. null/undefined = the plain card.
+   * the grid via `useCardFeeWaivers`). Adds the diagonal ₹0 DELIVERY ribbon and folds the
+   * fees into the red "Save ₹X+" badge. null/undefined = the plain card.
    */
   feeWaiver?: CardFeeWaiver | null;
-  /** Offer live, figures loading: reserve the receipt's space so the grid doesn't shift. */
-  feeWaiverPending?: boolean;
-  /** The ₹0-delivery offer is on for this grid: sold-out/backorder cards get a grey line. */
-  feeOfferLive?: boolean;
 }) {
   const router = useRouter();
   const url = productUrl(product);
@@ -102,9 +97,10 @@ export default function StoreProductCard({
   // Rupees saved against the M.R.P. ("Save ₹250"), not a percentage — display only.
   // Black Friday: a sold-out or variable card advertises no ₹0 delivery (nothing to check
   // out / no single box). Otherwise the badge also counts the fees the offer waives.
+  // Server-rendered festival theme: known on first paint, so layout keyed off it never shifts.
+  const blackFriday = useFestival()?.theme.themeKey === 'blackfriday';
   const unavailable = !isVariable && (product.stock === 'out' || product.stock === 'backorder') ? product.stock : null;
   const waiver = !isVariable && !unavailable ? feeWaiver ?? null : null;
-  const waiverPending = !waiver && !isVariable && !unavailable && feeWaiverPending;
   const saveLabel = zeroDeliverySaveLabel(waiver, (n) => formatPrice(n))
     ?? (onSale ? savingsLabel(product.price, product.originalPrice, (n) => formatPrice(n)) : null);
   // Diwali offer — an EXTRA % on top of the price shown; the sale badge and M.R.P.
@@ -215,7 +211,8 @@ export default function StoreProductCard({
         )}
 
         {/* Badges */}
-        <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
+        {/* z-[2]: the Save tag always sits above the ₹0 DELIVERY ribbon (z-1). */}
+        <div className="absolute left-2.5 top-2.5 z-[2] flex flex-col items-start gap-1.5">
           {fitmentBadge && (
             <span className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white">
               ✓ Fits {fitmentBadge}
@@ -253,7 +250,14 @@ export default function StoreProductCard({
         <button
           onClick={toggleWish}
           aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-          className="absolute right-2.5 top-2.5 grid h-9 w-9 place-items-center rounded-full bg-white shadow-sm transition-transform hover:scale-105"
+          className={cn(
+            'absolute right-2.5 z-[2] grid h-9 w-9 place-items-center rounded-full bg-white shadow-sm transition-transform hover:scale-105',
+            // Black Friday: the top-right corner belongs to the ₹0 DELIVERY ribbon, so the
+            // heart sits bottom-right for the whole festival. Keyed off the server-rendered
+            // festival theme (not the async waiver), so it never jumps after load.
+            blackFriday ? 'bottom-2.5' : 'top-2.5',
+          )}
+          data-wishlist-pos={blackFriday ? 'bottom' : 'top'}
         >
           <Heart className={cn('h-4 w-4 transition-colors', wished ? 'fill-[#cc0c39] text-danger' : 'text-ink-muted')} />
         </button>
@@ -343,14 +347,6 @@ export default function StoreProductCard({
             {isVariable ? <SlidersHorizontal className="h-4 w-4" /> : backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
           </button>
         </div>
-        <ZeroDeliveryReceipt
-          waiver={waiver}
-          pending={waiverPending}
-          live={!isVariable && (feeOfferLive || feeWaiverPending || !!feeWaiver)}
-          unavailable={unavailable}
-          price={festivalOffer?.finalPrice ?? product.price}
-          format={(n) => formatPrice(n, { exact: true })}
-        />
       </div>
     </>
   );
