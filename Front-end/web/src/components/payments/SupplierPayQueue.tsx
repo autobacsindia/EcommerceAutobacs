@@ -4,9 +4,10 @@ import CopyId from '@/components/ui/CopyId';
 import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronLeft, Loader2, Paperclip } from 'lucide-react';
-import { errorMessage, paymentKeys, postForm, rupees, toLocalInput, fromLocalInput } from './api';
+import { STATUS_TONE, errorMessage, paymentKeys, postForm, rupees, toLocalInput, fromLocalInput } from './api';
 import { DealLine } from './DealSummary';
 import FilePicker from './FilePicker';
+import HoldLine from './HoldLine';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import { getPayGroup, listPayGroups, payQueueKeys, sumRupees } from './suppliers';
 import { formatDateIST } from '@/lib/datetime';
@@ -40,7 +41,11 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
 
   const chosen = rows.filter((r) => ticked.includes(r.id));
   const total = sumRupees(chosen.map((r) => r.amount));
-  const allTicked = rows.length > 0 && chosen.length === rows.length;
+  // A held payment cannot be paid until accounts or the admin releases it (the
+  // server refuses it too): it is listed, with why, but cannot be ticked.
+  const ready = rows.filter((r) => r.status !== 'on_hold');
+  const heldCount = rows.length - ready.length;
+  const allTicked = ready.length > 0 && ready.every((r) => ticked.includes(r.id));
 
   async function pay(e: React.FormEvent) {
     e.preventDefault();
@@ -78,20 +83,26 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
         <>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{q.data.group.name}</h2>
-            <p className="text-sm text-gray-600">{q.data.group.destination} · {rows.length} to pay · {rupees(q.data.group.total)} in all</p>
+            <p className="text-sm text-gray-600">{q.data.group.destination} · {ready.length} to pay · {rupees(q.data.group.total)}</p>
+            {heldCount > 0 && (
+              <p className="mt-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800">
+                {heldCount} on hold · {rupees(q.data.group.onHoldTotal ?? 0)} — not in the total; release the hold to pay
+              </p>
+            )}
           </div>
           <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="p-3">{canPay && <input type="checkbox" aria-label="Tick all" checked={allTicked} onChange={(e) => setTicked(e.target.checked ? rows.map((r) => r.id) : [])} />}</th>
+                  <th className="p-3">{canPay && <input type="checkbox" aria-label="Tick all" checked={allTicked} onChange={(e) => setTicked(e.target.checked ? ready.map((r) => r.id) : [])} />}</th>
                   <th className="p-3">Request</th><th className="p-3">Order · item</th><th className="p-3">Customer</th><th className="p-3">Status</th><th className="p-3 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {rows.map((r) => (
-                  <tr key={r.id} className={ticked.includes(r.id) ? 'bg-blue-50' : ''}>
+                  <tr key={r.id} className={ticked.includes(r.id) ? 'bg-blue-50' : r.status === 'on_hold' ? 'bg-orange-50/60' : ''}>
                     <td className="p-3">{canPay && <input type="checkbox" aria-label={`Pay ${r.number}`} checked={ticked.includes(r.id)}
+                      disabled={r.status === 'on_hold'} title={r.status === 'on_hold' ? 'On hold — release the hold to pay it' : undefined}
                       onChange={(e) => setTicked(e.target.checked ? [...ticked, r.id] : ticked.filter((x) => x !== r.id))} />}</td>
                     <td className="p-3"><span className="font-medium text-gray-900">{r.number}</span><span className="block text-xs text-gray-500">{formatDateIST(r.createdAt)} · {r.requestedBy}</span>
                       {r.bankNotice && <span className="mt-1 flex items-center gap-1 text-xs text-amber-700"><AlertTriangle className="h-3 w-3" /> Bank details changed recently</span>}</td>
@@ -100,7 +111,10 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                       {r.order?.number ? ' · ' : ''}{r.itemNames.join(', ')}{r.deal && <DealLine d={r.deal} />}
                     </td>
                     <td className="p-3">{r.customer?.name}</td>
-                    <td className="p-3">{r.statusLabel}{r.status === 'on_hold' && r.decisionNote ? <span className="block text-xs text-gray-500">{r.decisionNote}</span> : null}</td>
+                    <td className="p-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
+                      <HoldLine hold={r.hold ?? (r.status === 'on_hold' ? { note: r.decisionNote, byName: '', role: '', at: null } : null)} className="mt-1" />
+                    </td>
                     <td className="p-3 text-right font-semibold">{rupees(r.amount)}</td>
                   </tr>
                 ))}
@@ -174,7 +188,12 @@ export default function SupplierPayQueue({ canPay }: { canPay: boolean }) {
         </div>
         <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
           {summary
-            ? <ListResultLine count={summary.count} capped={false} total={summary.total} noun={['supplier', 'suppliers']} formatTotal={rupees} />
+            ? (
+              <span className="flex flex-wrap items-center gap-2">
+                <ListResultLine count={summary.count} capped={false} total={summary.total} noun={['supplier', 'suppliers']} formatTotal={rupees} />
+                {!!summary.onHoldTotal && <span className="text-xs font-semibold text-orange-800">+ {rupees(summary.onHoldTotal)} on hold (not counted)</span>}
+              </span>
+            )
             : <span />}
           {filtered && <ListClear onClear={() => clear(['sort'])} />}
         </div>
@@ -197,8 +216,13 @@ export default function SupplierPayQueue({ canPay }: { canPay: boolean }) {
                 {g.bankNotice && <span className="mt-1 flex items-center gap-1 text-xs text-amber-700"><AlertTriangle className="h-3 w-3" /> Bank details changed recently</span>}
               </span>
               <span className="text-right">
-                <span className="block text-lg font-bold text-gray-900">{rupees(g.total)}</span>
-                <span className="block text-xs text-gray-500">{g.count} payment{g.count === 1 ? '' : 's'}{g.onHold ? ` · ${g.onHold} on hold` : ''}</span>
+                <span className="block text-lg font-bold text-gray-900">{rupees(g.total)}<span className="sr-only"> to pay</span></span>
+                <span className="block text-xs text-gray-500">{g.count - g.onHold} to pay</span>
+                {g.onHold > 0 && (
+                  <span className="mt-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800">
+                    {g.onHold} on hold{g.onHoldTotal ? ` · ${rupees(g.onHoldTotal)}` : ''}
+                  </span>
+                )}
               </span>
             </button>
           </li>

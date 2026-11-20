@@ -13,7 +13,7 @@ interface Money {
   supplierPaid: number; supplierWaiting: number; supplierNotPriced: number; expenses: number; leftAfterSupplier: number;
 }
 interface PaymentRow { id: string; label: string; amount: number; method: string; reference: string; status: string; at: string; refunded: number }
-interface SupplierRow { id: string; number: string; kind: string; statusLabel: string; payee: string; items: string[]; amount: number; currency: string; foreignAmount: number | null; paidAt: string | null }
+interface SupplierRow { id: string; number: string; kind: string; status: string; statusLabel: string; note?: string; payee: string; items: string[]; amount: number; currency: string; foreignAmount: number | null; paidAt: string | null }
 interface ReturnRow { id: string; statusLabel: string; createdAt: string; refundStatus: string | null; refundAmount: number | null }
 export interface Overview {
   customer: { name: string; accountDeleted: boolean };
@@ -126,7 +126,7 @@ export default function OrderOverview({ orderId }: { orderId: string }) {
               <ul className="divide-y divide-gray-100">
                 {supplierPayments.map((r) => (
                   <li key={r.id} className="flex justify-between gap-3 py-2 text-sm">
-                    <div className="min-w-0"><p className="font-medium text-gray-900">{r.number} · {r.payee}</p><p className="text-xs text-gray-500">{r.statusLabel}{r.items.length ? ` · ${r.items.join(', ')}` : ''}</p></div>
+                    <div className="min-w-0"><p className="font-medium text-gray-900">{r.number} · {r.payee}</p><p className="text-xs text-gray-500">{r.statusLabel}{r.items.length ? ` · ${r.items.join(', ')}` : ''}</p>{r.note && <p className={`text-xs ${r.status === 'declined' ? 'text-red-800' : 'text-orange-800'}`}>{r.status === 'declined' ? 'Declined' : 'On hold'}: {r.note}</p>}</div>
                     <span className="shrink-0 font-medium">{amountOf(r)}</span>
                   </li>
                 ))}

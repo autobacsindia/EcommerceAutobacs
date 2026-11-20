@@ -85,7 +85,8 @@ export async function summaryFor(user) {
     items.push({
       key: 'payments_to_pay',
       label: 'Approved payments to pay',
-      count: n('approved') + n('on_hold'),
+      // Held payments cannot be paid until released, so they are not "to pay".
+      count: n('approved'),
       href: '/admin/payments',
     });
   }

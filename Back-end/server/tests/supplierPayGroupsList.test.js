@@ -74,6 +74,7 @@ describe('search', () => {
     ['a customer inside the group', 'kavya', ['Profender India']],
     ['one payment\'s amount', '₹2,500', ['Bosch Distributor']],
     ['the group total', '2400', ['3M Car Care']],
+    ['the amount on hold', '2500', ['Bosch Distributor']],
   ])('%s', async (_, q, expected) => {
     expect(names(await pr.supplierPayGroups(admin, { q }))).toEqual(expected);
   });
@@ -81,12 +82,12 @@ describe('search', () => {
   it('every word must match; a miss is empty with a zero summary', async () => {
     expect(names(await pr.supplierPayGroups(admin, { q: 'bosch hdfc' }))).toEqual(['Bosch Distributor']);
     expect(names(await pr.supplierPayGroups(admin, { q: 'bosch icici' }))).toEqual([]);
-    expect((await pr.supplierPayGroups(admin, { q: 'nobody' })).summary).toEqual({ count: 0, total: 0, capped: false });
+    expect((await pr.supplierPayGroups(admin, { q: 'nobody' })).summary).toEqual({ count: 0, total: 0, onHoldTotal: 0, capped: false });
   });
 
   it('a found group is the whole group — its count and total are what is to pay', async () => {
     const [bosch] = (await pr.supplierPayGroups(admin, { q: 'PR-0001' })).groups;
-    expect(bosch).toMatchObject({ count: 2, total: 7500, onHold: 1 });
+    expect(bosch).toMatchObject({ count: 2, total: 5000, onHold: 1, onHoldTotal: 2500 });
   });
 
   it('an unapproved payment is never found', async () => {
@@ -119,11 +120,51 @@ describe('filter and sort', () => {
   });
 
   it('the summary counts and totals what is shown', async () => {
-    expect((await pr.supplierPayGroups(accounts, {})).summary).toEqual({ count: 3, total: 11400, capped: false });
-    expect((await pr.supplierPayGroups(accounts, { method: 'bank' })).summary).toEqual({ count: 2, total: 9900, capped: false });
+    expect((await pr.supplierPayGroups(accounts, {})).summary).toEqual({ count: 3, total: 8900, onHoldTotal: 2500, capped: false });
+    expect((await pr.supplierPayGroups(accounts, { method: 'bank' })).summary).toEqual({ count: 2, total: 7400, onHoldTotal: 2500, capped: false });
   });
 
   it('only admin and accounts', async () => {
     await expect(pr.supplierPayGroups(procurement, {})).rejects.toMatchObject({ statusCode: 403 });
+  });
+});
+
+// Regression: accounts held a payment in "All requests", but "Supplier payments —
+// by supplier" counted it in the supplier's total to pay and never said who held it
+// or why. The hold is the request's status — every view must read it the same way.
+describe('a held payment, as the pay queue shows it', () => {
+  const holder = { ...accounts, name: 'Meera' };
+
+  it('is counted apart from the total to pay, and names the reason and who held it', async () => {
+    const [{ _id }] = await PaymentRequest.collection.find({ amount: 5000 }).toArray();
+    await pr.hold(holder, String(_id), { note: 'GST number on the bill is wrong' });
+
+    const [bosch] = (await pr.supplierPayGroups(admin, { q: 'bosch' })).groups;
+    expect(bosch).toMatchObject({ count: 2, onHold: 2, total: 0, onHoldTotal: 7500 });
+
+    const detail = await pr.supplierPayGroup(admin, bosch.id);
+    expect(detail).toMatchObject({ total: 0, onHoldTotal: 7500 });
+    const held = detail.requests.find((r) => r.id === String(_id));
+    expect(held).toMatchObject({ status: 'on_hold', statusLabel: 'On hold' });
+    expect(held.hold).toMatchObject({ note: 'GST number on the bill is wrong', byName: 'Meera', role: expect.any(String) });
+    expect(held.hold.at).toBeTruthy();
+    // A held row with no recorded history (older data) still shows its reason.
+    const older = detail.requests.find((r) => r.id !== String(_id));
+    expect(older.hold).toEqual({ note: '', byName: '', role: '', at: null });
+  });
+
+  it('a held payment shows the same hold in "All requests"', async () => {
+    const [{ _id }] = await PaymentRequest.collection.find({ amount: 5000 }).toArray();
+    await pr.hold(holder, String(_id), { note: 'Funds arrive Friday' });
+    const { requests } = await pr.list(admin, { status: 'on_hold' });
+    const held = requests.find((r) => r.id === String(_id));
+    expect(held.hold).toMatchObject({ note: 'Funds arrive Friday', byName: 'Meera' });
+    expect(requests.find((r) => r.status === 'approved')).toBeUndefined();
+  });
+
+  it('an approved payment carries no hold', async () => {
+    const detail = await pr.supplierPayGroup(admin, (await pr.supplierPayGroups(admin, { q: '3m' })).groups[0].id);
+    expect(detail.requests.every((r) => r.hold === null)).toBe(true);
+    expect(detail).toMatchObject({ total: 2400, onHoldTotal: 0 });
   });
 });

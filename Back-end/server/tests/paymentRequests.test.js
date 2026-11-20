@@ -375,6 +375,20 @@ describe('Payment requests', () => {
       expect((await accounts.session.post(`/payment-requests/${a}/hold`, { note: 'Funds arrive Friday' })).body.request.status).toBe('on_hold');
       // Held or not, accounts still cannot be the one to pay it.
       expect((await accounts.session.form(`/payment-requests/${a}/pay`, { method: 'bank', reference: 'UTR998877' })).status).toBe(403);
+      // While held, NOBODY can pay it — the admin is told why and by whom.
+      const refused = await admin.session.form(`/payment-requests/${a}/pay`, { method: 'bank', reference: 'UTR998877' });
+      expect(refused.status).toBe(409);
+      expect(refused.body.message).toMatch(/is on hold \(“Funds arrive Friday”\).*Release the hold before paying it/);
+      expect((await PaymentRequest.findById(a).lean()).status).toBe('on_hold');
+      const heldView = (await admin.session.get(`/payment-requests/${a}`)).body.request;
+      expect(heldView.can).toMatchObject({ pay: false, release: true, hold: false });
+      // Releasing: only accounts or the admin; it is approved again and can be paid.
+      expect((await ops.session.post(`/payment-requests/${a}/release`, {})).status).toBe(403);
+      const released = (await accounts.session.post(`/payment-requests/${a}/release`, { note: 'Funds arrived' })).body.request;
+      expect(released).toMatchObject({ status: 'approved', decisionNote: '', hold: null });
+      expect(released.history.at(-1)).toMatchObject({ action: 'released', note: 'Funds arrived' });
+      // A second release (double click) changes nothing.
+      expect((await accounts.session.post(`/payment-requests/${a}/release`, {})).status).toBe(409);
       expect((await admin.session.form(`/payment-requests/${a}/pay`, { method: 'bank', reference: 'UTR998877' })).body.request.status).toBe('paid');
 
       const b = await raise();
@@ -540,6 +554,32 @@ describe('Payment requests', () => {
 
       const list = (await procurement.session.get(`/payment-requests/order/${id}`)).body.requests;
       expect(list).toEqual([expect.objectContaining({ status: 'paid', itemNames: ['Lift kit'] })]);
+    });
+
+    // Regression: a hold set in "All requests" must read the same on the order's
+    // supplier payments — status, reason and who held it, from the one record.
+    it('a hold shows on the order the same as everywhere: reason and who held it', async () => {
+      const order = await paidOrder();
+      const id = String(order._id);
+      const [kit] = order.items.map((i) => String(i._id));
+      await wf.setStock(procurement.user, id, kit, { stock: 'in_stock' }, req);
+      const prId = (await procurement.session.form('/payment-requests/supplier', { orderId: id, itemIds: [kit], amount: 38000, payee: BANK })).body.request.id;
+      expect((await accounts.session.post(`/payment-requests/${prId}/approve`)).status).toBe(200);
+      let [row] = (await procurement.session.get(`/payment-requests/order/${id}`)).body.requests;
+      expect(row).toMatchObject({ status: 'approved', hold: null, decisionNote: '' });
+
+      expect((await accounts.session.post(`/payment-requests/${prId}/hold`, { note: 'Bill queried with supplier' })).status).toBe(200);
+      [row] = (await procurement.session.get(`/payment-requests/order/${id}`)).body.requests;
+      expect(row).toMatchObject({ status: 'on_hold', statusLabel: 'On hold', decisionNote: 'Bill queried with supplier' });
+      expect(row.hold).toMatchObject({ note: 'Bill queried with supplier', role: expect.any(String) });
+      expect(row.hold.at).toBeTruthy();
+      const one = (await admin.session.get(`/payment-requests/${prId}`)).body.request;
+      expect(one.hold).toEqual(row.hold);
+
+      // Declined: the hold is gone everywhere, and the reason shown is the decline's.
+      expect((await accounts.session.post(`/payment-requests/${prId}/decline`, { note: 'Wrong supplier' })).status).toBe(200);
+      [row] = (await procurement.session.get(`/payment-requests/order/${id}`)).body.requests;
+      expect(row).toMatchObject({ status: 'declined', hold: null, decisionNote: 'Wrong supplier' });
     });
   });
 

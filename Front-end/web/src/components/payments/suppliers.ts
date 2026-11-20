@@ -51,8 +51,10 @@ export type PayGroup = {
   method: 'bank' | 'upi';
   destination: string;
   count: number;
+  /** Ready to pay — held payments are NOT in it (they are `onHoldTotal`). */
   total: number;
   onHold: number;
+  onHoldTotal?: number;
   bankNotice: boolean;
   oldestAt: string;
 };
@@ -93,7 +95,7 @@ export type PayGroupList = {
   groups: PayGroup[];
   sort: string;
   /** The groups shown (after search / filter) and what they add up to. */
-  summary?: { count: number; total: number; capped: boolean };
+  summary?: { count: number; total: number; onHoldTotal?: number; capped: boolean };
   truncated: boolean;
 };
 /** `params`: q, method (bank / upi), sort (oldest / total_desc / count_desc / name) — the server filters. */
@@ -102,7 +104,7 @@ export const listPayGroups = (params: Record<string, string> = {}) => {
   return apiClient.get<PayGroupList>(`/payment-requests/to-pay/suppliers${qs ? `?${qs}` : ''}`);
 };
 export const getPayGroup = (id: string) => apiClient.get<{
-  group: { id: string; name: string; destination: string; total: number; requests: PaymentRequest[] };
+  group: { id: string; name: string; destination: string; total: number; onHoldTotal?: number; requests: PaymentRequest[] };
 }>(`/payment-requests/to-pay/suppliers/${encodeURIComponent(id)}`);
 
 /** Sum in paise so 0.1 + 0.2 is 0.3 — the server compares this total to the paise. */

@@ -10,7 +10,9 @@
  *   approve / decline          accounts (and admin) — every team's requests
  *   pay                        admin only — after accounts' approval; an admin may
  *                              also pay a waiting request directly (that approves it)
- *   put on hold                accounts or admin — a brake, on an approved request
+ *   put on hold                accounts or admin — a brake, on an approved request:
+ *                              a held request CANNOT be paid until it is released
+ *   release a hold             accounts or admin — back to approved, payable again
  *   see                        admin and accounts: everything; a team: its own
  *
  * ── NO MONEY MOVES HERE ─────────────────────────────────────────────────────────
@@ -431,6 +433,26 @@ const what = (r) => (r.kind === 'supplier'
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
+/**
+ * A held request's hold, for every view that lists it: why (decisionNote — what
+ * hold() saved), and who held it and when (its latest 'on_hold' history entry).
+ * null unless it is on hold now. The status is the one source of truth; this only
+ * reads it, so a hold shows the same everywhere and ends wherever it ends.
+ */
+export function holdOf(r) {
+  if (r?.status !== 'on_hold') return null;
+  const h = [...(r.history || [])].reverse().find((e) => e.action === 'on_hold') || null;
+  return { note: r.decisionNote || h?.note || '', byName: h?.byName || '', role: h?.role || '', at: h?.at || null };
+}
+
+/** Rows read without their history (the lists): fetch it for the held ones only, so holdOf can name who held it. */
+async function withHoldHistory(rows) {
+  const held = rows.filter((r) => r.status === 'on_hold' && !r.history);
+  if (!held.length) return rows;
+  const found = new Map((await paymentRequestRepository.findHistories(held.map((r) => r._id))).map((x) => [idOf(x._id), x.history || []]));
+  return rows.map((r) => (r.status === 'on_hold' && !r.history ? { ...r, history: found.get(idOf(r._id)) || [] } : r));
+}
+
 /** What the panel shows, and what this person may do with it now. */
 export function shape(r, viewer) {
   // Procurement as a team sees its suppliers' bank details anyway (the directory),
@@ -484,6 +506,7 @@ export function shape(r, viewer) {
     files: (r.files || []).map((f) => ({ id: idOf(f._id), kind: f.kind, name: f.name, contentType: f.contentType, bytes: f.bytes })),
     payment: r.status === 'paid' ? r.payment : null,
     decisionNote: r.decisionNote || '',
+    hold: holdOf(r),
     history: (r.history || []).map((h) => ({ at: h.at, byName: h.byName, role: h.role, action: h.action, note: h.note })),
     createdAt: r.createdAt,
     approver: 'accounts',
@@ -492,8 +515,10 @@ export function shape(r, viewer) {
       decline: mayDecide(viewer) && ['submitted', 'on_hold'].includes(r.status),
       // Only the admin pays — an approved request, or a waiting one directly
       // (the approval is recorded with the payment).
-      pay: mayPay(viewer) && ['submitted', 'approved', 'on_hold'].includes(r.status),
+      // Never while on hold: a hold means "do not pay this yet" (release it first).
+      pay: mayPay(viewer) && PAYABLE.includes(r.status),
       hold: mayHold(viewer) && r.status === 'approved',
+      release: mayHold(viewer) && r.status === 'on_hold',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
       edit: mayEdit(viewer, r),
       // Which order an expense was for: any status (no money changes).
@@ -948,6 +973,15 @@ export async function decline(actor, id, { note } = {}, req) {
   return shape(r, actor);
 }
 
+/** Why a held request cannot be paid — named, so the admin knows who to ask. */
+const heldMessage = (r) => {
+  const h = holdOf(r);
+  return `${r.number} is on hold${h?.note ? ` (“${h.note.slice(0, 200)}”)` : ''}${h?.byName ? ` — held by ${h.byName}` : ''}. Release the hold before paying it.`;
+};
+
+/** What a payment may be recorded from: approved — or still waiting, which the admin's payment also approves. Never on hold. */
+const PAYABLE = Object.freeze(['submitted', 'approved']);
+
 export async function hold(actor, id, { note } = {}, req) {
   if (!mayHold(actor)) throw fail('Only accounts or an admin can put a payment on hold.', 403);
   const reason = String(note || '').trim();
@@ -958,6 +992,23 @@ export async function hold(actor, id, { note } = {}, req) {
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'on_hold' });
   await tellChat(r, 'on_hold', `⏸️ ${isAdmin(actor) ? 'Admin' : 'Accounts'} put ${what(r)} on hold: “${reason.slice(0, 200)}”.`, { mentionAdmins: true, mentionRequester: true });
+  return shape(r, actor);
+}
+
+/**
+ * Lift a hold: the request is approved again and can be paid. Accounts or the
+ * admin — whoever may hold may release. A note is optional ("funds arrived").
+ * Compare-and-set like every change: two releases at once release it once.
+ */
+export async function release(actor, id, { note } = {}, req) {
+  if (!mayHold(actor)) throw fail('Only accounts or an admin can release a hold.', 403);
+  const said = String(note || '').trim().slice(0, 1000);
+  await loadVisible(actor, id);
+  const r = await paymentRequestRepository.transition(id, ['on_hold'],
+    { status: 'approved', decisionNote: '' }, entry(actor, 'released', said));
+  if (!r) throw fail(MOVED, 409);
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'released' });
+  await tellChat(r, 'released', `▶️ ${isAdmin(actor) ? 'Admin' : 'Accounts'} released the hold on ${what(r)} — it can be paid now${said ? `: “${said.slice(0, 200)}”` : '.'}`, { mentionAdmins: true, mentionRequester: true });
   return shape(r, actor);
 }
 
@@ -983,6 +1034,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   // (Optional only so a browser tab opened before this shipped can still pay; the
   // compare-and-set below pins the same facts either way.)
   if (filled(payVersion) && String(payVersion) !== payVersionOf(r0)) throw fail(PAY_CHANGED, 409);
+  if (r0.status === 'on_hold') throw fail(heldMessage(await paymentRequestRepository.findById(id) || r0), 409);
   await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   const fromForeign = paidFrom === 'foreign';
@@ -1001,7 +1053,8 @@ export async function markPaid(actor, id, { method, reference, note, transaction
     throw fail(`This request is for ${inr(r0.amount)} — that is what accounts approved. Edit the request to change it.`, 400);
   }
   // The admin paying a request still waiting for approval approves it in the same step.
-  const from = ['submitted', 'approved', 'on_hold'];
+  // Not on hold: the compare-and-set below refuses a hold that lands after the check above.
+  const from = PAYABLE;
   const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
   const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor, { existing: (r0.files || []).length }) : [];
   const debit = priced ? `${inr(priced.amount)} debited for ${foreignLine({ ...r0, fxRate: null })} (₹${rateText(priced.fxRate)} per ${r0.currency})`
@@ -1025,6 +1078,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
     // Lost the race: the screenshot belongs to no payment.
     await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     const now = await paymentRequestRepository.findById(id);
+    if (now?.status === 'on_hold') throw fail(heldMessage(now), 409);
     throw fail(now && from.includes(now.status) && payVersionOf(now) !== payVersionOf(r0) ? PAY_CHANGED : MOVED, 409);
   }
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, {
@@ -1341,7 +1395,7 @@ export async function list(actor, params = {}) {
     query: listQuery(actor, filters), sorts: LIST_SORTS, sortName: name, cursor: filters.cursor, pageSize: PAGE_SIZE,
     find: paymentRequestRepository.page, count: (q) => paymentRequestRepository.summary(q, SUMMARY_CAP),
   });
-  return { ...page, requests: await withDeals(items, (r) => shape(r, actor)) };
+  return { ...page, requests: await withDeals(await withHoldHistory(items), (r) => shape(r, actor)) };
 }
 
 /**
@@ -1503,7 +1557,7 @@ export async function setLinks(actor, id, input = {}, req) {
 export async function forOrder(actor, orderId) {
   if (!seesAll(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
   if (!/^[a-f0-9]{24}$/i.test(String(orderId))) return [];
-  const rows = await paymentRequestRepository.findForOrder(orderId);
+  const rows = await withHoldHistory(await paymentRequestRepository.findForOrder(orderId));
   // A paid supplier payment for items the customer cancelled: the supplier owes us a
   // refund — procurement raises it from here (services/supplierLedgerService.js).
   const paidSupplier = rows.filter((r) => r.kind === 'supplier' && r.status === 'paid');
@@ -1519,6 +1573,9 @@ export async function forOrder(actor, orderId) {
   };
   return rows.map((r) => ({
     id: idOf(r._id), number: r.number, status: r.status, statusLabel: STATUS_LABELS[r.status],
+    // Why it was declined, or held (and by whom) — the same as every other view shows.
+    decisionNote: ['declined', 'on_hold'].includes(r.status) ? r.decisionNote || '' : '',
+    hold: holdOf(r),
     kind: r.kind, categoryLabel: r.kind === 'expense' ? categoryLabel(r.category) : 'Supplier', team: r.team,
     dealId: r.deal ? idOf(r.deal) : null, part: r.part || '', partLabel: deals.PART_LABELS[r.part] || '',
     amount: r.amount, currency: r.currency || BASE_CURRENCY, foreignAmount: r.foreignAmount ?? null, rupeesPending: rupeesPending(r),
@@ -1621,12 +1678,18 @@ export async function supplierPayGroups(actor, params = {}) {
     const id = groupIdOf(r);
     const g = groups.get(id) || {
       id, name: r.payee.name, method: r.payee.method, destination: destinationLabel(r.payee),
-      count: 0, total: 0, onHold: 0, bankNotice: false, oldestAt: r.createdAt,
+      count: 0, total: 0, onHold: 0, onHoldTotal: 0, bankNotice: false, oldestAt: r.createdAt,
     };
     g.name = r.payee.name; // newest name wins (rows are oldest first)
     g.count += 1;
-    g.total = round2(g.total + r.amount);
-    if (r.status === 'on_hold') g.onHold += 1;
+    // `total` is what is ready to pay. Held money is counted apart: a hold means
+    // "don't pay this yet", so it must never sit inside the figure to send.
+    if (r.status === 'on_hold') {
+      g.onHold += 1;
+      g.onHoldTotal = round2(g.onHoldTotal + r.amount);
+    } else {
+      g.total = round2(g.total + r.amount);
+    }
     if (r.bankNotice?.at) g.bankNotice = true;
     groups.set(id, g);
     const p = r.payee || {};
@@ -1635,13 +1698,13 @@ export async function supplierPayGroups(actor, params = {}) {
   }
   const words = searchWords(f.q);
   const matches = (g) => (!['bank', 'upi'].includes(f.method) || g.method === f.method)
-    && words.every((w) => text.get(g.id).includes(w) || (amountOf(w) !== null && (g.total === amountOf(w) || amounts.get(g.id).includes(amountOf(w)))));
+    && words.every((w) => text.get(g.id).includes(w) || (amountOf(w) !== null && (g.total === amountOf(w) || g.onHoldTotal === amountOf(w) || amounts.get(g.id).includes(amountOf(w)))));
   const sortName = GROUP_SORTS[f.sort] ? f.sort : 'oldest';
   const shown = [...groups.values()].filter(matches).sort(GROUP_SORTS[sortName]);
   return {
     groups: shown,
     sort: sortName,
-    summary: { count: shown.length, total: round2(shown.reduce((n, g) => n + g.total, 0)), capped: false },
+    summary: { count: shown.length, total: round2(shown.reduce((n, g) => n + g.total, 0)), onHoldTotal: round2(shown.reduce((n, g) => n + g.onHoldTotal, 0)), capped: false },
     truncated: rows.length >= TO_PAY_CAP,
   };
 }
@@ -1649,13 +1712,17 @@ export async function supplierPayGroups(actor, params = {}) {
 /** One destination's approved supplier payments, oldest first. */
 export async function supplierPayGroup(actor, groupId) {
   if (!seesAll(actor)) throw fail('Not authorized.', 403);
-  const rows = (await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP)).filter((r) => groupIdOf(r) === String(groupId));
-  if (!rows.length) throw fail('Nothing left to pay for this supplier.', 404);
+  const all = (await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP)).filter((r) => groupIdOf(r) === String(groupId));
+  if (!all.length) throw fail('Nothing left to pay for this supplier.', 404);
+  const rows = await withHoldHistory(all);
+  const sum = (list) => round2(list.reduce((n, r) => n + r.amount, 0));
   return {
     id: String(groupId),
     name: rows[rows.length - 1].payee.name,
     destination: destinationLabel(rows[0].payee),
-    total: round2(rows.reduce((n, r) => n + r.amount, 0)),
+    // Ready to pay, and held — apart, as on the list (supplierPayGroups).
+    total: sum(rows.filter((r) => r.status !== 'on_hold')),
+    onHoldTotal: sum(rows.filter((r) => r.status === 'on_hold')),
     requests: await withDeals(rows, (r) => shape(r, actor)),
   };
 }
@@ -1683,6 +1750,11 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
 
   const rows = await paymentRequestRepository.findByIds(wanted);
   if (rows.length !== wanted.length) throw fail('Request not found.', 404);
+  // A held payment is listed with the supplier but never paid — release it first.
+  const held = rows.filter((r) => r.kind === 'supplier' && r.status === 'on_hold');
+  if (held.length) {
+    throw fail(`${held.map((r) => r.number).join(', ')} ${held.length === 1 ? 'is' : 'are'} on hold — release the hold before paying, or untick ${held.length === 1 ? 'it' : 'them'}.`, 409);
+  }
   const notReady = rows.filter((r) => r.kind !== 'supplier' || !TO_PAY.includes(r.status));
   if (notReady.length) {
     throw fail(`${notReady.map((r) => r.number).join(', ')} ${notReady.length === 1 ? 'is' : 'are'} not waiting to be paid — refresh the list.`, 409);
@@ -1716,7 +1788,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
     paid = await paymentRequestRepository.inTransaction(async (session) => {
       const out = [];
       for (const r of rows) {
-        const next = await paymentRequestRepository.transitionInSession(r._id, TO_PAY, { kind: 'supplier' },
+        const next = await paymentRequestRepository.transitionInSession(r._id, ['approved'], { kind: 'supplier' },
           { status: 'paid', payment }, log, proof.length ? { files: { $each: proof } } : {}, session);
         if (!next) throw fail(MOVED, 409); // aborts: none of them is marked paid
         out.push(next);

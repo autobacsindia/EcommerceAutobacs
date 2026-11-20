@@ -146,6 +146,11 @@ router.post('/:id/decline', asyncHandler(async (req, res) => {
 router.post('/:id/hold', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.hold(req.user, req.params.id, req.body, req) });
 }));
+
+// POST /payment-requests/:id/release — accounts or admin: lift a hold (back to approved, payable again)
+router.post('/:id/release', asyncHandler(async (req, res) => {
+  res.json({ success: true, request: await pr.release(req.user, req.params.id, req.body, req) });
+}));
 // POST /payment-requests/:id/pay — multipart: method, reference, note?, proof
 router.post('/:id/pay', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.markPaid(req.user, req.params.id, req.body, req.files || [], req) });

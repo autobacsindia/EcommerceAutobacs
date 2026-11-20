@@ -355,14 +355,28 @@ describe('Supplier directory and one-transfer payments', () => {
       expect(stored.size).toBe(0); // the screenshot is not kept for a payment that was not recorded
     });
 
-    it('a ticked payment that was paid or held meanwhile stops the whole batch', async () => {
+    it('a ticked payment that was paid meanwhile stops the whole batch', async () => {
       const { a, b } = await threeForArbOneElsewhere();
-      await accounts.session.post(`/payment-requests/${b.id}/hold`, { note: 'Bill queried' });
-      // On hold is still "to pay", so it can be paid — but one paid singly cannot be paid again.
+      // One paid singly cannot be paid again.
       await admin.session.form(`/payment-requests/${b.id}/pay`, { method: 'upi', reference: 'UPI12345' });
       const res = await payBatch(admin.session, [a.id, b.id], 3500.5);
       expect(res.status).toBe(409);
       expect((await PaymentRequest.findById(a.id).lean()).status).toBe('approved');
+    });
+
+    it('a held payment cannot be paid in a batch: the whole batch is refused, nothing is recorded', async () => {
+      const { a, b } = await threeForArbOneElsewhere();
+      await accounts.session.post(`/payment-requests/${b.id}/hold`, { note: 'Bill queried' });
+      // Still listed with its supplier (so the admin sees it), but not payable.
+      const res = await payBatch(admin.session, [a.id, b.id], 3500.5);
+      expect(res.status).toBe(409);
+      expect(res.body.message).toMatch(/on hold — release the hold before paying, or untick it/);
+      expect((await PaymentRequest.find({ status: 'paid' }).lean())).toHaveLength(0);
+      expect((await PaymentRequest.findById(b.id).lean()).status).toBe('on_hold');
+      expect(stored.size).toBe(0);
+      // Released, it pays like any other.
+      await accounts.session.post(`/payment-requests/${b.id}/release`, {});
+      expect((await payBatch(admin.session, [a.id, b.id], 3500.5)).status).toBe(200);
     });
 
     it('two admins at once (or a double click) pay it once, never half', async () => {

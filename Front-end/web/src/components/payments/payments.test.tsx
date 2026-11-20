@@ -215,6 +215,22 @@ describe('detail', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Decline' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/payment-requests/r1/decline', { note: 'Duplicate bill' }));
   });
+
+  it('a held payment: no "Record payment", shows who held it, and can be released', async () => {
+    window.confirm = jest.fn(() => true);
+    const hold = { note: 'Funds arrive Friday', byName: 'Meera', role: 'staff', at: '2026-11-19T06:00:00Z' };
+    get.mockResolvedValue({ request: { ...base, status: 'on_hold', statusLabel: 'On hold', decisionNote: hold.note, hold,
+      can: { approve: false, decline: true, pay: false, hold: false, release: true, cancel: false } } });
+    post.mockResolvedValue({ request: { ...base, status: 'approved', statusLabel: 'Approved', hold: null } });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+    await within(panel).findByText('PR-0007');
+    expect(within(panel).queryByRole('button', { name: /Record payment/ })).not.toBeInTheDocument();
+    expect(within(panel).getByText(/by Meera \(Accounts\) on/)).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Release hold' }));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Release the hold on PR-0007?'));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/payment-requests/r1/release', { note: '' }));
+  });
 });
 
 describe('each team’s own options', () => {

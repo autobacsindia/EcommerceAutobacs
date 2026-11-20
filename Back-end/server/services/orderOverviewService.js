@@ -100,6 +100,8 @@ const requestRow = (r) => ({
   id: String(r._id), number: r.number, kind: r.kind, status: r.status, statusLabel: REQUEST_STATUS[r.status] || r.status,
   payee: r.payee?.name || '', items: r.itemNames || [], amount: r.amount, currency: r.currency || 'INR', foreignAmount: r.foreignAmount ?? null,
   part: r.part || '', paidAt: r.payment?.paidAt || null, askedBy: r.requestedByName || '', createdAt: r.createdAt,
+  // Why it is on hold or was declined — the same reason every payments view shows.
+  note: ['declined', 'on_hold'].includes(r.status) ? r.decisionNote || '' : '',
 });
 
 const returnRow = (r) => ({
