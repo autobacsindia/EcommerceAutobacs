@@ -10,10 +10,11 @@ import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeK
 import { payLine } from './SupplierPicker';
 import { OwesBadge, SupplierCreditPanel } from './SupplierCredit';
 import {
-  createSupplier, listSuppliers, setSupplierActive, supplierKeys, updateSupplier,
+  createSupplier, listSuppliers, revealAccountNumber, setSupplierActive, supplierKeys, updateSupplier,
   type Supplier, type SupplierInput,
 } from './suppliers';
 import RichTextBox from '@/components/ui/RichTextBox';
+import CopyId from '@/components/ui/CopyId';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -134,6 +135,44 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
   );
 }
 
+/**
+ * Accounts: "Show number" fetches the full account number once (the server logs who
+ * looked). Kept only in this component — never cached, gone on "Hide" or reload.
+ */
+function RevealAccount({ supplierId }: { supplierId: string }) {
+  const [number, setNumber] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function show() {
+    setBusy(true);
+    setError('');
+    try {
+      setNumber((await revealAccountNumber(supplierId)).accountNumber);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not show the number.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm">
+      {number ? (
+        <>
+          <span className="font-mono tabular-nums text-gray-900" aria-label="Full account number">{number}</span>
+          <CopyId value={number} label="Account number" />
+          <button type="button" onClick={() => setNumber('')} className="text-xs text-blue-700 hover:underline">Hide</button>
+        </>
+      ) : (
+        <button type="button" disabled={busy} onClick={show} className="text-xs font-medium text-blue-700 hover:underline disabled:opacity-50"
+          title="Your name is recorded each time you view it">
+          {busy ? 'Showing…' : 'Show account number'}
+        </button>
+      )}
+      {error && <span role="alert" className="text-xs text-red-700">{error}</span>}
+    </p>
+  );
+}
+
 function SupplierCard({ s, onEdit }: { s: Supplier; onEdit: () => void }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
@@ -152,6 +191,7 @@ function SupplierCard({ s, onEdit }: { s: Supplier; onEdit: () => void }) {
           <p className="text-sm text-gray-700">
             {payLine(s)}
           </p>
+          {s.can.revealAccount && <RevealAccount supplierId={s.id} />}
           {s.gstin && <p className="text-xs text-gray-500">GST {s.gstin}</p>}
           <OwesBadge balances={s.credit} />
           {s.bankChangedAt && <p className="text-xs text-amber-700">Bank details changed {new Date(s.bankChangedAt).toLocaleDateString('en-IN')} by {s.bankChangedBy}</p>}

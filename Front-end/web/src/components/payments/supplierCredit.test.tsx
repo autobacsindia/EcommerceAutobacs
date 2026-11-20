@@ -34,7 +34,8 @@ const entry = (over: Partial<CreditEntry> = {}): CreditEntry => ({
   supplier: { id: 's1', name: 'ARB Supplies' }, currency: 'INR', amount: 15000, signedAmount: -15000, amountText: '₹15,000',
   order: null, paymentRequest: null, date: '2026-11-06', reference: 'UTR-BACK-1', note: '', createdByName: 'Priya',
   createdAt: '2026-11-06T05:00:00Z', decidedByName: '', decidedAt: null, decisionNote: '', history: [],
-  can: { approve: true, decline: true, cancel: false }, ...over,
+  rev: 0, correctionOf: null, correctedAmount: null, correctedAmountText: '', correctionPending: false, edits: [],
+  can: { approve: true, decline: true, cancel: false, edit: false }, ...over,
 });
 
 let fetchMock: jest.Mock;
@@ -97,7 +98,7 @@ describe('the supplier\'s credit and the accounts tab', () => {
     get.mockResolvedValue({
       supplier: { id: 's1', name: 'ARB Supplies' },
       balances: [{ currency: 'INR', owed: 30000, owedText: '₹30,000', pending: -15000, pendingText: '₹15,000' }],
-      entries: [entry(), entry({ id: 'e0', kind: 'refund_due', kindLabel: 'Refund due', status: 'approved', statusLabel: 'Approved', signedAmount: 30000, amount: 30000, amountText: '₹30,000', can: { approve: false, decline: false, cancel: false } })],
+      entries: [entry(), entry({ id: 'e0', kind: 'refund_due', kindLabel: 'Refund due', status: 'approved', statusLabel: 'Approved', signedAmount: 30000, amount: 30000, amountText: '₹30,000', can: { approve: false, decline: false, cancel: false, edit: false } })],
       nextAfter: null, can: { propose: true, writeOff: false },
     });
     post.mockResolvedValue({ entry: entry() });
@@ -126,9 +127,69 @@ describe('the supplier\'s credit and the accounts tab', () => {
     wrap(<SupplierCreditTab />);
     const queue = screen.getByRole('region', { name: 'Waiting for accounts' });
     fireEvent.click(await within(queue).findByRole('button', { name: 'Approve' }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/suppliers/credit/e1/approve', { note: '' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/suppliers/credit/e1/approve', { note: '', rev: 0 }));
     const owing = screen.getByRole('region', { name: 'Suppliers who owe us' });
     expect(await within(owing).findByText('₹30,000')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Download CSV/ }).getAttribute('href')).toMatch(/^\/api\/v1\/suppliers\/credit\/report\.csv\?from=\d{4}-\d{2}-01&to=\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('editing a credit entry', () => {
+  const approvedRefund = entry({
+    id: 'e0', kind: 'refund_due', kindLabel: 'Refund due', status: 'approved', statusLabel: 'Approved', signedAmount: 30000, amount: 30000,
+    amountText: '₹30,000', rev: 1, can: { approve: false, decline: false, cancel: false, edit: true },
+    edits: [{ at: '2026-11-19T09:40:00Z', byName: 'Priya', reason: 'Bill had ₹2,000 shipping', changes: [{ field: 'Amount', from: '₹32,000', to: '₹30,000' }] }],
+  });
+  const page = (entries: CreditEntry[]) => ({
+    supplier: { id: 's1', name: 'ARB Supplies' }, balances: [{ currency: 'INR', owed: 30000, owedText: '₹30,000', pending: 0, pendingText: '' }],
+    entries, nextAfter: null, can: { propose: true, writeOff: false },
+  });
+
+  it('a pending repayment: edited in place with a reason, the version and a one-time form key', async () => {
+    get.mockResolvedValue(page([entry({ can: { approve: false, decline: false, cancel: true, edit: true } })]));
+    post.mockResolvedValue({ entry: entry() });
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    const form = screen.getByRole('form', { name: 'Edit Supplier paid back' });
+    fireEvent.change(within(form).getByLabelText('Amount (INR)'), { target: { value: '12000' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    expect(post).not.toHaveBeenCalled(); // the reason is required
+    fireEvent.change(within(form).getByLabelText('Why are you changing it?'), { target: { value: 'Bank statement shows ₹12,000' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [url, body] = post.mock.calls[0];
+    expect(url).toBe('/suppliers/credit/e1/edit');
+    expect(body).toMatchObject({ amount: 12000, reason: 'Bank statement shows ₹12,000', rev: 0, currency: 'INR', date: '2026-11-06', reference: 'UTR-BACK-1' });
+    expect(body.formKey).toMatch(/^[A-Za-z0-9_-]{8,}$/);
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved — still waiting for accounts.');
+  });
+
+  it('an approved entry: explains the correction, sends only the new amount, and lists its changes', async () => {
+    get.mockResolvedValue(page([approvedRefund]));
+    post.mockResolvedValue({ entry: approvedRefund, correction: entry({ id: 'c1', kind: 'correction_down', amountText: '₹5,000' }) });
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    const row = await screen.findByLabelText('Refund due ₹30,000');
+    expect(within(row).getByText('Changes (1)')).toBeInTheDocument();
+    expect(row).toHaveTextContent('Amount: ₹32,000 → ₹30,000');
+    expect(row).toHaveTextContent('Reason: Bill had ₹2,000 shipping');
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    const form = screen.getByRole('form', { name: 'Edit Refund due' });
+    expect(form).toHaveTextContent(/becomes a correction/);
+    expect(within(form).queryByLabelText('Currency')).toBeNull(); // an approved entry's currency never changes
+    fireEvent.change(within(form).getByLabelText('Correct amount (INR)'), { target: { value: '25000' } });
+    fireEvent.change(within(form).getByLabelText('Why are you changing it?'), { target: { value: "Supplier's credit note says ₹25,000" } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/suppliers/credit/e0/edit', expect.objectContaining({ amount: 25000, rev: 1 })));
+    expect(post.mock.calls[0][1]).not.toHaveProperty('currency');
+    expect(await screen.findByRole('status')).toHaveTextContent('Correction of ₹5,000 sent to accounts to approve.');
+  });
+
+  it('no Edit button when the server says no; a waiting correction is shown', async () => {
+    get.mockResolvedValue(page([{ ...approvedRefund, correctionPending: true, correctedAmountText: '₹28,000', can: { ...approvedRefund.can, edit: false } }]));
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    const row = await screen.findByLabelText('Refund due ₹30,000');
+    expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(row).toHaveTextContent('Corrected to ₹28,000');
+    expect(row).toHaveTextContent('A correction is waiting for accounts');
   });
 });

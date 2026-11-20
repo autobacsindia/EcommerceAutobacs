@@ -9,19 +9,27 @@ import mongoose from 'mongoose';
  *   next order ₹40,000: ₹15,000 of it from credit         credit_used      −15,000  → we transfer ₹25,000
  *   that payment declined → the credit comes back         credit_restored  +15,000
  *   the admin gives up on what is left                    written_off      − …
+ *   an approved ₹30,000 refund should have been ₹25,000   correction_down   −5,000  (correctionOf → that row)
  *
  * What the supplier owes = Σ APPROVED rows (+ for refund_due / credit_restored,
  * − for the rest), per currency — always worked out on the server, never stored as
  * an editable number. Rows are never edited or deleted: a mistake is corrected by a
- * new row. Only `status` (pending → approved / declined / cancelled) and the decision
- * fields change, once, by compare-and-set.
+ * new row — a correction_up / correction_down linked to it (`correctionOf`), which
+ * accounts approves like any other. Only `status` (pending → approved / declined /
+ * cancelled) and the decision fields change, once, by compare-and-set — plus, with a
+ * reason recorded in `edits`, the details of a PENDING row (owner, 2026-11-19) and the
+ * note / reference of an approved one (never its money).
  *
  * Amounts are hundredths of `currency` (paise, satang, cents) as integers, so sums
  * never drift the way floats do.
  */
-export const LEDGER_KINDS = Object.freeze(['refund_due', 'repaid', 'credit_used', 'credit_restored', 'written_off']);
+export const LEDGER_KINDS = Object.freeze(['refund_due', 'repaid', 'credit_used', 'credit_restored', 'written_off', 'correction_up', 'correction_down']);
 /** +1: the supplier owes us more; −1: less. */
-export const LEDGER_SIGN = Object.freeze({ refund_due: 1, credit_restored: 1, repaid: -1, credit_used: -1, written_off: -1 });
+export const LEDGER_SIGN = Object.freeze({
+  refund_due: 1, credit_restored: 1, correction_up: 1, repaid: -1, credit_used: -1, written_off: -1, correction_down: -1,
+});
+/** The kinds that add to what the supplier owes (the balance aggregate reads this). */
+export const OWES_MORE_KINDS = Object.freeze(LEDGER_KINDS.filter((k) => LEDGER_SIGN[k] > 0));
 
 const HistorySchema = new mongoose.Schema(
   {
@@ -30,6 +38,25 @@ const HistorySchema = new mongoose.Schema(
     byName: { type: String, default: '' },
     action: { type: String, required: true },
     note: { type: String, default: '', maxlength: 1000 },
+  },
+  { _id: false }
+);
+
+/** One field of an edit: what it was → what it became (as shown to people). */
+const ChangeSchema = new mongoose.Schema(
+  { field: { type: String, required: true }, from: { type: String, default: '' }, to: { type: String, default: '' } },
+  { _id: false }
+);
+/** Who changed the row, when, why, and what — never overwritten. */
+const EditSchema = new mongoose.Schema(
+  {
+    at: { type: Date, required: true },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    byName: { type: String, default: '' },
+    reason: { type: String, required: true, maxlength: 1000 },
+    changes: { type: [ChangeSchema], default: [] },
+    // The browser's id for that submit: a double-clicked edit is saved once.
+    formKey: { type: String, default: '' },
   },
   { _id: false }
 );
@@ -49,7 +76,7 @@ const SupplierLedgerEntrySchema = new mongoose.Schema(
     /*
       Idempotency: one row per cause. `use:<request>`, `restore:<request>`,
       `due:<request>` (one live claim per paid payment), `repaid:<form key>`,
-      `writeoff:<form key>`. A declined / cancelled claim gets its key retired
+      `writeoff:<form key>`, `fix:<form key>` (a correction). A declined / cancelled claim gets its key retired
       (suffixed) so a corrected one can be raised.
     */
     key: { type: String, required: true },
@@ -71,6 +98,14 @@ const SupplierLedgerEntrySchema = new mongoose.Schema(
     decidedAt: { type: Date, default: null },
     decisionNote: { type: String, default: '', maxlength: 1000 },
     history: { type: [HistorySchema], default: [] },
+
+    // A correction: the approved row it corrects (its kind kept for the label).
+    correctionOf: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierLedgerEntry', default: null },
+    correctionOfKind: { type: String, default: '' },
+    // Bumped by every edit: an approval or edit names the version it saw, so nobody
+    // approves an amount that changed under them. Rows from before 2026-11-19 have none (= 0).
+    rev: { type: Number, default: 0 },
+    edits: { type: [EditSchema], default: [] },
   },
   { timestamps: true }
 );

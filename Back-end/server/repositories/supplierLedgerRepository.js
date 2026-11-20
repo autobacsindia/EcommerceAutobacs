@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import SupplierLedgerEntry, { LEDGER_SIGN } from '../models/SupplierLedgerEntry.js';
+import SupplierLedgerEntry, { LEDGER_SIGN, OWES_MORE_KINDS } from '../models/SupplierLedgerEntry.js';
 
 export { LEDGER_SIGN };
 import Supplier from '../models/Supplier.js';
@@ -19,7 +19,7 @@ const BALANCE_STAGES = [
         $sum: {
           $cond: [
             { $eq: ['$status', 'approved'] },
-            { $cond: [{ $in: ['$kind', ['refund_due', 'credit_restored']] }, '$amountPaise', { $multiply: ['$amountPaise', -1] }] },
+            { $cond: [{ $in: ['$kind', OWES_MORE_KINDS] }, '$amountPaise', { $multiply: ['$amountPaise', -1] }] },
             0,
           ],
         },
@@ -29,7 +29,7 @@ const BALANCE_STAGES = [
         $sum: {
           $cond: [
             { $eq: ['$status', 'pending'] },
-            { $cond: [{ $in: ['$kind', ['refund_due', 'credit_restored']] }, '$amountPaise', { $multiply: ['$amountPaise', -1] }] },
+            { $cond: [{ $in: ['$kind', OWES_MORE_KINDS] }, '$amountPaise', { $multiply: ['$amountPaise', -1] }] },
             0,
           ],
         },
@@ -71,6 +71,17 @@ const supplierLedgerRepository = {
   claimsFor: (requestIds) => SupplierLedgerEntry.find({
     paymentRequest: { $in: requestIds, $type: 'objectId' }, kind: 'refund_due', status: { $in: ['pending', 'approved'] },
   }).select('paymentRequest status amountPaise currency').lean(),
+
+  /**
+   * The live (pending / approved) corrections of these rows, one supplier's or a page's.
+   * `supplier` first, so it rides supplier_ledger_supplier (no new index).
+   */
+  correctionsFor: (supplierIds, entryIds, session = null) => SupplierLedgerEntry.find({
+    supplier: { $in: supplierIds.map(toId) }, correctionOf: { $in: entryIds.map(toId) }, status: { $in: ['pending', 'approved'] },
+  }).select('correctionOf kind status amountPaise').session(session).lean(),
+
+  /** Compare-and-set on a filter (status, rev, …): the update, or null when it had already moved. */
+  updateWhere: (filter, update, session = null) => SupplierLedgerEntry.findOneAndUpdate(filter, update, { new: true, session }).lean(),
 
   /** Compare-and-set on status: `from` → the update. Null when it had already moved. */
   decide: (id, from, update, session = null) => SupplierLedgerEntry.findOneAndUpdate(

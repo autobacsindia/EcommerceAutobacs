@@ -35,7 +35,8 @@ export type Supplier = {
   bankChangedAt: string | null;
   bankChangedBy: string;
   updatedAt: string;
-  can: { edit: boolean };
+  /** revealAccount: accounts may ask for the full number (logged) — see revealAccountNumber. */
+  can: { edit: boolean; revealAccount?: boolean };
   /** What this supplier owes us (supplier credit), per currency — worked out by the server. */
   credit?: CreditBalance[];
 };
@@ -106,3 +107,7 @@ export const getPayGroup = (id: string) => apiClient.get<{
 
 /** Sum in paise so 0.1 + 0.2 is 0.3 — the server compares this total to the paise. */
 export const sumRupees = (amounts: number[]) => Math.round(amounts.reduce((n, a) => n + Math.round(a * 100), 0)) / 100;
+
+/** The full account number for accounts — the server writes "<who> viewed …" to the audit log first. */
+export const revealAccountNumber = (supplierId: string) =>
+  apiClient.post<{ accountNumber: string }>(`/suppliers/${encodeURIComponent(supplierId)}/account-number`, {});

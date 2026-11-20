@@ -7,7 +7,7 @@ import apiClient from '@/lib/api-client';
  *   refund due (order cancelled after we paid)   + owes us more
  *   supplier paid back / credit used / written off − owes us less
  */
-export type CreditKind = 'refund_due' | 'repaid' | 'credit_used' | 'credit_restored' | 'written_off';
+export type CreditKind = 'refund_due' | 'repaid' | 'credit_used' | 'credit_restored' | 'written_off' | 'correction_up' | 'correction_down';
 export type CreditStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
 
 export type CreditBalance = {
@@ -41,7 +41,35 @@ export type CreditEntry = {
   decidedAt: string | null;
   decisionNote: string;
   history: { at: string; byName: string; action: string; note: string }[];
-  can: { approve: boolean; decline: boolean; cancel: boolean };
+  /** Goes up with every edit; an approval or edit names the version it saw. */
+  rev: number;
+  /** A correction: the approved entry it corrects. */
+  correctionOf: { id: string; kindLabel: string } | null;
+  /** An approved entry after its approved corrections (null when never corrected). */
+  correctedAmount: number | null;
+  correctedAmountText: string;
+  correctionPending: boolean;
+  edits: CreditEdit[];
+  can: { approve: boolean; decline: boolean; cancel: boolean; edit: boolean };
+};
+
+/** Who changed an entry, when, why, and what (old → new, as people read it). */
+export type CreditEdit = {
+  at: string;
+  byName: string;
+  reason: string;
+  changes: { field: string; from: string; to: string }[];
+};
+
+export type CreditEditInput = {
+  reason: string;
+  rev: number;
+  formKey: string;
+  amount?: number;
+  currency?: string;
+  date?: string;
+  reference?: string;
+  note?: string;
 };
 
 export type SupplierCreditPage = {
@@ -76,8 +104,11 @@ export const recordRepayment = (supplierId: string, body: { currency: string; am
   apiClient.post<{ entry: CreditEntry }>(`/suppliers/${enc(supplierId)}/credit/repayments`, body);
 export const writeOff = (supplierId: string, body: { currency: string; amount: number; note: string; formKey: string }) =>
   apiClient.post<{ entry: CreditEntry }>(`/suppliers/${enc(supplierId)}/credit/write-offs`, body);
-export const decideCredit = (entryId: string, action: 'approve' | 'decline' | 'cancel', note = '') =>
-  apiClient.post<{ entry: CreditEntry }>(`/suppliers/credit/${enc(entryId)}/${action}`, { note });
+export const decideCredit = (entryId: string, action: 'approve' | 'decline' | 'cancel', note = '', rev?: number) =>
+  apiClient.post<{ entry: CreditEntry }>(`/suppliers/credit/${enc(entryId)}/${action}`, { note, ...(rev === undefined ? {} : { rev }) });
+/** Pending: changed in place. Approved: a new amount raises a correction (waits for accounts). */
+export const editCredit = (entryId: string, body: CreditEditInput) =>
+  apiClient.post<{ entry: CreditEntry; correction?: CreditEntry }>(`/suppliers/credit/${enc(entryId)}/edit`, body);
 
 export const creditReportHref = (from: string, to: string) =>
   `/api/v1/suppliers/credit/report.csv?from=${enc(from)}&to=${enc(to)}`;

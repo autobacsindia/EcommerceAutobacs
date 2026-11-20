@@ -153,6 +153,20 @@ describe('the directory', () => {
     expect(await screen.findByText(/A\/c XXXXXXXX9012/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Edit/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Add supplier/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Show account number/ })).not.toBeInTheDocument();
+  });
+
+  it('accounts sees the full account number only after asking for it, and can hide it again', async () => {
+    get.mockResolvedValue({ suppliers: [{ ...ARB, can: { edit: false, revealAccount: true } }], nextAfter: null });
+    post.mockResolvedValue({ accountNumber: '123456789012' });
+    wrap(<SupplierDirectory canEdit={false} />);
+    expect(await screen.findByText(/A\/c XXXXXXXX9012/)).toBeInTheDocument();
+    expect(screen.queryByText('123456789012')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show account number' }));
+    expect(await screen.findByLabelText('Full account number')).toHaveTextContent('123456789012');
+    expect(post).toHaveBeenCalledWith('/suppliers/s1/account-number', {});
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    expect(screen.queryByText('123456789012')).not.toBeInTheDocument();
   });
 });
 

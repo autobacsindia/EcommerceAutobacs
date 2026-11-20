@@ -105,7 +105,7 @@ async function paidOrder(salesUser = null) {
   return Order.findById(order._id).lean();
 }
 
-const { default: SupplierLedgerEntry } = await import('../models/SupplierLedgerEntry.js');
+const { default: SupplierLedgerEntry, LEDGER_SIGN } = await import('../models/SupplierLedgerEntry.js');
 const { default: cancellationService } = await import('../services/cancellationService.js');
 const ledger = await import('../services/supplierLedgerService.js');
 const { creditRows } = await import('../services/paymentSlipService.js');
@@ -134,10 +134,18 @@ describe('supplier credit (pure)', () => {
   it('shows who may do what on an entry', () => {
     const mine = { _id: 'e', kind: 'repaid', status: 'pending', amountPaise: 100, createdBy: 'u1', currency: 'INR' };
     const acc = { _id: 'u2', role: 'staff', staff: { team: 'accounts', active: true } };
-    expect(ledger.shape(mine, acc).can).toEqual({ approve: true, decline: true, cancel: false });
+    const proc = { _id: 'u1', role: 'staff', staff: { team: 'procurement', active: true } };
+    expect(ledger.shape(mine, acc).can).toEqual({ approve: true, decline: true, cancel: false, edit: false });
     expect(ledger.shape(mine, { ...acc, _id: 'u1' }).can.approve).toBe(false); // not their own
-    expect(ledger.shape(mine, { _id: 'u1', role: 'admin' }).can).toEqual({ approve: true, decline: true, cancel: true });
-    expect(ledger.shape({ ...mine, status: 'approved' }, acc).can).toEqual({ approve: false, decline: false, cancel: false });
+    expect(ledger.shape(mine, { _id: 'u1', role: 'admin' }).can).toEqual({ approve: true, decline: true, cancel: true, edit: true });
+    expect(ledger.shape({ ...mine, status: 'approved' }, acc).can).toEqual({ approve: false, decline: false, cancel: false, edit: false });
+    // Pending: whoever raised it edits; another procurement person does not. Approved: procurement corrects.
+    expect(ledger.shape(mine, proc).can.edit).toBe(true);
+    expect(ledger.shape(mine, { ...proc, _id: 'u9' }).can.edit).toBe(false);
+    expect(ledger.shape({ ...mine, status: 'approved' }, { ...proc, _id: 'u9' }).can.edit).toBe(true);
+    expect(ledger.shape({ ...mine, status: 'approved', kind: 'written_off' }, proc).can.edit).toBe(false); // admin only
+    expect(ledger.shape({ ...mine, status: 'approved', kind: 'credit_used' }, proc).can.edit).toBe(false); // follows its payment
+    expect(ledger.shape({ ...mine, correctionOf: 'x' }, proc).can.edit).toBe(false);
     expect(ledger.shape(mine, acc).signedAmount).toBe(-1);
   });
 });
@@ -470,5 +478,206 @@ describe('Supplier credit', () => {
     expect(await plan({ supplier: new mongoose.Types.ObjectId(arb) }, { createdAt: -1, _id: -1 })).toMatch(/supplier_ledger_supplier/);
     expect(await plan({ status: 'pending' }, { createdAt: -1, _id: -1 })).toMatch(/supplier_ledger_status/);
     expect(await plan({ supplier: new mongoose.Types.ObjectId(arb) }, { createdAt: -1, _id: -1 })).not.toMatch(/COLLSCAN/);
+    // The corrections of a history page (forSupplier): rides the supplier index, no new index needed.
+    const fixes = JSON.stringify(await SupplierLedgerEntry.find({
+      supplier: { $in: [new mongoose.Types.ObjectId(arb)] }, correctionOf: { $in: [new mongoose.Types.ObjectId()] }, status: { $in: ['pending', 'approved'] },
+    }).explain('queryPlanner'));
+    expect(fixes).toMatch(/supplier_ledger_supplier/);
+    expect(fixes).not.toMatch(/COLLSCAN/);
+  });
+  // ── Account number for accounts; editing entries (owner, 2026-11-19) ────────
+
+  it('accounts sees the full account number only by asking, and each look is logged; other teams never', async () => {
+    const { default: AuditLog } = await import('../models/AuditLog.js');
+    const arb = await saveSupplier();
+    // Lists: last 4 only, for everyone.
+    for (const who of [accounts, procurement]) {
+      const row = (await who.session.get('/suppliers')).body.suppliers.find((x) => x.id === arb);
+      expect(JSON.stringify(row)).not.toMatch(/123456789012/);
+      expect(row.payment.accountMasked).toMatch(/9012$/);
+    }
+    // Accounts' detail view: masked, with a "Show number" button.
+    const detail = await accounts.session.get(`/suppliers/${arb}`);
+    expect(detail.headers['cache-control']).toMatch(/no-store/);
+    expect(detail.body.supplier.payment.accountNumber).toBe('');
+    expect(detail.body.supplier.can).toEqual({ edit: false, revealAccount: true });
+    const shown = await accounts.session.post(`/suppliers/${arb}/account-number`);
+    expect(shown.status).toBe(200);
+    expect(shown.headers['cache-control']).toMatch(/no-store/);
+    expect(shown.body.accountNumber).toBe('123456789012');
+    const log = await AuditLog.findOne({ action: 'VIEW_ACCOUNT_NUMBER', resourceId: arb }).lean();
+    expect(log.details.summary).toBe('Anu viewed the account number of ARB Supplies');
+    expect(String(log.user)).toBe(String(accounts.user._id));
+    // Procurement still edits with the full number in the form; accounts cannot edit.
+    expect((await procurement.session.get(`/suppliers/${arb}`)).body.supplier.payment.accountNumber).toBe('123456789012');
+    expect((await accounts.session.put(`/suppliers/${arb}`, ARB)).status).toBe(403);
+    // Any other team, and customers: refused.
+    expect((await ops.session.post(`/suppliers/${arb}/account-number`)).status).toBe(403);
+    expect((await ops.session.get(`/suppliers/${arb}`)).status).toBe(403);
+    const customer = await makeUser('Cust', 'customer');
+    expect((await customer.session.post(`/suppliers/${arb}/account-number`)).status).toBe(403);
+    expect(await AuditLog.countDocuments({ action: 'VIEW_ACCOUNT_NUMBER' })).toBe(1);
+  });
+
+  const editEntry = (s, id, body) => s.post(`/suppliers/credit/${id}/edit`, { formKey: fk(), ...body });
+  const entryOf = async (supplierId, id) => (await credit(supplierId)).entries.find((e) => e.id === id);
+  /** What the supplier owes = Σ approved rows, straight from the database. */
+  const sumApproved = async (supplierId) => {
+    const rows = await SupplierLedgerEntry.find({ supplier: supplierId, status: 'approved' }).lean();
+    return rows.reduce((t, r) => t + r.amountPaise * LEDGER_SIGN[r.kind], 0) / 100;
+  };
+
+  it('a pending entry is edited in place with a reason; it stays waiting, and an approval of the old version is refused', async () => {
+    const arb = await saveSupplier();
+    await owesUs(arb, 30000);
+    const rep = (await procurement.session.post(`/suppliers/${arb}/credit/repayments`, { currency: 'INR', amount: 15000, date: ymd(), reference: 'UTR1', formKey: fk() })).body.entry;
+    expect(rep.rev).toBe(0);
+    expect((await editEntry(procurement.session, rep.id, { rev: 0, amount: 12000 })).status).toBe(400); // no reason
+    const procurement2 = await makeUser('Rahul', 'staff', staff('procurement'));
+    expect((await editEntry(procurement2.session, rep.id, { rev: 0, amount: 12000, reason: 'x' })).status).toBe(403); // not theirs
+    expect((await editEntry(accounts.session, rep.id, { rev: 0, amount: 12000, reason: 'x' })).status).toBe(403);
+    expect((await editEntry(procurement.session, rep.id, { rev: 0, amount: 30000.01, reason: 'x' })).status).toBe(409); // more than owed
+    expect((await editEntry(procurement.session, rep.id, { rev: 0, amount: 15000, reason: 'same' })).status).toBe(400); // nothing changed
+
+    const res = await editEntry(procurement.session, rep.id, { rev: 0, amount: 12000, reference: 'UTR2', reason: 'Bank statement shows ₹12,000' });
+    expect(res.status).toBe(200);
+    expect(res.body.entry).toMatchObject({ status: 'pending', amount: 12000, reference: 'UTR2', rev: 1 });
+    expect(res.body.entry.edits).toEqual([expect.objectContaining({
+      byName: 'Priya', reason: 'Bank statement shows ₹12,000',
+      changes: expect.arrayContaining([{ field: 'Amount', from: '₹15,000', to: '₹12,000' }, { field: 'Reference', from: 'UTR1', to: 'UTR2' }]),
+    })]);
+    // Accounts had it open at version 0: refused; at version 1: approved.
+    const stale = await accounts.session.post(`/suppliers/credit/${rep.id}/approve`, { rev: 0 });
+    expect(stale.status).toBe(409);
+    expect(stale.body.message).toMatch(/changed/);
+    expect((await editEntry(procurement.session, rep.id, { rev: 0, amount: 11000, reason: 'again' })).status).toBe(409); // stale form
+    expect((await accounts.session.post(`/suppliers/credit/${rep.id}/approve`, { rev: 1 })).status).toBe(200);
+    expect(await owed(arb)).toBe(18000);
+    expect(await sumApproved(arb)).toBe(18000);
+    // The admin may edit someone else's pending claim; the claim stays within the bill.
+    const { pr } = await paidThenCancelled(arb, 20000);
+    const claim = (await procurement.session.post('/suppliers/credit/claims', { paymentRequestId: pr.id })).body.entry;
+    expect((await editEntry(admin.session, claim.id, { rev: 0, amount: 20000.01, reason: 'x' })).status).toBe(400);
+    const byAdmin = await editEntry(admin.session, claim.id, { rev: 0, amount: 18000, note: 'less shipping', reason: 'Shipping not refundable' });
+    expect(byAdmin.status).toBe(200);
+    expect(byAdmin.body.entry).toMatchObject({ amount: 18000, note: 'less shipping', status: 'pending' });
+  });
+
+  it('a pending claim moved to another payment is re-checked: paid, cancelled, same supplier, one claim per payment', async () => {
+    const arb = await saveSupplier();
+    const a = await paidThenCancelled(arb, 10000);
+    const b = await paidThenCancelled(arb, 8000);
+    const claim = (await procurement.session.post('/suppliers/credit/claims', { paymentRequestId: a.pr.id })).body.entry;
+    const moved = await editEntry(procurement.session, claim.id, { rev: 0, paymentRequestId: b.pr.id, amount: 8000, reason: 'Raised on the wrong payment' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.entry.paymentRequest.id).toBe(b.pr.id);
+    expect(moved.body.entry.edits[0].changes).toEqual(expect.arrayContaining([{ field: 'Payment', from: a.pr.number, to: b.pr.number }]));
+    // The old payment is free again; the new one now has its claim.
+    expect((await procurement.session.post('/suppliers/credit/claims', { paymentRequestId: a.pr.id })).status).toBe(201);
+    const other = (await procurement.session.post('/suppliers/credit/claims', { paymentRequestId: a.pr.id })).body.entry;
+    const clash = await editEntry(procurement.session, other.id, { rev: 0, paymentRequestId: b.pr.id, amount: 1000, reason: 'x' });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toMatch(/already has a refund claim/);
+  });
+
+  it('editing an approved entry raises a correction for the difference; the balance is always Σ approved', async () => {
+    const arb = await saveSupplier();
+    const { claim } = await owesUs(arb, 30000);
+    // Currency or payment of an approved entry: refused.
+    expect((await editEntry(procurement.session, claim.id, { rev: 0, currency: 'THB', reason: 'x' })).status).toBe(409);
+
+    const down = await editEntry(procurement.session, claim.id, { rev: 0, amount: 25000, reason: "Supplier's credit note says ₹25,000" });
+    expect(down.status).toBe(200);
+    expect(down.body.correction).toMatchObject({ kind: 'correction_down', status: 'pending', amount: 5000, correctionOf: { id: claim.id } });
+    expect(down.body.entry).toMatchObject({ status: 'approved', amount: 30000, rev: 1 }); // the original is never rewritten
+    expect(down.body.entry.edits.at(-1)).toMatchObject({ reason: "Supplier's credit note says ₹25,000" });
+    expect(await owed(arb)).toBe(30000); // not until accounts approves
+    expect((await credit(arb)).balances[0].pending).toBe(-5000);
+    expect((await entryOf(arb, claim.id))).toMatchObject({ correctionPending: true, can: expect.objectContaining({ edit: false }) });
+    // One correction waiting at a time.
+    const second = await editEntry(procurement.session, claim.id, { rev: 1, amount: 20000, reason: 'x' });
+    expect(second.status).toBe(409);
+    expect(second.body.message).toMatch(/already waiting/);
+    // A correction itself is not edited.
+    expect((await editEntry(procurement.session, down.body.correction.id, { rev: 0, amount: 1, reason: 'x' })).status).toBe(409);
+
+    expect((await accounts.session.post(`/suppliers/credit/${down.body.correction.id}/approve`, { rev: 0 })).status).toBe(200);
+    expect(await owed(arb)).toBe(25000);
+    expect(await sumApproved(arb)).toBe(25000);
+    expect(await entryOf(arb, claim.id)).toMatchObject({ amount: 30000, correctedAmount: 25000, correctedAmountText: '₹25,000', correctionPending: false });
+
+    // Back up to ₹27,000 (from the corrected ₹25,000): a +₹2,000 correction.
+    const up = await editEntry(procurement.session, claim.id, { rev: 1, amount: 27000, reason: 'Found the second invoice' });
+    expect(up.body.correction).toMatchObject({ kind: 'correction_up', amount: 2000 });
+    expect((await accounts.session.post(`/suppliers/credit/${up.body.correction.id}/approve`)).status).toBe(200);
+    expect(await owed(arb)).toBe(27000);
+    expect(await sumApproved(arb)).toBe(27000);
+
+    // A note-only fix on an approved entry: in place, recorded, no correction.
+    const noteOnly = await editEntry(procurement.session, claim.id, { rev: 2, note: 'Credit note CN-114', reason: 'Add the credit note number' });
+    expect(noteOnly.status).toBe(200);
+    expect(noteOnly.body.correction).toBeUndefined();
+    expect(noteOnly.body.entry.edits.at(-1).changes).toEqual([{ field: 'Note', from: '', to: 'Credit note CN-114' }]);
+
+    // A repayment corrected down raises what is owed; to 0 cancels it out.
+    const rep = (await procurement.session.post(`/suppliers/${arb}/credit/repayments`, { currency: 'INR', amount: 7000, date: ymd(), formKey: fk() })).body.entry;
+    await accounts.session.post(`/suppliers/credit/${rep.id}/approve`);
+    expect(await owed(arb)).toBe(20000);
+    const zero = await editEntry(procurement.session, rep.id, { rev: 0, amount: 0, reason: 'That transfer bounced' });
+    expect(zero.body.correction).toMatchObject({ kind: 'correction_up', amount: 7000 });
+    await accounts.session.post(`/suppliers/credit/${zero.body.correction.id}/approve`);
+    expect(await owed(arb)).toBe(27000);
+    expect(await sumApproved(arb)).toBe(27000);
+  });
+
+  it('a correction cannot take the balance below zero, and write-offs / credit used are not corrected by procurement', async () => {
+    const arb = await saveSupplier();
+    const { claim } = await owesUs(arb, 30000);
+    const rep = (await procurement.session.post(`/suppliers/${arb}/credit/repayments`, { currency: 'INR', amount: 20000, date: ymd(), formKey: fk() })).body.entry;
+    await accounts.session.post(`/suppliers/credit/${rep.id}/approve`);
+    // Owes ₹10,000; cutting the claim to ₹5,000 would leave −₹5,000.
+    const neg = await editEntry(procurement.session, claim.id, { rev: 0, amount: 5000, reason: 'x' });
+    expect(neg.status).toBe(409);
+    expect(neg.body.message).toMatch(/below zero/);
+    const w = (await admin.session.post(`/suppliers/${arb}/credit/write-offs`, { currency: 'INR', amount: 1000, note: 'gone', formKey: fk() })).body.entry;
+    expect((await editEntry(procurement.session, w.id, { rev: 0, amount: 500, reason: 'x' })).status).toBe(403);
+    expect((await editEntry(admin.session, w.id, { rev: 0, amount: 500, reason: 'Only half was lost' })).status).toBe(200);
+  });
+
+  it('nobody approves their own correction (except the admin)', async () => {
+    const arb = await saveSupplier();
+    const { claim } = await owesUs(arb, 30000);
+    const fix = (await editEntry(procurement.session, claim.id, { rev: 0, amount: 29000, reason: 'Typo' })).body.correction;
+    expect((await procurement.session.post(`/suppliers/credit/${fix.id}/approve`)).status).toBe(403); // procurement never approves
+    // Raised by someone now in accounts (moved team): they still cannot approve it.
+    await SupplierLedgerEntry.updateOne({ _id: fix.id }, { $set: { createdBy: accounts.user._id } });
+    const own = await accounts.session.post(`/suppliers/credit/${fix.id}/approve`);
+    expect(own.status).toBe(403);
+    expect(own.body.message).toMatch(/Someone else/);
+    expect((await accounts2.session.post(`/suppliers/credit/${fix.id}/approve`)).status).toBe(200);
+    // The admin may approve a correction they raised.
+    const mine = (await editEntry(admin.session, claim.id, { rev: 1, amount: 28000, reason: 'Admin fix' })).body.correction;
+    expect((await admin.session.post(`/suppliers/credit/${mine.id}/approve`)).status).toBe(200);
+    expect(await owed(arb)).toBe(28000);
+  });
+
+  it('a double-submitted edit or correction saves once', async () => {
+    const arb = await saveSupplier();
+    const { claim } = await owesUs(arb, 30000);
+    const body = { rev: 0, amount: 26000, reason: 'Credit note', formKey: fk() };
+    const clicks = await Promise.all([1, 2, 3].map(() => procurement.session.post(`/suppliers/credit/${claim.id}/edit`, body)));
+    expect(clicks.map((c) => c.status)).toEqual([200, 200, 200]);
+    expect(new Set(clicks.map((c) => c.body.correction?.id)).size).toBe(1);
+    expect(await SupplierLedgerEntry.countDocuments({ correctionOf: claim.id })).toBe(1);
+    expect((await SupplierLedgerEntry.findById(claim.id).lean()).edits).toHaveLength(1);
+    // Pending edit, double-clicked: one edit record, one version bump.
+    const rep = (await procurement.session.post(`/suppliers/${arb}/credit/repayments`, { currency: 'INR', amount: 1000, date: ymd(), formKey: fk() })).body.entry;
+    const b2 = { rev: 0, amount: 900, reason: 'Typo', formKey: fk() };
+    const r2 = await Promise.all([1, 2].map(() => procurement.session.post(`/suppliers/credit/${rep.id}/edit`, b2)));
+    expect(r2.map((c) => c.status)).toEqual([200, 200]);
+    const saved = await SupplierLedgerEntry.findById(rep.id).lean();
+    expect(saved.edits).toHaveLength(1);
+    expect(saved.rev).toBe(1);
+    expect(saved.amountPaise).toBe(90000);
   });
 });
