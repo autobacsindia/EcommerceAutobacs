@@ -114,7 +114,7 @@ describe('invoice PDF', () => {
       expect(texts).not.toContain(`${l.label}:`);
     }
     expect(texts.filter((t) => /\(Black Friday offer\)$/.test(t)).length).toBeGreaterThanOrEqual(LINES.length);
-    expect(texts.some((t) => /^You saved .*6,915\.00 with the Black Friday offer$/.test(t))).toBe(true);
+    expect(texts).toContain('Total savings:');
     expect(texts.some((t) => /These fees were not charged and are not part of the invoice total/.test(t))).toBe(true);
     expect(texts.some((t) => /^Payable: products .*5,05,000\.00 \(GST .*77,033\.90 included\) \+ delivery fees .*0\.00 = .*5,05,000\.00$/.test(t))).toBe(true);
     // The old "- ₹X" deduction row is gone.
@@ -140,10 +140,10 @@ describe('confirmation email', () => {
     expect(text).toMatch(/Shipping fee: ₹4,416\.00 → ₹0\.00 \(Black Friday offer\)/);
     expect(text).toMatch(/Packing: ₹1,500\.00 → ₹0\.00 \(Black Friday offer\)/);
     expect(text).toMatch(/Payment fee: ₹999\.00 → ₹0\.00 \(Black Friday offer\)/);
-    expect(text).toMatch(/You saved ₹6,915\.00 with the Black Friday offer/);
+    expect(text).toMatch(/Total savings: ₹6,915\.00/);
     expect(text).toMatch(/You paid: products ₹5,05,000\.00 \(GST ₹77,033\.90 included\) \+ delivery fees ₹0\.00/);
     expect(html).toContain('<s style="color:#999;">₹4,416.00</s>');
-    expect(html).toContain('You saved ₹6,915.00 with the Black Friday offer');
+    expect(html).toContain('Total savings');
     expect(text).not.toMatch(/paid on delivery/);
   });
 
@@ -152,7 +152,42 @@ describe('confirmation email', () => {
     expect(text).toMatch(/Shipping fee: ₹4,416\.00\n/);
     expect(text).toMatch(/Payment fee: ₹999\.00/);
     expect(text).toMatch(/\+ delivery fees ₹6,915\.00/);
-    expect(text).not.toMatch(/Black Friday|You saved|→/);
+    expect(text).not.toMatch(/Black Friday|You saved|Total savings|→/);
     expect(html).not.toContain('<s ');
+  });
+});
+
+describe("Sachin's savings breakdown (order.savings snapshot)", () => {
+  // His example: ₹8,000 delivery fees waived + ₹5,000 discount = ₹13,000.
+  const withSavings = () => ({ ...order(true), savings: { discount: 5000, deliveryFees: 8000, total: 13000 } });
+
+  it('helper gives delivery-fees-waived, discount and total lines', () => {
+    expect(deliveryFeeBreakdown(withSavings()).savingsLines).toEqual([
+      { label: 'Shipping & fees waived', amount: 8000 },
+      { label: 'Discount', amount: 5000 },
+      { label: 'Total savings', amount: 13000, total: true },
+    ]);
+  });
+
+  it('no discount → the discount line is left out; no offer → no lines', () => {
+    const o = { ...order(true), savings: { discount: 0, deliveryFees: 8000, total: 8000 } };
+    expect(deliveryFeeBreakdown(o).savingsLines.map((l) => l.label)).toEqual(['Shipping & fees waived', 'Total savings']);
+    expect(deliveryFeeBreakdown({ ...order(false), savings: { discount: 5000, deliveryFees: 0, total: 5000 } }).savingsLines).toEqual([]);
+  });
+
+  it('invoice PDF prints all three lines', async () => {
+    const texts = (await drawCalls(withSavings())).map((d) => d.text);
+    expect(texts).toContain('Shipping & fees waived:');
+    expect(texts).toContain('Discount:');
+    expect(texts).toContain('Total savings:');
+    expect(texts.some((t) => /13,000\.00$/.test(t))).toBe(true);
+  });
+
+  it('email prints all three lines (text + html)', () => {
+    const { text, html } = orderConfirmationEmail({ order: withSavings(), company: { name: 'Autobacs India' } });
+    expect(text).toMatch(/Shipping & fees waived: ₹8,000\.00/);
+    expect(text).toMatch(/Discount: ₹5,000\.00/);
+    expect(text).toMatch(/Total savings: ₹13,000\.00/);
+    expect(html).toContain('Total savings');
   });
 });

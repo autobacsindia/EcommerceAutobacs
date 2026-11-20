@@ -61,6 +61,8 @@ interface OrderDetail {
   subtotalBeforeTax?: number;
   shippingCost: number;
   deliveryFees?: OrderDeliveryFeesSnapshot | null;
+  /** What the customer saved, snapshotted at checkout (absent on older orders). */
+  savings?: { discount: number; deliveryFees: number; total: number } | null;
   tax: number;
   discount: number;
   paymentStatus?: string;
@@ -818,7 +820,7 @@ export default function OrderDetailPage() {
               <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">{formatRupees((order.tax || 0), { exact: true })}</span></div>
               {/* Itemised delivery fees from the order's own snapshot (older orders: one
                   Shipping row, "paid on delivery" when nothing was charged online). */}
-              <OrderDeliveryFees fees={order.deliveryFees} shippingCost={order.shippingCost} />
+              <OrderDeliveryFees fees={order.deliveryFees} shippingCost={order.shippingCost} savings={order.savings ?? null} />
               {(order.discount || 0) > 0 && (
                 <div className="flex justify-between"><span className="text-ink-muted">{order.salesDiscount?.percent ? `Discount (${order.salesDiscount.percent}%)` : 'Discount'}</span><span className="text-green-700">-{formatRupees((order.discount || 0), { exact: true })}</span></div>
               )}

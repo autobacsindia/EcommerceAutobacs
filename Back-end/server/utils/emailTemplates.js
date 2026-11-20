@@ -602,7 +602,7 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
         ? `${l.label}: ${inr(l.amount)} → ${bfZero}`
         : `${l.label}: ${inr(l.amount)}`)),
       ...(feeView.couponSaving > 0 ? [`Free delivery (coupon): -${inr(feeView.couponSaving)}`] : []),
-      ...(feeView.waived ? [`🎉 You saved ${inr(feeView.saving)} with the Black Friday offer`] : []),
+      ...feeView.savingsLines.map((x) => `${x.total ? '🎉 ' : ''}${x.label}: ${inr(x.amount)}`),
     ].join('\n')
     : `Shipping: ${shippingValue}`;
   const payableText = feeView
@@ -679,9 +679,7 @@ ${companyName}
         ? totalsRow(l.label, `<s style="color:#999;">${inr(l.amount)}</s> <strong style="color:#15803d;">${bfZero}</strong>`)
         : totalsRow(l.label, inr(l.amount)))),
       feeView.couponSaving > 0 ? totalsRow('Free delivery (coupon)', `- ${inr(feeView.couponSaving)}`) : '',
-      feeView.waived
-        ? `<tr><td colspan="3" style="padding:6px 8px;text-align:right;background:#f0fdf4;color:#15803d;font-weight:bold;">🎉 You saved ${inr(feeView.saving)} with the Black Friday offer</td></tr>`
-        : '',
+      ...feeView.savingsLines.map((x) => `<tr><td colspan="2" style="padding:4px 8px;text-align:right;background:#f0fdf4;color:#15803d;${x.total ? 'font-weight:bold;' : ''}">${x.total ? '🎉 ' : ''}${x.label}</td><td style="padding:4px 8px;text-align:right;background:#f0fdf4;color:#15803d;${x.total ? 'font-weight:bold;' : ''}">${inr(x.amount)}</td></tr>`),
     ].join('')
     : '';
 

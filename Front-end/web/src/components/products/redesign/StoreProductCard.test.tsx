@@ -289,3 +289,46 @@ describe('StoreProductCard price row layout', () => {
     expect(priceRow()).toHaveClass('gap-2');
   });
 });
+
+describe('Black Friday ₹0 delivery (owner, 2026-11-20)', () => {
+  // Profender Thunder Series kit, Delhi (cheapest band) figures from the live quote.
+  const waiver = {
+    discount: 9000, save: 12223.5, shipping: 1024, packing: 500, handling: 28.8, other: 1670.7, total: 3223.5,
+  };
+  const kit = () => makeProduct({ price: 283000, originalPrice: 292000, slug: 'profender-thunder-series-hilux' });
+
+  it('badge = discount + fees waived, floored, with "+"; ribbon + receipt; You pay = the card price', () => {
+    render(<StoreProductCard product={kit()} feeWaiver={waiver} />);
+    expect(screen.getByTestId('card-save-badge')).toHaveTextContent('Save ₹12,223+');
+    expect(screen.getByTestId('zero-delivery-ribbon')).toHaveTextContent(/₹0 Delivery/i);
+    const receipt = screen.getByTestId('zero-delivery-receipt');
+    expect(receipt).toHaveTextContent(/Shipping\s*₹1,024\s*₹0/);
+    expect(receipt).toHaveTextContent(/Packing\s*₹500\s*₹0/);
+    expect(receipt).toHaveTextContent(/Handling\s*₹28\.80\s*₹0/);
+    expect(receipt).toHaveTextContent(/You pay\s*₹2,83,000/);
+  });
+
+  it('no waiver → the plain "Save ₹9,000" card, no ribbon or receipt', () => {
+    render(<StoreProductCard product={kit()} />);
+    expect(screen.getByTestId('card-save-badge')).toHaveTextContent('Save ₹9,000');
+    expect(screen.queryByTestId('zero-delivery-ribbon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('zero-delivery-receipt')).not.toBeInTheDocument();
+  });
+
+  it('figures loading → a same-size placeholder is reserved (no layout shift)', () => {
+    render(<StoreProductCard product={kit()} feeWaiverPending />);
+    expect(screen.getByTestId('zero-delivery-receipt-pending')).toHaveClass('h-[92px]');
+  });
+
+  it('sold out → no ₹0 delivery promise even if a waiver is passed', () => {
+    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock: 'out' })} feeWaiver={waiver} />);
+    expect(screen.queryByTestId('zero-delivery-ribbon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('zero-delivery-receipt')).not.toBeInTheDocument();
+  });
+
+  it('the card stays one link to the product and keeps its add-to-cart button', () => {
+    render(<StoreProductCard product={kit()} feeWaiver={waiver} />);
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Add to cart' })).toBeInTheDocument();
+  });
+});

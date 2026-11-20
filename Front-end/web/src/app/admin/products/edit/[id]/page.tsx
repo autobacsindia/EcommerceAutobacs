@@ -85,6 +85,7 @@ interface Product {
   listedSize?: ListedSize | null;
   shippingClass?: ShippingClass | null;
   shippingClassSource?: ShippingClassSource | null;
+  packingFee?: number | null;
 }
 
 /** Stable empty gallery — an inline `[]` would be a fresh prop every render. */
@@ -151,6 +152,8 @@ export default function EditProductPage() {
   const [shippingSize, setShippingSize] = useState<ShippingSizeForm>(EMPTY_SHIPPING_SIZE);
   const [listedSize, setListedSize] = useState<ListedSizeForm>(EMPTY_LISTED_SIZE);
   const [shippingClass, setShippingClass] = useState<ShippingClassChoice>('');
+  // ₹ per unit to pack this product; '' = use the size-class rate (Delivery fees page).
+  const [packingFee, setPackingFee] = useState('');
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<CloudinaryImage[]>([]);
   // The full gallery (saved + pending) in the admin's chosen display order, and
@@ -365,6 +368,7 @@ export default function EditProductPage() {
       setShippingSize(shippingSizeToForm(productData.shippingSize));
       setListedSize(listedSizeToForm(productData.listedSize));
       setShippingClass(shippingClassToChoice(productData.shippingClass, productData.shippingClassSource));
+      setPackingFee(typeof productData.packingFee === 'number' ? String(productData.packingFee) : '');
 
       // Hydrate variable-product models (if any) so edits preserve variant _ids
       // AND their WooCommerce linkage — see EditorVariant.wpVariationId. A field
@@ -541,6 +545,7 @@ export default function EditProductPage() {
       fd.append('shippingSize', JSON.stringify(shippingSizeToPayload(shippingSize)));
       fd.append('listedSize', JSON.stringify(listedSizeToPayload(listedSize)));
       fd.append('shippingClass', shippingClass);
+      fd.append('packingFee', packingFee.trim());
       if (formData.offerStartDate) fd.append('offerStartDate', formData.offerStartDate);
       if (formData.offerEndDate)   fd.append('offerEndDate',   formData.offerEndDate);
 
@@ -1106,6 +1111,29 @@ export default function EditProductPage() {
               shippingClass={shippingClass}
               onShippingClassChange={setShippingClass}
             />
+
+            {/* Packing fee override — replaces the size-class packing rate for big items
+                whose real crate costs more (e.g. a Profender suspension kit). */}
+            <div className="mb-4">
+              <label htmlFor="packingFee" className="block text-sm font-medium text-gray-700 mb-1">
+                Packing fee for this product (₹ per unit)
+              </label>
+              <input
+                id="packingFee"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100000}
+                step="0.01"
+                value={packingFee}
+                onChange={(e) => setPackingFee(e.target.value)}
+                placeholder="Blank = size-class rate"
+                className="w-48 px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Leave blank to use the packing rate for its size on the Delivery fees page.
+              </p>
+            </div>
 
             {/* Return / cancellation policy (per the signed Roavion policy) */}
             <div className="mb-4 border-t border-gray-200 pt-4">

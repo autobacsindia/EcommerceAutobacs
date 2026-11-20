@@ -666,6 +666,23 @@ class ProductRepository {
   }
 
   /**
+   * What the product-card delivery-fee estimate needs, for a bounded list of ids:
+   * active SIMPLE products only (a variable product's card shows a "From" price, not
+   * one model's box). Lean + projected; the caller caps the id list.
+   */
+  async findCardFeeInputs(ids) {
+    const valid = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (!valid.length) return [];
+    return Product.find(
+      { _id: { $in: valid }, isActive: true, productType: { $ne: 'variable' } },
+      {
+        price: 1, originalPrice: 1, saleEndsAt: 1, stock: 1, categories: 1,
+        shippingSize: 1, listedSize: 1, shippingClass: 1, packingFee: 1, festivalOfferSetting: 1,
+      },
+    ).lean().maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
    * Find active product by ID (requires isActive: true)
    */
   async findActiveById(productId, session = null) {

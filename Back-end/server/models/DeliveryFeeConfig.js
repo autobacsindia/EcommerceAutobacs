@@ -58,7 +58,6 @@ const DeliveryFeeConfigSchema = new mongoose.Schema({
     xl: money(D.packing.xl, 50000),
   },
   remoteAreaFee: money(D.remoteAreaFee, 50000),
-  insurancePercent: percent(D.insurancePercent),
   paymentFeePercent: percent(D.paymentFeePercent),
   paymentFeeGstPercent: percent(D.paymentFeeGstPercent),
   paymentFeeMax: money(D.paymentFeeMax, 100000),

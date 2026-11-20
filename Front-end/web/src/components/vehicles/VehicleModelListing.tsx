@@ -13,6 +13,7 @@ import StoreProductCard from '@/components/products/redesign/StoreProductCard';
 import StorePageHeader from '@/components/store/StorePageHeader';
 import VehicleImage from '@/components/vehicles/VehicleImage';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import { useCardFeeWaivers } from '@/hooks/queries/useCardFeeWaivers';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 
 /**
@@ -124,6 +125,7 @@ export default function VehicleModelListing({
 
   // One batched request for the whole visible page rather than one per card.
   const { data: campaignData } = useCampaignProductRates(products.map((p) => p._id || (p as { id?: string }).id).filter((id): id is string => !!id));
+  const fee = useCardFeeWaivers(products.map((p) => p._id || (p as { id?: string }).id).filter((id): id is string => !!id));
   const campaignBadgeVisible = useCampaignBadgeVisible();
 
   useEffect(() => {
@@ -441,6 +443,8 @@ export default function VehicleModelListing({
                           featured={product.isFeatured || (product as { featured?: boolean }).featured}
                           fitmentBadge={displayName}
                           campaignRate={campaignBadgeVisible && pid ? campaignData?.rates?.[pid] : null}
+                          feeWaiver={pid ? fee.waivers?.products[pid] ?? null : null}
+                          feeWaiverPending={fee.pending}
                         />
                       );
                     })}

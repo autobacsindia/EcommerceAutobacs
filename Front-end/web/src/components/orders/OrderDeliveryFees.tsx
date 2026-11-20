@@ -25,6 +25,8 @@ interface Props {
   admin?: boolean;
   /** Old orders: how to word "no shipping charged". */
   legacyNoChargeLabel?: string;
+  /** The order's savings snapshot (absent on older orders). */
+  savings?: { discount: number; deliveryFees: number; total: number } | null;
 }
 
 const money = (n: number) => formatRupees(n ?? 0, { exact: true });
@@ -34,7 +36,7 @@ const money = (n: number) => formatRupees(n ?? 0, { exact: true });
  * Rendered only from the order's own snapshot: an order is an immutable financial
  * record, so today's rate card must never change what it says was charged.
  */
-export default function OrderDeliveryFees({ fees, shippingCost, admin = false, legacyNoChargeLabel = 'Extra — paid on delivery' }: Props) {
+export default function OrderDeliveryFees({ fees, shippingCost, admin = false, legacyNoChargeLabel = 'Extra — paid on delivery', savings }: Props) {
   if (!fees) {
     return (
       <div className="flex justify-between">
@@ -62,9 +64,21 @@ export default function OrderDeliveryFees({ fees, shippingCost, admin = false, l
         </div>
       ))}
       {bf ? (
-        <div className="flex justify-between rounded-md bg-green-50 px-2 py-1.5 font-semibold text-green-700">
-          <span>🎉 You saved {money(fees.offer.saving)} with the Black Friday offer</span>
-        </div>
+        <dl className="space-y-1 rounded-md bg-green-50 px-2 py-1.5 text-green-700" data-testid="order-savings">
+          {(savings
+            ? [
+              { label: 'Shipping & fees waived', amount: savings.deliveryFees, total: false },
+              ...(savings.discount > 0 ? [{ label: 'Discount', amount: savings.discount, total: false }] : []),
+              { label: 'Total savings', amount: savings.total, total: true },
+            ]
+            : [{ label: 'Total savings', amount: fees.offer.saving, total: true }]
+          ).map((r) => (
+            <div key={r.label} className={`flex justify-between ${r.total ? 'border-t border-green-600/30 pt-1 font-semibold' : ''}`}>
+              <dt>{r.total ? '🎉 ' : ''}{r.label}</dt>
+              <dd>{money(r.amount)}</dd>
+            </div>
+          ))}
+        </dl>
       ) : waived ? (
         <div className="flex justify-between text-green-700">
           <span>Delivery fees waived (coupon)</span>

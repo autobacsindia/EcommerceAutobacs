@@ -32,6 +32,7 @@ import { normalizeSeo } from '../utils/seo.js';
 import { imageKey, orderGallery } from '../utils/productGallery.js';
 import { pruneDanglingPointers, planVariantOwnedCleanup } from '../utils/variantImage.js';
 import { normalizeShippingSize, normalizeListedSize } from '../utils/shippingSize.js';
+import { normalizePackingFee } from '../utils/deliveryFees.js';
 import { parseShippingClassInput, resolveShippingClass } from '../utils/shippingClass.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
@@ -245,6 +246,13 @@ const parseProductFields = (body) => {
     const listed = normalizeListedSize(fields.listedSize);
     if (listed === undefined) delete fields.listedSize;
     else fields.listedSize = listed;
+  }
+  if ('packingFee' in fields) {
+    const fee = normalizePackingFee(fields.packingFee);
+    if (fee === undefined) {
+      throw new CentralAppError('Packing fee must be a number from 0 to 1,00,000 (leave blank for the size rate)', 400, { expose: true });
+    }
+    fields.packingFee = fee;
   }
 
   // ── Variable products ──────────────────────────────────────────────────────

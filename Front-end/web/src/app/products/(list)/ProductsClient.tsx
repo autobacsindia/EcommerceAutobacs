@@ -11,6 +11,7 @@ import { trackViewItemList } from '@/lib/analytics';
 import { useProducts } from '@/hooks/queries/useProducts';
 import { normalizeParams } from '@/hooks/queries/keys';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
+import { useCardFeeWaivers } from '@/hooks/queries/useCardFeeWaivers';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { resolveTerm, type ProductsData } from '@/lib/productQuery';
 import ShopContactHero from '@/components/products/ShopContactHero';
@@ -62,6 +63,7 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
 
   // One batched request for the whole visible page rather than one per card.
   const { data: campaignData } = useCampaignProductRates(data.products.map((p) => p._id));
+  const fee = useCardFeeWaivers(data.products.map((p) => p._id));
   const campaignBadgeVisible = useCampaignBadgeVisible();
 
   // Fire the analytics list-view event once per distinct params — but only when
@@ -196,6 +198,8 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
                         product={p}
                         featured={p.isFeatured}
                         campaignRate={campaignBadgeVisible ? campaignData?.rates?.[p._id] : null}
+                        feeWaiver={fee.waivers?.products[p._id] ?? null}
+                        feeWaiverPending={fee.pending}
                         priority={i < GRID_PRIORITY_IMAGES}
                       />
                     );

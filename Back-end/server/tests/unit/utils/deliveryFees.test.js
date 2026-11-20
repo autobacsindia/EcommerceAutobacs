@@ -3,7 +3,7 @@
  * The owner's real courier bills and category ranges are the oracle here.
  */
 import {
-  computeDeliveryFees, resolveBox, unitChargedKg, DEFAULT_RATE_CARD, FEE_CODES, isValidPin, bandFor, haversineKm,
+  computeDeliveryFees, resolveBox, unitChargedKg, DEFAULT_RATE_CARD, FEE_CODES, isValidPin, bandFor, haversineKm, normalizePackingFee,
 } from '../../../utils/deliveryFees.js';
 import { DEFAULT_CLASS_BOXES } from '../../../utils/shippingClass.js';
 
@@ -102,8 +102,8 @@ describe('box resolution (missing size → category → safe fallback)', () => {
 describe('percentage fees, remote area and GST', () => {
   const base = { lines: [line({ shippingSize: box(1, 20, 15, 10), shippingClass: 'small' })], goodsPaise: 1000000 };
 
-  it('insurance is 0.1% of the goods value', () => {
-    expect(amount(computeDeliveryFees({ ...base, card: card() }), 'insurance')).toBe(1000);
+  it('no insurance line (removed 2026-11-20), even with an old card that still holds a rate', () => {
+    expect(amount(computeDeliveryFees({ ...base, card: card({ insurancePercent: 0.1 }) }), 'insurance')).toBe(0);
   });
 
   it('GST on fees OFF: payment fee = Razorpay 2% + its 18% GST on (goods + other fees)', () => {
@@ -141,7 +141,7 @@ describe('percentage fees, remote area and GST', () => {
     expect(off.lines.some((l) => l.code === 'gst')).toBe(false);
     expect(amount(on, 'gst')).toBe(Math.round((sumLines(on) - amount(on, 'gst')) * 18 / 100));
     // Every non-payment line is identical; only the payment fee drops Razorpay's GST.
-    for (const code of ['shipping', 'packing', 'insurance']) expect(amount(on, code)).toBe(amount(off, code));
+    for (const code of ['shipping', 'packing']) expect(amount(on, code)).toBe(amount(off, code));
     expect(amount(on, 'payment')).toBeLessThan(amount(off, 'payment'));
   });
 
@@ -292,7 +292,7 @@ describe('the ₹5,05,000 Maybach conversion kit to Kochi (PIN 682019), no size 
     expect(r.mode).toBe('freight');
     expect(r.chargedKg).toBe(276);
     expect(r.estimated).toBe(true);
-    expect(r.lines.map((l) => l.code)).toEqual(['shipping', 'packing', 'handling', 'docket', 'fuel', 'insurance', 'payment', 'gst']);
+    expect(r.lines.map((l) => l.code)).toEqual(['shipping', 'packing', 'handling', 'docket', 'fuel', 'payment', 'gst']);
     expect(rupees(amount(r, 'shipping'))).toBe(4416);
     expect(rupees(amount(r, 'packing'))).toBe(1500);
   });
@@ -302,9 +302,28 @@ describe('the ₹5,05,000 Maybach conversion kit to Kochi (PIN 682019), no size 
   it('GST is charged once: 18% of every other line, and no Razorpay GST inside the payment fee', () => {
     const r = kit();
     expect(amount(r, 'gst')).toBe(Math.round((sumLines(r) - amount(r, 'gst')) * 18 / 100));
-    expect(rupees(amount(r, 'gst'))).toBe(1390.36);
+    // ₹1,390.36 with insurance (₹505); ₹1,299.46 since it was removed.
+    expect(rupees(amount(r, 'gst'))).toBe(1299.46);
   });
   it('total is in the owner\'s body-kit range (₹5,000–10,000)', () => {
-    expect(rupees(kit().totalPaise)).toBe(9114.56);
+    // ₹9,114.56 before insurance was removed (₹505 + ₹90.90 GST on it).
+    expect(rupees(kit().totalPaise)).toBe(8518.66);
+  });
+});
+describe('normalizePackingFee (admin product form)', () => {
+  it.each([
+    ['', null], [null, null], [undefined, null], ['2500', 2500], [0, 0], ['99.999', 100],
+  ])('%j → %j', (input, out) => expect(normalizePackingFee(input)).toBe(out));
+  it.each([['-1'], ['abc'], [100001]])('%j is invalid', (input) => expect(normalizePackingFee(input)).toBeUndefined());
+});
+
+describe('per-product packing fee', () => {
+  const lineFor = (product, quantity = 1) => computeDeliveryFees({ lines: [{ quantity, product }], goodsPaise: 100000 });
+  it('replaces the class rate, per unit', () => {
+    expect(amount(lineFor({ shippingClass: 'large' }), 'packing')).toBe(50000); // paise
+    expect(amount(lineFor({ shippingClass: 'large', packingFee: 2500 }, 3), 'packing')).toBe(750000);
+  });
+  it('null / non-number falls back to the class rate', () => {
+    expect(amount(lineFor({ shippingClass: 'large', packingFee: null }), 'packing')).toBe(50000);
   });
 });

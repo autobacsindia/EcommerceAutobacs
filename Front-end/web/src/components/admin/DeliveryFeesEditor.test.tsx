@@ -23,7 +23,6 @@ const CARD = {
   freight: { minimum: 500, docket: 100, otherCharges: 0, fuel: 0, hamaliPerKg: 1 },
   packing: { small: 50, medium: 100, large: 300, xl: 1500 },
   remoteAreaFee: 200,
-  insurancePercent: 0.1,
   paymentFeePercent: 2,
   paymentFeeGstPercent: 18,
   paymentFeeMax: 0,

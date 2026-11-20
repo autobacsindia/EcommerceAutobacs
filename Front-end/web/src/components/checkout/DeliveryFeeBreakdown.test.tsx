@@ -76,8 +76,9 @@ it('server-confirmed offer → fees struck through, ₹0 total, celebration once
   const applied = fees({}, { requested: true, applied: true, saving: 1140 });
   rerender(<DeliveryFeeBreakdown {...props} requested fees={applied} />);
   expect(screen.getByRole('dialog')).toHaveTextContent('Congratulations!');
-  expect(screen.getByRole('dialog')).toHaveTextContent('You saved ₹1,140');
-  expect(screen.getByText(/Black Friday offer applied — you saved/)).toBeInTheDocument();
+  expect(screen.getByRole('dialog')).toHaveTextContent(/You saved\s*₹1,140/);
+  expect(screen.getByText(/Black Friday offer applied — every delivery fee is ₹0/)).toBeInTheDocument();
+  expect(screen.getByTestId('savings-breakdown')).toHaveTextContent(/Total savings\s*₹1,140/);
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   // A re-quote that is still applied does not celebrate again.
@@ -121,4 +122,60 @@ it('PIN box keeps what is being typed when the parent stores the cleared PIN', (
   expect(box.value).toBe('50000');
   act(() => { fireEvent.change(box, { target: { value: '500002' } }); });
   expect(box.value).toBe('500002');
+});
+
+describe('PIN first (Sachin, 2026-11-20)', () => {
+  const noPin = (offer = {}) => fees({ needsPin: true, pin: null, lines: [], total: 0, place: null, distanceKm: null }, offer);
+
+  it('tapping Apply without a PIN does NOT request the offer; it asks for the PIN and focuses the box', () => {
+    const onRequestChange = jest.fn();
+    render(<DeliveryFeeBreakdown {...props} onRequestChange={onRequestChange} fees={noPin()} pinInput={{ value: '', onChange: jest.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: /Apply Black Friday offer/ }));
+    expect(onRequestChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId('offer-needs-pin')).toHaveTextContent('Enter your PIN code first to see your delivery fees and savings');
+    expect(document.activeElement).toBe(screen.getByLabelText('Delivery PIN code'));
+  });
+
+  it('server refused the waiver for no PIN (intent carried in) → same message, nothing shown as ₹0', () => {
+    render(<DeliveryFeeBreakdown {...props} requested fees={noPin({ requested: true, applied: false, error: 'pin_required' })} />);
+    expect(screen.getByTestId('offer-needs-pin')).toBeInTheDocument();
+    expect(screen.queryByTestId('offer-applied')).not.toBeInTheDocument();
+  });
+
+  it('with a PIN, Apply requests the offer as before', () => {
+    const onRequestChange = jest.fn();
+    render(<DeliveryFeeBreakdown {...props} onRequestChange={onRequestChange} fees={fees()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Apply Black Friday offer/ }));
+    expect(onRequestChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByTestId('offer-needs-pin')).not.toBeInTheDocument();
+  });
+});
+
+describe('savings breakdown', () => {
+  it('applied → delivery fees waived · discount · total savings, from the server figures', () => {
+    render(
+      <DeliveryFeeBreakdown
+        {...props}
+        requested
+        fees={fees({}, { requested: true, applied: true, saving: 8000 })}
+        savings={{ discount: 5000, deliveryFees: 8000, total: 13000 }}
+      />,
+    );
+    const box = screen.getByTestId('savings-breakdown');
+    expect(box).toHaveTextContent(/Shipping & fees waived.*8,000/);
+    expect(box).toHaveTextContent(/Discount.*5,000/);
+    expect(box).toHaveTextContent(/Total savings.*13,000/);
+  });
+
+  it('no goods discount → no Discount row', () => {
+    render(
+      <DeliveryFeeBreakdown
+        {...props}
+        requested
+        fees={fees({}, { requested: true, applied: true, saving: 1140 })}
+        savings={{ discount: 0, deliveryFees: 1140, total: 1140 }}
+      />,
+    );
+    expect(screen.getByTestId('savings-breakdown')).not.toHaveTextContent('Discount');
+  });
 });

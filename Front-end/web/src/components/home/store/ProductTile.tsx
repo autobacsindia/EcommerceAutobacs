@@ -8,6 +8,8 @@ import { discountPct, type StoreProduct } from './storeData';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
+import type { CardFeeWaiver } from '@/hooks/queries/useCardFeeWaivers';
+import ZeroDeliveryReceipt, { ZeroDeliveryRibbon, zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryReceipt';
 
 /** Five stars, filled to the rating (rounded to the half). */
 export function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
@@ -27,11 +29,21 @@ export function Stars({ rating, size = 14 }: { rating: number; size?: number }) 
  * with the saving in red. Nothing here computes or promises a price; it shows the
  * catalogue's own numbers through CurrencyContext like the rest of the store.
  */
-export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: string }) {
+export default function ProductTile({
+  p, badge, feeWaiver = null, feeWaiverPending = false,
+}: {
+  p: StoreProduct;
+  badge?: string;
+  /** Black Friday: what the offer waives on this product (server figures, per shelf). */
+  feeWaiver?: CardFeeWaiver | null;
+  /** Offer live, figures loading: reserve the receipt's space (no CLS). */
+  feeWaiverPending?: boolean;
+}) {
   const { formatPrice } = useCurrency();
   const off = discountPct(p);
   // The chip reads "Save ₹250", not "-5%" — display only, from the tile's own prices.
-  const saveLabel = savingsLabel(p.price, p.originalPrice, (n) => formatPrice(n));
+  // Black Friday: the badge also counts the delivery fees the offer waives ("Save ₹X+").
+  const saveLabel = zeroDeliverySaveLabel(feeWaiver, (n) => formatPrice(n)) ?? savingsLabel(p.price, p.originalPrice, (n) => formatPrice(n));
   // Diwali offer (display mirror; the cart charges the server's figure) — an EXTRA %
   // on top of the price; the sale line and M.R.P. stay. Skipped for a variable product,
   // whose tile price is not one model's exact price.
@@ -42,9 +54,10 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
       <div className="st-tile-media">
         <Img src={p.image} alt={p.name} className="st-tile-img" sizes="(max-width: 768px) 45vw, 220px" />
         {badge && <span className="st-badge">{badge}</span>}
+        {feeWaiver && <ZeroDeliveryRibbon />}
       </div>
       <div className="st-tile-body">
-        {off > 0 && (
+        {(off > 0 || feeWaiver) && (
           <div className="st-deal-line">
             {saveLabel && <span className="st-off">{saveLabel}</span>}
             <span className="st-deal-label">{p.offerEndDate ? 'Limited time deal' : 'Deal'}</span>
@@ -66,6 +79,7 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
           )}
         </div>
         <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" mrp={off > 0 ? p.originalPrice : null} />
+        <ZeroDeliveryReceipt waiver={feeWaiver} pending={feeWaiverPending} price={offer ? offer.finalPrice : p.price} format={exact} />
         {p.brand && <div className="st-brand">by {p.brand}</div>}
       </div>
     </Link>

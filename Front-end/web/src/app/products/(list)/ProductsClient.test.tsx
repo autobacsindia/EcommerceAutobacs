@@ -33,6 +33,10 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/lib/analytics', () => ({ trackViewItemList: jest.fn() }));
 
 // Campaign badges are a separate concern with their own tests.
+// Black Friday ₹0-delivery card figures: not what these tests exercise.
+jest.mock('@/hooks/queries/useCardFeeWaivers', () => ({
+  useCardFeeWaivers: () => ({ waivers: null, pending: false }),
+}));
 jest.mock('@/hooks/queries/useCampaignProductRates', () => ({
   useCampaignProductRates: () => ({ data: undefined }),
 }));

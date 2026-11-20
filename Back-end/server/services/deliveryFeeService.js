@@ -25,6 +25,11 @@ import AppError from '../utils/AppError.js';
 import { computeDeliveryFees, DEFAULT_RATE_CARD, isValidPin, haversineKm } from '../utils/deliveryFees.js';
 import { classFromCategorySlugs, slugsWithAncestors } from '../utils/categoryShippingClass.js';
 import { fromPaise } from '../utils/money.js';
+import productRepository from '../repositories/productRepository.js';
+import { isOfferLiveForPricing } from './festivalOfferService.js';
+import { isPurchasable } from '../utils/stockStatus.js';
+import { effectivePrice } from '../utils/productPrice.js';
+import { applyFestivalOffer, resolveFestivalSetting } from '../utils/festivalOffer.js';
 
 /** Snapshotted on orders; follows the event the owner runs (Black Friday 2026). */
 export const DELIVERY_FEE_OFFER_CODE = 'blackfriday';
@@ -37,7 +42,12 @@ export const MAX_REMOTE_PINS_PER_UPLOAD = 20000;
 export const MAX_REMOTE_PIN_PAGE = 200;
 
 /** Reason codes the client can act on (quote.deliveryFees.offer.error). */
-export const OFFER_ERROR = Object.freeze({ ENDED: 'offer_ended' });
+export const OFFER_ERROR = Object.freeze({
+  ENDED: 'offer_ended',
+  // Tapped "Apply" before entering a PIN: the fees (and so the saving) are unknown, so
+  // the waiver is refused until a valid PIN prices them. Sachin, 2026-11-20.
+  PIN_REQUIRED: 'pin_required',
+});
 
 const fail = (message, status = 400, extra = {}) => new AppError(message, status, { expose: true, ...extra });
 
@@ -104,7 +114,6 @@ export function toRateCard(doc) {
       .map((b) => ({ upToKm: b.upToKm ?? null, ratePerKg: b.ratePerKg, slabRate: b.slabRate ?? null })),
     packing: group('packing'),
     remoteAreaFee: pick(doc?.remoteAreaFee, d.remoteAreaFee),
-    insurancePercent: pick(doc?.insurancePercent, d.insurancePercent),
     paymentFeePercent: pick(doc?.paymentFeePercent, d.paymentFeePercent),
     paymentFeeGstPercent: pick(doc?.paymentFeeGstPercent, d.paymentFeeGstPercent),
     paymentFeeMax: pick(doc?.paymentFeeMax, d.paymentFeeMax),
@@ -171,22 +180,28 @@ export async function quoteDeliveryFees({ orderItems, goodsPaise, pin = null, ap
   const cleanPin = normalizePin(pin);
   const requested = Boolean(applyOffer);
   const offerLive = await isFeeOfferLiveForPricing(now, session);
-  const offerBlock = (savingPaise) => ({
-    code: DELIVERY_FEE_OFFER_CODE,
-    available: offerLive,
-    requested,
-    applied: requested && offerLive,
-    savingPaise,
-    saving: fromPaise(savingPaise),
-    error: requested && !offerLive ? OFFER_ERROR.ENDED : null,
-  });
+  const offerBlock = (savingPaise, hasPin) => {
+    let error = null;
+    if (requested && !offerLive) error = OFFER_ERROR.ENDED;
+    else if (requested && !hasPin) error = OFFER_ERROR.PIN_REQUIRED;
+    return {
+      code: DELIVERY_FEE_OFFER_CODE,
+      available: offerLive,
+      requested,
+      // Never applied without a PIN: no fees are priced yet, so there is nothing to waive.
+      applied: requested && offerLive && hasPin,
+      savingPaise,
+      saving: fromPaise(savingPaise),
+      error,
+    };
+  };
 
   if (!cleanPin) {
     return {
       needsPin: true, pin: null, place: null, distanceKm: null, origin: card.origin.label,
       remote: null, mode: null, chargedKg: null, estimated: false, band: null,
       gstOnFees: card.gstOnFees.enabled ? card.gstOnFees.percent : 0,
-      lines: [], totalPaise: 0, total: 0, offer: offerBlock(0),
+      lines: [], totalPaise: 0, total: 0, offer: offerBlock(0, false),
     };
   }
 
@@ -229,7 +244,7 @@ export async function quoteDeliveryFees({ orderItems, goodsPaise, pin = null, ap
     lines: fees.lines.map((l) => ({ ...l, amount: fromPaise(l.amountPaise) })),
     totalPaise: fees.totalPaise,
     total: fromPaise(fees.totalPaise),
-    offer: offerBlock(applied ? fees.totalPaise : 0),
+    offer: offerBlock(applied ? fees.totalPaise : 0, true),
   };
 }
 
@@ -255,6 +270,89 @@ export function toOrderSnapshot(block, chargedPaise) {
       saving: block.offer.saving,
     },
   };
+}
+
+// ── Product-card estimate ─────────────────────────────────────────────────────
+
+/** Most ids one card request reads (a product grid page is ≤ 60 cards). */
+export const MAX_CARD_FEE_IDS = 60;
+
+/** The three lines the card's receipt names; everything else is "Other fees". */
+const CARD_NAMED_LINES = Object.freeze(['shipping', 'packing', 'handling']);
+
+/**
+ * What the Black Friday offer waives on ONE unit of each product, for the product cards'
+ * "Save ₹X+" badge and ₹0 receipt (owner, 2026-11-20).
+ *
+ * Same maths as checkout (computeDeliveryFees, same rate card, boxes, category guess and
+ * the product's own packing fee), with the PIN unknown, so it prices the CHEAPEST case:
+ * the cheapest distance band and a non-remote PIN. Every real PIN costs at least this
+ * much, so the card's "+" is true for every shopper and never over-promises. Goods are
+ * the price the card shows (festival offer applied when live), which is what the
+ * payment-fee line is a percentage of.
+ *
+ * Display only: checkout re-prices from the PIN and the quote decides what is charged.
+ *
+ * @param {string[]} ids  product ids (deduped and capped here)
+ * @returns {Promise<{ live: boolean, products: Record<string, { discount:number, save:number, shipping:number, packing:number,
+ *   handling:number, other:number, total:number }> }>}  `live` false → render nothing.
+ */
+export async function cardFeeWaivers(ids, { now = new Date() } = {}) {
+  const unique = [...new Set((Array.isArray(ids) ? ids : []).map((s) => String(s).trim()).filter(Boolean))]
+    .slice(0, MAX_CARD_FEE_IDS);
+  const card = await getRateCard();
+  if (!card.chargeAtCheckout || !unique.length) return { live: false, products: {} };
+  if (!(await isFeeOfferLiveForPricing(now))) return { live: false, products: {} };
+
+  const [products, { boxes }, categoryIndex, festivalLive] = await Promise.all([
+    productRepository.findCardFeeInputs(unique),
+    getClassBoxes(),
+    getCategoryIndex(),
+    isOfferLiveForPricing(now),
+  ]);
+
+  // Cheapest band: rates need not rise with distance, so try every band.
+  const distances = card.distanceBands.map((b) => (b.upToKm == null ? null : b.upToKm));
+
+  const out = {};
+  for (const p of products) {
+    if (!isPurchasable(p.stock)) continue;
+    const pre = effectivePrice(p, now);
+    const offer = festivalLive ? applyFestivalOffer({ unitPrice: pre, setting: resolveFestivalSetting(p) }) : null;
+    const goodsPaise = Math.max(0, Math.round((offer ? offer.finalPrice : pre) * 100));
+    if (!goodsPaise) continue;
+    const line = {
+      quantity: 1,
+      product: {
+        shippingSize: p.shippingSize || null,
+        listedSize: p.listedSize || null,
+        shippingClass: p.shippingClass || null,
+        packingFee: p.packingFee ?? null,
+        categoryClass: classFromCategorySlugs(slugsWithAncestors(p.categories || [], categoryIndex)),
+      },
+    };
+    let best = null;
+    for (const distanceKm of distances) {
+      const fees = computeDeliveryFees({ lines: [line], goodsPaise, isRemote: false, distanceKm, card, classBoxes: boxes });
+      if (!best || fees.totalPaise < best.totalPaise) best = fees;
+    }
+    const by = Object.fromEntries(best.lines.map((l) => [l.code, l.amountPaise]));
+    const named = CARD_NAMED_LINES.reduce((s, c) => s + (by[c] || 0), 0);
+    // The card's red "Save" figure today: M.R.P. − selling price (catalogue sale only;
+    // the festival offer keeps its own tag). The badge becomes that + the fees waived.
+    const mrpPaise = typeof p.originalPrice === 'number' ? Math.round(p.originalPrice * 100) : 0;
+    const discountPaise = Math.max(0, mrpPaise - Math.round(pre * 100));
+    out[String(p._id)] = {
+      discount: fromPaise(discountPaise),
+      save: fromPaise(discountPaise + best.totalPaise),
+      shipping: fromPaise(by.shipping || 0),
+      packing: fromPaise(by.packing || 0),
+      handling: fromPaise(by.handling || 0),
+      other: fromPaise(best.totalPaise - named),
+      total: fromPaise(best.totalPaise),
+    };
+  }
+  return { live: true, products: out };
 }
 
 // ── Display read (cached) ─────────────────────────────────────────────────────
@@ -292,7 +390,7 @@ const NUMERIC_FIELDS = Object.freeze([
   ['freight.otherCharges', 0, 10000], ['freight.fuel', 0, 10000], ['freight.hamaliPerKg', 0, 100],
   ['packing.small', 0, 50000], ['packing.medium', 0, 50000], ['packing.large', 0, 50000], ['packing.xl', 0, 50000],
   ['remoteAreaFee', 0, 50000],
-  ['insurancePercent', 0, 100], ['paymentFeePercent', 0, 100], ['paymentFeeGstPercent', 0, 100],
+  ['paymentFeePercent', 0, 100], ['paymentFeeGstPercent', 0, 100],
   ['paymentFeeMax', 0, 100000],
   ['xlBox.weightKg', 0.1, 2000], ['xlBox.lengthCm', 1, 1000], ['xlBox.breadthCm', 1, 1000], ['xlBox.heightCm', 1, 1000],
   ['gstOnFees.percent', 0, 100],
@@ -435,6 +533,7 @@ export default {
   quoteDeliveryFees,
   toOrderSnapshot,
   resolvePublicDeliveryFeeConfig,
+  cardFeeWaivers,
   getAdminDeliveryFeeConfig,
   updateRateCard,
   addRemotePins,
