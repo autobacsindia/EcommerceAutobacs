@@ -19,7 +19,9 @@ export type LineAction =
   | 'in_stock' | 'own_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'dispatch_own' | 'wait' | 'refund' | 'approve' | 'reject'
   | 'payment_initiated' | 'payment_undo' | 'stock_undo' | 'decision_undo'
   /** Procurement may split the item across suppliers / change a supplier (Back-end supplierPartsService). */
-  | 'supplier_parts';
+  | 'supplier_parts'
+  // Accounts (or the admin): a supplier change on this line waits for their review.
+  | 'supplier_review';
 
 /**
  * One supplier part of an order line (Back-end utils/supplierParts.js partsView).
@@ -44,6 +46,8 @@ export type SupplierPart = {
   reasonCode: string;
   /** "Supplier refunded — out of stock" (a removed part: the note). */
   reason: string;
+  /** Accounts' review of this change (null: made before reviews existed, or not a change). */
+  review?: { status: 'pending' | 'approved' | 'rejected'; byName: string; at: string | null; note: string } | null;
 };
 
 /** A parcel in transit against its expected delivery date (Back-end utils/parcelEta.js). */

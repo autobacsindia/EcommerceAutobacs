@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
-import SupplierLedgerEntry, { LEDGER_SIGN, OWES_MORE_KINDS } from '../models/SupplierLedgerEntry.js';
+import SupplierLedgerEntry, { LEDGER_SIGN, OWES_MORE_KINDS, REFUND_METHODS } from '../models/SupplierLedgerEntry.js';
 
-export { LEDGER_SIGN };
+export { LEDGER_SIGN, REFUND_METHODS };
 import Supplier from '../models/Supplier.js';
 
 /**
@@ -71,6 +71,20 @@ const supplierLedgerRepository = {
   claimsFor: (requestIds) => SupplierLedgerEntry.find({
     paymentRequest: { $in: requestIds, $type: 'objectId' }, kind: 'refund_due', status: { $in: ['pending', 'approved'] },
   }).select('paymentRequest status amountPaise currency').lean(),
+
+  /**
+   * The refunds recorded against these payments ("Supplier refunded" on the order),
+   * every status — a declined one shows why, so procurement can raise it again.
+   * Rides supplier_ledger_request ({ paymentRequest, kind }).
+   */
+  refundsFor: (requestIds, session = null) => SupplierLedgerEntry.find({
+    paymentRequest: { $in: requestIds, $type: 'objectId' }, kind: 'repaid',
+  }).select('-history -edits').sort({ createdAt: 1, _id: 1 }).limit(200).session(session).lean(),
+
+  /** The live claim on one payment (pending or approved). */
+  claimFor: (requestId, session = null) => SupplierLedgerEntry.findOne({
+    paymentRequest: toId(requestId), kind: 'refund_due', status: { $in: ['pending', 'approved'] },
+  }).session(session).lean(),
 
   /**
    * The live (pending / approved) corrections of these rows, one supplier's or a page's.

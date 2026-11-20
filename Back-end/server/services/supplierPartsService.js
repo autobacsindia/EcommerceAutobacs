@@ -22,8 +22,11 @@ import supplierDealRepository from '../repositories/supplierDealRepository.js';
 import { STAGE_LABELS, STOCK } from '../utils/teamWorkflow.js';
 import {
   PartError, materialize, addPart, replacePart, removePart, editPart, partForRequest,
-  reasonText, cleanReason, cleanSupplierName, IMPLICIT_PART_ID, PART_STATUS,
+  reasonText, cleanReason, cleanSupplierName, IMPLICIT_PART_ID, PART_STATUS, reviewPart, REVIEW,
 } from '../utils/supplierParts.js';
+import orderRepository from '../repositories/orderRepository.js';
+import { orderNumber } from './invoiceService.js';
+import { keysetPage, plainQuery } from '../utils/listQuery.js';
 import {
   loadWorkflowLine, refreshWorkflowOpen, workflowEvent, workflowCan, WORKFLOW_RACE, writeLineParts, getOrder, PART_STAGES,
 } from './teamWorkflowService.js';
@@ -75,7 +78,7 @@ const partById = (parts, partId) => (String(partId) === IMPLICIT_PART_ID ? parts
  * here: its line-level supplier payment moves onto its first part, and its stock
  * reads "in stock" (being sourced) — from now on its parts decide the stage.
  */
-async function save(actor, orderId, itemId, line, parts, action, note) {
+async function save(actor, orderId, itemId, line, parts, action, note, rootSet = {}) {
   const fromLegacy = !line.split;
   const legacyStock = [STOCK.PENDING, STOCK.ORDERED, null, undefined].includes(line.stock);
   // Splitting a line: also hold its own payment mark as read, so a payment raised
@@ -85,6 +88,7 @@ async function save(actor, orderId, itemId, line, parts, action, note) {
     expect,
     set: legacyStock ? { stock: STOCK.IN_STOCK, stockBy: actor._id, stockAt: line.stockAt || new Date() } : {},
     unset: fromLegacy ? ['supplierPaymentAt', 'supplierPaymentRef', 'paymentInitiatedBy', 'paymentInitiatedAt'] : [],
+    rootSet,
   }, workflowEvent(actor, action, { itemId: line.itemId, note: String(note || '').slice(0, 500) }));
   if (!updated) throw fail(WORKFLOW_RACE, 409);
   await refreshWorkflowOpen(orderId);
@@ -173,7 +177,8 @@ export async function changeSupplier(actor, orderId, itemId, partId, input = {},
     ...open.map((r) => `${r.number} cancelled`),
     ...paid.map((r) => `${r.number} paid — refund due from ${was.supplierName || 'the supplier'}`),
   ].join(' · ');
-  await save(actor, orderId, itemId, line, next, 'supplier_changed', note);
+  // The change now waits for accounts' review (accounts' approvals list reads this mark).
+  await save(actor, orderId, itemId, line, next, 'supplier_changed', note, { 'workflow.reviewPendingAt': new Date() });
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {
     change: 'supplier_changed', itemId: String(itemId), partId: resolvedId, newPartId: idOf(part._id),
     from: was.supplierName || '', to: part.supplierName, reasonCode: input.reasonCode,
@@ -182,3 +187,63 @@ export async function changeSupplier(actor, orderId, itemId, partId, input = {},
   return getOrder(actor, orderId);
 }
 
+
+// ── Accounts' review of a supplier change ───────────────────────────────────────
+
+/**
+ * Accounts (or the admin) approves or rejects a supplier change. The change has
+ * already happened — this records accounts' agreement, or their objection with a
+ * reason, which procurement and the admin see on the order. No money moves here:
+ * the new supplier's payment and the old one's refund are approved on their own.
+ */
+export async function reviewSupplierChange(actor, orderId, itemId, partId, { decision, note } = {}, req) {
+  if (!workflowCan.accounts(actor)) throw fail('Only accounts (or the admin) reviews a supplier change.', 403);
+  const { line } = await loadWorkflowLine(orderId, itemId);
+  const parts = line.parts || [];
+  const { parts: next, part } = rule(() => reviewPart(parts, partId, { decision, note }, actor, { isAdmin: actor?.role === 'admin' }));
+  const verdict = decision === 'approve' ? 'approved' : 'rejected';
+  const updated = await writeLineParts(orderId, itemId, line, next, {},
+    workflowEvent(actor, `supplier_change_${verdict}`, { itemId: line.itemId, note: `${part.supplierName || 'No supplier'} → … ${verdict}${note ? `: ${String(note).slice(0, 300)}` : ''}` }));
+  if (!updated) throw fail(WORKFLOW_RACE, 409);
+  await orderRepository.clearReviewPendingIfNone(orderId);
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {
+    change: `supplier_change_${verdict}`, itemId: String(itemId), partId: String(partId), note: String(note || '').slice(0, 300),
+  });
+  return getOrder(actor, orderId);
+}
+
+const REVIEW_PAGE = 50;
+const REVIEW_SORTS = Object.freeze({ oldest: { field: 'workflow.reviewPendingAt', dir: 1, type: 'date' } });
+
+/**
+ * Accounts' list: every supplier change waiting for review, across orders, oldest
+ * first. A keyset page of ORDERS (workflow_review_pending); each brings its waiting changes.
+ */
+export async function pendingSupplierChanges(actor, params = {}) {
+  if (!workflowCan.accounts(actor) && !workflowCan.procurement(actor)) throw fail('Not authorized.', 403);
+  const f = plainQuery(params);
+  const page = await keysetPage({
+    query: { 'workflow.reviewPendingAt': { $type: 'date' } }, sorts: REVIEW_SORTS, sortName: 'oldest', cursor: f.after, pageSize: REVIEW_PAGE,
+    find: orderRepository.pageReviewPending,
+  });
+  const mayReview = workflowCan.accounts(actor);
+  const changes = [];
+  for (const o of page.items) {
+    for (const l of o.workflow?.lines || []) {
+      const item = (o.items || []).find((i) => idOf(i._id) === idOf(l.itemId));
+      const parts = l.parts || [];
+      for (const p of parts) {
+        if (p.reviewStatus !== REVIEW.PENDING) continue;
+        const now = parts.find((x) => idOf(x._id) === idOf(p.replacedWith));
+        changes.push({
+          orderId: idOf(o._id), orderNumber: orderNumber(o), itemId: idOf(l.itemId), itemName: item?.name || '',
+          partId: idOf(p._id), what: p.what || '',
+          from: p.supplierName || '', to: now?.supplierName || '',
+          reason: reasonText(p), changedByName: p.replacedByName || '', changedAt: p.replacedAt || null,
+          can: { review: mayReview && (actor?.role === 'admin' || idOf(p.replacedBy) !== idOf(actor?._id)) },
+        });
+      }
+    }
+  }
+  return { changes, nextAfter: page.nextCursor };
+}

@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, CheckCircle2, FileText, Gift, Loader2, MessageCircle, Pencil, Share2, Truck, Undo2, Warehouse } from 'lucide-react';
+import Link from 'next/link';
+import { Camera, CheckCircle2, Eye, FileText, Gift, Loader2, MessageCircle, Pencil, Share2, Truck, Undo2, Warehouse } from 'lucide-react';
+import AuthContext from '@/context/AuthContext';
 import apiClient from '@/lib/api-client';
 import { tokenManager } from '@/lib/http/tokenManager';
 import { staffKeys } from '@/hooks/queries/keys';
@@ -104,6 +106,9 @@ async function shareProofs(proofs: ParcelProof[], baseName: string) {
  */
 export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const queryClient = useQueryClient();
+  // Read without useAuth's provider check: the panel also renders where no session is mounted (tests, previews).
+  const user = useContext(AuthContext)?.user;
+  const asAccounts = user?.role === 'staff' && user.staff?.team === 'accounts';
   const [error, setError] = useState('');
   const supplierPayments = useOrderSupplierPayments(orderId);
   // Made-to-order items whose supplier balance is unpaid cannot ship yet (the server
@@ -218,6 +223,14 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
     <div className="space-y-5 text-sm">
       {/* Where every product stands, left to right, with who moved it and when. */}
       <OrderJourney order={o} showFacts={false} />
+
+      {/* Accounts sees the order read-only and decides on "Waiting for approval". */}
+      {asAccounts && (
+        <p role="note" className="flex flex-wrap items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+          <Eye className="h-3.5 w-3.5" aria-hidden /> You&rsquo;re viewing as accounts — supplier details here are read-only (procurement records them).
+          <Link href="/team/approvals" className="font-semibold underline">Approve or reject on Waiting for approval</Link>
+        </p>
+      )}
 
       {/* The order number, to quote to a supplier or paste into search. */}
       <p className="flex items-center gap-1 text-gray-700">

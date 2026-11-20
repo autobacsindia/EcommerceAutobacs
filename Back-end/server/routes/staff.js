@@ -51,7 +51,7 @@ import {
   validateWorkLineOnly,
   validateAddSupplierPart,
   validateEditSupplierPart,
-  validateChangeSupplier,
+  validateChangeSupplier, validateReviewSupplierChange,
   validateRemoveSupplierPart,
   validateEditParcel,
   validateParcelStep,
@@ -720,6 +720,17 @@ router.patch('/work/orders/:id/lines/:itemId/parts/:partId', validateEditSupplie
 router.post('/work/orders/:id/lines/:itemId/parts/:partId/change', validateChangeSupplier, validateRequest, asyncHandler(async (req, res) => {
   const { supplierName, what, reasonCode, reasonNote } = req.body;
   res.json({ success: true, order: await supplierParts.changeSupplier(req.user, req.params.id, req.params.itemId, req.params.partId, { supplierName, what, reasonCode, reasonNote }, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/parts/:partId/review  { decision: 'approve'|'reject', note? (reject: required) } — accounts
+router.post('/work/orders/:id/lines/:itemId/parts/:partId/review', validateReviewSupplierChange, validateRequest, asyncHandler(async (req, res) => {
+  const { decision, note } = req.body;
+  res.json({ success: true, order: await supplierParts.reviewSupplierChange(req.user, req.params.id, req.params.itemId, req.params.partId, { decision, note }, req) });
+}));
+
+// @route  GET /staff/work/supplier-changes/pending?after=  — accounts' "Waiting for your approval": supplier changes
+router.get('/work/supplier-changes/pending', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await supplierParts.pendingSupplierChanges(req.user, req.query)) });
 }));
 
 // @route  POST /staff/work/orders/:id/lines/:itemId/parts/:partId/remove  { note? } — a part added by mistake, never paid

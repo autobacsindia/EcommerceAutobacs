@@ -57,7 +57,13 @@ export function paymentsByPart(parts: SupplierPart[], requests: OrderPayment[], 
  * "G S Enterprises → Trek N Trade · changed by Aromal S on 19 Nov 2026 · Supplier refunded — out of stock".
  * Read-only; shown to everyone who sees the order (admin, procurement, accounts).
  */
-export function SupplierChanges({ parts, children }: { parts: SupplierPart[]; children?: (p: SupplierPart) => React.ReactNode }) {
+export function SupplierChanges({ parts, children, onReview, busy = false }: {
+  parts: SupplierPart[];
+  children?: (p: SupplierPart) => React.ReactNode;
+  /** Accounts (or the admin): approve / reject a change still waiting. Absent: read-only. */
+  onReview?: (p: SupplierPart, decision: 'approve' | 'reject', note: string) => void;
+  busy?: boolean;
+}) {
   const gone = parts.filter((p) => p.status !== 'active');
   if (!gone.length) return null;
   const byId = new Map(parts.map((p) => [p.id, p]));
@@ -80,11 +86,45 @@ export function SupplierChanges({ parts, children }: { parts: SupplierPart[]; ch
                 {p.status === 'replaced' ? 'Changed' : 'Removed'}{p.replacedByName ? ` by ${p.replacedByName}` : ''}{p.replacedAt ? ` on ${formatDateIST(p.replacedAt)}` : ''}
                 {p.reason && <> · <span className="text-gray-800">{p.reason}</span></>}
               </p>
+              <ReviewLine p={p} onReview={onReview} busy={busy} />
               {children?.(p)}
             </li>
           );
         })}
       </ol>
+    </div>
+  );
+}
+
+const REVIEW_TONE = {
+  pending: 'bg-amber-100 text-amber-900',
+  approved: 'bg-green-100 text-green-800',
+  rejected: 'bg-red-100 text-red-800',
+} as const;
+
+/** "Waiting for accounts" / "Approved by Fathima KA" / "Rejected by … — why", and accounts' buttons. */
+function ReviewLine({ p, onReview, busy }: {
+  p: SupplierPart; onReview?: (p: SupplierPart, decision: 'approve' | 'reject', note: string) => void; busy: boolean;
+}) {
+  if (!p.review) return null;
+  const r = p.review;
+  const text = r.status === 'pending' ? 'Waiting for accounts' : `${r.status === 'approved' ? 'Approved' : 'Rejected'} by ${r.byName}${r.at ? ` on ${formatDateIST(r.at)}` : ''}`;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className={`rounded-full px-2 py-0.5 font-semibold ${REVIEW_TONE[r.status]}`}>{text}</span>
+      {r.status === 'rejected' && r.note && <span className="text-red-800">Why: {r.note}</span>}
+      {r.status === 'approved' && r.note && <span className="text-gray-700">“{r.note}”</span>}
+      {r.status === 'pending' && onReview && (
+        <span className="flex gap-1.5">
+          <button type="button" disabled={busy} className="rounded-md bg-green-600 px-2 py-0.5 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+            onClick={() => onReview(p, 'approve', '')}>Approve change</button>
+          <button type="button" disabled={busy} className="rounded-md border border-red-300 px-2 py-0.5 font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            onClick={() => {
+              const why = window.prompt('Why is this supplier change rejected? (procurement and the admin see this)') || '';
+              if (why.trim().length >= 3) onReview(p, 'reject', why.trim());
+            }}>Reject</button>
+        </span>
+      )}
     </div>
   );
 }
@@ -107,6 +147,7 @@ export default function SupplierParts({ order, line, requests, onDone }: {
   const qc = useQueryClient();
   const parts = line.supplierParts ?? [];
   const canEdit = line.actions.includes('supplier_parts');
+  const canReview = line.actions.includes('supplier_review');
   const [mode, setMode] = useState<null | { kind: 'add' } | { kind: 'change' | 'edit' | 'pay'; part: SupplierPart }>(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<{ id: string; edit: boolean } | null>(null);
@@ -221,7 +262,8 @@ export default function SupplierParts({ order, line, requests, onDone }: {
       )}
       {mode?.kind === 'add' && <AddForm busy={send.isPending} onCancel={() => setMode(null)} onSubmit={(body) => send.mutate({ path: '', body })} />}
       {err}
-      <SupplierChanges parts={parts}>
+      <SupplierChanges parts={parts} busy={send.isPending}
+        onReview={canReview ? (p, decision, note) => send.mutate({ path: `/${p.id}/review`, body: { decision, note } }) : undefined}>
         {(p) => (byPart.get(p.id) ?? []).map((r) => <SupplierPaymentRow key={r.id} r={r} muted onOpen={(edit) => setOpen({ id: r.id, edit })} />)}
       </SupplierChanges>
       {open && <PaymentRequestDetail id={open.id} startEditing={open.edit} onClose={() => { setOpen(null); refreshPayments(); }} />}

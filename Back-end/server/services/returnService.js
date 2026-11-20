@@ -572,7 +572,12 @@ export function destinationOptions(order, rr) {
   for (const item of rr.items || []) {
     const orderLine = matchOrderLine(order.items || [], { ...plain(item), itemId: item.orderItemId });
     const wf = orderLine && wfLines.find((l) => idOf(l.itemId) === idOf(orderLine._id));
-    if (wf?.supplierName && wf.stock !== 'own_stock') suppliers.add(wf.supplierName);
+    if (!wf || wf.stock === 'own_stock') continue;
+    // An item bought from several suppliers (utils/supplierParts.js): offer every
+    // supplier it is still bought from, not only the first one.
+    const active = (wf.parts || []).filter((p) => p.status === 'active' && p.supplierName);
+    if (active.length) for (const p of active) suppliers.add(p.supplierName);
+    else if (wf.supplierName) suppliers.add(wf.supplierName);
   }
   return { default: 'warehouse', suppliers: [...suppliers] };
 }

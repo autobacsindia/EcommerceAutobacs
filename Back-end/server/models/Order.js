@@ -232,6 +232,10 @@ const OrderSchema = new mongoose.Schema({
     // True while some team still has something to do; the work queues read only
     // open orders (indexed). Recomputed after every team action.
     open: { type: Boolean, default: undefined },
+    // Set while a supplier change on this order waits for accounts' review (the
+    // oldest such change); unset when none does. Accounts' approvals list reads it
+    // (indexed, partial — holds only the orders waiting).
+    reviewPendingAt: { type: Date, default: undefined },
     lines: {
       type: [{
         itemId: { type: mongoose.Schema.Types.ObjectId, required: true }, // Order.items[]._id
@@ -283,6 +287,13 @@ const OrderSchema = new mongoose.Schema({
             replacedWith: mongoose.Schema.Types.ObjectId,
             reasonCode: { type: String, maxlength: 40 },
             reasonNote: { type: String, maxlength: 300 },
+            // Accounts' review of this change (on the replaced part): pending →
+            // approved | rejected, with who, when and why. Absent before 2026-11-20.
+            reviewStatus: { type: String, enum: ['pending', 'approved', 'rejected'] },
+            reviewedAt: Date,
+            reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            reviewedByName: String,
+            reviewNote: { type: String, maxlength: 300 },
           }],
           default: undefined,
         },
@@ -1311,6 +1322,13 @@ OrderSchema.index(
 OrderSchema.index(
   { 'workflow.open': 1, 'workflow.enteredAt': 1, _id: 1 },
   { partialFilterExpression: { 'workflow.open': true }, name: 'team_workflow_open' }
+);
+// Accounts' "Waiting for your approval" → supplier changes, oldest first (keyset).
+// Partial on the date, so it holds only orders with a change waiting — a handful.
+// Built by scripts/create-supplier-review-index.js (prod runs autoIndex off).
+OrderSchema.index(
+  { 'workflow.reviewPendingAt': 1, _id: 1 },
+  { partialFilterExpression: { 'workflow.reviewPendingAt': { $type: 'date' } }, name: 'workflow_review_pending' }
 );
 // Item refunds recorded but not yet paid out — the admin's "refunds to pay"
 // (admin Company overview). Partial: only orders that have a cancellation.

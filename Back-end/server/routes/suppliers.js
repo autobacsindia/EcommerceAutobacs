@@ -4,6 +4,7 @@ import { protect, staffOrAdmin } from '../middleware/authMiddleware.js';
 import { authenticatedUserRateLimit } from '../middleware/rateLimitMiddleware.js';
 import * as suppliers from '../services/supplierService.js';
 import * as credit from '../services/supplierLedgerService.js';
+import { uploadPaymentProof, concurrentUploadGuard, attachmentSizeGuard, handleAttachmentError } from '../middleware/uploadMiddleware.js';
 
 /**
  * The supplier directory (/api/v1/suppliers). Procurement and the admin add and
@@ -38,6 +39,21 @@ router.get('/credit/report.csv', asyncHandler(async (req, res) => {
 // POST /suppliers/credit/claims { paymentRequestId, amount?, note? }   "Supplier must refund"
 router.post('/credit/claims', asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, entry: await credit.claimRefund(req.user, req.body?.paymentRequestId, req.body, req) });
+}));
+// POST /suppliers/credit/order-refunds — multipart: paymentRequestId, amount, date, method, reference, note?, formKey, proof (files)
+//   "Supplier refunded" on the order: money a supplier gave back on one paid payment. Waits for accounts.
+router.post('/credit/order-refunds', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, entry: await credit.recordOrderRefund(req.user, req.body || {}, req.files || [], req) });
+}));
+// GET /suppliers/credit/:entryId/files/:fileId — a refund's proof
+router.get('/credit/:entryId/files/:fileId', asyncHandler(async (req, res) => {
+  const { buffer, contentType, name } = await credit.getFile(req.user, req.params.entryId, req.params.fileId);
+  res.set({
+    'Content-Type': contentType,
+    'Content-Disposition': `inline; filename="${String(name).replace(/[^\w.-]+/g, '_')}"`,
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.send(buffer);
 }));
 // POST /suppliers/credit/:entryId/approve|decline|cancel { note }
 for (const action of ['approve', 'decline', 'cancel']) {

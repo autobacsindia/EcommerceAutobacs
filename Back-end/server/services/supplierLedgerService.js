@@ -1,7 +1,8 @@
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
-import supplierLedgerRepository, { LEDGER_SIGN } from '../repositories/supplierLedgerRepository.js';
+import supplierLedgerRepository, { LEDGER_SIGN, REFUND_METHODS } from '../repositories/supplierLedgerRepository.js';
 import paymentRequestRepository from '../repositories/paymentRequestRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import supplierRepository from '../repositories/supplierRepository.js';
@@ -10,6 +11,9 @@ import { keysetPage, plainQuery } from '../utils/listQuery.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
 import { requestPartReplaced } from '../utils/supplierParts.js';
+import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
+import { checkAttachments } from './storage/attachmentCheck.js';
+import { storeAll } from './storage/storeAll.js';
 
 /**
  * Supplier credit — what a supplier owes us, kept as an immutable ledger
@@ -69,6 +73,7 @@ export const KIND_LABELS = Object.freeze({
   correction_up: 'Correction (owes us more)',
   correction_down: 'Correction (owes us less)',
 });
+export const METHOD_LABELS = Object.freeze({ upi: 'UPI', bank: 'Bank transfer', cash: 'Cash', credit_note: 'Credit note' });
 export const STATUS_LABELS = Object.freeze({
   pending: 'Waiting for accounts', approved: 'Approved', declined: 'Declined', cancelled: 'Cancelled',
 });
@@ -225,6 +230,9 @@ export function shape(e, viewer, fixes = null) {
     date: e.date || '',
     reference: e.reference || '',
     note: e.note || '',
+    method: e.method || '',
+    methodLabel: METHOD_LABELS[e.method] || '',
+    files: (e.files || []).map((f) => ({ id: idOf(f._id), name: f.name || '', contentType: f.contentType, bytes: f.bytes })),
     createdByName: e.createdByName || '',
     createdAt: e.createdAt,
     decidedByName: e.decidedByName || '',
@@ -312,13 +320,37 @@ export async function owing(actor) {
   };
 }
 
-/** The open claim (if any) on each paid payment → Map requestId → { status, amount, currency }. */
-export async function claimsFor(requestIds) {
+/**
+ * The open claim (if any) on each paid payment, with the refunds recorded against it
+ * ("Supplier refunded" on the order) → Map requestId → {
+ *   id, status, amount, currency,
+ *   refunded   — approved refunds,  refundPending — refunds waiting for accounts,
+ *   left       — what is still to come back (claim − approved − waiting),
+ *   refunds    — every refund row (declined ones too: procurement sees why),
+ * }. Two indexed queries for the whole order.
+ */
+export async function claimsFor(requestIds, viewer = null) {
   const ids = requestIds.map(idOf).filter(isId).map((id) => new mongoose.Types.ObjectId(id));
   const out = new Map();
   if (!ids.length) return out;
-  for (const c of await supplierLedgerRepository.claimsFor(ids)) {
-    out.set(idOf(c.paymentRequest), { id: idOf(c._id), status: c.status, amount: fromPaise(c.amountPaise), currency: c.currency });
+  const [claims, refunds] = await Promise.all([supplierLedgerRepository.claimsFor(ids), supplierLedgerRepository.refundsFor(ids)]);
+  const byRequest = new Map();
+  for (const r of refunds) {
+    const k = idOf(r.paymentRequest);
+    byRequest.set(k, [...(byRequest.get(k) || []), r]);
+  }
+  for (const c of claims) {
+    const k = idOf(c.paymentRequest);
+    const rows = byRequest.get(k) || [];
+    const sum = (status) => rows.filter((r) => r.status === status && r.currency === c.currency).reduce((n, r) => n + r.amountPaise, 0);
+    const refunded = sum('approved');
+    const waiting = sum('pending');
+    out.set(k, {
+      id: idOf(c._id), status: c.status, amount: fromPaise(c.amountPaise), currency: c.currency,
+      refunded: fromPaise(refunded), refundPending: fromPaise(waiting), left: fromPaise(Math.max(0, c.amountPaise - refunded - waiting)),
+      refunds: rows.map((r) => shape(r, viewer)),
+      canRecordRefund: mayPropose(viewer) && c.amountPaise - refunded - waiting > 0,
+    });
   }
   return out;
 }
@@ -489,6 +521,146 @@ export async function writeOff(actor, supplierId, input = {}, req) {
   return shape(done.entry, actor);
 }
 
+// ── Supplier refunded (from the order) ──────────────────────────────────────
+
+/*
+  The supplier gave back money they owed on ONE paid payment (owner, 2026-11-20):
+  procurement records it on the order — amount (part is fine), date, how, reference,
+  proof — and accounts approves it. It is the same `repaid` row Payments → Suppliers →
+  credit records, tied to the payment (`paymentRequest`), so the order and the
+  supplier's balance can never disagree.
+
+    PR-0088 paid ₹2,065 to G S Enterprises; supplier changed → claim ₹2,065 (refund_due)
+    G S sends ₹1,000 by UPI      → repaid ₹1,000 (pending)  → accounts approves
+    G S sends the other ₹1,065   → repaid ₹1,065 (pending)  → accounts approves → left ₹0
+
+  What may be recorded against a payment = its claim (after approved corrections) −
+  refunds approved − refunds waiting. Checked when recorded, and again under the
+  supplier's lock when approved (two refunds raised at once cannot both fit).
+*/
+
+const SUPPLIER_REFUND_FOLDER = 'payment-requests/supplier-refunds'; // a PRIVATE prefix (storage/assetScope.js)
+const resourceTypeOf = (f) => (f.contentType === 'application/pdf' ? 'raw' : 'image');
+
+/** Check, then store privately. Nothing half-saved: a failure removes what was stored. */
+async function storeProof(files, actor) {
+  const checked = checkAttachments(files, { noun: 'proof file' });
+  return storeAll(checked, async ({ file, contentType, ext, name }) => {
+    const ref = await putPrivateAsset({
+      buffer: file.buffer,
+      folder: SUPPLIER_REFUND_FOLDER,
+      basename: `proof-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+      contentType,
+      cloudinaryPrivate: true,
+    });
+    return { publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes, name, uploadedBy: actor._id, uploadedAt: new Date() };
+  }, dropProof);
+}
+const dropProof = (f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) });
+
+/**
+ * Room left on a payment's claim, in paise: claim (after its approved corrections) −
+ * refunds (approved ones after their own corrections; waiting ones too unless
+ * `approvedOnly`) — `except` leaves one row out (the one being edited / approved).
+ * Two reads: the refunds, then ONE corrections read for the claim and its refunds
+ * together (it runs under the supplier lock when a refund is approved).
+ */
+async function roomOnClaim(claim, opts = {}) {
+  const { claimPaise, refundedPaise } = await claimTotals(claim, opts);
+  return claimPaise - refundedPaise;
+}
+
+/** Σ refunds recorded on a claim's payment (approved ones after their own corrections). */
+async function refundedPaise(claim, opts = {}) {
+  return (await claimTotals(claim, { ...opts, withClaim: false })).refundedPaise;
+}
+
+async function claimTotals(claim, { except = null, approvedOnly = false, session = null, withClaim = true } = {}) {
+  const rows = (await supplierLedgerRepository.refundsFor([claim.paymentRequest], session)).filter((r) => idOf(r._id) !== idOf(except)
+    && r.currency === claim.currency && (r.status === 'approved' || (!approvedOnly && r.status === 'pending')));
+  const approvedIds = rows.filter((r) => r.status === 'approved').map((r) => r._id);
+  const ids = [...(withClaim && claim.status === 'approved' ? [claim._id] : []), ...approvedIds];
+  const fixes = new Map();
+  if (ids.length) {
+    for (const c of await supplierLedgerRepository.correctionsFor([claim.supplier], ids, session)) {
+      const k = idOf(c.correctionOf);
+      fixes.set(k, [...(fixes.get(k) || []), c]);
+    }
+  }
+  const effective = (e) => (e.status === 'approved' ? correctedState(e, fixes.get(idOf(e._id))).effectivePaise : e.amountPaise);
+  return {
+    claimPaise: effective(claim),
+    refundedPaise: rows.reduce((n, r) => n + effective(r), 0),
+  };
+}
+
+const cleanMethod = (v) => {
+  const m = text(v, 20);
+  if (!REFUND_METHODS.includes(m)) throw fail('Choose how the supplier paid it back.', 400);
+  return m;
+};
+
+/** "Supplier refunded": procurement records money a supplier gave back on one paid payment. Waits for accounts. */
+export async function recordOrderRefund(actor, input = {}, files = [], req) {
+  if (!mayPropose(actor)) throw fail('Only procurement records a supplier refund.', 403);
+  const key = `repaid:${cleanFormKey(input.formKey)}`;
+  // A double click / retry: the first submit was saved — the same answer, nothing stored twice.
+  const again = await supplierLedgerRepository.findByKey(key);
+  if (again) return shape(again, actor);
+  const requestId = input.paymentRequestId;
+  if (!isId(requestId)) throw fail('Payment not found.', 404);
+  const claim = await supplierLedgerRepository.claimFor(requestId);
+  if (!claim) throw fail('Raise "Supplier must refund" on this payment first — then record what came back.', 409);
+  const amountPaise = cleanAmountPaise(input.amount);
+  const date = cleanDay(input.date);
+  const method = cleanMethod(input.method);
+  const reference = text(input.reference, 120);
+  if (method !== 'cash' && !reference) throw fail(method === 'credit_note' ? 'Enter the credit note number.' : 'Enter the UTR / reference of the refund.', 400);
+  const room = await roomOnClaim(claim);
+  if (amountPaise > room) {
+    throw fail(room > 0
+      ? `Only ${moneyOf(room, claim.currency)} is still to come back on ${claim.paymentRequestNumber} — a refund cannot be more than that.`
+      : `Nothing more is due back on ${claim.paymentRequestNumber} (refunds already recorded cover it).`, 409);
+  }
+  const proof = files?.length ? await storeProof(files, actor) : [];
+  let done;
+  try {
+    done = await insertOnce({
+      supplier: claim.supplier, supplierName: claim.supplierName, kind: 'repaid', currency: claim.currency, amountPaise,
+      status: 'pending', key, order: claim.order, orderNumber: claim.orderNumber || '',
+      paymentRequest: claim.paymentRequest, paymentRequestNumber: claim.paymentRequestNumber || '',
+      date, reference, method, note: text(input.note, 1000), files: proof,
+      createdBy: actor._id, createdByName: actor.name || '',
+      history: [historyEntry(actor, 'raised', input.note)],
+    });
+  } catch (err) {
+    await Promise.allSettled(proof.map(dropProof));
+    throw err;
+  }
+  // The same submit twice at the same moment: the unique key kept one — drop our copies of the files.
+  if (!done.created) await Promise.allSettled(proof.map(dropProof));
+  else {
+    auditLogger.logAction(req, 'CREATE', 'SupplierLedgerEntry', done.entry._id, {
+      kind: 'repaid', amountPaise, currency: claim.currency, paymentRequest: idOf(claim.paymentRequest), method,
+    });
+  }
+  return shape(done.entry, actor);
+}
+
+/** One proof file of an entry, streamed through us (never a public link). */
+export async function getFile(actor, id, fileId) {
+  if (!maySeeCredit(actor)) throw fail('Not authorized.', 403);
+  const e = await loadEntry(id);
+  const f = (e.files || []).find((x) => idOf(x._id) === String(fileId));
+  if (!f) throw fail('File not found.', 404);
+  const buffer = await readPrivateAsset(f, async (url) => {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`File fetch failed: ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  });
+  return { buffer, contentType: f.contentType, name: f.name || `refund-${e.paymentRequestNumber || idOf(e._id)}` };
+}
+
 // ── Decide ───────────────────────────────────────────────────────────────────
 
 const MOVED = 'This entry has just been decided or changed by someone else. Refresh to see where it is now.';
@@ -524,6 +696,7 @@ export async function approve(actor, id, { note, rev } = {}, req) {
     // at once cannot both fit into the same balance.
     ? await supplierLedgerRepository.inTransaction(async (session) => {
       await supplierLedgerRepository.lockSupplier(e0.supplier, session);
+      if (e0.kind === 'repaid' && e0.paymentRequest) await assertFitsClaim(e0, session);
       const owed = await owedPaise(e0.supplier, e0.currency, session);
       if (e0.amountPaise > owed) {
         throw fail(`${e0.supplierName} now owes us ${moneyOf(owed, e0.currency)} — this ${moneyOf(e0.amountPaise, e0.currency)} cannot be approved. Decline it, and raise the right amount.`, 409);
@@ -534,6 +707,28 @@ export async function approve(actor, id, { note, rev } = {}, req) {
   if (!e) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'APPROVE', 'SupplierLedgerEntry', e._id, { kind: e.kind, amountPaise: e.amountPaise, currency: e.currency });
   return shape(e, actor);
+}
+
+/** A refund tied to a payment: its claim must be approved, and the refund must fit what is left on it. */
+async function assertFitsClaim(e0, session) {
+  const claim = await supplierLedgerRepository.claimFor(e0.paymentRequest, session);
+  if (!claim) throw fail(`${e0.paymentRequestNumber} has no refund claim any more — decline this refund.`, 409);
+  if (claim.status !== 'approved') {
+    throw fail(`Approve the refund claim on ${e0.paymentRequestNumber} (${moneyOf(claim.amountPaise, claim.currency)}) first, then this refund.`, 409);
+  }
+  const room = await roomOnClaim(claim, { except: e0._id, approvedOnly: true, session });
+  if (e0.amountPaise > room) {
+    throw fail(`Only ${moneyOf(Math.max(0, room), claim.currency)} is still to come back on ${e0.paymentRequestNumber} — this ${moneyOf(e0.amountPaise, e0.currency)} cannot be approved. Decline it, and record the right amount.`, 409);
+  }
+}
+
+/** A claim cannot go below the refunds already recorded against its payment. */
+async function assertCoversRefunds(claim, newPaise, session = null) {
+  if (!claim.paymentRequest) return;
+  const refunded = await refundedPaise(claim, { session });
+  if (newPaise < refunded) {
+    throw fail(`${moneyOf(refunded, claim.currency)} of refunds are already recorded on ${claim.paymentRequestNumber} — the claim cannot be less than that.`, 409);
+  }
 }
 
 async function close(actor, e0, status, note, req) {
@@ -626,6 +821,13 @@ async function editPending(actor, e0, input, { reason, formKey, rev }, req) {
     const amountPaise = has(input, 'amount') ? cleanAmountPaise(input.amount) : e0.amountPaise;
     if (has(input, 'date')) c.add('date', 'Date paid back', e0.date, cleanDay(input.date));
     if (has(input, 'reference')) c.add('reference', 'Reference', e0.reference, text(input.reference, 120));
+    if (e0.paymentRequest && currency !== e0.currency) throw fail(`A refund on ${e0.paymentRequestNumber} is in ${e0.currency}, like the payment.`, 400);
+    if (e0.paymentRequest && amountPaise !== e0.amountPaise) {
+      const claim = await supplierLedgerRepository.claimFor(e0.paymentRequest);
+      const room = claim ? await roomOnClaim(claim, { except: e0._id }) : 0;
+      if (amountPaise > room) throw fail(`Only ${moneyOf(Math.max(0, room), e0.currency)} is still to come back on ${e0.paymentRequestNumber}.`, 409);
+    }
+    if (has(input, 'method') && e0.paymentRequest) c.add('method', 'How', e0.method, cleanMethod(input.method), (m) => METHOD_LABELS[m] || m);
     if (currency !== e0.currency || amountPaise !== e0.amountPaise) {
       const owed = await owedPaise(e0.supplier, currency);
       if (amountPaise > owed) {
@@ -645,6 +847,8 @@ async function editPending(actor, e0, input, { reason, formKey, rev }, req) {
     const r = moving ? await claimablePayment(input.paymentRequestId) : await paymentRequestRepository.findById(e0.paymentRequest);
     if (!r) throw fail('The payment this claim is for was not found.', 404);
     if (moving) {
+      // Refunds already recorded follow their payment — the claim cannot leave it.
+      await assertCoversRefunds(e0, 0);
       if (idOf(r.supplier) !== idOf(e0.supplier)) throw fail(`${r.number} was paid to a different supplier — raise a claim on it there instead.`, 409);
       c.add('paymentRequest', 'Payment', e0.paymentRequestNumber, r.number);
       c.set.paymentRequest = r._id;
@@ -657,6 +861,7 @@ async function editPending(actor, e0, input, { reason, formKey, rev }, req) {
     const currency = r.currency || BASE_CURRENCY;
     const amountPaise = has(input, 'amount') ? cleanAmountPaise(input.amount) : Math.min(e0.amountPaise, billPaiseOf(r));
     if (amountPaise > billPaiseOf(r)) throw fail(`The refund cannot be more than what ${r.number} was for (${moneyOf(billPaiseOf(r), currency)}).`, 400);
+    if (amountPaise !== e0.amountPaise) await assertCoversRefunds(e0, amountPaise);
     c.add('currency', 'Currency', e0.currency, currency);
     if (amountPaise !== e0.amountPaise || currency !== e0.currency) {
       c.set.amountPaise = amountPaise;
@@ -715,6 +920,7 @@ async function correctApproved(actor, e0, input, { reason, formKey, rev }, req) 
       if (state.pending) throw fail('A correction of this entry is already waiting for accounts — wait for it, or cancel it first.', 409);
       if (newPaise !== state.effectivePaise) {
         if (billPaise != null && newPaise > billPaise) throw fail(`The refund cannot be more than what ${e0.paymentRequestNumber} was for (${moneyOf(billPaise, e0.currency)}).`, 400);
+        if (e0.kind === 'refund_due' && e0.paymentRequest) await assertCoversRefunds(e0, newPaise, session);
         // + the supplier owes us more after the fix, − less.
         const deltaPaise = (LEDGER_SIGN[e0.kind] || 0) * (newPaise - state.effectivePaise);
         const kind = deltaPaise > 0 ? 'correction_up' : 'correction_down';
@@ -829,6 +1035,6 @@ export async function restoreCredit(request, note = '') {
 }
 
 export default {
-  forSupplier, pending, owing, report, claimRefund, recordRepayment, writeOff, approve, decline, cancel, edit,
+  forSupplier, pending, owing, report, claimRefund, recordRepayment, recordOrderRefund, getFile, writeOff, approve, decline, cancel, edit,
   checkCreditUse, useCredit, restoreCredit, claimsFor, balancesForSuppliers, owedPaise, shape,
 };
