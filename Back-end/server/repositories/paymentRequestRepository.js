@@ -39,6 +39,10 @@ const linkedFields = (purposeChars) => {
 };
 
 const paymentRequestRepository = {
+  /** A paid payment recorded with any of these reference spellings (the slip reader's duplicate check). */
+  findPaidByReference: (spellings, excludeId = null) => PaymentRequest.findOne({
+    'payment.reference': { $in: spellings }, status: 'paid', ...(excludeId && { _id: { $ne: excludeId } }),
+  }).select('number').lean(),
   create: async (doc, session = null) => (await PaymentRequest.create([doc], { session }))[0].toObject(),
   findById: (id) => PaymentRequest.findById(id).lean(),
   /** The request this person already raised with this browser id (payment_request_client_id). */

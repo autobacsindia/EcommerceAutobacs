@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SlipReadSchema } from './shared/slipReadSchema.js';
 
 /**
  * A customer paid a sales order by bank transfer (NEFT / RTGS / IMPS / UPI to the
@@ -58,6 +59,8 @@ const BankTransferSchema = new mongoose.Schema(
     paidOn: { type: Date, required: true },
     note: { type: String },
     files: { type: [FileSchema], default: [] },
+    /** Which of reference / date were read from the slip vs typed (models/shared/slipReadSchema.js). */
+    slipRead: { type: SlipReadSchema, default: null },
     status: { type: String, enum: ['pending', 'confirmed', 'rejected', 'withdrawn'], default: 'pending', required: true },
     /**
      * true while pending or confirmed. The UTR index is unique over active rows

@@ -8,6 +8,8 @@ import { STATUS_TONE, errorMessage, paymentKeys, postForm, rupees, toLocalInput,
 import { DealLine } from './DealSummary';
 import FilePicker from './FilePicker';
 import HoldLine from './HoldLine';
+import { useSlipReader } from './slipReader';
+import SlipReadStatus, { SlipFieldTag } from './SlipReadStatus';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import { getPayGroup, listPayGroups, payQueueKeys, sumRupees } from './suppliers';
 import { formatDateIST } from '@/lib/datetime';
@@ -46,6 +48,14 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
   const ready = rows.filter((r) => r.status !== 'on_hold');
   const heldCount = rows.length - ready.length;
   const allTicked = ready.length > 0 && ready.every((r) => ticked.includes(r.id));
+  // The payment screenshot is read as it is attached; the boxes fill in to be checked.
+  const slip = useSlipReader({
+    files: proof,
+    onRead: (f) => {
+      if (f.reference) setReference((now) => now.trim() || f.reference);
+      if (f.transactionAt && new Date(f.transactionAt).getTime() <= Date.now()) setAt(toLocalInput(f.transactionAt));
+    },
+  });
 
   async function pay(e: React.FormEvent) {
     e.preventDefault();
@@ -58,6 +68,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
     form.append('method', method);
     form.append('reference', reference.trim());
     form.append('transactionAt', fromLocalInput(at));
+    if (slip.token) form.append('slipRead', slip.token);
     for (const f of proof) form.append('proof', f);
     setBusy(true);
     try {
@@ -131,12 +142,13 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                   <select id="pb-method" className={input} value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
                     <option value="bank">Bank transfer</option><option value="upi">UPI</option><option value="razorpay">Razorpay payout</option><option value="other">Other</option>
                   </select></div>
-                <div><label className={label} htmlFor="pb-ref">Reference (UTR / payout ID) — optional</label>
+                <div><label className={label} htmlFor="pb-ref">Reference (UTR / payout ID) — optional<SlipFieldTag source={slip.tag('reference', reference)} /></label>
                   <input id="pb-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} /></div>
-                <div className="sm:col-span-2"><label className={label} htmlFor="pb-at">Transaction date &amp; time (when the money was sent)</label>
+                <div className="sm:col-span-2"><label className={label} htmlFor="pb-at">Transaction date &amp; time (when the money was sent)<SlipFieldTag source={slip.tag('transactionAt', at)} /></label>
                   <input id="pb-at" type="datetime-local" className={input} required max={toLocalInput()} value={at} onChange={(e) => setAt(e.target.value)} /></div>
               </div>
               <FilePicker files={proof} onChange={setProof} max={MAX_ATTACHMENTS} accept={PHOTO_OR_PDF} label="Attach payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+              <SlipReadStatus slip={slip} expectedAmount={chosen.length ? total : undefined} />
               {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
               <button type="submit" disabled={busy || !chosen.length} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />} Record payment of {rupees(total)}

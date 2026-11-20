@@ -8,6 +8,8 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import {
   accountName, actOn, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
+import { useSlipReader } from './slipReader';
+import SlipReadStatus, { SlipFieldTag, SlipSources } from './SlipReadStatus';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
 import EditPaidPayment from './EditPaidPayment';
@@ -177,6 +179,15 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
   //                  account): `sent` is the amount sent in that currency, `account` its name.
   const [pay, setPay] = useState({ method: 'razorpay', reference: '', at: toLocalInput(), rupees: '', from: 'inr' as 'inr' | 'foreign', sent: '', account: '' });
   const [proof, setProof] = useState<File[]>([]);
+  // The payment screenshot is read as it is attached; the boxes fill in to be checked.
+  const slip = useSlipReader({
+    files: proof,
+    excludeId: id,
+    onRead: (f) => {
+      if (f.reference) setPay((p) => ({ ...p, reference: p.reference.trim() || f.reference }));
+      if (f.transactionAt && new Date(f.transactionAt).getTime() <= Date.now()) setPay((p) => ({ ...p, at: toLocalInput(f.transactionAt) }));
+    },
+  });
   const [error, setError] = useState('');
 
   const done = (r: PaymentRequest) => {
@@ -200,6 +211,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
       if (note.trim()) form.append('note', note.trim());
       // The figures this screen shows: the server refuses if the request changed since.
       if (q.data?.request.payVersion) form.append('payVersion', q.data.request.payVersion);
+      if (slip.token) form.append('slipRead', slip.token);
       for (const f of proof) form.append('proof', f);
       return (await postForm<{ request: PaymentRequest }>(`/payment-requests/${id}/pay`, form)).request;
     },
@@ -282,6 +294,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               {r.paidFrom && <Row k="Paid from" v={`${accountName(r.paidFrom)} · ${money(r.paidFrom.amount, r.paidFrom.currency)} sent`} />}
               {r.payment && <Row k="Transaction" v={formatDateTimeIST(r.payment.transactionAt || r.payment.paidAt)} />}
               {r.payment && <Row k="Recorded" v={formatDateTimeIST(r.payment.paidAt)} />}
+              {r.payment?.slipRead && <div className="sm:col-span-2"><SlipSources slipRead={r.payment.slipRead} /></div>}
               {r.decisionNote && ['declined', 'on_hold'].includes(r.status) && <Row k={r.status === 'declined' ? 'Reason' : 'On hold'} v={r.decisionNote} />}
               {r.hold && heldByText(r.hold) && <Row k="Held" v={heldByText(r.hold).replace(/^Held /, '')} />}
             </dl>
@@ -399,13 +412,15 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                         <option value="other">Other</option>
                       </select>
                       <input aria-label="Payment reference" className={input} value={pay.reference} onChange={(e) => setPay({ ...pay, reference: e.target.value })} placeholder="Payout ID / UTR (optional)" />
-                      <label className="text-xs text-gray-600 sm:col-span-2">Transaction date &amp; time (when the money was sent)
+                      <SlipFieldTag source={slip.tag('reference', pay.reference)} />
+                      <label className="text-xs text-gray-600 sm:col-span-2">Transaction date &amp; time (when the money was sent)<SlipFieldTag source={slip.tag('transactionAt', pay.at)} />
                         <input type="datetime-local" aria-label="Transaction date and time" className={`${input} mt-1`} max={toLocalInput()} required value={pay.at} onChange={(e) => setPay({ ...pay, at: e.target.value })} />
                       </label>
                     </div>
                     <div className="text-sm">
                       <FilePicker files={proof} onChange={setProof} max={MAX_PROOFS} accept={PHOTO_OR_PDF}
                         label="Attach payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+                      <SlipReadStatus slip={slip} expectedAmount={billAmount(r) ? undefined : r.amount} />
                     </div>
                     <textarea aria-label="Note" className={input} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
                     <div className="flex gap-2">

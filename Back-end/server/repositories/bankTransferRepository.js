@@ -10,7 +10,8 @@ const bankTransferRepository = {
   create: async (doc) => (await BankTransfer.create(doc)).toObject(),
   findById: (id, session = null) => BankTransfer.findById(id).session(session).lean(),
   /** A pending or confirmed transfer already carrying this UTR, if any. */
-  findActiveByReference: (referenceKey) => BankTransfer.findOne({ referenceKey, active: true }).select('_id orderNumber status').lean(),
+  findActiveByReference: (referenceKey, excludeId = null) => BankTransfer.findOne({ referenceKey, active: true, ...(excludeId && { _id: { $ne: excludeId } }) })
+    .select('_id orderNumber status').lean(),
   countPending: () => BankTransfer.countDocuments({ status: 'pending' }),
   /** Correct a pending transfer, only if nobody changed it since it was read (compare-and-set). */
   updatePendingIf: (id, updatedAt, set, entry) => BankTransfer.findOneAndUpdate(

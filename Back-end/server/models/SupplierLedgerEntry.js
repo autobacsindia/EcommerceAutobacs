@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SlipReadSchema } from './shared/slipReadSchema.js';
 
 /**
  * Supplier credit — one row per thing that changed what a supplier owes us
@@ -111,6 +112,8 @@ const SupplierLedgerEntrySchema = new mongoose.Schema(
     // its proof. `paymentRequest` then names the paid supplier payment it refunds.
     method: { type: String, enum: [...REFUND_METHODS, ''], default: '' },
     files: { type: [FileSchema], default: [] },
+    // Which of reference / date / amount were read from the slip vs typed (shared/slipReadSchema.js).
+    slipRead: { type: SlipReadSchema, default: null },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     createdByName: { type: String, default: '' },

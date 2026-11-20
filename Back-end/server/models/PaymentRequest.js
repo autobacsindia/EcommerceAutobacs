@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SlipReadSchema } from './shared/slipReadSchema.js';
 
 /**
  * A request for the company to pay someone — a supplier for an order's item,
@@ -183,6 +184,8 @@ const PaymentRequestSchema = new mongoose.Schema(
       paidByName: { type: String, default: '' },
       // Set when several requests to one payee were paid in one transfer.
       batch: { type: String, default: '' },
+      // Which of reference / transaction time were read from the slip vs typed (shared/slipReadSchema.js).
+      slipRead: { type: SlipReadSchema, default: null },
       // Paid from a foreign-currency account (e.g. a Thai bank account): no rupees
       // were debited, so `amount` stays 0 and the bill's own currency is what moved.
       // `amount` here is what was sent, in `currency` (always the bill's currency).

@@ -3,6 +3,7 @@
  * team expenses, approved by admin and paid by accounts.
  */
 import apiClient from '@/lib/api-client';
+import type { SlipRead } from './slipReader';
 import { tokenManager } from '@/lib/http/tokenManager';
 
 export type PaymentStatus = 'submitted' | 'approved' | 'on_hold' | 'paid' | 'declined' | 'cancelled';
@@ -55,7 +56,11 @@ export type PaymentRequest = {
   bankNotice?: { at: string; byName: string } | null;
   files: { id: string; kind: 'bill' | 'qr' | 'proof'; name: string; contentType: string; bytes: number }[];
   /** paidAt = when it was recorded; transactionAt = when the money moved (older records: absent). */
-  payment: { method: string; reference: string; paidAt: string; transactionAt?: string | null; paidByName: string } | null;
+  payment: {
+    method: string; reference: string; paidAt: string; transactionAt?: string | null; paidByName: string;
+    /** Which fields were read from the slip vs typed (server-decided). */
+    slipRead?: SlipRead;
+  } | null;
   decisionNote: string;
   hold?: PaymentHold | null;
   history: { at: string; byName: string; role: string; action: string; note: string }[];

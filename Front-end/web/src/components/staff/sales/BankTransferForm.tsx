@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Landmark, Loader2, Paperclip } from 'lucide-react';
 import FilePicker from '@/components/payments/FilePicker';
 import { postForm } from '@/components/payments/api';
+import { useSlipReader } from '@/components/payments/slipReader';
+import SlipReadStatus, { SlipFieldTag } from '@/components/payments/SlipReadStatus';
 import { acceptsFile, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, mb, PHOTO_OR_PDF } from '@/lib/attachments';
 import { errorMessage, rupees, type SalesOrder } from './types';
 
@@ -57,6 +59,15 @@ export default function BankTransferForm({ order, onDone, open, onOpenChange, sh
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The receipt is read as it is attached: boxes fill in for the salesman to check (never saved by itself).
+  const slip = useSlipReader({
+    files,
+    expectedAmount: order.totalAmount,
+    onRead: (f) => {
+      if (f.reference) setReference((now) => now.trim() || f.reference);
+      if (f.date && f.date <= today()) setPaidOn(f.date);
+    },
+  });
   // Carried-over receipt: attach it when it arrives, unless it breaks this form's rules.
   useEffect(() => {
     if (!initialFiles?.length) return;
@@ -88,6 +99,7 @@ export default function BankTransferForm({ order, onDone, open, onOpenChange, sh
     form.append('reference', reference.trim());
     form.append('paidOn', paidOn);
     if (note.trim()) form.append('note', note.trim());
+    if (slip.token) form.append('slipRead', slip.token);
     for (const f of files) form.append('proof', f);
     setBusy(true);
     try {
@@ -114,12 +126,12 @@ export default function BankTransferForm({ order, onDone, open, onOpenChange, sh
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block font-medium text-gray-800">UTR / bank or UPI reference</span>
+          <span className="mb-1 block font-medium text-gray-800">UTR / bank or UPI reference<SlipFieldTag source={slip.tag('reference', reference)} /></span>
           <input ref={utr} value={reference} onChange={(e) => setReference(e.target.value)} required maxLength={40}
             placeholder="From the customer's receipt" autoComplete="off" className={input} />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block font-medium text-gray-800">Date paid</span>
+          <span className="mb-1 block font-medium text-gray-800">Date paid<SlipFieldTag source={slip.tag('date', paidOn)} /></span>
           <input type="date" value={paidOn} max={today()} onChange={(e) => setPaidOn(e.target.value)} required className={input} />
         </label>
       </div>
@@ -134,6 +146,7 @@ export default function BankTransferForm({ order, onDone, open, onOpenChange, sh
         <p className="mb-1 font-medium text-gray-800">Payment receipt — screenshot or PDF</p>
         <FilePicker files={files} onChange={setFiles} max={MAX_TRANSFER_FILES} accept={PHOTO_OR_PDF}
           label="Attach receipt (PDF or photo)" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+        <SlipReadStatus slip={slip} />
       </div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

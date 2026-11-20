@@ -11,6 +11,8 @@ import {
   type CreditBalance, type CreditEditInput, type CreditEntry, type RefundMethod,
 } from './credit';
 import type { SupplierRefundClaim } from './api';
+import { useSlipReader } from './slipReader';
+import SlipReadStatus, { SlipFieldTag, SlipSources } from './SlipReadStatus';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -157,6 +159,7 @@ function RefundRow({ r }: { r: CreditEntry }) {
         <a key={f.id} href={creditFileHref(r.id, f.id)} target="_blank" rel="noopener noreferrer" className="ml-2 underline">Proof</a>
       ))}
       {r.status === 'declined' && r.decisionNote && <span className="block text-red-700">Why: {r.decisionNote}</span>}
+      {r.slipRead && <span className="mt-1 block"><SlipSources slipRead={r.slipRead} /></span>}
     </li>
   );
 }
@@ -173,6 +176,15 @@ function RecordRefundForm({ requestId, currency, left, onDone }: { requestId: st
   const [proof, setProof] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The proof is read as it is chosen; the boxes fill in for procurement to check.
+  const slip = useSlipReader({
+    files: proof,
+    onRead: (f) => {
+      if (f.reference) setReference((now) => now.trim() || f.reference);
+      if (f.date && f.date <= istToday()) setDate(f.date);
+      if (f.amount != null && currency === 'INR' && f.amount <= left) setAmount(String(f.amount));
+    },
+  });
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     if (busy) return;
@@ -180,7 +192,7 @@ function RecordRefundForm({ requestId, currency, left, onDone }: { requestId: st
     setError('');
     try {
       // The same formKey on a retry: the server saves it once.
-      await recordOrderRefund({ paymentRequestId: requestId, amount: Number(amount), date, method, reference, note, formKey }, proof);
+      await recordOrderRefund({ paymentRequestId: requestId, amount: Number(amount), date, method, reference, note, formKey, slipRead: slip.token }, proof);
       await Promise.all([qc.invalidateQueries({ queryKey: paymentKeys.all }), qc.invalidateQueries({ queryKey: creditKeys.all })]);
       onDone();
     } catch (err) {
@@ -194,10 +206,10 @@ function RecordRefundForm({ requestId, currency, left, onDone }: { requestId: st
     <form onSubmit={submit} aria-label="Supplier refunded" className="space-y-2 rounded-lg border border-emerald-200 bg-white p-3 text-sm text-gray-900">
       <p>What did the supplier give back? At most {money(left, currency)} is still to come back. A part is fine.</p>
       <div className="grid gap-2 sm:grid-cols-2">
-        <label className="block"><span className={label}>Amount ({currency})</span>
+        <label className="block"><span className={label}>Amount ({currency})<SlipFieldTag source={slip.tag('amount', amount)} /></span>
           <input className={input} required type="number" min="0.01" max={left} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
-        <label className="block"><span className={label}>Date it came back</span>
+        <label className="block"><span className={label}>Date it came back<SlipFieldTag source={slip.tag('date', date)} /></span>
           <input className={input} required type="date" max={istToday()} value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
         <label className="block"><span className={label}>How</span>
@@ -205,13 +217,14 @@ function RecordRefundForm({ requestId, currency, left, onDone }: { requestId: st
             {REFUND_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </label>
-        <label className="block"><span className={label}>{refLabel}</span>
+        <label className="block"><span className={label}>{refLabel}<SlipFieldTag source={slip.tag('reference', reference)} /></span>
           <input className={input} required={method !== 'cash'} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} />
         </label>
       </div>
       <label className="block"><span className={label}>Proof (optional)</span>
         <input aria-label="Proof" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setProof(Array.from(e.target.files || []))} className="text-sm" />
       </label>
+      <SlipReadStatus slip={slip} />
       <input aria-label="Note" className={input} maxLength={1000} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
       {error && <p role="alert" className="text-red-700">{error}</p>}
       <div className="flex gap-2">

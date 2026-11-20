@@ -29,7 +29,29 @@ const storageMock = {
 };
 jest.unstable_mockModule('../services/storage/privateUploads.js', () => ({ ...storageMock, default: storageMock }));
 
+// The Claude API double for the slip reader: answers like a clear GPay screenshot.
+const slipApi = { calls: 0 };
+class FakeAnthropic {
+  constructor() {
+    const create = async () => {
+      slipApi.calls += 1;
+      return {
+        model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: {},
+        content: [{ type: 'text', text: JSON.stringify({
+          readable: true, reference: 'UTR123456789012', referenceLabel: 'UTR', otherReferences: [], amount: 52000, currency: 'INR',
+          date: new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10), time: '', paymentStatus: 'success',
+          payerName: 'Ravi Kumar', payeeName: 'Autobacs India', payeeAccount: '', appOrBank: 'Google Pay',
+        }) }],
+      };
+    };
+    this.messages = { create };
+    this.beta = { messages: { create } };
+  }
+}
+jest.unstable_mockModule('@anthropic-ai/sdk', () => ({ default: FakeAnthropic }));
+
 const request = (await import('supertest')).default;
+const { default: sharp } = await import('sharp');
 const { app, cronService, adaptiveThrottlingService } = await import('../app.js');
 const dbHandler = await import('./db-handler.js');
 const { default: User } = await import('../models/User.js');
@@ -94,6 +116,46 @@ describe('Bank transfer routes', () => {
   });
 
   const fields = { amount: 52000, reference: 'UTR123456789012', paidOn: new Date().toISOString().slice(0, 10) };
+
+  describe('slip reader', () => {
+    let slip;
+    const key = process.env.ANTHROPIC_API_KEY;
+    beforeAll(async () => { slip = await sharp({ create: { width: 30, height: 60, channels: 3, background: '#fff' } }).jpeg().toBuffer(); });
+    beforeEach(() => { process.env.ANTHROPIC_API_KEY = 'sk-test-not-real'; slipApi.calls = 0; });
+    afterAll(() => { if (key === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = key; });
+    const file = () => ({ field: 'slip', buffer: slip, name: 'gpay.jpg', type: 'image/jpeg' });
+
+    it('reads a slip, then the save records the UTR and date as read from it — still pending for accounts', async () => {
+      expect((await lead.session.get('/slip-reader/status')).body).toMatchObject({ enabled: true });
+      const read = await lead.session.form('/slip-reader/read', { expectedAmount: 52000 }, [file()]);
+      expect(read.status).toBe(200);
+      expect(read.headers['cache-control']).toMatch(/no-store/);
+      expect(read.body).toMatchObject({ status: 'read', fields: { reference: 'UTR123456789012', amount: 52000 }, warnings: [] });
+
+      const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+      const saved = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`,
+        { ...fields, paidOn: today, slipRead: read.body.token }, [{ ...file(), field: 'proof' }]);
+      expect(saved.status).toBe(201);
+      expect(saved.body.transfer).toMatchObject({ status: 'pending', slipRead: { fields: { reference: 'slip', date: 'slip' } } });
+    });
+
+    it('is off without the key: nothing is sent', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      expect((await lead.session.get('/slip-reader/status')).body).toMatchObject({ enabled: false });
+      expect((await lead.session.form('/slip-reader/read', {}, [file()])).body).toMatchObject({ status: 'off' });
+      expect(slipApi.calls).toBe(0);
+    });
+
+    it('staff only: signed out is refused, a customer is refused, a non-slip file is refused', async () => {
+      const out = await request(app).post(`${BASE}/slip-reader/read`);
+      expect([401, 403]).toContain(out.status);
+      const customer = await makeUser('Cust', 'customer');
+      expect((await customer.session.form('/slip-reader/read', {}, [file()])).status).toBe(403);
+      const exe = await lead.session.form('/slip-reader/read', {}, [{ field: 'slip', buffer: Buffer.from('MZ....'), name: 'x.exe', type: 'application/octet-stream' }]);
+      expect(exe.status).toBe(400);
+      expect(slipApi.calls).toBe(0);
+    });
+  });
 
   it('refuses a request whose files add up to more than 40 MB before reading it', async () => {
     /*

@@ -451,6 +451,8 @@ export const uploadPayDetailsQr = staffUpload(['qr'], (file) => `"${file.origina
 export const uploadSubscriptionInvoices = staffUpload().array('invoice', MAX_ATTACHMENTS);
 /** Recording a payment or a bank transfer: up to MAX_ATTACHMENTS screenshots (field `proof`). */
 export const uploadPaymentProof = staffUpload().array('proof', MAX_ATTACHMENTS);
+/** A payment slip to READ (services/slipReader): one photo or PDF (field `slip`). Never stored. */
+export const uploadSlipToRead = staffUpload().single('slip');
 /** Parcel proof: up to MAX_ATTACHMENTS photos or PDFs (field `photo`, repeated). */
 export const uploadProofPhotos = staffUpload().array('photo', MAX_ATTACHMENTS);
 
