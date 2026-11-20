@@ -91,6 +91,7 @@ import adminOverviewRoutes from './adminOverview.js';
 import adminSlipTemplateRoutes from './adminSlipTemplates.js';
 import adminLookupRoutes from './adminLookup.js';
 import paymentRequestRoutes from './paymentRequests.js';
+import slipReaderRoutes from './slipReader.js';
 import subscriptionDueRoutes from './subscriptionDues.js';
 import incentiveRoutes from './incentives.js';
 import googleReviewRoutes from './googleReviews.js';
@@ -196,6 +197,8 @@ apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
 // Staff panel (/team): invite redemption is public; everything else is active staff
 // or admin, scoped per team inside staffService. Limiters are applied per route.
 apiRouter.use('/staff', staffRoutes);
+// Payment-slip reader: suggests UTR / date / amount from an attached slip (staff + admin).
+apiRouter.use('/slip-reader', slipReaderRoutes);
 // Team chat: admins + active staff only (never customers). Rate limit is applied
 // inside the router so the long-lived /chat/stream SSE connection is not counted.
 apiRouter.use('/chat', chatRoutes);

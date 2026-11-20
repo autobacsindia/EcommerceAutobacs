@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
+import { slipProvenance, markEdited } from './slipReader/slipReaderService.js';
 import auditLogger from './auditLogger.js';
 import supplierLedgerRepository, { LEDGER_SIGN, REFUND_METHODS } from '../repositories/supplierLedgerRepository.js';
 import paymentRequestRepository from '../repositories/paymentRequestRepository.js';
@@ -233,6 +234,7 @@ export function shape(e, viewer, fixes = null) {
     method: e.method || '',
     methodLabel: METHOD_LABELS[e.method] || '',
     files: (e.files || []).map((f) => ({ id: idOf(f._id), name: f.name || '', contentType: f.contentType, bytes: f.bytes })),
+    slipRead: e.slipRead || null,
     createdByName: e.createdByName || '',
     createdAt: e.createdAt,
     decidedByName: e.decidedByName || '',
@@ -630,6 +632,7 @@ export async function recordOrderRefund(actor, input = {}, files = [], req) {
       status: 'pending', key, order: claim.order, orderNumber: claim.orderNumber || '',
       paymentRequest: claim.paymentRequest, paymentRequestNumber: claim.paymentRequestNumber || '',
       date, reference, method, note: text(input.note, 1000), files: proof,
+      slipRead: slipProvenance(actor, input.slipRead, { files, reference, date, amount: amountPaise / 100 }),
       createdBy: actor._id, createdByName: actor.name || '',
       history: [historyEntry(actor, 'raised', input.note)],
     });
@@ -781,6 +784,13 @@ function changeList() {
   };
 }
 
+/** A value saved as read from the slip and changed in this edit is now a person's value. */
+function slipEdits(e0, set) {
+  if ('reference' in set) markEdited(e0.slipRead, set, 'reference');
+  if ('date' in set) markEdited(e0.slipRead, set, 'date');
+  if ('amountPaise' in set) markEdited(e0.slipRead, set, 'amount');
+}
+
 const editRecord = (actor, reason, changes, formKey) => ({
   at: new Date(), by: actor._id, byName: actor.name || '', reason, changes, formKey,
 });
@@ -870,6 +880,7 @@ async function editPending(actor, e0, input, { reason, formKey, rev }, req) {
   }
   if (has(input, 'note')) c.add('note', 'Note', e0.note, text(input.note, 1000));
   if (!c.changes.length) throw fail('Nothing was changed.', 400);
+  slipEdits(e0, c.set);
   const update = {
     $set: c.set,
     $inc: { rev: 1 },
@@ -942,6 +953,7 @@ async function correctApproved(actor, e0, input, { reason, formKey, rev }, req) 
       }
     }
     if (!changes.length) throw fail('Nothing was changed.', 400);
+    slipEdits(e0, c.set);
     const entry = await supplierLedgerRepository.updateWhere(
       { _id: e0._id, status: 'approved', ...revFilter(rev) },
       {

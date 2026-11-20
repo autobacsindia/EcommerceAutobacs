@@ -748,6 +748,11 @@ export async function ensureCriticalIndexes() {
       { reference: 1, createdAt: -1 },
       { partialFilterExpression: { reference: { $gt: '' } }, name: 'payment_request_reference', background: true }
     );
+    // The slip reader's duplicate-UTR check (services/slipReader) — only rows with a reference.
+    await db.collection('paymentrequests').createIndex(
+      { 'payment.reference': 1 },
+      { partialFilterExpression: { 'payment.reference': { $gt: '' } }, name: 'payment_request_paid_reference', background: true }
+    );
     await db.collection('paymentrequests').createIndex(
       { requestedBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'payment_request_client_id', background: true }
@@ -763,6 +768,10 @@ export async function ensureCriticalIndexes() {
     await db.collection('supplier_ledger').createIndex(
       { paymentRequest: 1, kind: 1 },
       { partialFilterExpression: { paymentRequest: { $type: 'objectId' } }, name: 'supplier_ledger_request', background: true }
+    );
+    await db.collection('supplier_ledger').createIndex(
+      { reference: 1 },
+      { partialFilterExpression: { reference: { $gt: '' } }, name: 'supplier_ledger_reference', background: true }
     );
     console.log('✓ SupplierLedger indexes confirmed');
 

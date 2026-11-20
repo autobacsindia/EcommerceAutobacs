@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import type { SlipRead } from './slipReader';
+import { SlipSources } from './SlipReadStatus';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
@@ -32,6 +34,8 @@ type Details = {
   amount: number;
   reference: string;
   paidOn: string;
+  /** Which of UTR / date were read from the slip vs typed (server-decided). */
+  slipRead?: SlipRead;
   note: string;
   status: BankTransferStatus;
   statusLabel: string;
@@ -236,6 +240,7 @@ function Body({ d }: { d: Details }) {
           <Row label="Recorded">{[d.recordedBy, formatDateTimeIST(d.recordedAt)].filter(Boolean).join(', ')}</Row>
           {d.reviewedAt && <Row label={d.status === 'rejected' ? 'Rejected' : 'Confirmed'}>{[d.reviewedBy, formatDateTimeIST(d.reviewedAt)].filter(Boolean).join(', ')}</Row>}
         </dl>
+        {d.slipRead && <div className="mt-2"><SlipSources slipRead={d.slipRead} /></div>}
         {d.note && <p className="mt-2 rounded-lg bg-gray-50 p-2 text-sm text-gray-700">GTM: {d.note}</p>}
         {d.reviewNote && <p className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">Reason: {d.reviewNote}</p>}
         {d.files.length > 0 && (

@@ -22,6 +22,8 @@ import type { SupplierRefundClaim } from './api';
 
 const get = jest.fn();
 const post = jest.fn();
+// Slip reading has its own tests (slipReader.test.tsx); here it is off, so the forms behave as before.
+jest.mock('./slipReaderStatus', () => ({ slipReaderEnabled: () => Promise.resolve(false), resetSlipReaderForTests: () => {} }));
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), patch: jest.fn() },

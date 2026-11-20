@@ -91,6 +91,7 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `NODE_ENV` | `development` | `production` | gates validateEnv, cookie flags, logging |
 | `ELASTICSEARCH_NODE` / `_USERNAME` / `_PASSWORD` | dev index (or disabled) | prod ES | dev reindex must not touch prod index |
 | `CLOUDINARY_*` | dev cloud / `dev/` folder | prod | don't pollute prod media |
+| `ANTHROPIC_API_KEY` | empty (slip reader off) or a dev key with a low spend limit | prod key (Railway only) | the payment-slip reader is off until set; every read is a paid API call. `SLIP_READER_MODEL` / `SLIP_READER_ENABLED` / `SLIP_READER_TIMEOUT_MS` are optional |
 | `ZEPTOMAIL_SEND_MAIL_TOKEN` | token (+ `EMAIL_REDIRECT_TO`), or disabled | prod token | dev sends must not hit sender reputation or real customers |
 | `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` / `EMAIL_WELCOME_FROM_*` | `noreply@` / `info@autobacsindia.com` | same | must be on the domain verified in ZeptoMail |
 | `CONSULTATION_NOTIFICATION_EMAILS` | unset (→ `sales@autobacsindia.com`) | unset, or the sales inbox(es) | where "new consultation request" alerts go; separate from `ADMIN_NOTIFICATION_EMAILS` (orders/payments/reviews), so changing one never moves the other |

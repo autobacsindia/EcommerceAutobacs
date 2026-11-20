@@ -53,6 +53,7 @@ import {
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { publicEmail } from '../utils/customerContact.js';
 import { quotationDetailsForOrder } from './salesQuotationService.js';
+import { slipProvenance, markEdited } from './slipReader/slipReaderService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -163,6 +164,7 @@ export function shape(t, viewer) {
     reviewedAt: t.reviewedAt || null,
     reviewNote: t.reviewNote || '',
     files: (t.files || []).map((f) => ({ id: idOf(f._id), name: f.name || '', contentType: f.contentType, bytes: f.bytes })),
+    slipRead: t.slipRead || null,
     can: { confirm: open, reject: open, edit: mayEdit(viewer, t), withdraw: mayEdit(viewer, t) },
     editableUntil: null, // no time limit any more
   };
@@ -271,6 +273,7 @@ export async function recordBankTransfer(actor, orderId, input = {}, files = [],
       referenceKey,
       paidOn,
       note,
+      slipRead: slipProvenance(actor, input.slipRead, { files, reference, date: paidOn }),
       files: stored,
       status: 'pending',
       active: true,
@@ -355,6 +358,7 @@ export async function recordExtraChargeTransfer(actor, extraId, input = {}, file
       referenceKey,
       paidOn,
       note,
+      slipRead: slipProvenance(actor, input.slipRead, { files, reference, date: paidOn }),
       files: stored,
       status: 'pending',
       active: true,
@@ -399,10 +403,11 @@ export async function editBankTransfer(actor, id, input = {}, req) {
     if (dup && idOf(dup._id) !== idOf(t0._id)) throw fail(`This UTR is already recorded on order ${dup.orderNumber}.`, 409);
     Object.assign(set, { reference, referenceKey });
     changes.push(`UTR ${t0.reference} → ${reference}`);
+    markEdited(t0.slipRead, set, 'reference');
   }
   if (input.paidOn != null && input.paidOn !== '') {
     const paidOn = cleanPaidOn(input.paidOn);
-    if (new Date(paidOn).getTime() !== new Date(t0.paidOn).getTime()) { set.paidOn = paidOn; changes.push('date paid'); }
+    if (new Date(paidOn).getTime() !== new Date(t0.paidOn).getTime()) { set.paidOn = paidOn; changes.push('date paid'); markEdited(t0.slipRead, set, 'date'); }
   }
   if (input.note != null && String(input.note).trim().slice(0, 500) !== (t0.note || '')) {
     set.note = String(input.note).trim().slice(0, 500);

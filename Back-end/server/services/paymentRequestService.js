@@ -28,6 +28,7 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
+import { slipProvenance, markEdited } from './slipReader/slipReaderService.js';
 import auditLogger from './auditLogger.js';
 import paymentRequestRepository from '../repositories/paymentRequestRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
@@ -1021,7 +1022,7 @@ export async function release(actor, id, { note } = {}, req) {
  * worked out from it. A rupee request's amount is what accounts approved: a
  * different figure is refused, never applied.
  */
-export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees, paidFrom, sentAmount, sentCurrency, accountLabel, payVersion } = {}, proofFiles = [], req) {
+export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees, paidFrom, sentAmount, sentCurrency, accountLabel, payVersion, slipRead } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
@@ -1071,6 +1072,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
       payment: {
         method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '',
         ...(fromAccount ? { fromAccount } : {}),
+        slipRead: slipProvenance(actor, slipRead, { files: uploads, reference: ref, transactionAt: txAt }),
       },
     }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), debit, note].filter(Boolean).join(' — ')),
     proof.length ? { files: { $each: proof } } : {}, undefined);
@@ -1237,7 +1239,7 @@ export async function update(actor, id, input = {}, req) {
  * (payBatch) is corrected together with them: it was one transfer. One
  * transaction; every change is in each request's history.
  */
-export async function editPayment(actor, id, { method, reference, note, removeFileIds, transactionAt, rupees, accountLabel } = {}, proofFiles = [], req) {
+export async function editPayment(actor, id, { method, reference, note, removeFileIds, transactionAt, rupees, accountLabel, slipRead } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin can edit a payment record.', 403);
   const r0 = await loadVisible(actor, id);
   if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
@@ -1272,6 +1274,15 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   if (txAt && (!wasAt || new Date(txAt).getTime() !== new Date(wasAt).getTime())) {
     changes.push(`transaction time ${wasAt ? istTime(wasAt) : '—'} → ${istTime(txAt)}`);
   }
+  // A new slip read on this edit replaces the record of which fields came from a slip;
+  // otherwise a field saved as read from the slip and changed now is a person's value.
+  const slipSet = {};
+  const reread = slipProvenance(actor, slipRead, { files: uploads, reference: ref, transactionAt: txAt });
+  if (reread) slipSet['payment.slipRead'] = reread;
+  else {
+    if (ref !== (r0.payment?.reference || '')) markEdited(r0.payment?.slipRead, slipSet, 'reference', 'payment.slipRead');
+    if (txAt && wasAt && new Date(txAt).getTime() !== new Date(wasAt).getTime()) markEdited(r0.payment?.slipRead, slipSet, 'date', 'payment.slipRead');
+  }
   const label = abroad && accountLabel != null ? String(accountLabel).replace(/\s+/g, ' ').trim().slice(0, 80) : null;
   if (label != null && label !== (abroad.label || '')) changes.push(`paid from ${abroad.label || '—'} → ${label || '—'}`);
   if (removing.length) changes.push(`${removing.length} screenshot${removing.length === 1 ? '' : 's'} removed`);
@@ -1294,7 +1305,7 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
       let mine = null;
       for (const tid of targets) {
         if (publicIds.length) await paymentRequestRepository.pullProofsInSession(tid, publicIds, session);
-        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref, ...(txAt ? { 'payment.transactionAt': txAt } : {}), ...(label != null ? { 'payment.fromAccount.label': label } : {}), ...(priced || {}) }, log, stored, session);
+        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref, ...(txAt ? { 'payment.transactionAt': txAt } : {}), ...slipSet, ...(label != null ? { 'payment.fromAccount.label': label } : {}), ...(priced || {}) }, log, stored, session);
         if (!next) throw fail(MOVED, 409);
         if (idOf(tid) === idOf(r0._id)) mine = next;
       }
@@ -1735,7 +1746,7 @@ export async function supplierPayGroup(actor, groupId) {
  * add up to it (one was held or paid meanwhile), nothing changes.
  * Unticked requests are untouched and stay in the queue.
  */
-export async function payBatch(actor, { ids, expectedTotal, method, reference, note, transactionAt } = {}, proofFiles = [], req) {
+export async function payBatch(actor, { ids, expectedTotal, method, reference, note, transactionAt, slipRead } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   let list = ids;
   if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = [list]; } }
@@ -1779,7 +1790,10 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor, { existing: fullest }) : [];
   const batch = `PB-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
   const now = new Date();
-  const payment = { method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '', batch };
+  const payment = {
+    method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '', batch,
+    slipRead: slipProvenance(actor, slipRead, { files: uploads, reference: ref, transactionAt: txAt }),
+  };
   const together = `one transfer for ${rows.length} payment${rows.length === 1 ? '' : 's'}, ${inr(total)}`;
   const log = entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), together, note].filter(Boolean).join(' — '));
 

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Loader2, Paperclip } from 'lucide-react';
 import { accountName, billAmount, errorMessage, fileHref, postForm, rupees, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
+import { useSlipReader } from './slipReader';
+import SlipReadStatus, { SlipFieldTag } from './SlipReadStatus';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
@@ -31,6 +33,16 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
   const [add, setAdd] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // A newly added screenshot is read: correcting the record is why it was added, so its
+  // values replace the old ones in the boxes — still only saved when the admin presses Save.
+  const slip = useSlipReader({
+    files: add,
+    excludeId: r.id,
+    onRead: (f) => {
+      if (f.reference) setReference(f.reference);
+      if (f.transactionAt && new Date(f.transactionAt).getTime() <= Date.now()) setAt(toLocalInput(f.transactionAt));
+    },
+  });
   const proofs = r.files.filter((f) => f.kind === 'proof');
   // The server's per-save and per-record limits, counting the ones ticked for removal as gone.
   const room = Math.max(0, Math.min(MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD - (r.files.length - remove.length)));
@@ -46,6 +58,7 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
     if (foreign && debit.trim() && Number(debit) !== r.amount) form.append('rupees', debit.trim());
     if (abroad && account.trim() !== abroad.label) form.append('accountLabel', account.trim());
     if (remove.length) form.append('removeFileIds', JSON.stringify(remove));
+    if (slip.token) form.append('slipRead', slip.token);
     for (const f of add) form.append('proof', f);
     setBusy(true);
     try {
@@ -70,7 +83,7 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
           <select id="ep-method" className={input} value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="bank">Bank transfer</option><option value="upi">UPI</option><option value="razorpay">Razorpay</option><option value="other">Other</option>
           </select></div>
-        <div><label className={label} htmlFor="ep-ref">Reference / UTR</label>
+        <div><label className={label} htmlFor="ep-ref">Reference / UTR<SlipFieldTag source={slip.tag('reference', reference)} /></label>
           <input id="ep-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" /></div>
         {foreign && (
           <div className="sm:col-span-2"><label className={label} htmlFor="ep-rupees">Rupees debited (₹) — was {rupees(r.amount)}</label>
@@ -80,7 +93,7 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
           <div className="sm:col-span-2"><label className={label} htmlFor="ep-account">Paid from — {billAmount(r)} sent, no rupees debited</label>
             <input id="ep-account" className={input} maxLength={80} value={account} onChange={(e) => setAccount(e.target.value)} placeholder={accountName(abroad)} /></div>
         )}
-        <div className="sm:col-span-2"><label className={label} htmlFor="ep-at">Transaction date &amp; time</label>
+        <div className="sm:col-span-2"><label className={label} htmlFor="ep-at">Transaction date &amp; time<SlipFieldTag source={slip.tag('transactionAt', at)} /></label>
           <input id="ep-at" type="datetime-local" className={input} max={toLocalInput()} value={at} onChange={(e) => setAt(e.target.value)} /></div>
       </div>
       {proofs.length > 0 && (
@@ -100,8 +113,11 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
       )}
       <div className="text-sm">
         {room > 0 || add.length ? (
-          <FilePicker files={add} onChange={setAdd} max={Math.max(room, add.length)} accept={PHOTO_OR_PDF}
-            label="Add payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+          <>
+            <FilePicker files={add} onChange={setAdd} max={Math.max(room, add.length)} accept={PHOTO_OR_PDF}
+              label="Add payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+            <SlipReadStatus slip={slip} expectedAmount={billAmount(r) ? undefined : r.amount} />
+          </>
         ) : (
           <p className="text-xs text-gray-600">This payment already has {MAX_ATTACHMENTS_PER_RECORD} files. Tick one to remove before adding another.</p>
         )}

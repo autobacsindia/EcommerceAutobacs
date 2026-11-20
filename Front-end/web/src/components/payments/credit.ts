@@ -1,4 +1,5 @@
 import apiClient from '@/lib/api-client';
+import type { SlipRead } from './slipReader';
 import { postForm } from './api';
 
 /**
@@ -30,6 +31,8 @@ export type CreditBalance = {
 
 export type CreditEntry = {
   id: string;
+  /** Which of reference / date / amount were read from the slip vs typed (server-decided). */
+  slipRead?: SlipRead;
   kind: CreditKind;
   kindLabel: string;
   status: CreditStatus;
@@ -116,9 +119,14 @@ export const claimRefund = (body: { paymentRequestId: string; amount?: number; n
 /** "Supplier refunded" on the order: money back on one paid payment, with proof. Waits for accounts. */
 export const recordOrderRefund = (fields: {
   paymentRequestId: string; amount: number; date: string; method: RefundMethod; reference: string; note: string; formKey: string;
+  /** The slip reader's token ('' when nothing was read). */
+  slipRead?: string;
 }, proof: File[] = []) => {
   const form = new FormData();
-  for (const [k, v] of Object.entries(fields)) form.append(k, String(v));
+  for (const [k, v] of Object.entries(fields)) {
+    if (k === 'slipRead' && !v) continue;
+    form.append(k, String(v));
+  }
   for (const f of proof) form.append('proof', f);
   return postForm<{ entry: CreditEntry }>('/suppliers/credit/order-refunds', form);
 };

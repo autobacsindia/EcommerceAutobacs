@@ -39,6 +39,10 @@ const BALANCE_STAGES = [
 ];
 
 const supplierLedgerRepository = {
+  /** A waiting or approved entry with any of these reference spellings (the slip reader's duplicate check). */
+  findLiveByReference: (spellings, excludeId = null) => SupplierLedgerEntry.findOne({
+    reference: { $in: spellings }, status: { $in: ['pending', 'approved'] }, ...(excludeId && { _id: { $ne: excludeId } }),
+  }).select('paymentRequestNumber supplierName').lean(),
   create: async (doc, session = null) => (await SupplierLedgerEntry.create([doc], { session }))[0].toObject(),
   findById: (id, session = null) => SupplierLedgerEntry.findById(id).session(session).lean(),
   findByKey: (key, session = null) => SupplierLedgerEntry.findOne({ key }).session(session).lean(),

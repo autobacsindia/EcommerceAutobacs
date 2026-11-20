@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SlipReadSchema } from './shared/slipReadSchema.js';
 
 /**
  * Supplier credit — one row per thing that changed what a supplier owes us
@@ -111,6 +112,8 @@ const SupplierLedgerEntrySchema = new mongoose.Schema(
     // its proof. `paymentRequest` then names the paid supplier payment it refunds.
     method: { type: String, enum: [...REFUND_METHODS, ''], default: '' },
     files: { type: [FileSchema], default: [] },
+    // Which of reference / date / amount were read from the slip vs typed (shared/slipReadSchema.js).
+    slipRead: { type: SlipReadSchema, default: null },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     createdByName: { type: String, default: '' },
@@ -136,6 +139,11 @@ SupplierLedgerEntrySchema.index({ key: 1 }, { unique: true, name: 'supplier_ledg
 SupplierLedgerEntrySchema.index({ supplier: 1, createdAt: -1, _id: -1 }, { name: 'supplier_ledger_supplier' });
 // Accounts' queue (pending) and the report (by date), newest first.
 SupplierLedgerEntrySchema.index({ status: 1, createdAt: -1, _id: -1 }, { name: 'supplier_ledger_status' });
+// The slip reader's duplicate-UTR check on supplier refunds (else a scan of the ledger). Only rows with a reference.
+SupplierLedgerEntrySchema.index(
+  { reference: 1 },
+  { name: 'supplier_ledger_reference', partialFilterExpression: { reference: { $gt: '' } } }
+);
 // The claim on a payment (order page, refund button).
 SupplierLedgerEntrySchema.index(
   { paymentRequest: 1, kind: 1 },

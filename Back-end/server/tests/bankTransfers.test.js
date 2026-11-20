@@ -20,6 +20,7 @@
  */
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
+import { createHash } from 'crypto';
 
 jest.setTimeout(120000);
 
@@ -71,6 +72,7 @@ const bt = await import('../services/bankTransferService.js');
 const sales = await import('../services/salesOrderService.js');
 const payments = await import('../services/salesPaymentService.js');
 const { summaryFor } = await import('../services/notificationService.js');
+const { signReadToken } = await import('../services/slipReader/slipReaderService.js');
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 const JPEG = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(300, 1)]);
@@ -509,6 +511,33 @@ describe('correcting a recorded transfer', () => {
     const a = await bt.recordBankTransfer(lead, (await salesOrder(lead))._id, input(), [shot()], req);
     const b = await bt.recordBankTransfer(lead, (await salesOrder(lead))._id, input({ reference: 'HDFCR52024102100000' }), [shot()], req);
     await expect(bt.editBankTransfer(lead, b.id, { reference: a.reference }, req)).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe('slip read automatically (services/slipReader)', () => {
+  const tokenFor = (who, buffer, f) => signReadToken({
+    v: 1, u: String(who._id), at: Date.now(), m: 'claude-opus-5-5',
+    h: createHash('sha256').update(buffer).digest('hex'), f,
+  });
+
+  it('records which fields were saved as read and which a person changed; a later fix marks it changed', async () => {
+    const order = await salesOrder(lead);
+    const slipRead = tokenFor(lead, JPEG, { reference: 'HDFCR52024102112345', date: isoDay(-1), time: '10:00', amount: 52000 });
+    const t = await bt.recordBankTransfer(lead, order._id, input({ paidOn: isoDay(0), slipRead }), [shot()], req);
+    expect(t.slipRead).toMatchObject({ model: 'claude-opus-5-5', fields: { reference: 'slip', date: 'edited' } });
+    expect(t.status).toBe('pending'); // a read slip never confirms anything
+
+    const fixed = await bt.editBankTransfer(lead, t.id, { reference: 'HDFCR52024102199999' }, req);
+    expect(fixed.slipRead.fields).toMatchObject({ reference: 'edited', date: 'edited' });
+  });
+
+  it('claims nothing when the token is someone else\'s or the read slip is not the one saved', async () => {
+    const o1 = await salesOrder(lead);
+    const other = tokenFor(lead2, JPEG, { reference: 'HDFCR52024102112345', date: isoDay(0), time: '', amount: 52000 });
+    expect((await bt.recordBankTransfer(lead, o1._id, input({ slipRead: other }), [shot()], req)).slipRead).toBeNull();
+    const o2 = await salesOrder(lead);
+    const wrongFile = tokenFor(lead, PDF, { reference: 'HDFCR5202410211XXXX', date: isoDay(0), time: '', amount: 52000 });
+    expect((await bt.recordBankTransfer(lead, o2._id, input({ reference: 'HDFCR5202410211YYYY', slipRead: wrongFile }), [shot()], req)).slipRead).toBeNull();
   });
 });
 

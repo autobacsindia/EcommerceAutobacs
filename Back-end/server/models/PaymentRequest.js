@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SlipReadSchema } from './shared/slipReadSchema.js';
 
 /**
  * A request for the company to pay someone — a supplier for an order's item,
@@ -183,6 +184,8 @@ const PaymentRequestSchema = new mongoose.Schema(
       paidByName: { type: String, default: '' },
       // Set when several requests to one payee were paid in one transfer.
       batch: { type: String, default: '' },
+      // Which of reference / transaction time were read from the slip vs typed (shared/slipReadSchema.js).
+      slipRead: { type: SlipReadSchema, default: null },
       // Paid from a foreign-currency account (e.g. a Thai bank account): no rupees
       // were debited, so `amount` stays 0 and the bill's own currency is what moved.
       // `amount` here is what was sent, in `currency` (always the bill's currency).
@@ -238,6 +241,13 @@ PaymentRequestSchema.index({ project: 1, createdAt: -1, _id: -1 }, { name: 'paym
 PaymentRequestSchema.index(
   { reference: 1, createdAt: -1 },
   { name: 'payment_request_reference', partialFilterExpression: { reference: { $gt: '' } } }
+);
+// The slip reader's duplicate-UTR check: "is this UTR on a paid payment already?"
+// Without it every slip read scanned every paid payment (measured: 16,000 docs read
+// for 20,000 payments → 0 with it). Only rows that have a reference.
+PaymentRequestSchema.index(
+  { 'payment.reference': 1 },
+  { name: 'payment_request_paid_reference', partialFilterExpression: { 'payment.reference': { $gt: '' } } }
 );
 // A double-submitted expense / supplier request is saved once. `$type`, never `$ne`.
 PaymentRequestSchema.index(

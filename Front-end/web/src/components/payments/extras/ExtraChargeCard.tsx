@@ -10,6 +10,8 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import FilePicker from '@/components/payments/FilePicker';
 import { postForm } from '@/components/payments/api';
+import { useSlipReader } from '@/components/payments/slipReader';
+import SlipReadStatus, { SlipFieldTag } from '@/components/payments/SlipReadStatus';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import { extraKeys, extraUrl, receiptHref, toneOf, type ExtraCharge } from './api';
 
@@ -35,6 +37,15 @@ export default function ExtraChargeCard({ extra, showOrder = false, orderBase }:
   const [offlineMethod, setOfflineMethod] = useState('bank_transfer');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  // The customer's receipt is read as it is attached; the boxes fill in to be checked.
+  const slip = useSlipReader({
+    files,
+    expectedAmount: extra.amount,
+    onRead: (f) => {
+      if (f.reference) setUtr((now) => now.trim() || f.reference);
+      if (f.date && f.date <= todayIso()) setPaidOn(f.date);
+    },
+  });
 
   const refresh = () => {
     setError('');
@@ -59,6 +70,7 @@ export default function ExtraChargeCard({ extra, showOrder = false, orderBase }:
     form.append('reference', utr.trim());
     form.append('paidOn', paidOn);
     if (note.trim()) form.append('note', note.trim());
+    if (slip.token) form.append('slipRead', slip.token);
     files.forEach((f) => form.append('proof', f));
     run.mutate(() => postForm(extraUrl(extra.id, 'bank-transfer'), form));
   };
@@ -135,8 +147,11 @@ export default function ExtraChargeCard({ extra, showOrder = false, orderBase }:
       {panel === 'bank' && (
         <form className="space-y-2" onSubmit={recordBank} aria-label="Record bank transfer for this extra">
           <input className={input} required placeholder="UTR / bank reference" value={utr} onChange={(e) => setUtr(e.target.value)} aria-label="UTR" />
+          <SlipFieldTag source={slip.tag('reference', utr)} />
           <input className={input} type="date" required value={paidOn} onChange={(e) => setPaidOn(e.target.value)} aria-label="Date the customer paid" />
+          <SlipFieldTag source={slip.tag('date', paidOn)} />
           <FilePicker files={files} onChange={setFiles} max={MAX_ATTACHMENTS} accept={PHOTO_OR_PDF} label="Attach receipt (PDF or photo)" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+          <SlipReadStatus slip={slip} />
           <button type="submit" disabled={busy} className={primary}>Send to Accounts to check — {rupees(extra.amount)}</button>
         </form>
       )}
