@@ -13,7 +13,7 @@
 
 import deliveryFeeRepository from '../repositories/deliveryFeeRepository.js';
 import { getClassBoxes } from './shippingClassService.js';
-import { isDeliveryFeeOfferLive, isDeliveryFeeOfferLiveForPricing } from './festivalOfferService.js';
+import { isDeliveryFeeOfferLive, isDeliveryFeeOfferLiveForPricing, isFestivalOfferLive } from './festivalOfferService.js';
 import * as festivalThemeService from './festivalThemeService.js';
 import festivalOfferRepository from '../repositories/festivalOfferRepository.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
@@ -26,7 +26,6 @@ import { computeDeliveryFees, DEFAULT_RATE_CARD, isValidPin, haversineKm } from 
 import { classFromCategorySlugs, slugsWithAncestors } from '../utils/categoryShippingClass.js';
 import { fromPaise } from '../utils/money.js';
 import productRepository from '../repositories/productRepository.js';
-import { isOfferLiveForPricing } from './festivalOfferService.js';
 import { isPurchasable } from '../utils/stockStatus.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { applyFestivalOffer, resolveFestivalSetting } from '../utils/festivalOffer.js';
@@ -300,15 +299,19 @@ const CARD_NAMED_LINES = Object.freeze(['shipping', 'packing', 'handling']);
 export async function cardFeeWaivers(ids, { now = new Date() } = {}) {
   const unique = [...new Set((Array.isArray(ids) ? ids : []).map((s) => String(s).trim()).filter(Boolean))]
     .slice(0, MAX_CARD_FEE_IDS);
-  const card = await getRateCard();
-  if (!card.chargeAtCheckout || !unique.length) return { live: false, products: {} };
-  if (!(await isFeeOfferLiveForPricing(now))) return { live: false, products: {} };
+  if (!unique.length) return { live: false, products: {} };
+  // One FestivalOffer read answers both "is the fee offer live" and "is the festival
+  // price offer live", fetched alongside the rate card (measured 2026-11-20: 5 → 4 reads,
+  // 3 → 2 round trips in a row per grid). Same rules as isFeeOfferLiveForPricing.
+  const [card, offerCfg] = await Promise.all([getRateCard(), festivalOfferRepository.find()]);
+  if (!card.chargeAtCheckout) return { live: false, products: {} };
+  if (!isDeliveryFeeOfferLive(offerCfg, now) || !(await blackFridayGate(now))) return { live: false, products: {} };
+  const festivalLive = isFestivalOfferLive(offerCfg, now);
 
-  const [products, { boxes }, categoryIndex, festivalLive] = await Promise.all([
+  const [products, { boxes }, categoryIndex] = await Promise.all([
     productRepository.findCardFeeInputs(unique),
     getClassBoxes(),
     getCategoryIndex(),
-    isOfferLiveForPricing(now),
   ]);
 
   // Cheapest band: rates need not rise with distance, so try every band.
