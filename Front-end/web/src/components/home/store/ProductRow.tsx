@@ -80,6 +80,7 @@ export default function ProductRow({
                 badge={p.salesRank && p.salesRank <= rankBadges ? `#${p.salesRank} Best seller` : undefined}
                 feeWaiver={p.variable ? null : fee.waivers?.products[p.id] ?? null}
                 feeWaiverPending={!p.variable && fee.pending}
+                feeOfferLive={fee.live}
               />
             </div>
           ))}

@@ -38,6 +38,7 @@ export default function StoreProductCard({
   priority = false,
   feeWaiver,
   feeWaiverPending = false,
+  feeOfferLive = false,
 }: {
   product: Product;
   featured?: boolean;
@@ -65,6 +66,8 @@ export default function StoreProductCard({
   feeWaiver?: CardFeeWaiver | null;
   /** Offer live, figures loading: reserve the receipt's space so the grid doesn't shift. */
   feeWaiverPending?: boolean;
+  /** The ₹0-delivery offer is on for this grid: sold-out/backorder cards get a grey line. */
+  feeOfferLive?: boolean;
 }) {
   const router = useRouter();
   const url = productUrl(product);
@@ -99,8 +102,9 @@ export default function StoreProductCard({
   // Rupees saved against the M.R.P. ("Save ₹250"), not a percentage — display only.
   // Black Friday: a sold-out or variable card advertises no ₹0 delivery (nothing to check
   // out / no single box). Otherwise the badge also counts the fees the offer waives.
-  const waiver = !isVariable && product.stock !== 'out' ? feeWaiver ?? null : null;
-  const waiverPending = !waiver && !isVariable && product.stock !== 'out' && feeWaiverPending;
+  const unavailable = !isVariable && (product.stock === 'out' || product.stock === 'backorder') ? product.stock : null;
+  const waiver = !isVariable && !unavailable ? feeWaiver ?? null : null;
+  const waiverPending = !waiver && !isVariable && !unavailable && feeWaiverPending;
   const saveLabel = zeroDeliverySaveLabel(waiver, (n) => formatPrice(n))
     ?? (onSale ? savingsLabel(product.price, product.originalPrice, (n) => formatPrice(n)) : null);
   // Diwali offer — an EXTRA % on top of the price shown; the sale badge and M.R.P.
@@ -342,6 +346,8 @@ export default function StoreProductCard({
         <ZeroDeliveryReceipt
           waiver={waiver}
           pending={waiverPending}
+          live={!isVariable && (feeOfferLive || feeWaiverPending || !!feeWaiver)}
+          unavailable={unavailable}
           price={festivalOffer?.finalPrice ?? product.price}
           format={(n) => formatPrice(n, { exact: true })}
         />

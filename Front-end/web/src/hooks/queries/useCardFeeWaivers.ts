@@ -59,5 +59,10 @@ export function useCardFeeWaivers(productIds: string[]) {
   });
   /** Offer live but figures not back yet: cards reserve the receipt's space (no CLS). */
   const pending = offerLive && ids.length > 0 && q.isLoading;
-  return { waivers: q.data ?? null, pending };
+  /**
+   * The offer is on for this grid (or about to be confirmed): every simple card holds the
+   * receipt's space, and a sold-out/backorder card fills it with a grey status line.
+   */
+  const live = pending || !!q.data;
+  return { waivers: q.data ?? null, pending, live };
 }

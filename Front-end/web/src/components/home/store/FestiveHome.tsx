@@ -10,6 +10,8 @@ import { festivalVars } from '@/components/festival/festivalStyle';
 import { GIFT_BAND_LIMITS, type GiftTier } from './giftTiers';
 import BlackFridayHero from './BlackFridayHero';
 import type { StoreProduct } from './storeData';
+import type { StockStatus } from '@/lib/stock';
+import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
 
 /**
  * The festive dress for the store home page, switched by the admin festival
@@ -48,6 +50,16 @@ export interface FestiveHeroPhoto {
   save: number;
   /** Product id (simple products only), for the Black Friday ₹0-delivery saving. */
   id?: string;
+  /**
+   * Catalogue fields for the Black Friday hero's full cards (price, M.R.P., add to cart).
+   * Present only for showcase products; banner fallback photos have none and the card
+   * then shows just the photo, name and a "View deal" link.
+   */
+  price?: number;
+  originalPrice?: number;
+  stock?: StockStatus;
+  variable?: boolean;
+  festivalOfferSetting?: FestivalOfferSetting | null;
 }
 
 export function FestiveHero({

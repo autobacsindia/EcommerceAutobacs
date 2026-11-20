@@ -445,6 +445,7 @@ export default function VehicleModelListing({
                           campaignRate={campaignBadgeVisible && pid ? campaignData?.rates?.[pid] : null}
                           feeWaiver={pid ? fee.waivers?.products[pid] ?? null : null}
                           feeWaiverPending={fee.pending}
+                          feeOfferLive={fee.live}
                         />
                       );
                     })}

@@ -160,7 +160,6 @@ export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
       { strong: '₹0', text: 'Shipping fee' },
       { strong: '₹0', text: 'Packing fee' },
       { strong: '₹0', text: 'Handling fee' },
-      { strong: '₹0', text: 'Insurance fee' },
       { strong: '₹0', text: 'Platform fee' },
       { strong: '₹0', text: 'Fuel surcharge' },
       { strong: '₹0', text: 'Docket / processing fee' },

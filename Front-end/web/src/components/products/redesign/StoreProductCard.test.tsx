@@ -326,6 +326,33 @@ describe('Black Friday ₹0 delivery (owner, 2026-11-20)', () => {
     expect(screen.queryByTestId('zero-delivery-receipt')).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['backorder', /On backorder/],
+    ['out', /Sold out for now/],
+  ] as const)('offer on, %s card → grey status line of the receipt\'s height; no ribbon, discount-only badge', (stock, text) => {
+    // The server sends no waiver for a product that cannot be ordered now; pass one anyway
+    // to prove the card itself refuses a ₹0 claim.
+    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock })} feeWaiver={waiver} feeOfferLive />);
+    const line = screen.getByTestId('zero-delivery-unavailable');
+    expect(line).toHaveTextContent(text);
+    expect(line).toHaveClass('h-[92px]');
+    expect(line).not.toHaveTextContent('₹0');
+    expect(screen.queryByTestId('zero-delivery-ribbon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('zero-delivery-receipt')).not.toBeInTheDocument();
+    if (stock === 'backorder') expect(screen.getByTestId('card-save-badge')).toHaveTextContent('Save ₹9,000');
+  });
+
+  it('figures still loading → a backorder card shows its grey line at once (no placeholder flicker)', () => {
+    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock: 'backorder' })} feeWaiverPending />);
+    expect(screen.getByTestId('zero-delivery-unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('zero-delivery-receipt-pending')).not.toBeInTheDocument();
+  });
+
+  it('offer off → a backorder card has no grey line (normal card)', () => {
+    render(<StoreProductCard product={makeProduct({ price: 283000, originalPrice: 292000, stock: 'backorder' })} />);
+    expect(screen.queryByTestId('zero-delivery-unavailable')).not.toBeInTheDocument();
+  });
+
   it('the card stays one link to the product and keeps its add-to-cart button', () => {
     render(<StoreProductCard product={kit()} feeWaiver={waiver} />);
     expect(screen.getAllByRole('link')).toHaveLength(1);

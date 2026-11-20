@@ -20,6 +20,8 @@ jest.mock('@/hooks/queries/useVehicleMakes', () => ({
   useVehicleMakes: () => ({ data: [] }),
   useVehicleModels: () => ({ data: [], isFetching: false }),
 }));
+// The hero cards add to cart; the real CartProvider (app layout) is out of scope here.
+jest.mock('@/context/CartContext', () => ({ useCart: () => ({ addToCart: jest.fn() }) }));
 jest.mock('@/components/home/redesign/Img', () => ({ __esModule: true, default: (p: { alt?: string }) => <img alt={p.alt} /> }));
 
 const HOUR = 3600_000;
@@ -153,9 +155,11 @@ describe('Black Friday home page', () => {
     const list = within(perks).getByRole('list', { name: 'Black Friday delivery offer' });
     const items = within(list).getAllByRole('listitem');
     expect(items.map((li) => li.textContent)).toEqual(FESTIVAL_THEMES.blackfriday.perks!.map((p) => `${p.strong} ${p.text}`));
-    for (const name of ['Shipping', 'Packing', 'Handling', 'Insurance', 'Platform fee']) {
+    for (const name of ['Shipping', 'Packing', 'Handling', 'Platform fee']) {
       expect(list).toHaveTextContent(name);
     }
+    // Insurance is no longer a fee (removed 2026-11-20), so the strip must not promise it.
+    expect(list).not.toHaveTextContent('Insurance');
     // It sits at the top of the hero, before the headline.
     const hero = screen.getByTestId('festive-hero');
     const heading = within(hero).getByRole('heading', { name: /Black\s*Friday/i });
