@@ -12,7 +12,7 @@ import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { useListParams } from '@/lib/hooks/useListParams';
 import { ListClear, ListSearch, ListSelect, listField } from '@/components/panel/ListControls';
 import {
-  LEAD_SOURCE_COLORS, LEAD_SOURCE_LABELS, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS, scoreBadge,
+  LEAD_SOURCE_COLORS, LEAD_SOURCE_LABELS, LEAD_STATUS_COLORS, LEAD_STATUS_LABELS,
   type LeadSourceType, type LeadStatus,
 } from '@/lib/leads';
 import { FOLLOW_UP_OPTIONS, followUpOption, type FollowUpStatus } from './followUpStatus';
@@ -27,6 +27,7 @@ export type TeamLead = {
   id: string;
   name: string;
   status: LeadStatus;
+  /** 0–100 priority (backend utils/leadScore.js). Drives the "Hottest first" sort only — not shown to sales staff. */
   score: number;
   source: LeadSourceType | null;
   detail: {
@@ -167,7 +168,6 @@ function LeadCard({ lead, you, sellers }: { lead: TeamLead; you: You; sellers: P
 
   const f = lead.followingUp;
   const closed = lead.status === 'won' || lead.status === 'lost';
-  const badge = scoreBadge(lead.score);
   const contact = detail.data?.lead.contact ?? lead.contact;
   const mayRecord = !!f && (f.mine || you.canReassign) && !closed;
   const fu = lead.followUpStatus ? followUpOption(lead.followUpStatus.status) : null;
@@ -186,7 +186,6 @@ function LeadCard({ lead, you, sellers }: { lead: TeamLead; you: You; sellers: P
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-base font-semibold text-gray-900">{lead.name}</p>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`} title="Lead score (higher = hotter)">{badge.label}</span>
             {lead.source && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEAD_SOURCE_COLORS[lead.source]}`}>{LEAD_SOURCE_LABELS[lead.source]}</span>}
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEAD_STATUS_COLORS[lead.status]}`}>{LEAD_STATUS_LABELS[lead.status]}</span>
             {lead.hasPurchased && <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-800">Bought before</span>}
