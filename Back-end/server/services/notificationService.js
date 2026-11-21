@@ -31,7 +31,7 @@ import { countDueForBell as countTasksDue } from './staffTaskService.js';
 import { countTrainingForBell } from './staffTrainingService.js';
 import { countLastDaysForBell } from './staffDepartureService.js';
 import { countsFor as countReturnsFor } from './returnService.js';
-import { countUnread as countInboxUnread } from './staffTaskInboxService.js';
+import { countUnread as countInboxUnread, recentAlerts } from './staffTaskInboxService.js';
 import { bellItemsFor as metaLeadBellItems } from './metaLeadDeadlineService.js';
 
 const isAdmin = (u) => u?.role === 'admin';
@@ -51,11 +51,11 @@ const isAccounts = (u) => isActiveStaff(u) && u.staff.team === STAFF_TEAMS.ACCOU
  */
 export async function summaryFor(user) {
   const items = [];
-  if (!isAdmin(user) && !isActiveStaff(user)) return { items, total: 0 };
+  if (!isAdmin(user) && !isActiveStaff(user)) return { items, total: 0, alerts: [] };
 
   const wantsPayments = isAdmin(user) || isAccounts(user);
   // One aggregate covers both payment queues; refunds are a separate table.
-  const [byStatus, refunds, transfers, extrasWaiting, extraRefundsDue, tasksDue, returnItems, inboxUnread] = await Promise.all([
+  const [byStatus, refunds, transfers, extrasWaiting, extraRefundsDue, tasksDue, returnItems, inboxUnread, alerts] = await Promise.all([
     wantsPayments ? paymentRequestRepository.countByStatus() : Promise.resolve([]),
     isAdmin(user) || isAccounts(user) ? orderRepository.countPendingCancellationRefunds() : Promise.resolve(0),
     // A small collection (a handful of rows a week), so a count is cheap.
@@ -69,6 +69,8 @@ export async function summaryFor(user) {
     countReturnsFor(user),
     // One covered count on staff_task_inbox_list, capped (the badge shows "99+").
     countInboxUnread(user),
+    // "New task" / "added to a project" in the last day, unread: the panel's pop-up card.
+    recentAlerts(user).catch(() => []),
   ]);
   const n = (status) => byStatus.find((r) => r._id === status)?.n || 0;
 
@@ -179,5 +181,5 @@ export async function summaryFor(user) {
 
   // Zero-count rows are kept so the dropdown can say "nothing waiting" for a
   // queue that IS yours, rather than hiding it and looking like it vanished.
-  return { items, total: items.reduce((t, i) => t + (i.quiet ? 0 : i.count), 0) };
+  return { items, total: items.reduce((t, i) => t + (i.quiet ? 0 : i.count), 0), alerts };
 }

@@ -235,12 +235,14 @@ export type TaskRules = {
 };
 
 /** One line in the Inbox (GET /staff/tasks/inbox). */
-export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided';
+export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided' | 'project_added';
 export type InboxItem = {
   id: string;
   kind: InboxKind;
-  /** The live title when it still opens; the title it had then when not. */
-  task: { id: string; code: string; title: string };
+  /** The live title when it still opens; the title it had then when not. Null on a project line. */
+  task: { id: string; code: string; title: string } | null;
+  /** A project line ("added you to Vicky's Hilux"): the project, its live name when it still opens. */
+  project?: { id: string; name: string } | null;
   by: Person | null;
   text: string;
   read: boolean;
@@ -573,15 +575,35 @@ export type ProjectDetails = {
   updatedAt: string | null;
   updatedByName: string;
 };
+/** One of your own tasks in the morning reminder. */
+export type ReminderItem = {
+  id: string; code: string; title: string; dueOn: string | null; daysLate: number;
+  project: { id: string; name: string; colour: string };
+};
+/** Someone with late project work: in an owner's project, or (the admin) anywhere. */
+export type LatePerson = { id: string; name: string; late: number; daysLate: number; lastUpdate: string | null };
+/** GET /staff/tasks/projects/reminder — the morning "please update your work" pop-up. */
 export type ProjectReminder = {
   day: string;
+  /** Monday: undated work is listed too. */
+  weekly: boolean;
+  mine: {
+    overdue: ReminderItem[]; today: ReminderItem[]; soon: ReminderItem[]; noDate: ReminderItem[];
+    counts: { overdue: number; today: number; soon: number; noDate: number; later: number };
+  };
+  /** Projects you are in (not owner) whose deadline is near or passed. */
+  deadlines: { id: string; name: string; colour: string; dueOn: string; daysLate: number; open: number }[];
+  /** Projects you own. */
   projects: {
     id: string; name: string; colour: string; dueOn: string | null;
     projectLate: boolean; projectDueToday: boolean;
     open: number; late: number; dueToday: number;
     lateTasks: { id: string; title: string; dueOn: string | null }[];
     dueTodayTasks: { id: string; title: string; dueOn: string | null }[];
+    notUpdated: LatePerson[];
   }[];
+  /** The admin: everyone with late project work. */
+  team: LatePerson[];
   totals: { open: number; late: number; dueToday: number };
 };
 export type ProjectList = { id: string; name: string };

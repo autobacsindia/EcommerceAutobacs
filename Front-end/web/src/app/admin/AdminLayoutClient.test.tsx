@@ -23,6 +23,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({ useChatUnreadTotal: () => 2 })
 jest.mock('@/components/notifications/NotificationBell', () => ({ __esModule: true, default: () => <button type="button">Notifications</button> }));
 // Calls have their own tests (components/calls); here they are just a pass-through wrapper.
 jest.mock('@/components/tasks/ProjectReminderPopup', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/components/notifications/NewWorkPopup', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/calls/CallProvider', () => ({ __esModule: true, default: ({ children }: { children: React.ReactNode }) => children }));
 jest.mock('@/components/notifications/PushPrompt', () => ({ __esModule: true, default: () => null }));
 

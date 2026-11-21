@@ -16,7 +16,7 @@ import { storageProvider } from '../config/storage.js';
 import { postStuckDigests } from './chatStuckDigest.js';
 import { sweepCalls } from './chatCallService.js';
 import { sendOverdueReport } from './overdueReportService.js';
-import { runDailyReminders } from './projectReminderService.js';
+import { runDailyReminders, reminderCron } from './projectReminderService.js';
 import { postEtaReminders } from './parcelEtaReminders.js';
 import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
 import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthService.js';
@@ -396,13 +396,15 @@ class CronService {
   }
 
   /**
-   * Project owners' morning reminder (services/projectReminderService.js):
-   * 10:00 IST every day. Once per owner per day by construction — the unique
+   * The morning project reminder (services/projectReminderService.js) for
+   * everyone on a project: 09:30 IST (PROJECT_REMINDER_HOUR/_MINUTE, or a full
+   * PROJECT_REMINDER_CRON). Sundays and holidays are skipped inside the run.
+   * Once per person per day by construction — the unique
    * (user, day) row and its pending → sending claim — so the lock only saves a
    * second replica the work; a doubled or restarted run sends nothing more.
    */
   scheduleProjectReminders() {
-    const schedule = process.env.PROJECT_REMINDER_CRON || '0 10 * * *';
+    const schedule = process.env.PROJECT_REMINDER_CRON || reminderCron();
     if (!cron.validate(schedule)) {
       console.error(`[CronService] Invalid PROJECT_REMINDER_CRON "${schedule}" — project reminders NOT scheduled`);
       return;
@@ -410,7 +412,9 @@ class CronService {
     const task = cron.schedule(schedule, () =>
       this.withDistributedLock('cron:lock:projectReminders', 15 * 60, () =>
         runDailyReminders()
-          .then((r) => console.log(`[CronService] Project reminders ${r.day}: ${r.withWork} owners with work, ${r.sent} notified, ${r.skipped} already saw it, ${r.failed} failed`))
+          .then((r) => console.log(r.quiet
+            ? `[CronService] Project reminders ${r.day}: quiet day (Sunday/holiday), none sent`
+            : `[CronService] Project reminders ${r.day}: ${r.people} people, ${r.withWork} with work, ${r.sent} notified, ${r.skipped} already saw it, ${r.already} already done, ${r.failed} failed`))
           .catch(err => console.error('[CronService] Project reminders failed:', err.message))
       ),
       { scheduled: true, timezone: 'Asia/Kolkata' }
@@ -419,7 +423,7 @@ class CronService {
       name: 'projectReminders',
       task,
       schedule,
-      description: 'Pop-up + notification: each project owner\'s open, due and late work',
+      description: 'Pop-up + notification: each project person\'s overdue, due and near work',
     });
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Project reminders scheduled: "${schedule}"`);

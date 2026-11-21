@@ -210,5 +210,19 @@ export const DEFAULT_SLIPS = Object.freeze([
   },
 ]);
 
-/** Daily owner reminder: shown from this IST hour on. */
-export const REMINDER_HOUR_IST = Number(process.env.PROJECT_REMINDER_HOUR || 10);
+/** Daily project reminder: shown from this IST time on (09:30 by default). */
+export const REMINDER_HOUR_IST = Number(process.env.PROJECT_REMINDER_HOUR || 9);
+export const REMINDER_MINUTE_IST = Number(process.env.PROJECT_REMINDER_MINUTE || 30);
+
+/**
+ * Days with no daily reminder besides Sundays, as IST "YYYY-MM-DD", comma-
+ * separated in STAFF_HOLIDAYS (Railway dashboard, no deploy). Until that is
+ * set, the support desk's SUPPORT_HOLIDAYS list is used. Malformed entries are
+ * dropped: a typo must never stop the server.
+ */
+export const staffHolidays = (env = process.env) => new Set(
+  String(env.STAFF_HOLIDAYS ?? env.SUPPORT_HOLIDAYS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)),
+);

@@ -33,6 +33,7 @@ import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { shapeDetails, canEditDetails, canReadOrders } from './staffProjectDetailsService.js';
 import { liveTemplates, slipsForProject } from './slipTemplateService.js';
+import { notifyAddedToProject } from './projectAlertService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -440,6 +441,8 @@ export async function createProject(actor, input = {}, req) {
     throw err;
   }
   auditLogger.logAction(req, 'CREATE', 'StaffProject', doc._id, { name, people: people.length, teams });
+  // Everyone put on it (not whoever started it) hears straight away. Never throws.
+  await notifyAddedToProject(doc, actor, people.map((x) => x.user));
   return { project: shape(doc, actor), duplicate: false };
 }
 
@@ -516,6 +519,12 @@ export async function updateProject(actor, id, input = {}, req) {
     );
   }
   if (set.lists || set.statuses) await reconcileProjectTasks(next);
+  // People newly on it (a restore, a rename — nobody new — tells nobody). Never throws.
+  if (set.people) {
+    const before = new Set((p.people || []).map((x) => idOf(x.user)));
+    const added = set.people.map((x) => x.user).filter((u) => !before.has(idOf(u)));
+    if (added.length) await notifyAddedToProject(next, actor, added);
+  }
   auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffProject', p._id, {
     changes: Object.keys(set),
     ...(set.statuses && { columns: set.statuses.map((x) => x.name), by: { id: idOf(actor._id), name: actor.name, role: manager ? 'manager' : 'member' } }),
