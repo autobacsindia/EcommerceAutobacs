@@ -8,9 +8,10 @@ import { trackContact } from '@/lib/contactTracking';
 /**
  * Floating "Need help?" tab pinned to the right edge, linking to /contact.
  *
- * Desktop only (md+). On phones it sat over product photos and the buy buttons;
- * phones reach us through ContactFab's one "Contact us" button instead (Batch 3,
- * 2026-11-21); the footer contact strip and the menu drawer also carry Call/WhatsApp.
+ * Desktop only (md+). On a 375px product page it sat on Add to cart and the
+ * wishlist heart (measured, 2026-11-21), and it would be a fourth floating
+ * control beside the WhatsApp / Call / Chat stack. Phones reach us through that
+ * stack; the footer contact strip and the menu drawer also carry Call/WhatsApp.
  *
  * Context: this is a fresh build replacing the legacy WooCommerce site, so we
  * give users a persistent, low-friction escape hatch to reach us if something

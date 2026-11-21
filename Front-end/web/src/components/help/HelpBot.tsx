@@ -160,12 +160,12 @@ export default function HelpBot() {
   if (isHelpBotSuppressed(pathname)) return null;
 
   const showStarters = turns.length <= 1;
-  // Phones have no launcher of their own: ContactFab's one "Contact us" button
-  // opens this panel ("Chat with us"), so the panel sits just above that button
-  // (16px + 48px + 12px gap), lifted further by the sticky buy bar when it shows.
+  // Phones have no launcher here: ContactFab's Chat button (in its WhatsApp /
+  // Call / Chat stack) opens this panel, so the panel sits just above that stack
+  // (16px + 148px + 12px gap), lifted further by the sticky buy bar when it shows
+  // (a transform, so no layout shift; the height cap uses the same lift).
   // Desktop: launcher bottom-6, panel bottom-28, as before.
-  // The buy-bar lift is a transform (no layout shift); the height cap uses it too.
-  const panelBottom = 'bottom-[calc(76px_+_env(safe-area-inset-bottom))] md:bottom-28';
+  const panelBottom = 'bottom-[calc(176px_+_env(safe-area-inset-bottom))] md:bottom-28';
 
   return (
     <>
@@ -182,7 +182,7 @@ export default function HelpBot() {
         aria-expanded={open}
         aria-controls="help-bot-panel"
         aria-label={open ? 'Close help' : 'Open help'}
-        // Desktop only: on phones ContactFab's "Contact us" menu opens the chat.
+        // Desktop only: on phones ContactFab's Chat button opens the chat.
         className={`fixed bottom-6 right-4 z-[60] hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
@@ -196,7 +196,7 @@ export default function HelpBot() {
           aria-modal="false"
           aria-label="Help"
           style={{ ['--fab-lift' as string]: `${buyBarHeight}px`, transform: `translateY(-${buyBarHeight}px)` }}
-          className={`fixed inset-x-3 ${panelBottom} z-[60] flex max-h-[min(34rem,calc(100dvh-9rem-var(--fab-lift)))] flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[23rem]`}
+          className={`fixed inset-x-3 ${panelBottom} z-[60] flex max-h-[min(34rem,calc(100dvh-14rem-var(--fab-lift)))] flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[23rem]`}
         >
           <header className="flex items-center gap-3 bg-[#121414] px-4 py-3 text-[#fff]">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0a5c33]">

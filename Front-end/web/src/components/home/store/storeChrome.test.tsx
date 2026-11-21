@@ -239,7 +239,7 @@ describe('Need-help tab on phones', () => {
     (trackContact as jest.Mock).mockClear();
   });
 
-  it('is desktop-only: phones use the one Contact us button instead', () => {
+  it('is desktop-only: on phones it covered Add to cart / the heart; the WhatsApp / Call / Chat stack covers contact', () => {
     render(<HelpWidget />);
     expect(tab()).toHaveClass('hidden', 'md:flex');
   });

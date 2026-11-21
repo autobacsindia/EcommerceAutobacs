@@ -20,17 +20,17 @@ describe('help panel', () => {
   // jsdom has no scrollIntoView; the panel scrolls to its newest message.
   beforeAll(() => { Element.prototype.scrollIntoView = () => {}; });
 
-  it('has its own launcher on desktop only — phones open it from the Contact us menu', () => {
+  it('has its own launcher on desktop only — on phones ContactFab\'s Chat button opens it', () => {
     render(<HelpBot />);
     const launcher = screen.getByRole('button', { name: 'Open help' });
     expect(launcher).toHaveClass('hidden', 'md:flex', 'h-14', 'w-14', 'bottom-6');
   });
 
-  it('on phones the panel opens just above the Contact us button, lifted with the buy bar', () => {
+  it('on phones the panel opens just above the WhatsApp / Call / Chat stack, lifted with the buy bar', () => {
     render(<HelpBot />);
     act(() => { window.dispatchEvent(new Event(OPEN_HELP_BOT_EVENT)); });
     const panel = screen.getByRole('dialog', { name: 'Help' });
-    expect(panel.className).toContain('bottom-[calc(76px_+_env(safe-area-inset-bottom))]');
+    expect(panel.className).toContain('bottom-[calc(176px_+_env(safe-area-inset-bottom))]');
     expect(panel).toHaveClass('md:bottom-28');
     expect(panel.style.transform).toBe('translateY(-0px)');
     act(() => setBuyBarHeight(117));

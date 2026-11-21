@@ -20,7 +20,6 @@ beforeEach(() => {
   act(() => resetFloatingClearance());
 });
 
-const toggle = () => screen.getByRole('button', { name: /contact us|close contact options/i });
 const stack = () => screen.getByTestId('contact-fab');
 
 describe('ContactFab', () => {
@@ -60,63 +59,45 @@ describe('ContactFab', () => {
     expect(href).not.toContain('/products/search');
   });
 
-  describe('on phones: one "Contact us" button', () => {
-    it('shows only the Contact us button until it is tapped', () => {
+  describe('on phones: three separate buttons, one tap each', () => {
+    it('shows WhatsApp, Call and Chat as their own 44px buttons, with no menu toggle', () => {
       pathname = '/';
       render(<ContactFab />);
-      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
-      expect(toggle()).toHaveClass('md:hidden'); // phones only
-      // Channels are hidden on phones, still shown from md up.
-      for (const el of [screen.getByLabelText(/whatsapp/i), screen.getByLabelText(/call us/i)]) {
-        expect(el).toHaveClass('hidden', 'md:flex');
-      }
-      expect(screen.getByRole('button', { name: 'Chat with us' })).toHaveClass('hidden');
-    });
-
-    it('opens a menu of WhatsApp, Call and Chat with us, and closes again', () => {
-      pathname = '/';
-      render(<ContactFab />);
-      fireEvent.click(toggle());
-      expect(toggle()).toHaveAttribute('aria-expanded', 'true');
-      for (const el of [
+      const buttons = [
         screen.getByLabelText(/whatsapp/i),
         screen.getByLabelText(/call us/i),
         screen.getByRole('button', { name: 'Chat with us' }),
-      ]) {
-        expect(el).toHaveClass('flex');
+      ];
+      for (const el of buttons) {
         expect(el).not.toHaveClass('hidden');
-        expect(el).toHaveClass('h-12'); // 48px tap target
+        expect(el).toHaveClass('flex', 'h-11', 'w-11'); // 44px tap target
       }
-      expect(screen.getByText('WhatsApp')).toBeInTheDocument();
-      expect(screen.getByText('Call us')).toBeInTheDocument();
-      fireEvent.click(toggle());
-      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.getByLabelText(/whatsapp/i)).toHaveClass('hidden');
+      // Stacked top-to-bottom in this order at the bottom-right.
+      expect([...stack().children]).toEqual(buttons);
+      expect(stack()).toHaveClass('fixed', 'flex-col');
+      expect(screen.queryByRole('button', { name: /contact us/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { expanded: false })).not.toBeInTheDocument();
     });
 
-    it('closes on Escape and on a tap elsewhere', () => {
+    it('keeps desktop as before: 56px WhatsApp + Call, chat via HelpBot\'s own launcher', () => {
       pathname = '/';
       render(<ContactFab />);
-      fireEvent.click(toggle());
-      fireEvent.keyDown(document, { key: 'Escape' });
-      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
-      fireEvent.click(toggle());
-      fireEvent.pointerDown(document.body);
-      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getByLabelText(/whatsapp/i)).toHaveClass('md:h-14', 'md:w-14');
+      expect(screen.getByLabelText(/call us/i)).toHaveClass('md:h-14', 'md:w-14');
+      expect(screen.getByRole('button', { name: 'Chat with us' })).toHaveClass('md:hidden');
+      expect(stack()).toHaveClass('md:bottom-28');
     });
 
-    it('"Chat with us" opens the help chat and counts one chat contact', () => {
+    it('Chat opens the help chat and counts one chat contact', () => {
       pathname = '/orders';
       const opened = jest.fn();
       window.addEventListener(OPEN_HELP_BOT_EVENT, opened);
       render(<ContactFab />);
-      fireEvent.click(toggle());
       fireEvent.click(screen.getByRole('button', { name: 'Chat with us' }));
       window.removeEventListener(OPEN_HELP_BOT_EVENT, opened);
       expect(opened).toHaveBeenCalledTimes(1);
       expect(capture).toHaveBeenCalledTimes(1);
       expect(capture).toHaveBeenCalledWith('contact_click', { channel: 'chat', path: '/orders' });
-      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('leaves Chat out where the help chat is not available', () => {
@@ -124,14 +105,6 @@ describe('ContactFab', () => {
       render(<ContactFab />);
       expect(screen.queryByRole('button', { name: 'Chat with us' })).not.toBeInTheDocument();
       expect(screen.getByLabelText(/whatsapp/i)).toBeInTheDocument();
-    });
-
-    it('opening the menu is not itself a contact', () => {
-      pathname = '/';
-      render(<ContactFab />);
-      fireEvent.click(toggle());
-      expect(capture).not.toHaveBeenCalled();
-      expect(pushToGtm).not.toHaveBeenCalled();
     });
   });
 
@@ -154,33 +127,29 @@ describe('ContactFab', () => {
       expect(stack().style.transform).toBe('translateY(-0px)');
     });
 
-    it('steps aside on phones while Add to cart / Buy now are on screen, and closes its menu', () => {
+    it('steps aside on phones while Add to cart / Buy now are on screen', () => {
       pathname = '/products/ironman-reco-traks';
       render(<ContactFab />);
-      fireEvent.click(toggle());
       const token = {};
       act(() => setBuyButtonsInView(token, true));
       expect(stack()).toHaveClass('max-md:invisible', 'max-md:opacity-0', 'max-md:pointer-events-none');
-      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
       act(() => setBuyButtonsInView(token, false));
       expect(stack()).not.toHaveClass('max-md:invisible');
     });
   });
 
-  it('reserves room after the page on phones so content can scroll clear of the button', () => {
+  it('reserves room after the page on phones so content can scroll clear of the stack', () => {
     pathname = '/orders';
     render(<ContactFab />);
     const spacer = screen.getByTestId('fab-clearance');
     expect(spacer).toHaveClass('md:hidden');
-    expect(spacer.className).toContain('h-[calc(76px');
+    expect(spacer.className).toContain('h-[calc(172px'); // 16 + 3×44 + 2×8, plus air
   });
 
-  it('records each channel tap once, in PostHog and GTM, and closes the menu', () => {
+  it('records each channel tap once, in PostHog and GTM', () => {
     pathname = '/orders';
     render(<ContactFab />);
-    fireEvent.click(toggle());
     fireEvent.click(screen.getByLabelText(/whatsapp/i));
-    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(screen.getByLabelText(/call us/i));
     expect(capture).toHaveBeenCalledTimes(2);
     expect(capture).toHaveBeenNthCalledWith(1, 'contact_click', { channel: 'whatsapp', path: '/orders' });
