@@ -29,7 +29,7 @@ export const ORGANISATION = {
   name: 'Autobacs India',
   legalName: 'Roavion Automotive Pvt. Ltd.',
   url: 'https://www.autobacsindia.com/',
-  logo: 'https://www.autobacsindia.com/images/autobacs-logo.png',
+  logo: 'https://www.autobacsindia.com/images/autobacs-logo-v2.png',
   // Taken verbatim from the About page's own hero copy, so the structured data
   // and the page a visitor reads cannot say different things.
   description:

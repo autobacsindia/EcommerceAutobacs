@@ -108,7 +108,7 @@
 .hr .main-nav .logo { display: flex; align-items: center; font-size: 13px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; flex-shrink: 0; }
 .hr .main-nav .logo span { color: var(--gold); font-weight: 300; }
 /* Logo image (when brand.logo is set). The asset must be padding-trimmed
-   (public/images/autobacs-logo-white.png is) so height fills the mark.
+   (public/images/autobacs-logo-v2-white.png is) so height fills the mark.
    The Autobacs mark is a ~4.2:1 lockup with a small "Powered By" tagline, so it
    needs enough height for the tagline to stay legible; keep height
    ≤ navbar height (76px) so it never overflows the bar. */

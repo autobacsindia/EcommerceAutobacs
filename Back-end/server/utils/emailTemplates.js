@@ -854,7 +854,7 @@ Grievances: grievance@autobacsindia.com
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
                 <td valign="middle">
                   <a href="${site}" target="_blank" style="text-decoration:none;">
-                    <img src="${site}/images/autobacs-logo-white.png" width="150" alt="Autobacs India" style="display:block;width:150px;max-width:150px;height:auto;border:0;outline:none;color:#FFFFFF;font-family:${font};font-size:20px;font-weight:800;">
+                    <img src="${site}/images/autobacs-logo-v2-white.png" width="150" alt="Autobacs India" style="display:block;width:150px;max-width:150px;height:auto;border:0;outline:none;color:#FFFFFF;font-family:${font};font-size:20px;font-weight:800;">
                   </a>
                 </td>
                 <td align="right" valign="middle" style="font-family:${font};font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#7E8A83;">

@@ -97,9 +97,9 @@ export const brand = {
   // is controlled in CSS via `.logo-img` (see home-redesign.css), NOT by inflating
   // the asset height.
   // White wordmark: every place that shows it sits on a dark plate/bar.
-  logo: '/images/autobacs-logo-white.png',
+  logo: '/images/autobacs-logo-v2-white.png',
   // Black wordmark for light backgrounds.
-  logoOnLight: '/images/autobacs-logo.png',
+  logoOnLight: '/images/autobacs-logo-v2.png',
   logoAlt: 'Autobacs India',
   // Profile avatar in the nav (replace with the signed-in user's image later).
   avatar:
