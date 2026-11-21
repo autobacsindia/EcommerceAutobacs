@@ -12,7 +12,7 @@ import type { OverdueReasonCode, WorkOrder } from './types';
 
 /*
   Reason for overdue on a parcel past its expected delivery date (Back-end
-  teamWorkflowService.setParcelOverdueReason). Procurement and the admin give
+  teamWorkflowService.setParcelOverdueReason). Procurement, operations and the admin give
   it; everyone who sees the parcel reads it. The server decides who may, checks
   the parcel is still overdue on the date shown, and keeps every reason given.
 */

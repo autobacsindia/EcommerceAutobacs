@@ -786,7 +786,7 @@ router.put('/work/orders/:id/parcels/:shipmentId/eta', validateParcelEta, valida
   res.json({ success: true, order: await setParcelEta(req.user, req.params.id, req.params.shipmentId, { date, previousDate }, req) });
 }));
 
-// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/overdue-reason  { code, note?, expectedDate? } — procurement / admin: why it is overdue
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/overdue-reason  { code, note?, expectedDate? } — procurement / operations / admin: why it is overdue
 router.put('/work/orders/:id/parcels/:shipmentId/overdue-reason', validateOverdueReason, validateRequest, asyncHandler(async (req, res) => {
   const { code, note, expectedDate } = req.body;
   res.set('Cache-Control', 'no-store');
