@@ -369,7 +369,9 @@ export const getOrderById = async (req, res) => {
     salesRep: _salesRep, crmLeadId: _crmLeadId, bankTransferPendingAt: _bankTransferPendingAt,
     offlinePayment: _offlinePayment, salesDiscount: _salesDiscount,
     // Admin address corrections carry internal reasons and staff names.
-    addressChanges: _addressChanges, ...customerSafe
+    addressChanges: _addressChanges,
+    // Gateway failure diagnostics and extra captures awaiting refund: staff-only.
+    paymentAttempts: _paymentAttempts, duplicateCaptures: _duplicateCaptures, ...customerSafe
   } = order;
   // A quotation's % discount: the customer sees the percent and amount; the reason
   // and who gave it stay with staff.

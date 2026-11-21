@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 const WebhookEventSchema = new mongoose.Schema({
   eventId:     { type: String, required: true, unique: true },
   eventType:   { type: String, required: true },
+  // 'processing' while a delivery works on it (deleted if that run fails, so the
+  // retry processes it); 'done' once handled. Legacy rows without it mean done.
+  status:      { type: String, enum: ['processing', 'done'] },
   processedAt: { type: Date, default: Date.now }
 });
 
