@@ -234,6 +234,14 @@ export type OrderMoneyLine = {
   /** GTM: the price before the rep's offer; null when there was none. */
   listPrice: number | null;
   lineTotal: number | null;
+  /**
+   * The split (refund math, so it matches refunds): this line's share of the
+   * order's coupon/points discount, what was paid for it after that, and the GST
+   * inside it. null on an older order where any line has no saved price.
+   */
+  discountShare?: number | null;
+  paid?: number | null;
+  gst?: number | null;
 };
 
 export type SaleHistoryChange = {
@@ -259,6 +267,9 @@ export type OrderMoney = {
   lines: OrderMoneyLine[];
   /** Sum of the line totals; null when any line has no saved price. */
   itemsTotal: number | null;
+  /** Σ each line's `paid`, and the paise it falls short of the goods amount (shares round down). */
+  itemsPaid?: number | null;
+  rounding?: number | null;
   subtotal: number | null;
   discount: number;
   couponCode: string;

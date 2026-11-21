@@ -11,9 +11,21 @@ export function LinePrice({ line }: { line: OrderMoneyLine }) {
     <p className="text-xs text-gray-600" data-testid="line-price">
       {line.listPrice != null && <span className="mr-1 text-gray-400 line-through">{rupees(line.listPrice)}</span>}
       {rupees(line.price)} × {line.quantity} = <span className="font-semibold text-gray-900">{amount(line.lineTotal)}</span>
+      {line.discountShare != null && line.discountShare > 0 && line.paid != null && (
+        <span data-testid="line-split" className="block">
+          Discount share −{rupees(line.discountShare)} → paid <span className="font-semibold text-gray-900">{rupees(line.paid)}</span>
+        </span>
+      )}
+      {line.gst != null && line.gst > 0 && (
+        <span data-testid="line-gst" className="block text-gray-500">Includes GST of {rupees(line.gst)}</span>
+      )}
     </p>
   );
 }
+
+/** What this item came to on the order: after its discount share when it had one. */
+export const lineAmount = (line: OrderMoneyLine | undefined): number | null =>
+  line ? (line.paid ?? line.lineTotal) : null;
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
@@ -36,6 +48,13 @@ export function OrderMoneySummary({ money, itemCount }: { money: OrderMoney; ite
         <Row label={`Items (${itemCount})`} value={amount(money.subtotal)} />
         {money.discount > 0 && (
           <Row label={money.couponCode ? `Discount (${money.couponCode})` : 'Discount'} value={`−${rupees(money.discount)}`} />
+        )}
+        {/* With a discount, the items' own paid amounts are what add up to the total. */}
+        {money.discount > 0 && money.itemsPaid != null && (
+          <Row label="Items after discount" value={rupees(money.itemsPaid)} />
+        )}
+        {money.discount > 0 && money.rounding != null && money.rounding > 0 && (
+          <Row label="Paise rounding" value={rupees(money.rounding)} />
         )}
         <Row label="Delivery" value={money.shipping > 0 ? rupees(money.shipping) : 'Free'} />
         <Row label="Order total" value={amount(money.total)} strong />

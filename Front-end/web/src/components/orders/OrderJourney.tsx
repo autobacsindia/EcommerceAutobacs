@@ -6,6 +6,7 @@ import { rupees } from '@/components/staff/sales/types';
 import type { WorkOrder } from '@/components/staff/work/types';
 import { formatEtaDay } from '@/components/staff/work/ParcelEta';
 import { buildJourney, type JourneyStep, type StepKey } from './journeySteps';
+import { lineAmount } from '@/components/staff/work/OrderMoney';
 
 /**
  * The order's journey as a left-to-right tracker (top to bottom on a phone), one
@@ -94,6 +95,7 @@ function Track({ steps, label }: { steps: JourneyStep[]; label: string }) {
  */
 export default function OrderJourney({ order, showFacts = true }: { order: WorkOrder; showFacts?: boolean }) {
   const lines = buildJourney(order);
+  const amountOf = new Map((order.money?.lines ?? []).map((m) => [m.itemId, lineAmount(m)]));
   const dispatched = order.parcels.filter((p) => p.status !== 'packed').length;
   const delivered = order.parcels.filter((p) => p.status === 'delivered').length;
   const facts: [string, string][] = [
@@ -132,7 +134,13 @@ export default function OrderJourney({ order, showFacts = true }: { order: WorkO
           {lines.map((l) => (
             <div key={l.itemId}>
               {lines.length > 1 && (
-                <p className="mb-2 text-sm font-medium text-gray-800">{l.name} × {l.quantity}</p>
+                <p className="mb-2 text-sm font-medium text-gray-800">
+                  {l.name} × {l.quantity}
+                  {/* Accounts / admin: this item's amount, so the split is visible at a glance. */}
+                  {amountOf.get(l.itemId) != null && (
+                    <span data-testid="journey-amount" className="text-gray-600"> · {rupees(amountOf.get(l.itemId) as number)}</span>
+                  )}
+                </p>
               )}
               <Track steps={l.steps} label={`Journey of ${l.name}`} />
               {l.branch && (

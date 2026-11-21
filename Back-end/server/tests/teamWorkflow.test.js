@@ -52,6 +52,7 @@ const { default: cancellationService } = await import('../services/cancellationS
 const { default: Payment } = await import('../models/Payment.js');
 const wf = await import('../services/teamWorkflowService.js');
 const { default: orderRepository } = await import('../repositories/orderRepository.js');
+const { refundableForLines } = await import('../services/refundMathService.js');
 const { default: karmaService } = await import('../services/karmaService.js');
 const { default: KarmaLedger } = await import('../models/KarmaLedger.js');
 const { default: affiliateCommissionRepository } = await import('../repositories/affiliateCommissionRepository.js');
@@ -257,11 +258,50 @@ describe('item prices for accounts (bulk orders)', () => {
     expect(money.subtotal - money.discount + money.shipping).toBe(money.total);
   });
 
+  it('splits the coupon across items with the refund math, and the items add up to the order', async () => {
+    const created = await paidOrder({ items: [
+      { product: new mongoose.Types.ObjectId(), name: 'Snorkel', price: 70000, quantity: 1 },
+      { product: new mongoose.Types.ObjectId(), name: 'Under body shield', price: 33333.33, quantity: 3 },
+    ] });
+    // ₹1,000 coupon on ₹1,69,999.99 of goods, ₹150 delivery, GST inside.
+    await Order.updateOne({ _id: created._id }, { $set: {
+      subtotal: 169999.99, discount: 1000, couponDiscount: 1000, couponCode: 'SAVE', shippingCost: 150, tax: 25779.66, totalAmount: 169149.99,
+    } });
+    const { money } = await wf.getOrder(await staff('accounts'), String(created._id));
+    const [a, b] = money.lines;
+    // Same figures a whole-line refund would return.
+    const order = await Order.findById(created._id).lean();
+    for (const [line, it] of [[a, order.items[0]], [b, order.items[1]]]) {
+      const r = refundableForLines(order, [{ itemId: it._id, quantity: it.quantity }]);
+      expect(line.paid).toBe(r.netRupees);
+      expect(line.discountShare).toBe(r.discountShareRupees);
+      expect(Math.round((line.lineTotal - line.discountShare) * 100)).toBe(Math.round(line.paid * 100));
+    }
+    // Items paid + rounding = goods; + delivery = order total.
+    const paise = (n) => Math.round(n * 100);
+    expect(paise(money.itemsPaid) + paise(money.rounding)).toBe(paise(money.subtotal - money.discount));
+    expect(paise(money.itemsPaid) + paise(money.rounding) + paise(money.shipping)).toBe(paise(money.total));
+    expect(money.rounding).toBeLessThan(0.02);
+    // GST shares never exceed the order's GST.
+    expect(paise(a.gst) + paise(b.gst)).toBeLessThanOrEqual(paise(money.tax));
+    expect(paise(money.tax) - paise(a.gst) - paise(b.gst)).toBeLessThan(3);
+  });
+
+  it('with no discount each item is paid its full line total', async () => {
+    const order = await paidOrder();
+    const { money } = await wf.getOrder(await staff('accounts'), String(order._id));
+    expect(money.lines.map((l) => [l.paid, l.discountShare])).toEqual([[5000, 0], [2000, 0]]);
+    expect(money).toMatchObject({ itemsPaid: 7000, rounding: 0 });
+  });
+
   it('a legacy line with no saved price shows as unknown, and no items total is invented', async () => {
     const created = await paidOrder();
     await Order.collection.updateOne({ _id: created._id }, { $unset: { 'items.1.price': '' } });
     const { money } = await wf.getOrder(await staff('accounts'), String(created._id));
     expect(money.lines[1]).toMatchObject({ price: null, lineTotal: null });
+    // No split is invented for any line when one line's price is unknown.
+    expect(money.lines.map((l) => l.paid)).toEqual([null, null]);
+    expect(money.itemsPaid).toBeNull();
     expect(money.lines[0].lineTotal).toBe(5000);
     expect(money.itemsTotal).toBeNull();
     expect(money.subtotal).toBe(7000);
