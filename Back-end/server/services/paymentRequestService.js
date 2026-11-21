@@ -47,7 +47,7 @@ import {
 } from '../config/expenseCategories.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
-import { bankCodeLabel, cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
+import { bankCodeLabel, cardLabelOf, cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
 import {
   and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
 } from '../utils/listQuery.js';
@@ -387,12 +387,20 @@ const filesFrom = (uploaded = {}) => {
   return { files: out.map(([, f]) => f), kinds: out.map(([k]) => k) };
 };
 
-/** A UPI payee needs their UPI ID or a payment QR — one way or the other to pay them. */
-function requireUpiOrQr(payee, kinds) {
+/**
+ * A supplier's UPI payee needs their UPI ID or a payment QR — one way or the
+ * other to pay them. Expense requests may leave it for accounts (`optional`).
+ */
+function requireUpiOrQr(payee, kinds, { optional = false } = {}) {
+  if (optional) return;
   if (payee.method === 'upi' && !payee.upiId && !kinds.includes('qr')) {
     throw fail('Enter their UPI ID, or attach their payment QR.', 400);
   }
 }
+
+/** How the admin paid it: the same list everywhere (pay, pay in one transfer, correct a payment). */
+export const PAID_METHODS = Object.freeze(['razorpay', 'bank', 'upi', 'card', 'other']);
+const paidMethodOf = (m) => (PAID_METHODS.includes(m) ? m : null);
 
 const nextNumber = async () => `PR-${String(await counterRepository.next('payment_request')).padStart(4, '0')}`;
 
@@ -430,7 +438,7 @@ async function tellChat(req, action, text, { mentionAdmins = false, mentionReque
 
 const what = (r) => (r.kind === 'supplier'
   ? `supplier payment ${r.number} — ${moneyText(r)} to ${r.payee.name}${r.orderNumber ? ` for ${r.orderNumber}` : ''}`
-  : `${categoryLabel(r.category)} expense ${r.number} — ${moneyText(r)} to ${r.payee.name}`);
+  : `${categoryLabel(r.category)} expense ${r.number} — ${moneyText(r)}${r.payee?.name ? ` to ${r.payee.name}` : ''}`);
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -550,7 +558,8 @@ export async function createExpense(actor, input, uploaded, req) {
   checkNote(team, category, description);
   const money = cleanMoney(team, input);
   const { amount } = money;
-  const payee = cleanPayee(input.payee);
+  // Every pay detail is optional on an expense: accounts usually fills them in.
+  const payee = cleanPayee(input.payee, { optional: true });
 
   const link = await expenseOrderLink(input.orderId);
   const extra = await otherLinks(actor, input);
@@ -562,7 +571,7 @@ export async function createExpense(actor, input, uploaded, req) {
   }
 
   const { files, kinds } = filesFrom(uploaded);
-  requireUpiOrQr(payee, kinds);
+  requireUpiOrQr(payee, kinds, { optional: true });
   const stored = await storeFiles(files, kinds, actor);
   let doc;
   try {
@@ -1024,7 +1033,7 @@ export async function release(actor, id, { note } = {}, req) {
  */
 export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees, paidFrom, sentAmount, sentCurrency, accountLabel, payVersion, slipRead } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
-  const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
+  const how = paidMethodOf(method);
   if (!how) throw fail('Choose how it was paid.', 400);
   // Optional: not every payment has one to hand (cash, some UPI apps).
   const ref = String(reference || '').trim();
@@ -1178,10 +1187,10 @@ export async function update(actor, id, input = {}, req) {
     ({ payee, bankNotice } = picked);
     supplier = picked.supplier._id;
   } else if (input.payee) {
-    payee = cleanPayee(input.payee);
+    payee = cleanPayee(input.payee, { optional: isExpense });
     if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) { supplier = null; bankNotice = null; }
   }
-  requireUpiOrQr(payee, (r0.files || []).map((f) => f.kind));
+  requireUpiOrQr(payee, (r0.files || []).map((f) => f.kind), { optional: isExpense });
   if (creditPaise && idOf(supplier) !== idOf(r0.supplier)) {
     throw fail(`${r0.number} uses ${deals.moneyOf(creditPaise, before.currency)} of ${r0.payee?.name || 'this supplier'}'s credit, so the supplier cannot change. Cancel it and raise a new payment instead.`, 409);
   }
@@ -1190,7 +1199,7 @@ export async function update(actor, id, input = {}, req) {
   // A foreign bill without rupees yet has no rupee amount to compare: its bill line says it.
   if (amount !== r0.amount && !rupeesPending(money) && !rupeesPending(r0)) changes.push(`amount ${inr(r0.amount)} → ${inr(amount)}`);
   if (fxChanged) changes.push(`bill ${foreignLine(before) || 'in rupees'} → ${foreignLine(money) || 'in rupees'}`);
-  if (payee.name !== r0.payee.name) changes.push(`payee ${r0.payee.name} → ${payee.name}`);
+  if (payee.name !== r0.payee.name) changes.push(`payee ${r0.payee.name || '(none)'} → ${payee.name || '(none)'}`);
   if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) changes.push('payment details');
   if (description !== (r0.description || '')) changes.push('details');
   if (category !== r0.category) changes.push(`for ${categoryLabel(r0.category)} → ${categoryLabel(category)}`);
@@ -1244,7 +1253,7 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   const r0 = await loadVisible(actor, id);
   if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
 
-  const how = method ? (['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null) : r0.payment?.method;
+  const how = method ? paidMethodOf(method) : r0.payment?.method;
   if (!how) throw fail('Choose how it was paid.', 400);
   const ref = reference != null ? String(reference).trim().slice(0, 120) : r0.payment?.reference || '';
   const wasAt = r0.payment?.transactionAt || r0.payment?.paidAt || null;
@@ -1344,9 +1353,8 @@ export const LIST_SORTS = Object.freeze({
   // Only meaningful for paid requests (the only ones with a paidAt): ignored otherwise.
   paid_recent: { field: 'payment.paidAt', dir: -1, type: 'date' },
 });
-export const PAID_METHODS = Object.freeze(['razorpay', 'bank', 'upi', 'other']);
 const SEARCH_FIELDS = Object.freeze([
-  'number', 'payee.name', 'payee.upiId', 'orderNumber', 'requestedByName', 'description', 'category',
+  'number', 'payee.name', 'payee.upiId', 'payee.cardLast4', 'payee.cardLabel', 'payee.cardName', 'orderNumber', 'requestedByName', 'description', 'category',
   'payment.reference', 'itemNames', 'customer.name', 'customer.phone', 'customer.city',
   'projectCode', 'projectName', 'reference',
 ]);
@@ -1658,7 +1666,12 @@ const TO_PAY = ['approved', 'on_hold'];
 /** An opaque id for a pay destination: the key itself holds the account number. */
 const groupIdOf = (r) => crypto.createHash('sha256').update(payKeyOf(r.payee, idOf(r._id))).digest('hex').slice(0, 16);
 
-const destinationLabel = (p = {}) => (p.method === 'upi' ? (p.upiId ? `UPI ${p.upiId}` : 'UPI by QR (see the request)') : `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${bankCodeLabel(p)}`);
+const destinationLabel = (p = {}) => {
+  if (p.method === 'upi') return p.upiId ? `UPI ${p.upiId}` : 'UPI by QR (see the request)';
+  if (p.method === 'card') return `Card ${cardLabelOf(p)}`.trim();
+  if (p.method !== 'bank') return 'Payment details not given yet';
+  return `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${bankCodeLabel(p)}`;
+};
 
 /** The "to pay, by supplier" sorts: longest waiting first unless asked. */
 const GROUP_SORTS = Object.freeze({
@@ -1754,7 +1767,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   if (!wanted.length) throw fail('Tick the payments you are paying.', 400);
   if (wanted.length > MAX_BATCH) throw fail(`Pay at most ${MAX_BATCH} at a time.`, 400);
   if (wanted.some((id) => !/^[a-f0-9]{24}$/i.test(id))) throw fail('Request not found.', 404);
-  const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
+  const how = paidMethodOf(method);
   if (!how) throw fail('Choose how it was paid.', 400);
   const ref = String(reference || '').trim(); // optional, as for a single payment
   const txAt = cleanTransactionAt(transactionAt);

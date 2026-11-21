@@ -140,7 +140,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><label className={label} htmlFor="pb-method">Paid by</label>
                   <select id="pb-method" className={input} value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
-                    <option value="bank">Bank transfer</option><option value="upi">UPI</option><option value="razorpay">Razorpay payout</option><option value="other">Other</option>
+                    <option value="bank">Bank transfer</option><option value="upi">UPI</option><option value="card">Card</option><option value="razorpay">Razorpay payout</option><option value="other">Other</option>
                   </select></div>
                 <div><label className={label} htmlFor="pb-ref">Reference (UTR / payout ID) — optional<SlipFieldTag source={slip.tag('reference', reference)} /></label>
                   <input id="pb-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} /></div>

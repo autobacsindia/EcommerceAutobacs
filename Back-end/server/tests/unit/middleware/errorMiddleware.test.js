@@ -145,3 +145,23 @@ describe('errorHandler — P1 alerting is for unexpected faults only', () => {
     expect(sendP1Alert).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('errorHandler — card numbers never reach the log (PCI DSS)', () => {
+  it('masks a card number inside a multipart JSON field, spaced or dashed', () => {
+    for (const n of ['4111111111111111', '4111 1111 1111 1111', '4111-1111-1111-1111']) {
+      run(appError('Only the last 4 digits of the card — never the full card number.', 400),
+        makeReq({ body: { category: 'tools', payee: JSON.stringify({ method: 'card', cardLast4: n }) } }));
+      const logged = console.error.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(logged).toContain('[REDACTED]');
+      expect(logged.replace(/\D/g, '')).not.toContain('411111111111');
+      console.error.mockClear();
+    }
+  });
+
+  it('leaves short numbers (amounts, last 4, phone) readable', () => {
+    run(appError('x', 400), makeReq({ body: { amount: '1250.50', payee: '{"cardLast4":"4821","phone":"9876543210"}' } }));
+    const logged = console.error.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(logged).toContain('4821');
+    expect(logged).toContain('9876543210');
+  });
+});

@@ -16,6 +16,7 @@ import { rupeesInWords } from '../utils/amountInWords.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { BASE_CURRENCY, categoryLabel } from '../config/expenseCategories.js';
 import { STATUS_LABELS, maskAccount, paidFromForeign, rupeesPending } from './paymentRequestService.js';
+import { CARD_NETWORKS, CARD_TYPES, methodLabel } from '../utils/payee.js';
 import { richTextToPlain } from '../utils/richText.js';
 
 const { HAS_UNICODE, FONT, FONT_BOLD, CURRENCY, unicodeFonts } = pdfFonts;
@@ -26,7 +27,7 @@ const ACTION_LABELS = {
   submitted: 'Raised', approved: 'Approved by admin', declined: 'Declined by admin',
   on_hold: 'Put on hold by accounts', paid: 'Paid by accounts', cancelled: 'Cancelled',
 };
-const METHOD_LABELS = { razorpay: 'Razorpay', bank: 'Bank transfer', upi: 'UPI', other: 'Other' };
+const METHOD_LABELS = { razorpay: 'Razorpay', bank: 'Bank transfer', upi: 'UPI', card: 'Card', other: 'Other' };
 const dateTime = (d) => formatDateTimeIST(d);
 /** An amount in a deal's currency: "Rs 29,000.00" / "THB 29,400.00". */
 const dealMoney = (n, cur) => (!cur || cur === BASE_CURRENCY ? money(n) : `${cur} ${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -185,7 +186,10 @@ export async function renderPaymentSlip(r) {
       ]);
       const rightEnd = block(L + colW + 24, 'PAY TO', [
         ['Name', payee.name],
-        ['Method', payee.method === 'upi' ? 'UPI' : 'Bank transfer'],
+        ['Method', methodLabel(payee.method) || 'Not given yet'],
+        ['Card', payee.method === 'card' ? [CARD_NETWORKS[payee.cardNetwork], CARD_TYPES[payee.cardType], payee.cardLast4 ? `ending ${payee.cardLast4}` : ''].filter(Boolean).join(' ') : ''],
+        ['Company card', payee.method === 'card' ? payee.cardLabel : ''],
+        ['Name on card', payee.method === 'card' ? payee.cardName : ''],
         ['UPI ID', payee.upiId],
         ['Account name', payee.accountName],
         ['Account no.', maskAccount(payee.accountNumber)],

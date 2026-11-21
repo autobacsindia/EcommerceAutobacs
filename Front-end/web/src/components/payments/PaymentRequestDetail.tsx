@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
+import { cardLabelOf } from './CardFields';
 import {
   accountName, actOn, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
@@ -32,6 +33,17 @@ const ACTION_LABELS: Record<string, string> = {
   on_hold: 'Put on hold', released: 'Hold released', paid: 'Paid', cancelled: 'Cancelled', edited: 'Edited', payment_edited: 'Payment record corrected',
 };
 const FILE_LABELS = { bill: 'Bill / invoice', qr: 'Payment QR', proof: 'Payment screenshot' } as const;
+
+/** How the payee is paid, in one line; '' (row hidden) is never shown — "Not given yet" instead. */
+function payByLine(p: PaymentRequest['payee']): string {
+  if (p.method === 'upi') return `UPI · ${p.upiId || 'scan their QR (attached)'}`;
+  if (p.method === 'card') return `Card · ${cardLabelOf(p) || 'details not given yet'}`;
+  if (p.method === 'bank') {
+    const parts = [p.accountName, p.accountNumber ? `A/c ${p.accountNumber}` : '', bankCode(p)].filter(Boolean);
+    return `Bank · ${parts.join(', ') || 'details not given yet'}${p.bankName ? ` (${p.bankName})` : ''}`;
+  }
+  return 'Not given yet — accounts can add it';
+}
 
 function Row({ k, v, copy }: { k: string; v?: string | null; /** Names a copy icon after the value ("Order number"). */ copy?: string }) {
   if (!v) return null;
@@ -247,7 +259,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 : r.rupeesPending
                 ? <p className="text-sm text-gray-700">Rupee amount: what the bank debits — recorded when paid.</p>
                 : foreignBill(r) && <p className="text-sm text-gray-700">Bill: {foreignBill(r)}</p>}
-              <p className="text-sm text-gray-600">to {r.payee.name}</p>
+              <p className="text-sm text-gray-600">to {r.payee.name || 'payee not given yet'}</p>
               {r.credit && r.bill != null && (
                 <p className="mt-1 text-sm text-emerald-800" aria-label="Supplier credit used">
                   Bill {money(r.bill, r.currency)} − supplier credit {money(r.credit.amount, r.currency)} = transfer {money(Math.round((r.bill - r.credit.amount) * 100) / 100, r.currency)}
@@ -288,7 +300,8 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                   <dd className="min-w-0 text-gray-900"><RichText value={r.description} /></dd>
                 </div>
               )}
-              <Row k="Pay by" v={r.payee.method === 'upi' ? `UPI · ${r.payee.upiId || 'scan their QR (attached)'}` : `Bank · ${r.payee.accountName}, A/c ${r.payee.accountNumber}, ${bankCode(r.payee)}${r.payee.bankName ? ` (${r.payee.bankName})` : ''}`} />
+              <Row k="Pay by" v={payByLine(r.payee)} />
+              {r.payee.method === 'card' && <Row k="Name on card" v={r.payee.cardName} />}
               <Row k="Payee phone" v={r.payee.phone} />
               {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}
               {r.paidFrom && <Row k="Paid from" v={`${accountName(r.paidFrom)} · ${money(r.paidFrom.amount, r.paidFrom.currency)} sent`} />}
@@ -369,9 +382,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 {mode === 'pay' && (
                   <div className="space-y-2">
                     {billAmount(r) ? (
-                      <p className="text-sm text-gray-700">Pay <strong>{billAmount(r)}</strong> to {r.payee.name}, then record it here{pay.from === 'foreign' ? '.' : ' with the rupees the bank debited.'}</p>
+                      <p className="text-sm text-gray-700">Pay <strong>{billAmount(r)}</strong> to {r.payee.name || 'the payee'}, then record it here{pay.from === 'foreign' ? '.' : ' with the rupees the bank debited.'}</p>
                     ) : (
-                      <p className="text-sm text-gray-700">Pay <strong>{rupees(r.amount)}</strong> to {r.payee.name} from the company Razorpay / bank, then record it here.</p>
+                      <p className="text-sm text-gray-700">Pay <strong>{rupees(r.amount)}</strong> to {r.payee.name || 'the payee'} from the company Razorpay / bank, then record it here.</p>
                     )}
                     {billAmount(r) && (
                       <fieldset className="rounded-lg border border-gray-200 p-2">
@@ -409,6 +422,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                         <option value="razorpay">Razorpay</option>
                         <option value="bank">Bank transfer</option>
                         <option value="upi">UPI</option>
+                        <option value="card">Card</option>
                         <option value="other">Other</option>
                       </select>
                       <input aria-label="Payment reference" className={input} value={pay.reference} onChange={(e) => setPay({ ...pay, reference: e.target.value })} placeholder="Payout ID / UTR (optional)" />

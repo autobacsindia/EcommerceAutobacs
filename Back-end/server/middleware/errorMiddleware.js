@@ -75,6 +75,9 @@ const SAFE_ERROR_MESSAGES = new Set([
  * Deep sanitize object to redact sensitive fields at any nesting level
  * Handles circular references and value pattern detection
  */
+// 13–19 digits, optionally split by spaces or dashes: the shape of a card number.
+const CARD_NUMBER_IN_TEXT = /(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)/g;
+
 function deepSanitize(obj, level = 0, maxLevel = 5, seen = new WeakSet()) {
   // Prevent infinite recursion
   if (level > maxLevel) return '[MAX_DEPTH_REached]';
@@ -134,6 +137,11 @@ function deepSanitize(obj, level = 0, maxLevel = 5, seen = new WeakSet()) {
     
     if (isSensitiveKey || isSensitiveValue) {
       acc[key] = '[REDACTED]';
+    } else if (typeof value === 'string') {
+      // A card number INSIDE a longer string — e.g. a multipart field holding
+      // JSON ('{"cardLast4":"4111 1111 1111 1111"}') — is masked too (PCI DSS:
+      // a refused card number must never reach the logs).
+      acc[key] = value.replace(CARD_NUMBER_IN_TEXT, '[REDACTED]');
     } else {
       acc[key] = deepSanitize(value, level + 1, maxLevel, seen);
     }

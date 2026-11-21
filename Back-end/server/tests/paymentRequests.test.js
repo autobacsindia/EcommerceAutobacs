@@ -69,6 +69,7 @@ async function signIn(email) {
   return {
     get: (url) => agent.get(`${BASE}${url}`),
     post: (url, body = {}) => agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
+    put: (url, body = {}) => agent.put(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
     form: (url, fields = {}, files = []) => {
       let r = agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf);
       for (const [k, v] of Object.entries(fields)) r = r.field(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
@@ -248,6 +249,86 @@ describe('Payment requests', () => {
       expect(res.status).toBe(400);
       expect(stored.size).toBe(before);
       expect(await PaymentRequest.countDocuments()).toBe(count);
+    });
+  });
+
+  describe('card and optional pay details', () => {
+    const CARD = { name: 'Claude', method: 'card', cardType: 'credit', cardNetwork: 'visa', cardLast4: '4821', cardName: 'Sachin', cardLabel: 'HDFC corporate card' };
+
+    it('a card is saved with its last 4 digits, shown to accounts, found by search, and paid by card', async () => {
+      const res = await expense(ops.session, { payee: CARD });
+      expect(res.status).toBe(201);
+      expect(res.body.request.payee).toMatchObject(CARD);
+      const saved = await PaymentRequest.findById(res.body.request.id).lean();
+      expect(saved.payee).toMatchObject({ method: 'card', cardLast4: '4821', cardLabel: 'HDFC corporate card' });
+      expect((await accounts.session.get(`/payment-requests/${res.body.request.id}`)).body.request.payee).toMatchObject(CARD);
+      const found = await accounts.session.get('/payment-requests?q=HDFC%20corporate');
+      expect(found.body.requests.map((r) => r.id)).toContain(res.body.request.id);
+      expect((await accounts.session.post(`/payment-requests/${res.body.request.id}/approve`)).status).toBe(200);
+      const paid = await admin.session.form(`/payment-requests/${res.body.request.id}/pay`, { method: 'card', reference: 'card txn 77' });
+      expect(paid.status).toBe(200);
+      expect(paid.body.request.payment.method).toBe('card');
+    });
+
+    it('a full card number is refused with "only the last 4 digits", nothing is saved, and it is not logged', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const before = await PaymentRequest.countDocuments();
+      try {
+        for (const n of ['4111111111111111', '4111 1111 1111 1111']) {
+          const res = await expense(ops.session, { payee: { ...CARD, cardLast4: n } });
+          expect(res.status).toBe(400);
+          expect(res.body.message).toMatch(/Only the last 4 digits/);
+          expect(JSON.stringify(res.body)).not.toContain('41111111');
+        }
+        const logged = [errorSpy, warnSpy, logSpy].flatMap((s) => s.mock.calls).map((c) => c.map((x) => (typeof x === 'string' ? x : JSON.stringify(x) ?? '')).join(' ')).join('\n');
+        expect(logged.replace(/\D/g, '')).not.toContain('411111111111');
+      } finally {
+        errorSpy.mockRestore(); warnSpy.mockRestore(); logSpy.mockRestore();
+      }
+      expect(await PaymentRequest.countDocuments()).toBe(before);
+    });
+
+    it('a request with no pay details at all goes through, and can be paid', async () => {
+      const res = await expense(ops.session, { payee: {} }, []);
+      expect(res.status).toBe(201);
+      expect(res.body.request.payee).toMatchObject({ name: '', method: '' });
+      // UPI chosen with no UPI ID and no QR: accounts fills it in later.
+      expect((await expense(ops.session, { payee: { method: 'upi' } }, [])).status).toBe(201);
+      const id = res.body.request.id;
+      expect((await accounts.session.post(`/payment-requests/${id}/approve`)).status).toBe(200);
+      expect((await admin.session.form(`/payment-requests/${id}/pay`, { method: 'card', reference: 'x' })).status).toBe(200);
+      const slip = await admin.session.get(`/payment-requests/${id}/slip`);
+      expect(slip.status).toBe(200);
+      expect(slip.headers['content-type']).toMatch(/pdf/);
+    });
+
+    it('the details can be filled in later; a bad IFSC is still refused when given', async () => {
+      const id = (await expense(ops.session, { payee: {} }, [])).body.request.id;
+      const badEdit = await admin.session.put(`/payment-requests/${id}`, { payee: { name: 'ARB', method: 'bank', ifsc: 'HDFC123' } });
+      expect(badEdit.status).toBe(400);
+      expect(badEdit.body.message).toMatch(/IFSC/);
+      const filled = await admin.session.put(`/payment-requests/${id}`, { payee: CARD });
+      expect(filled.status).toBe(200);
+      expect(filled.body.request.payee).toMatchObject({ method: 'card', cardLast4: '4821' });
+      expect((await admin.session.put(`/payment-requests/${id}`, { payee: { ...CARD, cardLast4: '4111111111111111' } })).status).toBe(400);
+      expect((await PaymentRequest.findById(id).lean()).payee.cardLast4).toBe('4821');
+      const raised = await expense(ops.session, { payee: { method: 'bank', ifsc: 'HDFC123' } }, []);
+      expect(raised.status).toBe(400);
+      expect(raised.body.message).toMatch(/IFSC/);
+      expect((await expense(ops.session, { payee: { method: 'upi', upiId: 'not-a-upi' } }, [])).status).toBe(400);
+      expect((await expense(ops.session, { payee: { method: 'card', cardLast4: '48' } }, [])).status).toBe(400);
+    });
+
+    it('supplier-style rules are unchanged for UPI and bank expenses', async () => {
+      const upi = await expense(ops.session);
+      expect(upi.status).toBe(201);
+      expect(upi.body.request.payee).toEqual(expect.objectContaining({ name: 'Fuel Station', method: 'upi', upiId: 'fuelstation@okaxis' }));
+      expect(upi.body.request.payee).not.toHaveProperty('cardLast4');
+      const bank = await expense(ops.session, { payee: BANK });
+      expect(bank.status).toBe(201);
+      expect(bank.body.request.payee).toMatchObject({ method: 'bank', ifsc: 'HDFC0001234', bankName: 'HDFC' });
     });
   });
 

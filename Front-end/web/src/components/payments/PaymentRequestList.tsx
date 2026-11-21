@@ -29,7 +29,7 @@ const PAID_SORT = { value: 'paid_recent', label: 'Recently paid' } as const;
 const KINDS = [{ value: 'supplier', label: 'Supplier payments' }, { value: 'expense', label: 'Expenses' }] as const;
 const PAID_BY = [
   { value: 'bank', label: 'Bank transfer' }, { value: 'upi', label: 'UPI' },
-  { value: 'razorpay', label: 'Razorpay' }, { value: 'other', label: 'Other' },
+  { value: 'card', label: 'Card' }, { value: 'razorpay', label: 'Razorpay' }, { value: 'other', label: 'Other' },
 ] as const;
 const DATE_OF = [{ value: 'raised', label: 'Raised on' }, { value: 'paid', label: 'Paid on' }] as const;
 
@@ -179,7 +179,7 @@ export default function PaymentRequestList({
               <button type="button" onClick={() => setOpen(r.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50">
                 <div className="min-w-0 flex-1">
                   <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-900">
-                    <span className="truncate">{r.number} · {r.kind === 'supplier' ? `Supplier — ${r.payee.name}` : `${categoryName(r)} — ${r.payee.name}`}</span>
+                    <span className="truncate">{r.number} · {r.kind === 'supplier' ? `Supplier — ${r.payee.name}` : `${categoryName(r)}${r.payee.name ? ` — ${r.payee.name}` : ''}`}</span>
                     {r.kind === 'supplier' && <OrderTypeTag type="procurement" />}
                     {r.partLabel && <span className="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">{r.partLabel}</span>}
                   </p>

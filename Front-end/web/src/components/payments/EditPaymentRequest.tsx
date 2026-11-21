@@ -8,6 +8,7 @@ import {
   categoryName, errorMessage, getExpenseOptions, money, paymentKeys, type PaymentRequest,
 } from './api';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
+import CardFields, { cardPayload, last4Problem, type CardDetails, type PayMethod } from './CardFields';
 import { SupplierSuggestions, payLine } from './SupplierPicker';
 import type { Supplier } from './suppliers';
 import RichTextBox from '@/components/ui/RichTextBox';
@@ -57,7 +58,13 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const foreign = currency !== 'INR';
   // A part of a supplier deal stays in the deal's currency.
   const currencyLocked = Boolean(r.dealId || r.credit);
-  const [method, setMethod] = useState<'upi' | 'bank'>(r.payee.method);
+  // An expense's pay details are all optional (accounts fills them in); a supplier's are not.
+  const optional = isExpense;
+  const [method, setMethod] = useState<PayMethod>(r.payee.method || '');
+  const [card, setCard] = useState<CardDetails>({
+    cardType: r.payee.cardType || '', cardNetwork: r.payee.cardNetwork || '', cardLast4: r.payee.cardLast4 || '',
+    cardName: r.payee.cardName || '', cardLabel: r.payee.cardLabel || '',
+  });
   const [payee, setPayee] = useState({
     name: r.payee.name, upiId: r.payee.upiId || '', accountName: r.payee.accountName || '',
     accountNumber: r.payee.accountNumber || '', ifsc: r.payee.ifsc || '', swift: r.payee.swift || '', bankName: r.payee.bankName || '', phone: r.payee.phone || '',
@@ -75,6 +82,7 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     setError('');
     const codeProblem = !picked && method === 'bank' && !masked ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
+    if (!picked && method === 'card' && last4Problem(card.cardLast4)) { setError(last4Problem(card.cardLast4)); return; }
     if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
     const body: Record<string, unknown> = { description: description.trim() };
     // A foreign bill sends only what was billed: its rupees are recorded when it is paid.
@@ -85,7 +93,11 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     else if (!(method === 'bank' && masked)) {
       body.payee = method === 'upi'
         ? { name: payee.name.trim(), method, upiId: payee.upiId.trim(), phone: payee.phone.trim() }
-        : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() };
+        : method === 'card'
+          ? { name: payee.name.trim(), method, ...cardPayload(card) }
+          : method === 'bank'
+            ? { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() }
+            : { name: payee.name.trim(), method: '' };
     }
     setBusy(true);
     try {
@@ -141,30 +153,31 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
       ) : (
         <>
           <div><label className={label} htmlFor="ed-payee">{r.kind === 'supplier' ? 'Supplier' : 'Pay to'}</label>
-            <input id="ed-payee" className={input} required minLength={2} maxLength={120} value={payee.name} onChange={set('name')} autoComplete="off" />
+            <input id="ed-payee" className={input} required={!optional} minLength={2} maxLength={120} value={payee.name} onChange={set('name')} autoComplete="off" />
             {r.kind === 'supplier' && <SupplierSuggestions query={payee.name} onPick={setPicked} />}</div>
           <div className="flex gap-2" role="radiogroup" aria-label="Payment method">
-            {(['upi', 'bank'] as const).map((m) => (
-              <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(m)}
+            {(optional ? (['upi', 'bank', 'card'] as const) : (['upi', 'bank'] as const)).map((m) => (
+              <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(optional && method === m ? '' : m)}
                 className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${method === m ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700'}`}>
-                {m === 'upi' ? 'UPI' : 'Bank transfer'}
+                {m === 'upi' ? 'UPI' : m === 'bank' ? 'Bank transfer' : 'Card'}
               </button>
             ))}
           </div>
+          {method === 'card' && <CardFields value={card} onChange={setCard} inputClass={input} />}
           {method === 'upi' ? (
             <input aria-label="UPI ID" className={input} value={payee.upiId} onChange={set('upiId')} placeholder="UPI ID (optional if their QR is attached)" autoCapitalize="none" />
-          ) : (
+          ) : method === 'bank' ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <input aria-label="Account holder" className={input} required value={payee.accountName} onChange={set('accountName')} placeholder="Account holder name" />
-              <input aria-label="Account number" className={input} required inputMode={codeKind === 'swift' ? 'text' : 'numeric'} value={payee.accountNumber} onChange={set('accountNumber')} placeholder="Account number" />
+              <input aria-label="Account holder" className={input} required={!optional} value={payee.accountName} onChange={set('accountName')} placeholder="Account holder name" />
+              <input aria-label="Account number" className={input} required={!optional} inputMode={codeKind === 'swift' ? 'text' : 'numeric'} value={payee.accountNumber} onChange={set('accountNumber')} placeholder="Account number" />
               {masked ? (
                 <p className="self-center text-sm text-gray-600">{payee.swift ? `SWIFT ${payee.swift}` : `IFSC ${payee.ifsc}`}</p>
               ) : (
-                <BankCodeField kind={codeKind} value={payee[codeKind]} onKind={setCodeKind} onChange={(v) => setPayee({ ...payee, [codeKind]: v })} inputClass={input} />
+                <BankCodeField kind={codeKind} value={payee[codeKind]} onKind={setCodeKind} onChange={(v) => setPayee({ ...payee, [codeKind]: v })} inputClass={input} optional={optional} />
               )}
               <input aria-label="Bank name" className={`${input} sm:self-end`} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
             </div>
-          )}
+          ) : null}
         </>
       )}
 

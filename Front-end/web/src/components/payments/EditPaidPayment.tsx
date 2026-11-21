@@ -81,7 +81,7 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
       <div className="grid gap-3 sm:grid-cols-2">
         <div><label className={label} htmlFor="ep-method">Paid by</label>
           <select id="ep-method" className={input} value={method} onChange={(e) => setMethod(e.target.value)}>
-            <option value="bank">Bank transfer</option><option value="upi">UPI</option><option value="razorpay">Razorpay</option><option value="other">Other</option>
+            <option value="bank">Bank transfer</option><option value="upi">UPI</option><option value="card">Card</option><option value="razorpay">Razorpay</option><option value="other">Other</option>
           </select></div>
         <div><label className={label} htmlFor="ep-ref">Reference / UTR<SlipFieldTag source={slip.tag('reference', reference)} /></label>
           <input id="ep-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" /></div>
