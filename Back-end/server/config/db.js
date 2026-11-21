@@ -868,6 +868,11 @@ export async function ensureCriticalIndexes() {
       { createdBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_client_id', background: true }
     );
+    // Redirect table (models/Redirect.js): one row per old URL.
+    await db.collection('redirects').createIndex(
+      { fromPath: 1 },
+      { unique: true, name: 'redirect_from_path', background: true }
+    );
     // One next copy per repeating task (models/StaffTask.js repeatOf): done twice makes one copy.
     await db.collection('stafftasks').createIndex(
       { repeatOf: 1 },

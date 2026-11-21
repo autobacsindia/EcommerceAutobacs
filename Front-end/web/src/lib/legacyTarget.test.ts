@@ -3,7 +3,7 @@
  * is off the table: the vehicle they name, the product they became, or a 404.
  * Cases from the Search Console report (Oct 2026).
  */
-import { legacyTarget, matchVehicle, wordOverlap } from './legacyTarget';
+import { legacyTarget, matchCategory, matchVehicle, wordOverlap } from './legacyTarget';
 
 const V = (slug: string, make: string, model: string) => ({ slug, make, model });
 const vehicles = [
@@ -76,5 +76,26 @@ describe('matching details', () => {
   it('word overlap is 1 for the same words in any order, 0 for none', () => {
     expect(wordOverlap('led-tail-light', 'tail-light-led')).toBe(1);
     expect(wordOverlap('a-b', 'c-d')).toBe(0);
+  });
+});
+
+describe('matchCategory (last resort for a dead product URL)', () => {
+  const cats = [{ slug: 'dash-cams' }, { slug: 'cams' }, { slug: 'car' }, { slug: 'speakers' }, { slug: 'suspension-kits' }];
+  it.each([
+    ['70mai-a400-dash-cam', 'dash-cams'], // most specific wins over "cams"
+    ['thor-2-speakers-6-inch', 'speakers'],
+    ['iron-man-foam-cell-pro-suspension-kit', 'suspension-kits'],
+    ['car-perfume', null], // 3-letter one-word category may not claim it
+    ['random-thing', null],
+  ])('%s → %s', (slug, expected) => expect(matchCategory(slug, cats)).toBe(expected));
+
+  it('legacyTarget(product) falls back to the category only when nothing better matches', () => {
+    expect(legacyTarget('70mai-a400-dash-cam', 'product', { vehicles: [], products: [], categories: cats }))
+      .toBe('/categories/dash-cams');
+    expect(legacyTarget('70mai-a400-dash-cam', 'product', {
+      vehicles: [], products: [{ slug: '70mai-a400-dash-cam-2' }], categories: cats,
+    })).toBe('/products/70mai-a400-dash-cam-2');
+    // /model/ pages never take the category fallback (Step 2 maps those by hand).
+    expect(legacyTarget('dash-cam', 'model', { vehicles: [], products: [], categories: cats })).toBeNull();
   });
 });

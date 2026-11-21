@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import { getServerApiBase, internalApiHeaders } from '@/lib/server-api';
 import { slugToSearchWords } from '@/lib/legacySearchRedirect';
-import { legacyTarget, type LegacyProduct, type LegacyVehicle } from '@/lib/legacyTarget';
+import { legacyTarget, type LegacyCategory, type LegacyProduct, type LegacyVehicle } from '@/lib/legacyTarget';
 
 /**
  * Server side of lib/legacyTarget.ts: fetch the vehicles and the products whose
@@ -21,6 +21,12 @@ const allVehicles = cache(async (): Promise<LegacyVehicle[]> => {
   return Array.isArray(body?.vehicles) ? body.vehicles : [];
 });
 
+// Only needed for an old PRODUCT URL that matched nothing better.
+const allCategories = cache(async (): Promise<LegacyCategory[]> => {
+  const body = await getJson(`${getServerApiBase()}/categories`);
+  return Array.isArray(body?.categories) ? body.categories : [];
+});
+
 async function productsLike(slug: string): Promise<LegacyProduct[]> {
   const q = slugToSearchWords(slug);
   if (!q) return [];
@@ -29,6 +35,10 @@ async function productsLike(slug: string): Promise<LegacyProduct[]> {
 }
 
 export const resolveLegacyTarget = cache(async (slug: string, kind: 'product' | 'model'): Promise<string | null> => {
-  const [vehicles, products] = await Promise.all([allVehicles(), productsLike(slug)]);
-  return legacyTarget(slug, kind, { vehicles, products });
+  const [vehicles, products, categories] = await Promise.all([
+    allVehicles(),
+    productsLike(slug),
+    kind === 'product' ? allCategories() : Promise.resolve([]),
+  ]);
+  return legacyTarget(slug, kind, { vehicles, products, categories });
 });

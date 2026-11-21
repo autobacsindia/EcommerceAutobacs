@@ -22,6 +22,7 @@ import {
   deleteManyFromCloudinary,
 } from '../utils/cloudinaryHelpers.js';
 import { deleteHostedImages } from '../services/storage/publicImageDeletes.js';
+import { validateRedirectTarget, setProductRedirect } from '../services/productRedirectService.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
 import { productTags as productNextTags } from '../utils/nextTags.js';
@@ -781,11 +782,24 @@ export const deleteProductWithImages = async (req, res) => {
 
   console.log(`[ProductController] DELETE product: ${product._id} | "${product.name}" | ${imageRefs.length} image(s) to clean up`);
 
+  // Where the old URL should send people (a replacement product or a category).
+  // Validated BEFORE the delete so a bad choice fails the whole request instead
+  // of leaving a deleted product with no answer. None chosen → its own category.
+  const redirectTo = await validateRedirectTarget(req.body?.redirectTo ?? req.query?.redirectTo, { selfSlug: product.slug });
+
   // Soft delete first — data is safe even if Cloudinary cleanup partially fails
   product.isActive = false;
   product.deletedAt = new Date();
   await product.save();
   console.log(`[ProductController] Soft-deleted product: ${product._id}`);
+  // Idempotent upsert; on failure the product still falls back to its category.
+  if (redirectTo) {
+    try {
+      await setProductRedirect(product, redirectTo, req.user?._id);
+    } catch (err) {
+      console.error(`[ProductController] redirect save failed for ${product._id}; category fallback applies:`, err.message);
+    }
+  }
 
   // Clean up storage — failures logged with [CLEANUP_REQUIRED], never thrown.
   if (imageRefs.length) {

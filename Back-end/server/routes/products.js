@@ -69,6 +69,7 @@ import {
   getCleanupStatus,
 } from "../controllers/productAdminController.js";
 import Product from "../models/Product.js";
+import { validateRedirectTarget, setProductRedirect, getProductRedirect } from "../services/productRedirectService.js";
 import {
   importWordPressProducts,
   getMissingWordPressProducts,
@@ -488,6 +489,36 @@ router.patch(
     if (!updated) return res.status(404).json({ success: false, message: 'Product not found' });
     auditLogger.logAction(req, 'UPDATE', 'Product', req.params.id, { change: 'seo_review', status: req.body.status });
     res.json({ success: true, seoReview: updated.seoReview });
+  })
+);
+
+// @route   GET|PUT /products/:id/redirect  { redirectTo: "/products/<slug>" | "/categories/<slug>" | null }
+// @desc    Where a switched-off product's old URL sends people (redirect table).
+//          null clears it. The edge picks the change up within ~5 minutes.
+// @access  Private/Admin, Marketing
+router.get(
+  "/:id/redirect",
+  protect,
+  adminOrMarketing,
+  validateProductIdParam,
+  asyncHandler(async (req, res) => {
+    const product = await productRepository.findForRedirect(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true, redirectTo: await getProductRedirect(product) });
+  })
+);
+router.put(
+  "/:id/redirect",
+  protect,
+  adminOrMarketing,
+  validateProductIdParam,
+  asyncHandler(async (req, res) => {
+    const product = await productRepository.findForRedirect(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    const redirectTo = await validateRedirectTarget(req.body?.redirectTo, { selfSlug: product.slug });
+    await setProductRedirect(product, redirectTo, req.user._id);
+    auditLogger.logAction(req, 'UPDATE', 'Product', req.params.id, { change: 'redirect', redirectTo });
+    res.json({ success: true, redirectTo });
   })
 );
 

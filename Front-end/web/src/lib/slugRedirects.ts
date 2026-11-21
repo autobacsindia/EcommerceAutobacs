@@ -24,13 +24,22 @@ export interface SlugRedirectMap {
   categories: SlugMap;
   brands: SlugMap;
   articles: SlugMap;
+  /** Whole-path redirect table: old path → new path, or null for 410 Gone. */
+  paths: Record<string, string | null>;
+  /** Current category / brand slugs (lowercase), for legacy-URL fallbacks. */
+  live: { categories: Set<string>; brands: Set<string> };
+  /** False until the map has loaded once: callers must not guess from an empty map. */
+  loaded: boolean;
 }
 
-const EMPTY: SlugRedirectMap = { products: {}, categories: {}, brands: {}, articles: {} };
+const EMPTY: SlugRedirectMap = {
+  products: {}, categories: {}, brands: {}, articles: {},
+  paths: {}, live: { categories: new Set(), brands: new Set() }, loaded: false,
+};
 export const REFRESH_MS = 5 * 60 * 1000;
 export const FETCH_TIMEOUT_MS = 1500;
 
-const SECTIONS: Array<[prefix: string, key: keyof SlugRedirectMap]> = [
+const SECTIONS: Array<[prefix: string, key: 'products' | 'categories' | 'brands' | 'articles']> = [
   ['/products/', 'products'],
   ['/categories/', 'categories'],
   ['/brands/', 'brands'],
@@ -109,7 +118,7 @@ export function isSlugRedirectCandidate(pathname: string): boolean {
 }
 
 function normalize(body: unknown): SlugRedirectMap {
-  const b = (body ?? {}) as Partial<Record<keyof SlugRedirectMap, unknown>>;
+  const b = (body ?? {}) as Partial<Record<'products' | 'categories' | 'brands' | 'articles', unknown>>;
   const section = (v: unknown): SlugMap => {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
     const out: SlugMap = {};
@@ -120,11 +129,31 @@ function normalize(body: unknown): SlugRedirectMap {
     }
     return out;
   };
+  // Paths: an own-site path (never another host) or null for 410.
+  const isPath = (v: string) => /^\/[a-z0-9/%_.-]*$/i.test(v) && !v.startsWith('//') && v.length <= 300;
+  const paths: Record<string, string | null> = {};
+  const rawPaths = (b as Record<string, unknown>).paths;
+  if (rawPaths && typeof rawPaths === 'object' && !Array.isArray(rawPaths)) {
+    for (const [k, val] of Object.entries(rawPaths as Record<string, unknown>)) {
+      if (!isPath(k)) continue;
+      if (val === null) paths[k.toLowerCase()] = null;
+      else if (typeof val === 'string' && isPath(val)) paths[k.toLowerCase()] = val;
+    }
+  }
+  const slugSet = (v: unknown) =>
+    new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && /^[a-z0-9-]+$/i.test(x)).map((x) => x.toLowerCase()) : []);
+  const rawLive = ((b as Record<string, unknown>).live ?? {}) as Record<string, unknown>;
   return {
     products: section(b.products),
     categories: section(b.categories),
     brands: section(b.brands),
     articles: section(b.articles),
+    paths,
+    live: { categories: slugSet(rawLive.categories), brands: slugSet(rawLive.brands) },
+    // Only a backend that sends the live lists lets callers fall back to a
+    // listing page. An older backend (deploy order!) would otherwise make every
+    // /collections/<x> look unknown and 301 it to /categories.
+    loaded: Array.isArray(rawLive.categories) && Array.isArray(rawLive.brands),
   };
 }
 

@@ -112,7 +112,11 @@ describe('AdminProductsPage', () => {
     const deleteButtons = screen.getAllByTestId('icon-trash');
     fireEvent.click(deleteButtons[0].closest('button')!);
 
-    expect(window.confirm).toHaveBeenCalled();
+    // A dialog asks where the old link goes; the default (its own category) sends
+    // no redirectTo and lets the backend decide.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(apiClient.delete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete product' }));
 
     await waitFor(() => {
       expect(apiClient.delete).toHaveBeenCalledWith(`${API_ENDPOINTS.PRODUCTS}/p1`);
