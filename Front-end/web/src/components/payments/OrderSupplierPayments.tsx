@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Banknote, Factory, FileText, Pencil } from 'lucide-react';
+import { Banknote, ChevronDown, Factory, FileText, Pencil } from 'lucide-react';
 import type { WorkOrder } from '@/components/staff/work/types';
 import apiClient from '@/lib/api-client';
 import { money, paymentKeys, paymentMoney, slipHref, STATUS_TONE, type OrderPayment, type OrderPayments, type SupplierDeal } from './api';
@@ -140,6 +140,31 @@ export function SupplierPaymentRow({ r, onOpen, muted = false }: { r: OrderPayme
   );
 }
 
+/** Done with: nobody has to act on these any more. */
+const SETTLED = new Set<OrderPayment['status']>(['approved', 'paid', 'cancelled']);
+const SETTLED_OPEN_KEY = 'orderExpenses.settledOpen';
+
+/**
+ * Open / closed, remembered in this browser (a per-viewer convenience — closed by
+ * default, and when storage is blocked or empty). Read after mount, so the server
+ * render and the first client render agree.
+ */
+function useRememberedOpen(key: string): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(key) === '1') setOpen(true);
+    } catch { /* private window / blocked storage: stay closed */ }
+  }, [key]);
+  const set = (next: boolean) => {
+    setOpen(next);
+    try {
+      window.localStorage.setItem(key, next ? '1' : '0');
+    } catch { /* not remembered — still works */ }
+  };
+  return [open, set];
+}
+
 /**
  * Expenses linked to this order (a courier charge, packing, a site visit), and
  * "Add expense for this order" — which raises an ordinary expense with the order
@@ -151,7 +176,26 @@ export function OrderOtherPayments({ order, requests }: { order: WorkOrder; requ
   const [raising, setRaising] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const expenses = requests.filter((r) => r.kind === 'expense');
+  // Owner (2026-11-21): what still needs someone stays on top — waiting, on hold,
+  // declined; what is done (approved, paid, cancelled) folds into one dropdown.
+  const needsAction = expenses.filter((r) => !SETTLED.has(r.status));
+  const settled = expenses.filter((r) => SETTLED.has(r.status));
+  const [showSettled, toggleSettled] = useRememberedOpen(SETTLED_OPEN_KEY);
+  const settledId = useId();
   const refresh = () => qc.invalidateQueries({ queryKey: paymentKeys.forOrder(order.id) });
+  const row = (r: OrderPayment) => (
+    <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+      <button type="button" onClick={() => setOpen(r.id)} className="font-medium text-blue-700 hover:underline">{r.number}</button>
+      <span className="text-gray-700">{r.categoryLabel} · {paymentMoney(r)} to {r.payee}</span>
+      {r.requestedByName && <span className="text-xs text-gray-500">by {r.requestedByName}</span>}
+      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
+      <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">
+        <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
+      </a>
+      <HoldLine hold={r.hold} className="w-full" />
+      {r.status === 'declined' && r.decisionNote && <span className="w-full text-xs text-red-800">Declined: {r.decisionNote}</span>}
+    </li>
+  );
 
   return (
     <div className="space-y-2">
@@ -164,22 +208,16 @@ export function OrderOtherPayments({ order, requests }: { order: WorkOrder; requ
         )}
       </div>
       {expenses.length === 0 && !raising && <p className="text-sm text-gray-500">None yet.</p>}
-      {expenses.length > 0 && (
-        <ul className="space-y-1">
-          {expenses.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
-              <button type="button" onClick={() => setOpen(r.id)} className="font-medium text-blue-700 hover:underline">{r.number}</button>
-              <span className="text-gray-700">{r.categoryLabel} · {paymentMoney(r)} to {r.payee}</span>
-              {r.requestedByName && <span className="text-xs text-gray-500">by {r.requestedByName}</span>}
-              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
-              <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">
-                <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
-              </a>
-              <HoldLine hold={r.hold} className="w-full" />
-              {r.status === 'declined' && r.decisionNote && <span className="w-full text-xs text-red-800">Declined: {r.decisionNote}</span>}
-            </li>
-          ))}
-        </ul>
+      {needsAction.length > 0 && <ul className="space-y-1" aria-label="Expenses still in progress">{needsAction.map(row)}</ul>}
+      {settled.length > 0 && (
+        <div>
+          <button type="button" aria-expanded={showSettled} aria-controls={settledId} onClick={() => toggleSettled(!showSettled)}
+            className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
+            <ChevronDown className={`h-4 w-4 transition-transform ${showSettled ? '' : '-rotate-90'}`} aria-hidden />
+            Approved &amp; closed ({settled.length})
+          </button>
+          {showSettled && <ul id={settledId} className="mt-1 space-y-1" aria-label="Approved and closed expenses">{settled.map(row)}</ul>}
+        </div>
       )}
       {raising && (
         <PaymentRequestForm
