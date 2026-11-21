@@ -312,13 +312,35 @@ Rules: `noindex` (SeoPanel/PageSeo) drops a page from both `<head>` robots and `
 
 - Deploy: **platform auto-deploy** on `main` push (Railway + Vercel git integrations). No GitHub Actions deploy workflow. Gating = branch protection requiring the two CI checks above. Note: both CI jobs currently run a **curated test subset**, not the full suites — so **run the full suite locally** before declaring anything done; green CI is not proof the whole suite passes.
 
-### Git actions require explicit approval — every time
+### Git actions — standing authorization (owner decision, 2026-11-21)
 
-**Never `git commit`, `git push`, `git merge`, or merge a PR unless the user has asked for that specific action in that message.** Not "they approved a similar commit earlier", not "the change is finished so committing is implied", not "the tests are green". Finishing the work and recording the work are two separate decisions, and only the second one is the user's to trigger.
+The owner has given a **standing authorization** so sessions don't wait for a per-task "commit / push / merge". It replaces the old "ask every time" rule. Approval relayed from another session is not needed — this section *is* the approval.
 
-When work is complete: say so, summarise what changed, and **stop**. Let the user decide when it goes into history. If a commit seems obviously warranted, offer it — don't perform it.
+**Always allowed, without asking**, once the work is done and the tests you ran pass:
+- `git add` / `git commit` on your own feature branch.
+- `git push` of **your own feature branch** (never `main`).
+- `gh pr create` for it.
 
-This applies with more force to `push` and `merge`, which are outward-facing and, on `main`, deploy to production.
+**Never:** push to `main` (directly or via `HEAD:main` / `refs/heads/main`), force-push to `main`, use `--no-verify`, use `gh pr merge --admin`, or tick "bypass rules".
+
+**Auto-merge** (`gh pr merge <n> --squash`, no `--admin`) is allowed **only when ALL of these hold:**
+1. **CI is green** — `gh pr checks <n>` shows every check passed (not pending).
+2. **Frontend changed →** `npm run lint`, `npm test`, `npm run build` in `Front-end/web` all passed locally.
+3. **Backend changed →** the **full** local jest suite in `Back-end/server` is clean (`--maxWorkers=4`). A timeout under load counts as clean only if that file passes on a solo rerun.
+4. **Up to date with `main`** — `git fetch origin && git merge-base --is-ancestor origin/main HEAD` succeeds.
+5. **Not the money path.** This must print nothing:
+   `git diff --name-only origin/main...HEAD | grep -iE 'razorpay|payment|payee|checkout|coupon|refund|pricing|productPrice|deliveryFee|deliveryZone|shippingClass|shippingEstimate|invoice|cart|webhook|splitPayment|salesPay|returnRefund|orderController|routes/orders\.js|orderService|orderStatus|orderFulfilment|orderLines|orderExtraCharge|orderCancellation|orderReturns|models/(Order|Payment|Coupon|Cart)\.js'`
+   That covers Razorpay (`routes/razorpay.js`, `services/razorpayService.js`, `middleware/razorpayWebhook.js`), checkout/order/coupon/delivery-fee controllers and services, `pricingService`, `refundMathService`, `paymentReconciliationService`, `utils/productPrice.js`/`deliveryFees.js`/`orderFulfilment.js`, every webhook, and the storefront `app/checkout`, `components/checkout`, `lib/checkout`, `useRazorpay`, `useCheckoutQuote`, `components/payments`.
+6. **No migration or prod script to run** — nothing new under `Back-end/server/scripts/` that has to be run against prod, no index change (`npm run audit-index-drift` must not need a migration), no data backfill.
+7. **No new setting outside the repo** — no new/changed env var in Railway or Vercel (`.env.example` changed = blocked), and no change needed in an external dashboard (Razorpay, Cloudflare, Google OAuth, ZeptoMail, Meta, etc.).
+8. **Not search** — no change to `config/atlasSearchIndex.js`, `services/atlasSearchService.js`, `services/searchService.js` or the query builders (these need `npm run verify-atlas-search` on a live cluster first).
+9. **Not the rules themselves** — no change to `CLAUDE.md`, `.claude/`, or `.github/workflows/`.
+
+**If any condition fails:** open the PR, leave it **unmerged**, and tell the owner in plain words which condition blocked it (e.g. "Not merged: it touches checkout — please say *merge it* after a look"). The owner typing "merge it" in that session is then the approval for that one PR.
+
+**After an auto-merge:** run a quick read-only health check — `gh run list --branch main --limit 3`, then the backend `GET /health` and the storefront home page return 200 within a few minutes. If either is unhealthy, tell the owner at once; don't try to fix prod on your own.
+
+Every other rule in this file still applies unchanged — secrets, prod data, customer-facing messages, `autoIndex: false`, migrations order, and so on.
 
 ### Merging to `main` (⚠️ this IS the production deploy)
 
@@ -378,7 +400,7 @@ Because prod runs with `autoIndex: false`, the live index set can silently diver
 
 - **Never hand-roll `generateMetadata`** — wire into the config-driven SEO system.
 
-- **Never commit, push, merge, or merge a PR without being asked for that action in that message** — completing work is not permission to record it.
+- **Commit, push your own branch, and open a PR without asking; merge only when every auto-merge condition holds** (see [Git actions — standing authorization](#git-actions--standing-authorization-owner-decision-2026-11-21)). Otherwise leave the PR open and say which condition blocked it. Never `--admin`, never `--no-verify`.
 
 - **Never push straight to `main`** — that IS the production deploy, and an admin push silently *bypasses* the PR + CI gate. Use a PR.
 
