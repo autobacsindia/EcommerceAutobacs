@@ -94,6 +94,12 @@ router.get('/:id/credit', asyncHandler(async (req, res) => {
 router.post('/:id/credit/repayments', asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, entry: await credit.recordRepayment(req.user, req.params.id, req.body || {}, req) });
 }));
+// POST /suppliers/:id/credit/entries — multipart: type (credit_given|repaid|adjustment_up|adjustment_down),
+//   currency?, amount, date, reason, reference?, paymentNumber?, formKey, proof (files)
+//   Supplier credit added straight from the Suppliers tab. Waits for accounts.
+router.post('/:id/credit/entries', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, entry: await credit.addEntry(req.user, req.params.id, req.body || {}, req.files || [], req) });
+}));
 // POST /suppliers/:id/credit/write-offs { currency, amount, note, formKey }   admin only
 router.post('/:id/credit/write-offs', asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, entry: await credit.writeOff(req.user, req.params.id, req.body || {}, req) });
