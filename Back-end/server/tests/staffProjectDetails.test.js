@@ -282,9 +282,9 @@ describe('slips', () => {
 });
 
 describe('the daily reminder', () => {
-  // 10:30 IST on 10 March 2030, and 09:30 IST the same day.
-  const AT_1030 = new Date('2030-03-10T05:00:00Z');
-  const AT_0930 = new Date('2030-03-10T04:00:00Z');
+  // 10:30 IST on Tuesday 12 March 2030, and 09:00 IST the same day (before the 09:30 reminder).
+  const AT_1030 = new Date('2030-03-12T05:00:00Z');
+  const AT_0930 = new Date('2030-03-12T03:30:00Z');
   let num = 0;
   const task = (title, dueOn, over = {}) => StaffTask.collection.insertOne({
     number: (num += 1), title, dueOn, project: new mongoose.Types.ObjectId(project.id), bucket: 'open', rank: dueOn || '9999-12-31', personal: false, ...over,
@@ -292,15 +292,17 @@ describe('the daily reminder', () => {
 
   beforeEach(async () => {
     await task('Fit seat covers', '2030-03-08');
-    await task('Roof rack', '2030-03-10');
+    await task('Roof rack', '2030-03-12');
     await task('Ceramic coating', '2030-03-15');
     await task('Done already', '2030-03-01', { bucket: 'done' });
     await task('Someone’s personal note', '2030-03-01', { personal: true });
+    // Creating the project told its people they were added; this block is about the reminder.
+    pushes.length = 0;
   });
 
   it('tells the owner what is open, due today and late — and nobody else', async () => {
     const r = await reminders.getReminder(await as(nevin), AT_1030);
-    expect(r.day).toBe('2030-03-10');
+    expect(r.day).toBe('2030-03-12');
     expect(r.projects).toEqual([expect.objectContaining({
       name: 'Vicky’s Hilux', open: 3, late: 1, dueToday: 1,
       lateTasks: [expect.objectContaining({ title: 'Fit seat covers' })],
@@ -325,10 +327,10 @@ describe('the daily reminder', () => {
     expect(await reminders.getReminder(await as(nevin), AT_1030)).toBeNull();
     await status(400, reminders.dismissReminder(await as(nevin), 'today'));
     // Tomorrow it comes back.
-    expect(await reminders.getReminder(await as(nevin), new Date('2030-03-11T05:00:00Z'))).not.toBeNull();
+    expect(await reminders.getReminder(await as(nevin), new Date('2030-03-13T05:00:00Z'))).not.toBeNull();
   });
 
-  it('the 10:00 run notifies once: a second, retried or simultaneous run sends nothing more', async () => {
+  it('the morning run notifies once: a second, retried or simultaneous run sends nothing more', async () => {
     const a = await reminders.runDailyReminders(AT_1030);
     expect(a).toMatchObject({ withWork: 1, sent: 1 });
     const b = await reminders.runDailyReminders(AT_1030);
@@ -336,10 +338,10 @@ describe('the daily reminder', () => {
     await Promise.all([reminders.runDailyReminders(AT_1030), reminders.runDailyReminders(AT_1030)]);
     expect(pushes).toHaveLength(1);
     expect(pushes[0]).toMatchObject({
-      to: [String(nevin._id)], title: 'Your projects today — some are late',
-      body: 'Vicky’s Hilux: 3 open, 1 late, 1 due today', tag: 'project-reminder-2030-03-10',
+      to: [String(nevin._id)], title: 'Your projects today — please update',
+      body: 'Vicky’s Hilux: 3 open, 1 late, 1 due today', tag: 'project-reminder-2030-03-12',
     });
-    expect(await StaffProjectReminder.countDocuments({ user: nevin._id, day: '2030-03-10' })).toBe(1);
+    expect(await StaffProjectReminder.countDocuments({ user: nevin._id, day: '2030-03-12' })).toBe(1);
   });
 
   it('simultaneous first runs still make one row and one notification', async () => {
@@ -375,7 +377,7 @@ describe('the daily reminder', () => {
 
   it('an owner who left the panel gets nothing', async () => {
     await User.updateOne({ _id: nevin._id }, { $set: { 'staff.active': false } });
-    expect((await reminders.runDailyReminders(AT_1030)).owners).toBe(0);
+    expect((await reminders.runDailyReminders(AT_1030)).withWork).toBe(0);
     expect(pushes).toHaveLength(0);
   });
 

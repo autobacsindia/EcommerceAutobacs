@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AtSign, CalendarCheck, CalendarClock, CheckCheck, Circle, CircleCheck, Lock, MessageSquare, Network, RefreshCw, UserPlus, X } from 'lucide-react';
+import { AtSign, CalendarCheck, CalendarClock, CheckCheck, Circle, CircleCheck, FolderKanban, Lock, MessageSquare, Network, RefreshCw, UserPlus, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { notificationKeys, taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -31,7 +32,7 @@ export function useInboxPages(filter: InboxFilter, enabled = true) {
 
 /** The tasks behind the lines, in order, once each — only those that still open. */
 export const inboxOrder = (pages: { pages: InboxPage[] } | undefined) =>
-  [...new Set((pages?.pages ?? []).flatMap((p) => p.items).filter((i) => i.canOpen).map((i) => i.task.id))];
+  [...new Set((pages?.pages ?? []).flatMap((p) => p.items).flatMap((i) => (i.canOpen && i.task ? [i.task.id] : [])))];
 
 /*
   Read, unread and Clear change the screen at once and put it back if the server
@@ -103,6 +104,7 @@ const KIND: Record<InboxKind, { icon: typeof AtSign; tone: string; say: (code: s
   comment_resolved: { icon: CircleCheck, tone: 'bg-emerald-100 text-emerald-700', say: (c) => `resolved a comment on ${c}`, quote: true },
   approval_requested: { icon: CalendarClock, tone: 'bg-amber-100 text-amber-700', say: (c) => `asks you to approve the due date of ${c}`, quote: false },
   approval_decided: { icon: CalendarCheck, tone: 'bg-blue-100 text-blue-700', say: (c) => `decided the due date of ${c}`, quote: false },
+  project_added: { icon: FolderKanban, tone: 'bg-blue-100 text-blue-700', say: (c) => `added you to ${c}`, quote: false },
 };
 
 /** What follows the sentence: the status it moved to, the due day, the words, the sub-task. */
@@ -124,14 +126,18 @@ function dayGroup(at: string, today: string) {
   return day === yesterday ? 'Yesterday' : 'Earlier';
 }
 
-function InboxLine({ item, active, onOpen, onState }: {
+function InboxLine({ item, active, onOpen, onOpenProject, onState }: {
   item: InboxItem;
   active: boolean;
   onOpen: (taskId: string) => void;
+  onOpenProject: (projectId: string) => void;
   onState: (state: 'read' | 'unread' | 'cleared') => void;
 }) {
   const k = KIND[item.kind];
   const Icon = k.icon;
+  // A project line reads like a task line: the project's name where the task's code and title go.
+  const task = item.task ?? { id: item.project?.id ?? '', code: item.project?.name ?? 'a project', title: item.project?.name ?? '' };
+  const isProject = !item.task;
   const who = item.by?.name || 'Someone';
   const detail = detailOf(item);
   const body = (
@@ -144,11 +150,11 @@ function InboxLine({ item, active, onOpen, onState }: {
       </span>
       <span className="min-w-0 flex-1">
         <span className={`block text-sm ${item.read ? 'text-gray-600' : 'text-gray-900'}`}>
-          <span className={item.read ? 'font-medium' : 'font-semibold'}>{who}</span> {k.say(item.task.code)}
-          {item.kind !== 'status' && <> · <span className={item.read ? '' : 'font-medium'}>{item.task.title}</span></>}
+          <span className={item.read ? 'font-medium' : 'font-semibold'}>{who}</span> {k.say(task.code)}
+          {item.kind !== 'status' && !isProject && <> · <span className={item.read ? '' : 'font-medium'}>{task.title}</span></>}
           {item.kind === 'status' && <> {detail}</>}
         </span>
-        {item.kind === 'status' && <span className="block truncate text-xs text-gray-500">{item.task.title}</span>}
+        {item.kind === 'status' && <span className="block truncate text-xs text-gray-500">{task.title}</span>}
         {item.kind !== 'status' && detail && <span className="block truncate text-xs text-gray-500">{detail}</span>}
         <span className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-400">
           <time dateTime={item.at} title={formatDateTimeIST(item.at)}>{timeAgo(item.at)}</time>
@@ -165,9 +171,9 @@ function InboxLine({ item, active, onOpen, onState }: {
       {item.canOpen ? (
         <button
           type="button"
-          onClick={() => onOpen(item.task.id)}
+          onClick={() => (isProject ? onOpenProject(task.id) : onOpen(task.id))}
           className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pl-3 text-left"
-          aria-label={`${who} ${k.say(item.task.code)}: ${item.task.title}${item.read ? '' : ' (unread)'}`}
+          aria-label={`${who} ${k.say(task.code)}${isProject ? '' : `: ${task.title}`}${item.read ? '' : ' (unread)'}`}
         >
           {body}
         </button>
@@ -179,7 +185,7 @@ function InboxLine({ item, active, onOpen, onState }: {
         <button
           type="button"
           onClick={() => onState(item.read ? 'unread' : 'read')}
-          aria-label={item.read ? `Mark ${item.task.code} update unread` : `Mark ${item.task.code} update read`}
+          aria-label={item.read ? `Mark ${task.code} update unread` : `Mark ${task.code} update read`}
           title={item.read ? 'Mark unread' : 'Mark read'}
           className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 sm:hidden sm:group-hover:inline-flex sm:group-focus-within:inline-flex"
         >
@@ -188,7 +194,7 @@ function InboxLine({ item, active, onOpen, onState }: {
         <button
           type="button"
           onClick={() => onState('cleared')}
-          aria-label={`Clear ${item.task.code} update`}
+          aria-label={`Clear ${task.code} update`}
           title="Clear"
           className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 sm:hidden sm:group-hover:inline-flex sm:group-focus-within:inline-flex"
         >
@@ -213,6 +219,8 @@ export default function Inbox({ filter, onFilter, openId, onOpen }: {
 }) {
   const q = useInboxPages(filter);
   const { setState, readAll } = useInboxChanges();
+  const router = useRouter();
+  const pathname = usePathname();
   const items = (q.data?.pages ?? []).flatMap((p) => p.items);
   const unread = q.data?.pages[0]?.unread ?? 0;
 
@@ -221,7 +229,7 @@ export default function Inbox({ filter, onFilter, openId, onOpen }: {
   useEffect(() => {
     if (!openId) return;
     for (const i of items) {
-      if (i.task.id !== openId || i.read || asked.current.has(i.id)) continue;
+      if (i.task?.id !== openId || i.read || asked.current.has(i.id)) continue;
       asked.current.add(i.id);
       setState.mutate({ item: i, state: 'read' }, { onError: () => asked.current.delete(i.id) });
     }
@@ -307,8 +315,12 @@ export default function Inbox({ filter, onFilter, openId, onOpen }: {
                 <InboxLine
                   key={item.id}
                   item={item}
-                  active={item.task.id === openId}
+                  active={!!item.task && item.task.id === openId}
                   onOpen={onOpen}
+                  onOpenProject={(projectId) => {
+                    if (!item.read) setState.mutate({ item, state: 'read' });
+                    router.push(`${pathname}?view=project&project=${encodeURIComponent(projectId)}`);
+                  }}
                   onState={(state) => setState.mutate({ item, state })}
                 />,
               ];

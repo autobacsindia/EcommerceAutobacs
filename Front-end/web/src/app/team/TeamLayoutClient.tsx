@@ -16,6 +16,7 @@ import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
 import CallProvider from '@/components/calls/CallProvider';
 import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
+import NewWorkPopup from '@/components/notifications/NewWorkPopup';
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -202,6 +203,7 @@ export default function TeamLayoutClient({
         <ChampionBanner />
         {children}
         <ProjectReminderPopup tasksHref="/team/tasks" />
+        <NewWorkPopup />
       </PanelShell>
     </CallProvider>
   );

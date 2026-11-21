@@ -1,4 +1,7 @@
-import StaffTaskInbox, { INBOX_STATES } from '../models/StaffTaskInbox.js';
+import mongoose from 'mongoose';
+import StaffTaskInbox, { INBOX_STATES, PROJECT_INBOX_KINDS } from '../models/StaffTaskInbox.js';
+
+export { PROJECT_INBOX_KINDS };
 import StaffTask from '../models/StaffTask.js';
 
 /** The unread count stops here; the badge shows "99+". */
@@ -43,6 +46,19 @@ const staffTaskInboxRepository = {
     state: states.length === 1 ? states[0] : { $in: states },
     ...(before ? { _id: { $lt: before } } : {}),
   }).sort({ _id: -1 }).limit(limit).lean(),
+
+  /**
+   * The newest unread rows of `kinds` written after `since` (a Date), at most
+   * `limit` — the panel's "new work" pop-up. A range on staff_task_inbox_list
+   * (user, state, _id), bounded by the time inside the _id; `kind` is checked
+   * on the few rows that range holds.
+   */
+  recentUnread: (user, kinds, since, limit) => StaffTaskInbox.find({
+    user,
+    state: 'unread',
+    _id: { $gt: mongoose.Types.ObjectId.createFromTime(Math.floor(since.getTime() / 1000)) },
+    kind: { $in: kinds },
+  }).sort({ _id: -1 }).limit(limit).select('kind task project number title by byName text createdAt').lean(),
 
   /** Unread rows, counted up to `cap` — the badge says "99+" past that. */
   countUnread: (user, cap) => StaffTaskInbox.countDocuments({ user, state: 'unread' }, { limit: cap }),

@@ -314,3 +314,28 @@ describe('marking lines', () => {
     await waitFor(() => expect(button).toBeDisabled());
   });
 });
+
+describe('a project line', () => {
+  it('“Vicky added you to Vicky’s Hilux” opens the project and reads the line', async () => {
+    serve({
+      lines: [line('0000000000000000000000b1', {
+        kind: 'project_added', task: null, project: { id: 'p7', name: 'Vicky’s Hilux' },
+        by: { id: 'u9', name: 'Vicky' }, text: 'deadline 2026-11-28',
+      })],
+    });
+    workspace();
+    const box = await inbox();
+    const button = await within(box).findByRole('button', { name: 'Vicky added you to Vicky’s Hilux (unread)' });
+    fireEvent.click(button);
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/inbox/0000000000000000000000b1', { state: 'read' }));
+    expect(addressBar.push).toHaveBeenCalledWith('/team/tasks?view=project&project=p7');
+  });
+
+  it('one the person was taken off cannot be opened', async () => {
+    serve({ lines: [line('0000000000000000000000b2', { kind: 'project_added', task: null, project: { id: 'p8', name: 'Old job' }, canOpen: false })] });
+    workspace();
+    const box = await inbox();
+    expect(await within(box).findByText(/added you to Old job/)).toBeInTheDocument();
+    expect(within(box).queryByRole('button', { name: /added you to Old job/ })).toBeNull();
+  });
+});

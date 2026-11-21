@@ -6,6 +6,9 @@ import mongoose from 'mongoose';
  * services/staffTaskInboxService.js at the same moments the pop-ups are sent, so
  * a pop-up missed on a closed tab is still there to read.
  *
+ * A project line ("Vicky added you to Vicky's Hilux", kind project_added)
+ * has `project` instead of `task`/`number`; `title` is the project's name.
+ *
  * One row per person per event. `key` names the event ("t:<task>:r<rev>:status",
  * "c:<comment>"), and { user, key } is unique — a retried request, or a retry that
  * finishes what a failed first attempt left, never makes a second row.
@@ -15,7 +18,10 @@ import mongoose from 'mongoose';
  * days after they were written: this is a feed of what happened, not the record
  * of it (that is the task's own history), so nothing of value is lost.
  */
-export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask', 'comment_assigned', 'comment_resolved', 'approval_requested', 'approval_decided']);
+export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask', 'comment_assigned', 'comment_resolved', 'approval_requested', 'approval_decided', 'project_added']);
+/** Kinds about a whole project, not one task: they carry `project`, not `task`/`number`. */
+export const PROJECT_INBOX_KINDS = Object.freeze(['project_added']);
+const aboutTask = function aboutTask() { return !PROJECT_INBOX_KINDS.includes(this.kind); };
 export const INBOX_STATES = Object.freeze(['unread', 'read', 'cleared']);
 export const INBOX_TTL_SECONDS = 90 * 24 * 60 * 60;
 
@@ -24,8 +30,10 @@ const StaffTaskInboxSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     key: { type: String, required: true, maxlength: 120 },
     kind: { type: String, enum: INBOX_KINDS, required: true },
-    task: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffTask', required: true },
-    number: { type: Number, required: true },
+    task: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffTask', required: aboutTask, default: undefined },
+    number: { type: Number, required: aboutTask, default: undefined },
+    /** A project line ("Vicky added you to Vicky's Hilux"): the project; `title` holds its name. */
+    project: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffProject', default: undefined },
     title: { type: String, default: '' },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     byName: { type: String, default: '' },

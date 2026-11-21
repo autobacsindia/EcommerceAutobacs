@@ -285,29 +285,87 @@ describe('helpers', () => {
 });
 
 describe('the daily pop-up', () => {
+  const NONE_MINE: ProjectReminder['mine'] = { overdue: [], today: [], soon: [], noDate: [], counts: { overdue: 0, today: 0, soon: 0, noDate: 0, later: 0 } };
   const REMINDER: ProjectReminder = {
     day: '2026-11-17',
+    weekly: false,
+    mine: NONE_MINE,
+    deadlines: [],
+    team: [],
     projects: [{
       id: 'p1', name: 'Vicky’s Hilux', colour: 'blue', dueOn: '2026-11-20', projectLate: false, projectDueToday: false,
       open: 3, late: 1, dueToday: 1,
       lateTasks: [{ id: 't1', title: 'Fit seat covers', dueOn: '2026-11-15' }],
       dueTodayTasks: [{ id: 't2', title: 'Roof rack', dueOn: '2026-11-17' }],
+      notUpdated: [{ id: 'u5', name: 'Nevin', late: 1, daysLate: 2, lastUpdate: '2026-11-10T06:00:00.000Z' }],
     }],
     totals: { open: 3, late: 1, dueToday: 1 },
   };
+  const HILUX = { id: 'p1', name: 'Vicky’s Hilux', colour: 'blue' };
+  const item = (id: string, title: string, dueOn: string | null, daysLate = 0) => ({ id, code: `T-${id}`, title, dueOn, daysLate, project: HILUX });
 
   it('shows the owner what is open, due today and late; Got it dismisses it for the day', async () => {
     get.mockResolvedValue({ reminder: REMINDER });
     post.mockResolvedValue({ ok: true });
     wrap(<ProjectReminderPopup tasksHref="/team/tasks" />);
     const dialog = await screen.findByRole('dialog', { name: 'Your projects today' });
-    expect(within(dialog).getByText(/3 tasks open/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/3 open tasks/)).toBeInTheDocument();
     expect(within(dialog).getByText('Fit seat covers')).toBeInTheDocument();
     expect(within(dialog).getByText('Roof rack')).toBeInTheDocument();
     expect(within(dialog).getByRole('link', { name: /Vicky’s Hilux/ })).toHaveAttribute('href', '/team/tasks?view=project&project=p1');
+    // The owner sees who has late work.
+    expect(within(dialog).getByText('Not updated')).toBeInTheDocument();
+    expect(within(dialog).getByText('Nevin')).toBeInTheDocument();
+    expect(within(dialog).getByText(/1 late item \(up to 2 days\) · last update 10 Nov/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Got it' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/projects/reminder/dismiss', { day: '2026-11-17' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('a member: overdue first (red, “please update”), then today, then soon; each task opens', async () => {
+    get.mockResolvedValue({
+      reminder: {
+        ...REMINDER,
+        projects: [],
+        mine: {
+          overdue: [item('t1', 'Fit roof rack', '2026-11-15', 2)],
+          today: [item('t2', 'Order mats', '2026-11-17')],
+          soon: [item('t3', 'Book alignment', '2026-11-19')],
+          noDate: [],
+          counts: { overdue: 1, today: 1, soon: 1, noDate: 4, later: 2 },
+        },
+        deadlines: [{ ...HILUX, dueOn: '2026-11-17', daysLate: 0, open: 3 }],
+      },
+    });
+    wrap(<ProjectReminderPopup tasksHref="/team/tasks" />);
+    const dialog = await screen.findByRole('dialog', { name: 'Your projects today' });
+    expect(within(dialog).getByRole('heading', { level: 2 })).toHaveTextContent('1 item overdue — please update');
+    const headings = within(dialog).getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(['Overdue (1)', 'Due today (1)', 'Due in the next 2 days (1)', 'Project deadlines']);
+    expect(within(dialog).getByRole('link', { name: 'Fit roof rack' })).toHaveAttribute('href', '/team/tasks/t1');
+    expect(within(dialog).getByText(/2 days late/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/deadline today · 3 open/)).toBeInTheDocument();
+    expect(within(dialog).getByText('2 more tasks due later — nothing to do yet.')).toBeInTheDocument();
+    // Undated work waits for Monday.
+    expect(within(dialog).queryByText(/No due date/)).toBeNull();
+  });
+
+  it('Mondays list the undated work; the admin sees everyone with late work', async () => {
+    get.mockResolvedValue({
+      reminder: {
+        ...REMINDER,
+        weekly: true,
+        projects: [],
+        mine: { ...NONE_MINE, noDate: [item('t4', 'Find a supplier', null)], counts: { ...NONE_MINE.counts, noDate: 1 } },
+        team: [{ id: 'u5', name: 'Nevin', late: 3, daysLate: 6, lastUpdate: null }],
+      },
+    });
+    wrap(<ProjectReminderPopup tasksHref="/admin/tasks" />);
+    const dialog = await screen.findByRole('dialog', { name: 'Your projects today' });
+    expect(within(dialog).getByText('No due date — add one (1)')).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'Find a supplier' })).toHaveAttribute('href', '/admin/tasks/t4');
+    expect(within(dialog).getByText('Late work across projects')).toBeInTheDocument();
+    expect(within(dialog).getByText(/3 late items \(up to 6 days\) · no update yet/)).toBeInTheDocument();
   });
 
   it('nothing to say: no pop-up', async () => {

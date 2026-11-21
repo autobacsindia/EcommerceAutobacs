@@ -16,8 +16,10 @@
  */
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
-import staffTaskInboxRepository, { INBOX_UNREAD_CAP } from '../repositories/staffTaskInboxRepository.js';
+import staffTaskInboxRepository, { INBOX_UNREAD_CAP, PROJECT_INBOX_KINDS } from '../repositories/staffTaskInboxRepository.js';
 import { canSee } from './staffTaskService.js';
+import { seesProject } from './staffProjectService.js';
+import staffProjectRepository from '../repositories/staffProjectRepository.js';
 
 export const INBOX_PAGE_SIZE = 30;
 export { INBOX_UNREAD_CAP };
@@ -29,12 +31,31 @@ const objectId = (raw, message) => {
   return new mongoose.Types.ObjectId(String(raw));
 };
 
+const aboutProject = (row) => PROJECT_INBOX_KINDS.includes(row.kind);
+
+/** A project line ("added you to …"): the project's live name when you still see it. */
+function shapeProjectItem(row, project, viewer) {
+  const canOpen = seesProject(viewer, project);
+  return {
+    id: idOf(row._id),
+    kind: row.kind,
+    task: null,
+    project: { id: idOf(row.project), name: canOpen ? project.name : row.title },
+    by: row.by ? { id: idOf(row.by), name: row.byName || '' } : null,
+    text: row.text || '',
+    read: row.state !== 'unread',
+    at: row.createdAt,
+    canOpen,
+  };
+}
+
 /** One row as the browser sees it; the task's live title when it still opens. */
 function shapeItem(row, task, viewer) {
   const canOpen = !!task && canSee(viewer, task);
   return {
     id: idOf(row._id),
     kind: row.kind,
+    project: null,
     task: {
       id: idOf(row.task),
       code: `T-${row.number}`,
@@ -68,11 +89,19 @@ export async function listInbox(actor, { state = 'all', cursor } = {}) {
   ]);
   const more = rows.length > INBOX_PAGE_SIZE;
   const page = more ? rows.slice(0, INBOX_PAGE_SIZE) : rows;
-  // One lookup for the whole page, not one per line.
-  const taskIds = [...new Set(page.map((r) => idOf(r.task)))];
-  const tasks = new Map((await staffTaskInboxRepository.tasksFor(taskIds)).map((t) => [idOf(t._id), t]));
+  // One lookup for the whole page per kind of thing, not one per line.
+  const taskIds = [...new Set(page.filter((r) => !aboutProject(r)).map((r) => idOf(r.task)))];
+  const projectIds = [...new Set(page.filter(aboutProject).map((r) => idOf(r.project)))];
+  const [taskRows, projectRows] = await Promise.all([
+    staffTaskInboxRepository.tasksFor(taskIds),
+    projectIds.length ? staffProjectRepository.findByIds(projectIds) : [],
+  ]);
+  const tasks = new Map(taskRows.map((t) => [idOf(t._id), t]));
+  const projects = new Map(projectRows.map((p) => [idOf(p._id), p]));
   return {
-    items: page.map((r) => shapeItem(r, tasks.get(idOf(r.task)), actor)),
+    items: page.map((r) => (aboutProject(r)
+      ? shapeProjectItem(r, projects.get(idOf(r.project)), actor)
+      : shapeItem(r, tasks.get(idOf(r.task)), actor))),
     nextCursor: more ? idOf(page[page.length - 1]._id) : null,
     unread,
   };
@@ -90,4 +119,34 @@ export async function setInboxState(actor, id, state) {
 export async function readAllInbox(actor, upTo) {
   const marked = await staffTaskInboxRepository.readUpTo(actor._id, objectId(upTo, 'Reload the inbox and try again.'));
   return { marked, unread: await countUnread(actor) };
+}
+
+// ── The "new work" pop-up ───────────────────────────────────────────────────
+
+/** Kinds that pop up in the open panel: work given to you. Comments and status changes stay quiet. */
+export const ALERT_KINDS = Object.freeze(['assigned', 'project_added']);
+/** Older than this, it is in the Inbox, not news. */
+export const ALERT_WINDOW_HOURS = 24;
+export const ALERTS_MAX = 5;
+
+/**
+ * The newest unread "you have a new task / were added to a project" lines, for
+ * the panel's pop-up card. The browser remembers which it has shown, so each
+ * pops up once per device; the line stays in the Inbox either way.
+ */
+export async function recentAlerts(user, now = new Date()) {
+  const since = new Date(now.getTime() - ALERT_WINDOW_HOURS * 3600_000);
+  const rows = await staffTaskInboxRepository.recentUnread(user._id, ALERT_KINDS, since, ALERTS_MAX);
+  const base = user.role === 'admin' ? '/admin/tasks' : '/team/tasks';
+  return rows.map((r) => ({
+    id: idOf(r._id),
+    kind: r.kind,
+    by: r.byName || '',
+    title: aboutProject(r) ? r.title : `T-${r.number} · ${r.title}`,
+    text: r.text || '',
+    href: aboutProject(r)
+      ? `${base}?view=project&project=${encodeURIComponent(idOf(r.project))}`
+      : `${base}/${encodeURIComponent(idOf(r.task))}`,
+    at: r.createdAt,
+  }));
 }

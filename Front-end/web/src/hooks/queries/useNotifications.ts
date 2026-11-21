@@ -27,6 +27,24 @@ export interface WaitingItem {
   quiet?: boolean;
 }
 
+/**
+ * "You have a new task" / "Vicky added you to Vicky's Hilux": the newest unread
+ * ones from the last day (services/staffTaskInboxService.js recentAlerts), for
+ * the panel's pop-up card (components/notifications/NewWorkPopup.tsx).
+ */
+export interface WorkAlert {
+  id: string;
+  kind: 'assigned' | 'project_added';
+  /** Who gave it. */
+  by: string;
+  /** "T-42 · Fit roof rack", or the project's name. */
+  title: string;
+  /** "due 2026-11-25", "you own it · deadline 2026-11-28", or empty. */
+  text: string;
+  href: string;
+  at: string;
+}
+
 const POLL_MS = 20_000;
 export const HIDDEN_POLL_MS = 60_000;
 
@@ -41,8 +59,8 @@ export function useWaitingWork() {
   return useQuery({
     queryKey: notificationKeys.summary(),
     queryFn: async () => {
-      const res = await apiClient.get<{ items: WaitingItem[]; total: number }>('/notifications/summary');
-      return { items: res.items ?? [], total: res.total ?? 0 };
+      const res = await apiClient.get<{ items: WaitingItem[]; total: number; alerts?: WorkAlert[] }>('/notifications/summary');
+      return { items: res.items ?? [], total: res.total ?? 0, alerts: res.alerts ?? [] };
     },
     enabled,
     staleTime: 10_000,
