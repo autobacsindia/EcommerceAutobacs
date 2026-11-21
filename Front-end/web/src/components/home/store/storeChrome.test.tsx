@@ -239,10 +239,9 @@ describe('Need-help tab on phones', () => {
     (trackContact as jest.Mock).mockClear();
   });
 
-  it('shows on phones as well as desktop', () => {
+  it('is desktop-only: on phones it covered Add to cart / the heart; the WhatsApp / Call / Chat stack covers contact', () => {
     render(<HelpWidget />);
-    expect(tab()).not.toHaveClass('hidden');
-    expect(tab()).toHaveClass('flex');
+    expect(tab()).toHaveClass('hidden', 'md:flex');
   });
 
   it('a tap counts one Need-help contact and opens /contact', () => {

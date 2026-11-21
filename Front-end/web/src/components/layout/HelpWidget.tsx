@@ -8,6 +8,11 @@ import { trackContact } from '@/lib/contactTracking';
 /**
  * Floating "Need help?" tab pinned to the right edge, linking to /contact.
  *
+ * Desktop only (md+). On a 375px product page it sat on Add to cart and the
+ * wishlist heart (measured, 2026-11-21), and it would be a fourth floating
+ * control beside the WhatsApp / Call / Chat stack. Phones reach us through that
+ * stack; the footer contact strip and the menu drawer also carry Call/WhatsApp.
+ *
  * Context: this is a fresh build replacing the legacy WooCommerce site, so we
  * give users a persistent, low-friction escape hatch to reach us if something
  * looks broken. It is deliberately unobtrusive (a thin edge tab) and can be
@@ -221,7 +226,7 @@ export default function HelpWidget() {
         }
       }}
       style={{ top: `${top}px`, touchAction: 'none' }}
-      className={`group fixed right-0 z-[60] flex select-none flex-col items-center gap-1.5
+      className={`group fixed right-0 z-[60] hidden md:flex select-none flex-col items-center gap-1.5
         rounded-l-2xl border border-r-0 border-[#4fd283]/40 bg-[#121414] px-2 py-3.5 sm:px-2.5 sm:py-4
         text-[#fff] shadow-[0_10px_28px_rgba(0,0,0,0.35)]
         transition-[background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
