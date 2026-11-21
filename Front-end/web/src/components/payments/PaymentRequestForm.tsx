@@ -11,6 +11,7 @@ import {
 import OrderPicker from './OrderPicker';
 import FilePicker from './FilePicker';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
+import CardFields, { cardPayload, EMPTY_CARD, last4Problem, type CardDetails, type PayMethod } from './CardFields';
 import { MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
 import type { Supplier } from './suppliers';
@@ -77,8 +78,12 @@ export default function PaymentRequestForm({
   const [itemIds, setItemIds] = useState<string[]>(supplier ? supplier.lines.map((l) => l.itemId) : []);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [method, setMethod] = useState<'upi' | 'bank'>('upi');
+  // A supplier is paid by UPI or bank, always. An expense may also be paid by a
+  // company card, or leave it all for accounts (click the chosen one to un-choose).
+  const [method, setMethod] = useState<PayMethod>('upi');
   const [payee, setPayee] = useState({ name: '', upiId: '', accountName: '', accountNumber: '', ifsc: '', swift: '', bankName: '', phone: '' });
+  const [card, setCard] = useState<CardDetails>(EMPTY_CARD);
+  const optional = !supplier;
   // IFSC or SWIFT: whatever the person picked, else SWIFT for a foreign-currency bill.
   const [codeChoice, setCodeChoice] = useState<BankCodeKind | null>(null);
   const [bills, setBills] = useState<File[]>([]);
@@ -151,7 +156,8 @@ export default function PaymentRequestForm({
     setError('');
     if (supplier && itemIds.length === 0) { setError('Choose the item(s) this payment is for.'); return; }
     if (picked?.payment.method === 'none') { setError(`Add how we pay ${picked.name} (bank or UPI) in Suppliers first.`); return; }
-    if (!picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
+    if (supplier && !picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
+    if (!picked && method === 'card' && last4Problem(card.cardLast4)) { setError(last4Problem(card.cardLast4)); return; }
     if (!supplier && !chosen) { setError('The options are still loading — try again in a moment.'); return; }
     if (setup && Number(amount) > Number(agreedTotal)) { setError(`The advance cannot be more than the agreed total (${money(Number(agreedTotal), currency)}).`); return; }
     const codeProblem = !picked && method === 'bank' ? bankCodeProblem(codeKind, payee[codeKind]) : '';
@@ -179,7 +185,11 @@ export default function PaymentRequestForm({
     if (picked && creditNum > 0) form.append('creditToUse', String(creditNum));
     if (!picked) form.append('payee', JSON.stringify(method === 'upi'
       ? { name: payee.name.trim(), method, upiId: payee.upiId.trim(), phone: payee.phone.trim() }
-      : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() }));
+      : method === 'card'
+        ? { name: payee.name.trim(), method, ...cardPayload(card) }
+        : method === 'bank'
+          ? { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() }
+          : { name: payee.name.trim(), method: '' }));
     if (supplier) {
       form.append('orderId', supplier.orderId);
       if (deal) form.append('dealId', deal.id);
@@ -331,7 +341,7 @@ export default function PaymentRequestForm({
         {!picked && (
           <div>
             <label className={label} htmlFor="pr-payee">{supplier ? 'Supplier' : 'Pay to'}</label>
-            <input id="pr-payee" className={input} required minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={supplier ? 'Type the supplier name' : 'Shop / person'} autoComplete="off" />
+            <input id="pr-payee" className={input} required={!optional} minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={supplier ? 'Type the supplier name' : 'Shop / person (optional)'} autoComplete="off" />
             {supplier && <SupplierSuggestions query={payee.name} onPick={setPicked} />}
           </div>
         )}
@@ -372,28 +382,33 @@ export default function PaymentRequestForm({
 
       {!picked && (
       <div>
-        <span className={label}>How to pay them</span>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className={label}>How to pay them</span>
+          {optional && <span className="text-xs text-gray-500">Optional — accounts can fill these in</span>}
+        </div>
         <div className="flex gap-2" role="radiogroup" aria-label="Payment method">
-          {(['upi', 'bank'] as const).map((m) => (
-            <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(m)}
+          {(optional ? (['upi', 'bank', 'card'] as const) : (['upi', 'bank'] as const)).map((m) => (
+            // On an expense, clicking the chosen one again un-chooses it (leave it for accounts).
+            <button key={m} type="button" role="radio" aria-checked={method === m} onClick={() => setMethod(optional && method === m ? '' : m)}
               className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${method === m ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700'}`}>
-              {m === 'upi' ? 'UPI' : 'Bank transfer'}
+              {m === 'upi' ? 'UPI' : m === 'bank' ? 'Bank transfer' : 'Card'}
             </button>
           ))}
         </div>
+        {method === 'card' && <CardFields value={card} onChange={setCard} inputClass={input} />}
         {method === 'upi' ? (
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            <input aria-label="UPI ID" className={input} value={payee.upiId} onChange={set('upiId')} placeholder="UPI ID (optional if you attach their QR)" autoCapitalize="none" />
+            <input aria-label="UPI ID" className={input} value={payee.upiId} onChange={set('upiId')} placeholder={optional ? "UPI ID (optional)" : "UPI ID (optional if you attach their QR)"} autoCapitalize="none" />
             <input aria-label="Payee phone" className={input} value={payee.phone} onChange={set('phone')} placeholder="Phone (optional)" inputMode="tel" />
           </div>
-        ) : (
+        ) : method === 'bank' ? (
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            <input aria-label="Account holder" className={input} required value={payee.accountName} onChange={set('accountName')} placeholder="Account holder name" />
-            <input aria-label="Account number" className={input} required inputMode={codeKind === 'swift' ? 'text' : 'numeric'} value={payee.accountNumber} onChange={set('accountNumber')} placeholder="Account number" />
-            <BankCodeField kind={codeKind} value={payee[codeKind]} onKind={setCodeChoice} onChange={(v) => setPayee({ ...payee, [codeKind]: v })} inputClass={input} />
+            <input aria-label="Account holder" className={input} required={!optional} value={payee.accountName} onChange={set('accountName')} placeholder={optional ? 'Account holder name (optional)' : 'Account holder name'} />
+            <input aria-label="Account number" className={input} required={!optional} inputMode={codeKind === 'swift' ? 'text' : 'numeric'} value={payee.accountNumber} onChange={set('accountNumber')} placeholder={optional ? 'Account number (optional)' : 'Account number'} />
+            <BankCodeField kind={codeKind} value={payee[codeKind]} onKind={setCodeChoice} onChange={(v) => setPayee({ ...payee, [codeKind]: v })} inputClass={input} optional={optional} />
             <input aria-label="Bank name" className={`${input} sm:self-end`} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
           </div>
-        )}
+        ) : null}
         {supplier && (
           <label className="mt-2 flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={saveSupplier} onChange={(e) => setSaveSupplier(e.target.checked)} />

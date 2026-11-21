@@ -39,8 +39,11 @@ export type PaymentRequest = {
   categoryLabel?: string;
   description: string;
   payee: {
-    name: string; method: 'upi' | 'bank'; upiId?: string; accountName?: string;
+    /** '' on an expense raised without pay details (accounts fills them in). */
+    name: string; method: 'upi' | 'bank' | 'card' | ''; upiId?: string; accountName?: string;
     accountNumber?: string; ifsc?: string; swift?: string; bankName?: string; phone?: string;
+    /** Card (expenses only): which company card — never its number (last 4 only). */
+    cardType?: string; cardNetwork?: string; cardLast4?: string; cardName?: string; cardLabel?: string;
   };
   order: { id: string; number: string } | null;
   /** The project it is for, as it was when linked ("PRJ-0007 Diwali launch"). */

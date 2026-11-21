@@ -235,6 +235,94 @@ describe('detail', () => {
   });
 });
 
+describe('card and optional pay details', () => {
+  const sentPayee = () => JSON.parse(String((fetchMock.mock.calls[0][1].body as FormData).get('payee')));
+
+  it('pays by card: sends type, network, last 4, name and which card', async () => {
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    await optionsLoaded();
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '6900' } });
+    fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Claude' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Card' }));
+    expect(screen.queryByLabelText('UPI ID')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Card type'), { target: { value: 'credit' } });
+    fireEvent.change(screen.getByLabelText('Card network'), { target: { value: 'visa' } });
+    fireEvent.change(screen.getByLabelText('Card last 4 digits'), { target: { value: '4821' } });
+    fireEvent.change(screen.getByLabelText('Name on card'), { target: { value: 'Sachin' } });
+    fireEvent.change(screen.getByLabelText('Which company card'), { target: { value: 'HDFC corporate card' } });
+    fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Claude subscription' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(sentPayee()).toEqual({ name: 'Claude', method: 'card', cardType: 'credit', cardNetwork: 'visa', cardLast4: '4821', cardName: 'Sachin', cardLabel: 'HDFC corporate card' });
+  });
+
+  it('a pasted full card number is refused on the spot and never kept', async () => {
+    wrap(<PaymentRequestForm onDone={() => {}} />);
+    await optionsLoaded();
+    fireEvent.click(screen.getByRole('radio', { name: 'Card' }));
+    const last4 = screen.getByLabelText('Card last 4 digits');
+    fireEvent.change(last4, { target: { value: '4111 1111 1111 1111' } });
+    expect(screen.getByRole('alert')).toHaveTextContent(/Only the last 4 digits/);
+    expect(last4).toHaveValue('');
+    fireEvent.change(last4, { target: { value: '48' } });
+    expect(screen.getByRole('alert')).toHaveTextContent(/all 4/);
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('goes through with no pay details at all', async () => {
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    await optionsLoaded();
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '840' } });
+    fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Airport pickup' } });
+    // Un-choose UPI: nothing about how to pay.
+    fireEvent.click(screen.getByRole('radio', { name: 'UPI' }));
+    expect(screen.getByLabelText('Pay to')).not.toBeRequired();
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(sentPayee()).toEqual({ name: '', method: '' });
+  });
+
+  it('bank details may be blank, but a typed IFSC is still checked', async () => {
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    await optionsLoaded();
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '840' } });
+    fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Airport pickup' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Bank transfer' }));
+    expect(screen.getByLabelText('Account number')).not.toBeRequired();
+    expect(screen.getByLabelText('IFSC')).not.toBeRequired();
+    fireEvent.change(screen.getByLabelText('IFSC'), { target: { value: 'HDFC123' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/IFSC/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('IFSC'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(sentPayee()).toMatchObject({ method: 'bank', accountNumber: '', ifsc: '', swift: '' });
+  });
+
+  it('the detail shows the card, and the admin can record it as paid by card', async () => {
+    get.mockResolvedValue({ request: { ...base, payee: { name: 'Claude', method: 'card', cardType: 'credit', cardNetwork: 'visa', cardLast4: '4821', cardName: 'Sachin', cardLabel: 'HDFC corporate card' } } });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    expect(await screen.findByText('Card · Visa credit ••••4821 · HDFC corporate card')).toBeInTheDocument();
+    expect(screen.getByText('Sachin')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+    fireEvent.change(screen.getByLabelText('Paid by'), { target: { value: 'card' } });
+    fireEvent.click(screen.getByRole('button', { name: /Mark as paid/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/payment-requests/r1/pay', expect.anything()));
+    expect((fetchMock.mock.calls[0][1].body as FormData).get('method')).toBe('card');
+  });
+
+  it('the detail says when pay details are not given yet', async () => {
+    get.mockResolvedValue({ request: { ...base, payee: { name: '', method: '' } } });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    expect(await screen.findByText(/Not given yet/)).toBeInTheDocument();
+  });
+});
+
 describe('each team’s own options', () => {
   const options = () => screen.getAllByRole('option').map((o) => o.textContent);
   const detailsBox = () => screen.getByLabelText('Details');

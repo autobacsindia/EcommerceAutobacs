@@ -97,8 +97,10 @@ const PaymentRequestSchema = new mongoose.Schema(
     description: { type: String, default: '', maxlength: 12000 },
 
     payee: {
-      name: { type: String, required: true, maxlength: 120 },
-      method: { type: String, enum: ['upi', 'bank'], required: true },
+      // Expense requests may leave every pay detail blank (accounts fills them in):
+      // name '' and method '' then. Supplier payments always carry both.
+      name: { type: String, default: '', maxlength: 120 },
+      method: { type: String, enum: ['upi', 'bank', 'card', ''], default: '' },
       upiId: { type: String, default: '', maxlength: 100 },
       accountName: { type: String, default: '', maxlength: 120 },
       accountNumber: { type: String, default: '', maxlength: 34 },
@@ -108,6 +110,13 @@ const PaymentRequestSchema = new mongoose.Schema(
       swift: { type: String, default: '', maxlength: 11 },
       bankName: { type: String, default: '', maxlength: 120 },
       phone: { type: String, default: '', maxlength: 20 },
+      // Card (expense requests only): WHICH company card, never the card itself.
+      // PCI DSS — no full number, expiry or CVV is ever stored: last 4 digits only.
+      cardType: { type: String, enum: ['credit', 'debit', ''], default: undefined },
+      cardNetwork: { type: String, enum: ['visa', 'mastercard', 'rupay', 'amex', ''], default: undefined },
+      cardLast4: { type: String, default: undefined, match: /^(\d{4})?$/ },
+      cardName: { type: String, default: undefined, maxlength: 120 },
+      cardLabel: { type: String, default: undefined, maxlength: 60 },
     },
 
     // Supplier requests: what the payment is for, snapshotted when raised so the
@@ -173,7 +182,7 @@ const PaymentRequestSchema = new mongoose.Schema(
 
     // Filled when accounts records the payment.
     payment: {
-      method: { type: String, enum: ['razorpay', 'bank', 'upi', 'other'], default: undefined },
+      method: { type: String, enum: ['razorpay', 'bank', 'upi', 'card', 'other'], default: undefined },
       reference: { type: String, default: '', maxlength: 120 },
       paidAt: { type: Date, default: null }, // when it was RECORDED here
       // When the money actually moved (the admin enters it; defaults to paidAt).

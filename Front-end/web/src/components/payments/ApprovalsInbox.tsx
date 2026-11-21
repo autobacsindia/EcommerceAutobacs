@@ -102,7 +102,7 @@ function PaymentRow({ r, onOpen }: { r: PaymentRequest; onOpen: () => void }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 text-sm">
           <p className="font-semibold text-gray-900">
-            {r.number} · {r.kind === 'supplier' ? 'Supplier payment' : categoryName(r)} · {amount} to {r.payee?.name}
+            {r.number} · {r.kind === 'supplier' ? 'Supplier payment' : categoryName(r)} · {amount}{r.payee?.name ? ` to ${r.payee.name}` : ''}
           </p>
           <p className="text-xs text-gray-600">
             Raised by {r.requestedBy} ({r.teamLabel}) on {formatDateIST(r.createdAt)}

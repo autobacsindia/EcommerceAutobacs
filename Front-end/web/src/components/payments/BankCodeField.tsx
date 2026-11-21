@@ -30,12 +30,14 @@ export const bankCodePayload = (kind: BankCodeKind, value: string) =>
 
 const toggle = (on: boolean) => `rounded-md px-2.5 py-1 text-xs font-medium ${on ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600' : 'text-gray-600 hover:bg-gray-100'}`;
 
-export default function BankCodeField({ kind, value, onKind, onChange, inputClass }: {
+export default function BankCodeField({ kind, value, onKind, onChange, inputClass, optional = false }: {
   kind: BankCodeKind;
   value: string;
   onKind: (k: BankCodeKind) => void;
   onChange: (v: string) => void;
   inputClass: string;
+  /** Expense requests: may be left blank (a typed code is still checked). */
+  optional?: boolean;
 }) {
   const problem = bankCodeProblem(kind, value);
   const id = `bank-code-${kind}`;
@@ -51,10 +53,10 @@ export default function BankCodeField({ kind, value, onKind, onChange, inputClas
         aria-invalid={problem ? true : undefined}
         aria-describedby={problem ? `${id}-problem` : undefined}
         className={inputClass}
-        required
+        required={!optional}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={kind === 'swift' ? 'SWIFT code, e.g. KASITHBK' : 'IFSC, e.g. HDFC0001234'}
+        placeholder={`${kind === 'swift' ? 'SWIFT code, e.g. KASITHBK' : 'IFSC, e.g. HDFC0001234'}${optional ? ' (optional)' : ''}`}
         autoCapitalize="characters"
         maxLength={14}
       />
