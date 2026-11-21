@@ -9,7 +9,7 @@
  * checks the viewer may see the task or project before it answers. A video's
  * address answers with a short-lived private link the player can seek in.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
 import {
@@ -119,8 +119,31 @@ export function FileChip({ file, onRemove }: { file: TaskFile; onRemove?: () => 
  * HEVC .mov in Chrome on Windows): the player then gives way to a "download it"
  * line, and the download link is always there.
  */
+/**
+ * True once `el` is within `margin` of the screen (and stays true). Without
+ * IntersectionObserver (very old browsers) it is true at once.
+ */
+function useNearScreen<T extends Element>(margin = '300px') {
+  const ref = useRef<T>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || near) return undefined;
+    if (typeof IntersectionObserver === 'undefined') { setNear(true); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); }
+    }, { rootMargin: margin });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near, margin]);
+  return [ref, near] as const;
+}
+
 export function VideoPlayer({ file }: { file: TaskFile }) {
   const [broken, setBroken] = useState(false);
+  // A long feed of clips: each first frame costs an access check and a storage
+  // read, so only fetch it when the player is about to come into view.
+  const [ref, near] = useNearScreen<HTMLVideoElement>();
   return (
     <figure className="max-w-full" data-testid="task-video">
       {broken ? (
@@ -129,10 +152,11 @@ export function VideoPlayer({ file }: { file: TaskFile }) {
         </p>
       ) : (
         <video
+          ref={ref}
           src={file.url}
           controls
           playsInline
-          preload="metadata"
+          preload={near ? 'metadata' : 'none'}
           onError={() => setBroken(true)}
           className="block max-h-72 w-[360px] max-w-full rounded-xl border border-gray-200 bg-black"
           aria-label={file.name}
@@ -153,7 +177,7 @@ function Photo({ file }: { file: TaskFile }) {
   return (
     <a href={file.url} target="_blank" rel="noopener noreferrer" title={`Open ${file.name}`} className="block overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
       {/* eslint-disable-next-line @next/next/no-img-element -- private, cookie-authenticated bytes; next/image cannot fetch them */}
-      <img src={file.url} alt={file.name} className="block h-32 w-32 object-cover sm:h-40 sm:w-40" />
+      <img src={file.url} alt={file.name} loading="lazy" decoding="async" className="block h-32 w-32 object-cover sm:h-40 sm:w-40" />
     </a>
   );
 }

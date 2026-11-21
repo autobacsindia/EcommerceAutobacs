@@ -104,6 +104,40 @@ describe('MediaFiles', () => {
   });
 });
 
+describe('loading only what is on screen (optimization pass)', () => {
+  // Each video's first frame costs an access check on our API plus a storage read.
+  const videos = (count: number): TaskFile[] => Array.from({ length: count }, (_, i) => (
+    { url: URL(`v${i}.mp4`), name: `v${i}.mp4`, mime: 'video/mp4', size: 1, kind: 'video' as const }
+  ));
+  const original = global.IntersectionObserver;
+  afterEach(() => { global.IntersectionObserver = original; });
+
+  it('20 videos below the screen fetch nothing; one scrolled near fetches only its own preview', () => {
+    const observed: { el: Element; cb: IntersectionObserverCallback }[] = [];
+    global.IntersectionObserver = class {
+      cb: IntersectionObserverCallback;
+      constructor(cb: IntersectionObserverCallback) { this.cb = cb; }
+      observe(el: Element) { observed.push({ el, cb: this.cb }); }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return []; }
+    } as unknown as typeof IntersectionObserver;
+    const { container } = render(<MediaFiles files={videos(20)} />);
+    const players = Array.from(container.querySelectorAll('video'));
+    // Before this pass every one was preload="metadata": 20 fetches on open.
+    expect(players.filter((v) => v.getAttribute('preload') === 'metadata')).toHaveLength(0);
+    const first = observed.find((o) => o.el === players[0])!;
+    act(() => first.cb([{ isIntersecting: true, target: players[0] } as unknown as IntersectionObserverEntry], {} as IntersectionObserver));
+    expect(players.map((v) => v.getAttribute('preload')).filter((p) => p === 'metadata')).toHaveLength(1);
+    expect(players[0]).toHaveAttribute('preload', 'metadata');
+  });
+
+  it('photos load lazily', () => {
+    render(<MediaFiles files={[{ url: URL('a.png'), name: 'a.png', mime: 'image/png', size: 1, kind: 'image' }]} />);
+    expect(screen.getByRole('img', { name: 'a.png' })).toHaveAttribute('loading', 'lazy');
+  });
+});
+
 describe('ProjectUpdates', () => {
   it('lists updates with their photos and videos; a deleted one shows only that it was deleted', async () => {
     get.mockResolvedValue({
