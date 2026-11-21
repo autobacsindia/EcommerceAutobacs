@@ -54,7 +54,7 @@ export const FileSchema = new mongoose.Schema(
   {
     publicId: { type: String, required: true },
     provider: { type: String, default: 'r2' },
-    kind: { type: String, enum: ['image', 'file'], required: true },
+    kind: { type: String, enum: ['image', 'video', 'file'], required: true },
     name: { type: String, required: true, maxlength: 100 },
     mime: { type: String, required: true },
     size: { type: Number, default: 0 },
@@ -162,7 +162,7 @@ const StaffTaskSchema = new mongoose.Schema(
   {
     number: { type: Number, required: true },
     title: { type: String, required: true, trim: true, maxlength: 200 },
-    description: { type: String, default: '', maxlength: 24000 }, // words ≤ DESCRIPTION_MAX (4000); formatted HTML may be longer
+    description: { type: String, default: '', maxlength: 120000 }, // words ≤ DESCRIPTION_MAX (20,000); formatted HTML may be up to 6× longer
     status: { type: String, enum: TASK_STATUSES, default: 'todo', required: true },
     priority: { type: String, enum: TASK_PRIORITIES, default: 'normal', required: true },
     /** IST calendar day, 'YYYY-MM-DD' — a day, not an instant, so "due today" means the same thing to everyone. */

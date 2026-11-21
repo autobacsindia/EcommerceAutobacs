@@ -20,7 +20,7 @@ import { Dialog } from './Overlays';
 import { SlipMenu } from './SlipMenu';
 
 export { slipHref, SlipMenu } from './SlipMenu';
-import { formatDueDay, isConflict, type Project, type ProjectDetails, type ProjectField, type ProjectTemplate, type ProjectTemplates } from './types';
+import { LONG_TEXT_MAX, formatDueDay, isConflict, type Project, type ProjectDetails, type ProjectField, type ProjectTemplate, type ProjectTemplates } from './types';
 
 const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
@@ -158,7 +158,7 @@ function FieldInput({ f, value, onChange }: { f: ProjectField; value: string; on
     <label htmlFor={id} className={`block min-w-0 ${f.type === 'textarea' ? 'sm:col-span-2' : ''}`}>
       <span className="mb-1 block text-xs font-medium text-gray-700">{f.label}</span>
       {f.type === 'textarea' ? (
-        <textarea {...common} rows={3} maxLength={f.max ?? 1000} />
+        <textarea {...common} rows={3} maxLength={LONG_TEXT_MAX} />
       ) : f.type === 'date' ? (
         <input {...common} type="date" />
       ) : (
@@ -306,7 +306,7 @@ export function DetailsForm({ p, onDone }: { p: Project; onDone: () => void }) {
                   onChange={(e) => setDraft((d) => ({ ...d, custom: d.custom.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)) }))}
                   placeholder="Value"
                   aria-label={`Extra field ${i + 1} value`}
-                  maxLength={limits?.customValue ?? 300}
+                  maxLength={limits?.customValue ?? LONG_TEXT_MAX}
                   className={inputClass}
                 />
                 <button type="button" onClick={() => setDraft((d) => ({ ...d, custom: d.custom.filter((_, j) => j !== i) }))} aria-label={`Remove extra field ${i + 1}`} className="shrink-0 rounded p-1.5 text-gray-500 hover:bg-gray-100">

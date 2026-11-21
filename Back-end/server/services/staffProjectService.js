@@ -25,6 +25,7 @@
  *   - lists are keyset-paged and bounded; counts are one aggregate per page
  */
 import mongoose from 'mongoose';
+import { STAFF_LONG_TEXT_MAX, longTextTooLong } from '../config/staffTextLimits.js';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import staffProjectRepository, { PROJECT_STATUSES, PROJECT_COLOURS, PROJECT_STAGE_TYPES, projectCode, projectNumberIn } from '../repositories/staffProjectRepository.js';
@@ -39,7 +40,7 @@ const fail = (message, status) => new AppError(message, status, { expose: true }
 
 export const PROJECT_PAGE_SIZE = 20;
 export const PROJECT_NAME_MAX = 80;
-export const PROJECT_DESCRIPTION_MAX = 2000;
+export const PROJECT_DESCRIPTION_MAX = STAFF_LONG_TEXT_MAX;
 export const PROJECT_PEOPLE_MAX = 50;
 /** Projects one person's access is read from, per request. Far above any real use. */
 export const PROJECT_ACCESS_CAP = 500;
@@ -132,7 +133,7 @@ function cleanName(raw) {
 function cleanDescription(raw) {
   // eslint-disable-next-line no-control-regex
   const text = String(raw ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim();
-  if (text.length > PROJECT_DESCRIPTION_MAX) throw fail(`Keep the description under ${PROJECT_DESCRIPTION_MAX} characters.`, 400);
+  if (text.length > PROJECT_DESCRIPTION_MAX) throw fail(longTextTooLong('The description'), 400);
   return text;
 }
 function cleanColour(raw) {

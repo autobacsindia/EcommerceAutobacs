@@ -31,7 +31,7 @@ import { ProjectPicker } from './ProjectPicker';
 import { RepeatField } from './RepeatPicker';
 import { useProject } from './Projects';
 import {
-  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, stageOf, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
+  FOLLOWERS_MAX, LONG_TEXT_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, stageOf, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type RepeatInput, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -844,7 +844,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
           placeholder="Add more detail for whoever does this…"
           className="px-1 text-sm leading-relaxed text-gray-700"
           canEdit={task.can.edit}
-          maxLength={4000}
+          maxLength={LONG_TEXT_MAX}
         />
         {!task.can.edit && !task.description && <p className="text-sm text-gray-400">No description.</p>}
       </section>

@@ -20,7 +20,8 @@ import AssigneePicker from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { Avatar, AvatarStack } from './ui';
 import { Dialog } from './Overlays';
-import { STAGE_TYPES, formatDueDay, isConflict, newClientId, type Project, type ProjectPage, type ProjectStatus, type TaskStatus } from './types';
+import ProjectUpdates from './ProjectUpdates';
+import { LONG_TEXT_MAX, STAGE_TYPES, formatDueDay, isConflict, newClientId, type Project, type ProjectPage, type ProjectStatus, type TaskStatus } from './types';
 import { PROJECT_COLOURS, projectDot } from './ProjectPicker';
 import { ProjectDetailsPanel } from './ProjectDetails';
 import { SaveAsTemplate, TemplatePicker, fromTemplateMessage, type FromTemplate } from './JobTemplates';
@@ -389,6 +390,7 @@ export function ProjectHeader({ p, onBack, isAdmin }: { p: Project; onBack: () =
         </div>
       </div>
       <ProjectDetailsPanel p={p} />
+      <ProjectUpdates project={p} />
       <Dialog open={editing} onClose={() => setEditing(false)} label="Edit project">
         {editing && <ProjectForm project={p} isAdmin={isAdmin} onCancel={() => setEditing(false)} onDone={() => setEditing(false)} onDeleted={() => { setEditing(false); onBack(); }} />}
       </Dialog>
@@ -624,7 +626,7 @@ export function ProjectForm({ project, isAdmin, pickOwner = true, onDone, onCanc
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          maxLength={2000}
+          maxLength={LONG_TEXT_MAX}
           rows={2}
           placeholder="What is it for?"
           className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"

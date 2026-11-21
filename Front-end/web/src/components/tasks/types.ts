@@ -5,6 +5,7 @@
  * The API decides who may do what and says so per task in `can`; the screens only
  * hide what would be refused.
  */
+import { CHAT_FILES } from '@/lib/attachments';
 
 /** Like ClickUp: to do, in progress, complete. ('waiting' was retired; the server shows old ones as in progress.) */
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
@@ -190,7 +191,7 @@ export type TaskPage = { tasks: Task[]; nextCursor: string | null; summary?: { c
 
 /** A file on a task or a comment. `url` is served only to people who can see the task. */
 export type TaskFile = {
-  url: string; name: string; mime: string; size: number; kind: 'image' | 'file';
+  url: string; name: string; mime: string; size: number; kind: 'image' | 'video' | 'file';
   /** Task files only: who added it, and whether the viewer may remove it. */
   by?: { id: string; name: string }; at?: string; canRemove?: boolean;
 };
@@ -404,11 +405,21 @@ export function formatDueDay(ymd: string | null): string {
 export const orderHrefFor = (base: string, orderId: string) =>
   (base.startsWith('/admin') ? `/admin/orders?order=${encodeURIComponent(orderId)}` : '/team/orders');
 
+/**
+ * The staff safety cap on long text (server: config/staffTextLimits.js). Not a
+ * limit anyone meets in normal use — the box only shows a counter past 80%.
+ */
+export const LONG_TEXT_MAX = 20000;
+
 /** Files on one comment, and on one task over its life (the server checks both). */
 export const COMMENT_FILES_MAX = 10;
 export const TASK_FILES_MAX = 30;
-/** What a task or comment file may be (the server checks the bytes too). */
-export const TASK_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,application/pdf,text/csv,text/plain,.xlsx,.docx';
+/**
+ * What a task, comment or project-update file may be — the same as team chat:
+ * photos, videos (MP4, MOV, WebM), PDFs and common documents. On a phone the
+ * picker offers the camera and the gallery. The server checks the bytes too.
+ */
+export const TASK_FILE_ACCEPT = CHAT_FILES;
 
 /** Your running timer, as the server read it (`seconds` at the moment it answered). */
 export type RunningTimer = {
@@ -620,5 +631,14 @@ export const stageOf = (stages: ProjectStage[], t: Pick<Task, 'stage' | 'status'
   stages.find((s) => s.id === t.stage)
   ?? stages.find((s) => s.type === t.status)
   ?? (t.status === 'in_progress' ? stages.find((s) => s.type === 'todo') : undefined);
+/** One update on a project (services/staffProjectUpdateService.js): words, photos and videos. */
+export type ProjectUpdate = {
+  id: string; by: string; byId: string; mine: boolean; at: string | null; deleted: boolean;
+  text: string; files: TaskFile[]; canDelete: boolean;
+};
+export type ProjectUpdatePage = { updates: ProjectUpdate[]; nextBefore: string | null };
+/** Files on one project update — the same as a task comment. */
+export const PROJECT_UPDATE_FILES_MAX = COMMENT_FILES_MAX;
+
 export type ProjectPage = { projects: Project[]; nextCursor: string | null; canCreate: boolean; canPickOwner?: boolean };
 export type ProjectPick = { id: string; code?: string | null; name: string; colour: string };

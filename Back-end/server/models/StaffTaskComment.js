@@ -26,7 +26,7 @@ const StaffTaskCommentSchema = new mongoose.Schema(
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     byName: { type: String, default: '' },
     /** Empty only when the comment is files alone. */
-    text: { type: String, default: '', maxlength: 12000 }, // words ≤ COMMENT_MAX; formatted HTML may be longer
+    text: { type: String, default: '', maxlength: 120000 }, // words ≤ COMMENT_MAX (20,000); formatted HTML may be up to 6× longer
     /** The browser's id for this comment, so a double-send posts once. */
     clientId: { type: String, default: undefined, maxlength: 64 },
     /** People addressed with @Name — each could see the task when it was written. */

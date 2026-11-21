@@ -113,6 +113,30 @@ describe('details: what is stored', () => {
     );
   });
 
+  it('long job notes are kept whole up to the 20,000 safety cap; over it is refused with a clear message', async () => {
+    const long = 'Replaced the bumper and checked every sensor. '.repeat(400).trim(); // ~18,400 characters
+    await save(opsMember, {
+      values: { workToDo: long, conditionNotes: long, customerAddress: long },
+      custom: [{ label: 'Notes', value: long }],
+    });
+    const stored = (await StaffProject.findById(project.id).lean()).details;
+    expect(stored.values.workToDo).toBe(long);
+    expect(stored.values.conditionNotes).toBe(long);
+    expect(stored.values.customerAddress).toBe(long);
+    expect(stored.custom[0].value).toBe(long);
+    await status(400, save(opsMember, { values: { workToDo: 'x'.repeat(20001) } }), /Work being done is too long \(over 20,000 characters\)/);
+    await status(400, save(opsMember, { values: {}, custom: [{ label: 'Notes', value: 'x'.repeat(20001) }] }), /too long/);
+    // One-line boxes keep their own short limits.
+    await status(400, save(opsMember, { values: { vehicleReg: 'K'.repeat(21) } }), /under 20 characters/);
+  });
+
+  it('a long project description is kept; over the cap is refused', async () => {
+    const long = 'd'.repeat(20000);
+    await projects.updateProject(await as(nevin), project.id, { rev: (await StaffProject.findById(project.id).lean()).rev, description: long }, req);
+    expect((await StaffProject.findById(project.id).lean()).description).toBe(long);
+    await status(400, projects.updateProject(await as(nevin), project.id, { rev: (await StaffProject.findById(project.id).lean()).rev, description: `${long}d` }, req), /too long/);
+  });
+
   it('a project with no details yet shows none', async () => {
     expect((await projects.getProject(await as(nevin), project.id)).details).toBeNull();
   });

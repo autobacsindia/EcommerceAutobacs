@@ -80,9 +80,11 @@ import { keysetPage } from '../utils/listQuery.js';
 import { normalizeEmoji } from '../utils/reactions.js';
 import {
   storeTaskFiles, discardTaskFiles, removeTaskFile, readTaskFile, taskFileUrl, taskFolder, basenameOf, isTaskFileName,
+  isVideoFileName, privateVideoLink,
   TASK_FILES_MAX, COMMENT_FILES_MAX,
 } from './taskFileService.js';
 import { cleanRichText, richTextLength, richTextToPlain, RICH_TEXT_MARKUP_FACTOR } from '../utils/richText.js';
+import { STAFF_LONG_TEXT_MAX, longTextTooLong } from '../config/staffTextLimits.js';
 import staffTaskLinkRepository from '../repositories/staffTaskLinkRepository.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -90,8 +92,9 @@ const fail = (message, status) => new AppError(message, status, { expose: true }
 export const TASK_PAGE_SIZE = 50;
 export const COMMENT_PAGE_SIZE = 50;
 export const TITLE_MAX = 200;
-export const DESCRIPTION_MAX = 4000;
-export const COMMENT_MAX = 2000;
+/** Notes and comments share the staff safety cap (config/staffTextLimits.js). */
+export const DESCRIPTION_MAX = STAFF_LONG_TEXT_MAX;
+export const COMMENT_MAX = STAFF_LONG_TEXT_MAX;
 /** How long the author may edit or delete a comment — the same as team chat (CHAT_EDIT_WINDOW_MS). */
 export const COMMENT_EDIT_WINDOW_MS = 30 * 60 * 1000;
 /** Different emoji on one comment, and people @mentioned in one (as chat). */
@@ -275,10 +278,10 @@ function cleanRich(raw, max, tooLong) {
 }
 
 function cleanDescription(raw) {
-  return cleanRich(raw, DESCRIPTION_MAX, `Keep the notes under ${DESCRIPTION_MAX} characters.`);
+  return cleanRich(raw, DESCRIPTION_MAX, longTextTooLong('The description'));
 }
 
-const cleanCommentText = (raw) => cleanRich(raw, COMMENT_MAX, `Keep a comment under ${COMMENT_MAX} characters.`);
+const cleanCommentText = (raw) => cleanRich(raw, COMMENT_MAX, longTextTooLong('This comment'));
 
 /** 'YYYY-MM-DD' (a real calendar day), or null to clear. */
 function cleanDay(raw, what) {
@@ -2369,13 +2372,17 @@ export async function removeTaskFileFrom(actor, id, name) {
  * The bytes of a file on the task or on one of its comments, for someone who
  * sees the task. A file that was removed, or whose comment was deleted, is 404.
  */
-export async function readFileOf(actor, id, name) {
+export async function readFileOf(actor, id, name, { download = false } = {}) {
   const t = await loadVisible(actor, id);
   if (!isTaskFileName(name)) throw fail('File not found.', 404);
   const publicId = `${taskFolder(idOf(t._id))}/${name}`;
   const own = (t.files || []).find((f) => f.publicId === publicId)
     || await staffTaskRepository.liveCommentFile(t._id, publicId);
   if (!own) throw fail('File not found.', 404);
+  // A video: a short-lived private link the player can seek in (services/taskFileService.js).
+  if (isVideoFileName(name)) {
+    return { redirect: await privateVideoLink(taskFolder(idOf(t._id)), name, { downloadAs: download ? own.name : undefined }) };
+  }
   const file = await readTaskFile(idOf(t._id), name);
   // The name it was uploaded with, for a download's file name.
   return { ...file, name: own.name || null };

@@ -95,7 +95,7 @@ const ProjectStageSchema = new mongoose.Schema(
 const StaffProjectSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, maxlength: 80 },
-    description: { type: String, default: '', maxlength: 2000 },
+    description: { type: String, default: '', maxlength: 20000 }, // PROJECT_DESCRIPTION_MAX
     colour: { type: String, enum: PROJECT_COLOURS, default: 'blue' },
     owner: { type: PersonSchema, required: true },
     /** Everyone in the project, the owner first. Decides who sees it. */

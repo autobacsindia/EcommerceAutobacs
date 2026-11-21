@@ -15,7 +15,7 @@ import apiClient from '@/lib/api-client';
 import RichTextBox from '@/components/ui/RichTextBox';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { MAX_ASSIGNEES, TASK_PRIORITIES, estimateProblem, isPastDue, newClientId, parseDuration, type Assignee, type RepeatInput, type Task, type TaskPriority } from './types';
+import { LONG_TEXT_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, estimateProblem, isPastDue, newClientId, parseDuration, type Assignee, type RepeatInput, type Task, type TaskPriority } from './types';
 
 /** Shown under a due date that has already passed. */
 export function PastDueWarning({ dueOn, dueTime }: { dueOn: string; dueTime?: string | null }) {
@@ -244,7 +244,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
         <RichTextBox
           value={form.description}
           onChange={(description) => set({ description })}
-          maxLength={4000}
+          maxLength={LONG_TEXT_MAX}
           minHeightClass="min-h-[4.5rem]"
           placeholder="Add a description (optional)"
           ariaLabel="Notes"

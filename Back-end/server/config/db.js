@@ -800,6 +800,12 @@ export async function ensureCriticalIndexes() {
     await db.collection('staffprojects').createIndex({ archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_all', background: true });
     await db.collection('staffprojects').createIndex({ 'people.user': 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_people', background: true });
     await db.collection('staffprojects').createIndex({ teams: 1, archivedAt: 1, rank: 1, _id: 1 }, { name: 'staff_project_teams', background: true });
+    // A project's updates, newest first (models/StaffProjectUpdate.js), and one save per double-tap.
+    await db.collection('staffprojectupdates').createIndex({ project: 1, _id: -1 }, { name: 'staff_project_update_project', background: true });
+    await db.collection('staffprojectupdates').createIndex(
+      { by: 1, clientId: 1 },
+      { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_project_update_client_id', background: true }
+    );
     await db.collection('staffprojects').createIndex(
       { createdBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_project_client_id', background: true }

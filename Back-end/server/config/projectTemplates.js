@@ -18,15 +18,21 @@
  *   number    a plain number      money     rupees, 2 decimals, never negative
  */
 
+import { STAFF_LONG_TEXT_MAX } from './staffTextLimits.js';
+
 export const FIELD_TYPES = Object.freeze(['text', 'textarea', 'phone', 'date', 'number', 'money']);
 
-/** Longest value per type, in characters, unless a field says otherwise. */
-export const FIELD_MAX = Object.freeze({ text: 120, textarea: 1000, phone: 20 });
+/**
+ * Longest value per type, in characters. A one-line field may say otherwise
+ * (`max`); a several-lines field always takes the staff safety cap
+ * (config/staffTextLimits.js) — job notes are never cut short.
+ */
+export const FIELD_MAX = Object.freeze({ text: 120, textarea: STAFF_LONG_TEXT_MAX, phone: 20 });
 
 /** Extra "label: value" rows any project may add beyond its template. */
 export const CUSTOM_FIELDS_MAX = 20;
 export const CUSTOM_LABEL_MAX = 40;
-export const CUSTOM_VALUE_MAX = 300;
+export const CUSTOM_VALUE_MAX = STAFF_LONG_TEXT_MAX;
 
 const f = (key, label, type, group, extra = {}) => Object.freeze({ key, label, type, group, ...extra });
 
@@ -44,13 +50,13 @@ export const PROJECT_TEMPLATES = Object.freeze({
     fields: Object.freeze([
       f('customerName', 'Customer name', 'text', 'customer', { max: 80 }),
       f('customerPhone', 'Phone', 'phone', 'customer'),
-      f('customerAddress', 'Address', 'textarea', 'customer', { max: 300 }),
+      f('customerAddress', 'Address', 'textarea', 'customer'),
       f('vehicleModel', 'Vehicle model', 'text', 'vehicle', { max: 80, placeholder: 'Toyota Hilux 2024' }),
       f('vehicleReg', 'Registration no.', 'text', 'vehicle', { max: 20, upper: true, placeholder: 'KL 07 AB 1234' }),
       f('vehicleReceivedOn', 'Date vehicle received', 'date', 'vehicle'),
       f('odometerKm', 'Odometer (km)', 'number', 'vehicle'),
       f('workToDo', 'Work being done', 'textarea', 'job'),
-      f('conditionNotes', 'Condition when received', 'textarea', 'job', { max: 600, placeholder: 'Scratch on rear bumper, spare tyre present' }),
+      f('conditionNotes', 'Condition when received', 'textarea', 'job', { placeholder: 'Scratch on rear bumper, spare tyre present' }),
       f('deliveryOn', 'Delivery date', 'date', 'job'),
       f('amountQuoted', 'Amount quoted (₹)', 'money', 'money'),
       f('advancePaid', 'Advance paid (₹)', 'money', 'money'),
