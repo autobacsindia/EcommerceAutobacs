@@ -13,6 +13,7 @@ import { resolveFestivalSetting, type FestivalOfferSetting, type FestivalVariant
 import { toast } from 'react-hot-toast';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
+import { useReportBuyBarHeight } from '@/lib/floatingClearance';
 
 interface StickyVariant {
   _id: string;
@@ -144,13 +145,17 @@ export default function StickyCartBar({
 
   // Hide when the resolved unit is sold out (a selected out-of-stock variant, or a
   // simple product out of stock). Variable products with no selection stay visible.
-  if (!isVisible || activeStock === 'out') {
+  const shown = isVisible && activeStock !== 'out';
+  // The floating Contact button lifts by this bar's height so it never sits on it.
+  const barRef = useReportBuyBarHeight<HTMLDivElement>(shown);
+  if (!shown) {
     return null;
   }
 
   return (
     <AnimatePresence>
       <motion.div
+        ref={barRef}
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}

@@ -27,6 +27,7 @@ import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCount
 import EmiOptions from '@/components/products/redesign/EmiOptions';
 import NotifyMeButton from '@/components/products/redesign/NotifyMeButton';
 import JoinWaitlistButton from '@/components/products/redesign/JoinWaitlistButton';
+import { useKeepFloatingButtonsClear } from '@/lib/floatingClearance';
 
 const TRUST_ICONS: Record<TrustIcon, typeof Shield> = { CreditCard, Shield, Truck, RotateCcw };
 const MAX_QTY = 99;
@@ -226,6 +227,10 @@ export default function BuyBox({
 
   const rounded = Math.round(product.averageRating);
 
+  // While Add to cart / Buy now / wishlist are on screen the floating Contact
+  // button steps aside, so it can never sit on top of them.
+  const ctaRef = useKeepFloatingButtonsClear<HTMLDivElement>();
+
   return (
     <div>
       {categoryName && <Eyebrow>{categoryName}</Eyebrow>}
@@ -383,7 +388,7 @@ export default function BuyBox({
       {!backorder && !needsSelection && !outOfStock && <EmiOptions price={festivalOffer ? festivalOffer.finalPrice : activePrice} className="mt-7" />}
 
       {/* CTAs */}
-      <div className="mt-6 flex flex-col gap-3">
+      <div ref={ctaRef} className="mt-6 flex flex-col gap-3">
         {backorder ? (
           <div className="flex gap-3">
             <JoinWaitlistButton

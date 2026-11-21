@@ -239,10 +239,9 @@ describe('Need-help tab on phones', () => {
     (trackContact as jest.Mock).mockClear();
   });
 
-  it('shows on phones as well as desktop', () => {
+  it('is desktop-only: phones use the one Contact us button instead', () => {
     render(<HelpWidget />);
-    expect(tab()).not.toHaveClass('hidden');
-    expect(tab()).toHaveClass('flex');
+    expect(tab()).toHaveClass('hidden', 'md:flex');
   });
 
   it('a tap counts one Need-help contact and opens /contact', () => {

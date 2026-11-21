@@ -1,8 +1,11 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Phone } from 'lucide-react';
+import { MessageCircle, Phone, X } from 'lucide-react';
 import { trackContact } from '@/lib/contactTracking';
+import { useFloatingClearance } from '@/lib/floatingClearance';
+import { isHelpBotSuppressed, OPEN_HELP_BOT_EVENT } from '@/components/help/helpBotVisibility';
 import { SITE_URL } from '@/lib/siteUrl';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 
@@ -36,63 +39,135 @@ function WhatsAppIcon({ className }: { className?: string }) {
 }
 
 /**
- * Floating WhatsApp + Call buttons, bottom-right on every storefront page.
+ * Floating contact buttons, bottom-right on every storefront page.
  *
  * On a product page the WhatsApp message carries the page link, so the sales
  * team knows which product the customer is asking about.
  *
- * Phones show the same separate buttons as desktop (owner's call, 2026-11-15:
- * one tap per channel, each tracked on its own). They stack ABOVE the help-chat
- * launcher (HelpBot), which owns the lowest slot:
- *   phones:  launcher 20px + 48 → this stack from 80px (2×48 + 12 → 188px)
- *            on a product page everything lifts above the sticky Add-to-cart
- *            bar (up to ~117px tall in a sale): launcher 132px, this stack
- *            from 192px (→ 300px)
- *   desktop: launcher 24px + 56, this stack from 112px (unchanged)
- * Both add the iOS home-bar inset. HelpWidget's bottom reserve depends on these.
+ * Desktop (md+): separate WhatsApp + Call buttons, stacked above the help-chat
+ * launcher (HelpBot, bottom-6) from bottom-28 — unchanged.
+ *
+ * Phones: ONE "Contact us" button that opens a small menu — WhatsApp, Call,
+ * Chat with us (Batch 3, owner-approved 2026-11-21; replaces the 2026-11-15
+ * one-button-per-channel layout). Three bubbles plus the side tab sat on Add to
+ * cart, Buy now and the wishlist heart on a 375px product page, and phone
+ * buyers were paying half as often as desktop. So on phones it:
+ *   - sits 16px above the sticky buy bar while that bar shows (the bar reports
+ *     its live height, incl. the taller sale variant), else 16px off the bottom;
+ *   - fades out (and leaves the tab order) while the in-page Add to cart /
+ *     Buy now / wishlist block is on screen.
+ * Both add the iOS home-bar inset. HelpBot's phone panel opens above it.
+ * Each channel tap is still recorded once (trackContact); opening the menu is not.
  */
 export default function ContactFab() {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const { buyBarHeight, buyButtonsInView } = useFloatingClearance();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // A new page closes the menu — it must not follow the customer around.
+  useEffect(() => { setOpen(false); }, [pathname]);
+  // Stepping aside for the buy buttons also closes it.
+  useEffect(() => { if (buyButtonsInView) setOpen(false); }, [buyButtonsInView]);
+
+  // Escape or a tap anywhere else closes the menu.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [open]);
+
   if (isSuppressed(pathname)) return null;
 
   const onProduct = isProductPage(pathname);
   const message = onProduct
     ? `Hi Autobacs India! I have a question about this product: ${SITE_URL}${pathname}`
     : 'Hi Autobacs India! I have a question.';
+  const chatAvailable = !isHelpBotSuppressed(pathname);
   const ring = 'shadow-xl shadow-black/30 ring-[3px] ring-white transition-transform hover:scale-105 focus:outline-none focus-visible:ring-[#6fdc9c]';
-  const bottom = onProduct
-    ? 'bottom-[calc(192px_+_env(safe-area-inset-bottom))]'
-    : 'bottom-[calc(80px_+_env(safe-area-inset-bottom))]';
+  // Phones: a labelled pill inside the open menu, hidden while it is closed.
+  // Desktop: the familiar round icon button, always shown.
+  const item = `${open ? 'flex' : 'hidden'} md:flex h-12 items-center justify-center gap-2 rounded-full pl-4 pr-5 text-[15px] font-semibold md:h-14 md:w-14 md:p-0`;
+  const label = 'md:hidden';
+  // Phones only: step aside while Add to cart / Buy now / wishlist are on screen.
+  const away = buyButtonsInView
+    ? 'max-md:pointer-events-none max-md:invisible max-md:translate-y-3 max-md:opacity-0'
+    : '';
 
   return (
     <>
-    {/* Phones: empty room after the footer, as tall as the floating stack
-        (launcher + WhatsApp + Call tops out at 188px, plus a little air), so
-        the last price/link on any page can scroll clear of the buttons. On a
-        product page the sticky Add-to-cart bar already reserves its own room
-        below this, which together covers the lifted stack (→ 300px). */}
-    <div aria-hidden="true" data-testid="fab-clearance" className="h-[calc(196px_+_env(safe-area-inset-bottom))] md:hidden" />
-    <div className={`fixed right-4 z-40 flex flex-col items-end gap-3 ${bottom} md:bottom-28`}>
+    {/* Phones: empty room after the footer, as tall as the Contact button
+        (16px + 48px) plus a little air, so the last price/link on any page can
+        scroll clear of it. On a product page the sticky buy bar reserves its own
+        room below this. Static height, so it never shifts the page. */}
+    <div aria-hidden="true" data-testid="fab-clearance" className="h-[calc(76px_+_env(safe-area-inset-bottom))] md:hidden" />
+    <div
+      ref={rootRef}
+      data-testid="contact-fab"
+      // Lifted with a transform, not `bottom`: moving a box by `bottom` counts
+      // as a layout shift (CLS), a transform does not. The bar is md:hidden, so
+      // the lift is always 0 on desktop.
+      style={{ transform: `translateY(-${buyBarHeight}px)` }}
+      className={`fixed right-4 z-40 flex flex-col items-end gap-3 bottom-[calc(16px_+_env(safe-area-inset-bottom))] md:bottom-28 transition-[opacity,transform,translate,visibility] duration-200 motion-reduce:transition-none ${away}`}
+    >
+      {chatAvailable && (
+        <button
+          type="button"
+          aria-label="Chat with us"
+          onClick={() => {
+            trackContact('chat', pathname);
+            setOpen(false);
+            window.dispatchEvent(new Event(OPEN_HELP_BOT_EVENT));
+          }}
+          // Phones only: desktop keeps HelpBot's own launcher.
+          className={`${open ? 'flex' : 'hidden'} h-12 items-center gap-2 rounded-full bg-[#121414] pl-4 pr-5 text-[15px] font-semibold text-[#fff] md:hidden ${ring}`}
+        >
+          <MessageCircle className="h-5 w-5" aria-hidden="true" />
+          Chat with us
+        </button>
+      )}
       <a
         href={whatsappLink(message)}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Chat with us on WhatsApp"
         title="Chat on WhatsApp"
-        onClick={() => trackContact('whatsapp', pathname)}
-        className={`flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#25D366] text-[#fff] ${ring}`}
+        onClick={() => { trackContact('whatsapp', pathname); setOpen(false); }}
+        className={`${item} bg-[#25D366] text-[#fff] ${ring}`}
       >
         <WhatsAppIcon className="h-6 w-6 md:h-7 md:w-7" />
+        <span className={label}>WhatsApp</span>
       </a>
       <a
         href={`tel:${SUPPORT_PHONE_TEL}`}
         aria-label={`Call us on ${SUPPORT_PHONE_DISPLAY}`}
         title={`Call ${SUPPORT_PHONE_DISPLAY}`}
-        onClick={() => trackContact('call', pathname)}
-        className={`flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] hover:bg-[#0b6b3c] ${ring}`}
+        onClick={() => { trackContact('call', pathname); setOpen(false); }}
+        className={`${item} bg-[#0a5c33] text-[#fff] hover:bg-[#0b6b3c] ${ring}`}
       >
         <Phone className="h-5 w-5 md:h-6 md:w-6" />
+        <span className={label}>Call us</span>
       </a>
+      {/* Phones: the one button. */}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label={open ? 'Close contact options' : 'Contact us'}
+        onClick={() => setOpen((v) => !v)}
+        className={`flex h-12 items-center gap-2 rounded-full bg-[#0a5c33] px-4 text-[15px] font-semibold text-[#fff] md:hidden ${ring}`}
+      >
+        {open ? <X className="h-5 w-5" aria-hidden="true" /> : <MessageCircle className="h-5 w-5" aria-hidden="true" />}
+        <span>{open ? 'Close' : 'Contact us'}</span>
+      </button>
     </div>
     </>
   );

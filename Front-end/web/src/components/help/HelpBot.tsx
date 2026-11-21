@@ -22,6 +22,7 @@ import { isHelpBotSuppressed, OPEN_HELP_BOT_EVENT } from './helpBotVisibility';
 import apiClient from '@/lib/api';
 import { capture } from '@/lib/analytics';
 import { trackContact } from '@/lib/contactTracking';
+import { useFloatingClearance } from '@/lib/floatingClearance';
 import { whatsappLink } from '@/lib/contactInfo';
 import { STARTERS, answerFor, type Action } from '@/lib/help/intents';
 
@@ -43,13 +44,6 @@ interface Turn {
   searching?: boolean;
 }
 
-/**
- * A product page: on phones its sticky Add-to-cart bar owns the bottom edge,
- * so the launcher sits above it. Nothing may cover Add to cart.
- */
-const isProductPage = (pathname: string | null) =>
-  !!pathname && /^\/products\/(?!search(\/|$))[^/]+$/.test(pathname);
-
 /** Where a chat bubble would be in the way or out of place. */
 const GREETING =
   "Hi! I can help you find a part, check an order, or explain delivery and returns. What do you need?";
@@ -63,6 +57,7 @@ export default function HelpBot() {
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { buyBarHeight } = useFloatingClearance();
 
   const push = useCallback((turn: Omit<Turn, 'id'>) => {
     const id = nextId.current++;
@@ -165,16 +160,12 @@ export default function HelpBot() {
   if (isHelpBotSuppressed(pathname)) return null;
 
   const showStarters = turns.length <= 1;
-  // Clear of the sticky Add-to-cart bar (up to ~117px when a sale adds a price
-  // line, measured at 390px) plus the iOS home indicator.
-  const onProduct = isProductPage(pathname);
-  // Plus the iOS home-bar inset on phones. ContactFab's stack is measured from these.
-  const launcherBottom = onProduct
-    ? 'bottom-[calc(132px_+_env(safe-area-inset-bottom))] md:bottom-6'
-    : 'bottom-[calc(20px_+_env(safe-area-inset-bottom))] md:bottom-6';
-  const panelBottom = onProduct
-    ? 'bottom-[calc(192px_+_env(safe-area-inset-bottom))] md:bottom-28'
-    : 'bottom-[calc(80px_+_env(safe-area-inset-bottom))] md:bottom-28';
+  // Phones have no launcher of their own: ContactFab's one "Contact us" button
+  // opens this panel ("Chat with us"), so the panel sits just above that button
+  // (16px + 48px + 12px gap), lifted further by the sticky buy bar when it shows.
+  // Desktop: launcher bottom-6, panel bottom-28, as before.
+  // The buy-bar lift is a transform (no layout shift); the height cap uses it too.
+  const panelBottom = 'bottom-[calc(76px_+_env(safe-area-inset-bottom))] md:bottom-28';
 
   return (
     <>
@@ -191,10 +182,10 @@ export default function HelpBot() {
         aria-expanded={open}
         aria-controls="help-bot-panel"
         aria-label={open ? 'Close help' : 'Open help'}
-        // Phones too: its own button, the lowest in the stack (ContactFab sits above).
-        className={`fixed ${launcherBottom} right-4 z-[60] flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
+        // Desktop only: on phones ContactFab's "Contact us" menu opens the chat.
+        className={`fixed bottom-6 right-4 z-[60] hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
       >
-        {open ? <X className="h-5 w-5 md:h-6 md:w-6" /> : <MessageCircle className="h-5 w-5 md:h-6 md:w-6" />}
+        {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
 
       {open && (
@@ -204,7 +195,8 @@ export default function HelpBot() {
           role="dialog"
           aria-modal="false"
           aria-label="Help"
-          className={`fixed inset-x-3 ${panelBottom} z-[60] flex max-h-[min(34rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[23rem]`}
+          style={{ ['--fab-lift' as string]: `${buyBarHeight}px`, transform: `translateY(-${buyBarHeight}px)` }}
+          className={`fixed inset-x-3 ${panelBottom} z-[60] flex max-h-[min(34rem,calc(100dvh-9rem-var(--fab-lift)))] flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[23rem]`}
         >
           <header className="flex items-center gap-3 bg-[#121414] px-4 py-3 text-[#fff]">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0a5c33]">

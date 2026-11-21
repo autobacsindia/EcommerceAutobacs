@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import HelpBot from './HelpBot';
 import { OPEN_HELP_BOT_EVENT } from './helpBotVisibility';
 import { capture } from '@/lib/analytics';
+import { setBuyBarHeight } from '@/lib/floatingClearance';
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/' }));
 jest.mock('@/lib/api', () => ({ __esModule: true, default: { get: jest.fn().mockResolvedValue({ suggestions: [] }) } }));
@@ -19,12 +20,22 @@ describe('help panel', () => {
   // jsdom has no scrollIntoView; the panel scrolls to its newest message.
   beforeAll(() => { Element.prototype.scrollIntoView = () => {}; });
 
-  it('shows its own launcher on phones, sized for a thumb', () => {
+  it('has its own launcher on desktop only — phones open it from the Contact us menu', () => {
     render(<HelpBot />);
     const launcher = screen.getByRole('button', { name: 'Open help' });
-    expect(launcher).not.toHaveClass('hidden');
-    expect(launcher).toHaveClass('flex', 'h-12', 'w-12', 'md:h-14', 'md:w-14');
-    expect(launcher.className).toContain('bottom-[calc(20px_+_env(safe-area-inset-bottom))]');
+    expect(launcher).toHaveClass('hidden', 'md:flex', 'h-14', 'w-14', 'bottom-6');
+  });
+
+  it('on phones the panel opens just above the Contact us button, lifted with the buy bar', () => {
+    render(<HelpBot />);
+    act(() => { window.dispatchEvent(new Event(OPEN_HELP_BOT_EVENT)); });
+    const panel = screen.getByRole('dialog', { name: 'Help' });
+    expect(panel.className).toContain('bottom-[calc(76px_+_env(safe-area-inset-bottom))]');
+    expect(panel).toHaveClass('md:bottom-28');
+    expect(panel.style.transform).toBe('translateY(-0px)');
+    act(() => setBuyBarHeight(117));
+    expect(panel.style.transform).toBe('translateY(-117px)');
+    act(() => setBuyBarHeight(0));
   });
 
   it('counts one chat contact when opened, none when closed', () => {
