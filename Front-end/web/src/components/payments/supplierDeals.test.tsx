@@ -181,6 +181,65 @@ describe('other payments for an order', () => {
     expect(screen.queryByText('PR-0199')).toBeNull();
   });
 
+  describe('approved & closed fold into a dropdown (owner, 2026-11-21)', () => {
+    const at = (over: Partial<OrderPayment>): OrderPayment => ({ ...expense, ...over });
+    const rows = [
+      at({ id: 'a', number: 'PR-0201', status: 'submitted', statusLabel: 'Waiting for accounts approval' }),
+      at({ id: 'b', number: 'PR-0202', status: 'on_hold', statusLabel: 'On hold' }),
+      at({ id: 'c', number: 'PR-0203', status: 'declined', statusLabel: 'Declined', decisionNote: 'No bill' }),
+      at({ id: 'd', number: 'PR-0089', status: 'paid', statusLabel: 'Paid' }),
+      at({ id: 'e', number: 'PR-0204', status: 'approved', statusLabel: 'Approved' }),
+      at({ id: 'f', number: 'PR-0127', status: 'cancelled', statusLabel: 'Cancelled' }),
+    ];
+    beforeEach(() => window.localStorage.clear());
+
+    it('waiting / on hold / declined stay on top; approved, paid, cancelled are folded, closed by default', () => {
+      wrap(<OrderOtherPayments order={order} requests={rows} />);
+      const top = screen.getByRole('list', { name: 'Expenses still in progress' });
+      expect(within(top).getAllByRole('button').map((b) => b.textContent)).toEqual(['PR-0201', 'PR-0202', 'PR-0203']);
+      expect(screen.getByText('Declined: No bill')).toBeInTheDocument();
+      const toggle = screen.getByRole('button', { name: 'Approved & closed (3)' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText('PR-0089')).toBeNull();
+      fireEvent.click(toggle);
+      const folded = screen.getByRole('list', { name: 'Approved and closed expenses' });
+      expect(within(folded).getAllByRole('button').map((b) => b.textContent)).toEqual(['PR-0089', 'PR-0204', 'PR-0127']);
+      expect(within(folded).getByText('Receipt')).toBeInTheDocument();
+    });
+
+    it('remembers open / closed in this browser', () => {
+      const first = wrap(<OrderOtherPayments order={order} requests={rows} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Approved & closed (3)' }));
+      expect(window.localStorage.getItem('orderExpenses.settledOpen')).toBe('1');
+      first.unmount();
+      wrap(<OrderOtherPayments order={order} requests={rows} />);
+      expect(screen.getByRole('button', { name: 'Approved & closed (3)' })).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('PR-0089')).toBeInTheDocument();
+    });
+
+    it('blocked storage: still opens and closes, starts closed', () => {
+      const get = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+      const set = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+      wrap(<OrderOtherPayments order={order} requests={rows} />);
+      const toggle = screen.getByRole('button', { name: 'Approved & closed (3)' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      get.mockRestore();
+      set.mockRestore();
+    });
+
+    it('nothing approved yet: no dropdown; only approved ones: no empty top list', () => {
+      const a = wrap(<OrderOtherPayments order={order} requests={[rows[0]]} />);
+      expect(screen.queryByRole('button', { name: /Approved & closed/ })).toBeNull();
+      a.unmount();
+      wrap(<OrderOtherPayments order={order} requests={[rows[3]]} />);
+      expect(screen.queryByRole('list', { name: 'Expenses still in progress' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Approved & closed (1)' })).toBeInTheDocument();
+      expect(screen.queryByText('None yet.')).toBeNull();
+    });
+  });
+
   it('"Add expense for this order" opens the expense form for that order', async () => {
     get.mockResolvedValue({ options: { team: 'operations', baseCurrency: 'INR', currencies: [{ code: 'INR', label: '₹' }], categories: [{ value: 'fuel', label: 'Fuel', noteRequired: false }] } });
     wrap(<OrderOtherPayments order={order} requests={[]} />);
