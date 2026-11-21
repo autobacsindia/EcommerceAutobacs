@@ -253,9 +253,10 @@ class LeadSyncService {
    *
    * @param {{ request: object, user: object, product: object, variantLabel?: string|null }} args
    */
-  async upsertFromWaitlist({ request, user, product, variantLabel = null }) {
+  async upsertFromWaitlist({ request, user, product, variantLabel = null, phone = null }) {
     return this._upsertSource(
-      { name: user.name, email: user.email, phone: user.phone },
+      // The number typed on the waitlist form, else the account's.
+      { name: user.name, email: user.email, phone: phone || user.phone },
       {
         type: 'backorder_waitlist',
         ref: request._id,
