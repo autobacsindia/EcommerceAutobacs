@@ -7,6 +7,7 @@ import userRepository from '../repositories/userRepository.js';
 import { canAccess, isChatUser, postCallLine } from './chatService.js';
 import { publishChatEvent } from './chatEvents.js';
 import { sendToUsers } from './pushService.js';
+import { cloudflareTurnServers } from './callRelay.js';
 
 /**
  * Person-to-person calls in team-chat DMs.
@@ -124,6 +125,11 @@ export function iceServersFor(user, now = Date.now()) {
     servers.push({ urls: turn, username, credential });
   }
   return servers;
+}
+
+/** iceServersFor plus the hosted relay (services/callRelay.js) when it is set up. Never throws. */
+export async function callIceServers(user) {
+  return [...iceServersFor(user), ...(await cloudflareTurnServers())];
 }
 
 // ── ending ───────────────────────────────────────────────────────────────────
@@ -261,7 +267,7 @@ export async function startCall(user, channelId, { media = 'video', deviceId } =
       ttl: Math.ceil(RING_MS / 1000),
     },
   );
-  return { call: shapeCall(call), iceServers: iceServersFor(user), joined: false };
+  return { call: shapeCall(call), iceServers: await callIceServers(user), joined: false };
 }
 
 async function rejoinOrAnswer(user, call, deviceId) {
@@ -281,7 +287,7 @@ async function rejoinOrAnswer(user, call, deviceId) {
     // connection: tell the other side to start over with it.
     await emit(updated, 'call.rejoined', { side });
   }
-  return { call: shapeCall(updated), iceServers: iceServersFor(user), joined: true };
+  return { call: shapeCall(updated), iceServers: await callIceServers(user), joined: true };
 }
 
 /** Answer a ringing call, from one tab. Any other tab of the callee stops ringing. */
@@ -306,7 +312,7 @@ export async function answerCall(user, callId, { deviceId } = {}) {
   clearRingTimer(answered._id);
   await emit(answered, 'call.answered');
   void sendToUsers([{ userId: idOf(answered.callee), url: '/' }], { tag: `call-${idOf(answered)}`, close: true, ttl: 60 });
-  return { call: shapeCall(answered), iceServers: iceServersFor(user), joined: true };
+  return { call: shapeCall(answered), iceServers: await callIceServers(user), joined: true };
 }
 
 /** The person called says no. */
@@ -391,5 +397,5 @@ export async function myLiveCall(user) {
   if (!call) return { call: null, iceServers: [] };
   const peerId = sideOf(call, user) === 'caller' ? call.callee : call.caller;
   const peer = await userRepository.findChatPrincipal(peerId);
-  return { call: shapeCall(call), peer: peer ? { id: idOf(peer), name: peer.name || '' } : null, iceServers: iceServersFor(user) };
+  return { call: shapeCall(call), peer: peer ? { id: idOf(peer), name: peer.name || '' } : null, iceServers: await callIceServers(user) };
 }

@@ -18,7 +18,32 @@ interface UseSSEOptions {
   onError?: (error: Error) => void;
   onConnect?: () => void;
   reconnectDelay?: number;
+  /** Fast retries before slowing to one try every SLOW_RETRY_MS. It never gives up for good. */
   maxReconnectAttempts?: number;
+}
+
+/*
+ * Reconnect policy.
+ *
+ * A live stream can end three ways, and every one must lead back to a connected
+ * stream while the page is open — a page that silently stops listening is the
+ * "live notifications / calls work in one browser but not the other" bug:
+ *   1. the server or a proxy closes it cleanly (deploy, restart, proxy limit):
+ *      the reader reports `done` — this used to end the loop for good;
+ *   2. the network drops it (Wi-Fi change, laptop sleep): fetch/read throws;
+ *   3. it goes half-open (sleep, NAT timeout): no error, no data, for ever.
+ *      The server beats every ~25 s, so silence past STALE_AFTER_MS means dead.
+ * After `maxReconnectAttempts` fast tries it keeps trying every SLOW_RETRY_MS
+ * (it used to stop at 10), and coming back online or to the tab retries at once.
+ */
+export const STALE_AFTER_MS = 70_000;
+export const SLOW_RETRY_MS = 60_000;
+export const MAX_FAST_DELAY_MS = 15_000;
+
+/** Wait before reconnect attempt `attempt` (0-based). */
+export function backoffDelay(attempt: number, baseMs: number, maxFastAttempts: number): number {
+  if (attempt >= maxFastAttempts) return SLOW_RETRY_MS;
+  return Math.min(baseMs * Math.pow(2, attempt), MAX_FAST_DELAY_MS);
 }
 
 export function useSSE({
@@ -68,6 +93,25 @@ export function useSSE({
   // connectFnRef holds the stable connect function so setTimeout can always
   // call the latest version without capturing stale variables.
   const connectFnRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  // Silence watchdog: re-armed on every chunk from the server (see STALE_AFTER_MS).
+  const staleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearStaleTimer = () => {
+    if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+    staleTimerRef.current = null;
+  };
+
+  /** Try again after the policy's delay. One pending retry at a time. */
+  const scheduleReconnect = () => {
+    if (!isMountedRef.current || !enabledRef.current || reconnectTimeoutRef.current) return;
+    const attempt = reconnectAttemptsRef.current;
+    const delay = backoffDelay(attempt, reconnectDelayRef.current, maxReconnectAttemptsRef.current);
+    reconnectAttemptsRef.current = attempt + 1;
+    reconnectTimeoutRef.current = setTimeout(() => {
+      reconnectTimeoutRef.current = null;
+      connectFnRef.current().catch(() => {});
+    }, delay);
+  };
 
   // Build the connect logic once (stable ref, never recreated)
   useEffect(() => {
@@ -87,6 +131,7 @@ export function useSSE({
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      clearStaleTimer();
       // Clear any pending reconnect timer
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -96,9 +141,17 @@ export function useSSE({
       setConnectionState('connecting');
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
+      // Aborted by the watchdog (not by us tearing down): that is a lost stream.
+      let stale = false;
+      const armStaleTimer = () => {
+        clearStaleTimer();
+        staleTimerRef.current = setTimeout(() => {
+          stale = true;
+          abortController.abort();
+        }, STALE_AFTER_MS);
+      };
 
       try {
-        console.log(`SSE: Connecting to ${currentUrl}`);
         const response = await fetch(currentUrl, {
           method: 'GET',
           headers: {
@@ -152,7 +205,7 @@ export function useSSE({
         setConnectionState('connected');
         reconnectAttemptsRef.current = 0;
         hasRefreshedRef.current = false; // Fresh healthy connection — allow one refresh again later
-        console.log('SSE: Connected successfully');
+        armStaleTimer();
         onConnectRef.current?.();
 
         const reader = response.body.getReader();
@@ -162,7 +215,8 @@ export function useSSE({
         while (true) {
           const { done, value } = await reader.read();
           if (!isMountedRef.current) break;
-          if (done) { console.log('SSE stream ended'); break; }
+          if (done) break;
+          armStaleTimer();
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n\n');
@@ -179,20 +233,20 @@ export function useSSE({
             }
           }
         }
+        clearStaleTimer();
+        // The server or a proxy closed the stream cleanly (deploy, restart, a
+        // proxy's time limit). The page is still open, so listen again.
+        if (!isMountedRef.current || abortControllerRef.current !== abortController) return;
+        setConnectionState('disconnected');
+        scheduleReconnect();
       } catch (error: any) {
-        if (error.name === 'AbortError') {
-          console.log('SSE connection aborted');
-          return;
-        }
+        clearStaleTimer();
+        if (error?.name === 'AbortError' && !stale) return; // torn down or replaced on purpose
+        if (!isMountedRef.current || abortControllerRef.current !== abortController) return;
 
-        const isNetworkError = error instanceof TypeError && error.message === 'Failed to fetch';
-        if (isNetworkError) {
-          console.log('SSE: Backend unreachable, will retry...');
-        } else {
-          console.error('SSE connection error:', error);
-        }
+        const isNetworkError = stale || (error instanceof TypeError && /fetch|network|load failed/i.test(error.message));
+        if (!isNetworkError) console.error('SSE connection error:', error);
 
-        if (!isMountedRef.current) return;
         setConnectionState('error');
         // A network-level failure (not a 401) is unrelated to auth, so allow a fresh
         // token refresh on the next 401. Without this, a refresh consumed earlier in
@@ -202,28 +256,37 @@ export function useSSE({
         if (!isNetworkError) {
           onErrorRef.current?.(error);
         }
-
-        const maxAttempts = maxReconnectAttemptsRef.current;
-        if (reconnectAttemptsRef.current < maxAttempts) {
-          const delay = Math.min(
-            reconnectDelayRef.current * Math.pow(2, reconnectAttemptsRef.current),
-            15000
-          );
-          reconnectAttemptsRef.current++;
-          console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxAttempts})`);
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connectFnRef.current().catch(() => {});
-          }, delay);
-        } else {
-          console.error('Max reconnection attempts reached');
-        }
+        scheduleReconnect();
       }
     };
 
     connectFnRef.current = connectInternal;
   });
 
+  // Back online, or back to this tab after the computer slept: if the stream is
+  // not up, try now rather than waiting out a (possibly one-minute) back-off.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const retryNow = () => {
+      if (!isMountedRef.current || !enabledRef.current) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      // Only when waiting out a back-off: otherwise it is live, connecting now,
+      // or stopped on purpose (signed out).
+      if (!reconnectTimeoutRef.current) return;
+      reconnectAttemptsRef.current = 0;
+      connectFnRef.current().catch(() => {});
+    };
+    window.addEventListener('online', retryNow);
+    document.addEventListener('visibilitychange', retryNow);
+    return () => {
+      window.removeEventListener('online', retryNow);
+      document.removeEventListener('visibilitychange', retryNow);
+    };
+  }, []);
+
   const disconnect = useCallback(() => {
+    if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+    staleTimerRef.current = null;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
