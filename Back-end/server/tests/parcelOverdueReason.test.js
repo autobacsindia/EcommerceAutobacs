@@ -3,7 +3,7 @@
  * through the real workflow / shipment services against an in-memory Mongo.
  *
  * What must hold:
- *   - procurement and the admin give it; operations, sales, accounts and inactive staff cannot
+ *   - procurement, operations and the admin give it; sales, accounts and inactive staff cannot
  *   - a reason must be picked; "Other" needs a note; an over-long note is refused
  *   - only while the parcel is overdue (not upcoming, not delivered); a stale date is refused
  *   - every save is kept (what, who, when, for which date), newest first, bounded
@@ -113,15 +113,23 @@ describe('who may give the reason', () => {
     expect((await explain(a, id, sid, { code: 'supplier_delay' })).parcels[0].overdueReason).toMatchObject({ code: 'supplier_delay', note: '', by: a.name });
   });
 
-  it('operations, sales, accounts and inactive staff cannot', async () => {
+  it('operations (who own the parcel) can, from their own view', async () => {
     const { id, parcelIds: [sid] } = await overdueOrder();
-    for (const actor of [await person('operations'), await person('sales', { isHead: true }), await person('accounts'), await person('procurement', { active: false })]) {
+    const ops = await person('operations');
+    expect((await wf.getOrder(ops, id)).parcels[0]).toMatchObject({ etaState: 'overdue', overdueReason: null, canExplainOverdue: true });
+    const v = await explain(ops, id, sid, { code: 'courier_delay', note: 'DTDC hub delay' });
+    expect(v.parcels[0].overdueReason).toMatchObject({ text: 'Courier delay — DTDC hub delay', by: ops.name });
+  });
+
+  it('sales, accounts and inactive staff cannot', async () => {
+    const { id, parcelIds: [sid] } = await overdueOrder();
+    for (const actor of [await person('sales', { isHead: true }), await person('accounts'), await person('procurement', { active: false }), await person('operations', { active: false })]) {
       await expect(explain(actor, id, sid, { code: 'courier_delay' })).rejects.toMatchObject({ statusCode: 403 });
     }
     expect((await Order.findById(id).lean()).shipments[0].overdueReason?.code).toBeUndefined();
-    // Operations sees the badge and the (empty) reason, but no button.
-    const opsView = await wf.getOrder(await person('operations'), id);
-    expect(opsView.parcels[0]).toMatchObject({ etaState: 'overdue', overdueReason: null, canExplainOverdue: false });
+    // Accounts sees the badge and the (empty) reason, but no button.
+    const accountsView = await wf.getOrder(await person('accounts'), id);
+    expect(accountsView.parcels[0]).toMatchObject({ etaState: 'overdue', overdueReason: null, canExplainOverdue: false });
   });
 });
 

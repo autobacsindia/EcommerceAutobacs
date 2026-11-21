@@ -161,7 +161,7 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     overdueReason?: { code: OverdueReasonCode; label: string; note: string; text: string; by: string; at: string | null } | null;
     /** Every reason given, newest first; forDate is the expected date it explained. */
     overdueReasonHistory?: { code: OverdueReasonCode; label: string; note: string; forDate: string; by: string; at: string }[];
-    /** Procurement or admin, while the parcel is overdue. */
+    /** Procurement, operations or admin, while the parcel is overdue. */
     canExplainOverdue?: boolean;
   }[];
   cancellations: {

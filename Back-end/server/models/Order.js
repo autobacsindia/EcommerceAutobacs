@@ -1045,7 +1045,7 @@ const OrderSchema = new mongoose.Schema({
     }],
     /*
       Why the parcel is past its expected date (utils/parcelEta.js
-      OVERDUE_REASONS) — procurement / admin. STAFF ONLY. `forDay` is the
+      OVERDUE_REASONS) — procurement / operations / admin. STAFF ONLY. `forDay` is the
       eta.day it explains: a new date makes it stale (currentOverdueReason), so
       a parcel overdue again needs a fresh reason. Every save is kept, newest
       MAX_OVERDUE_REASON_HISTORY, in `overdueReasonHistory`.

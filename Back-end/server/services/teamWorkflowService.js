@@ -101,8 +101,11 @@ const can = {
   /** The customer's decision: the sales person on the order, or any sales head (website orders have no seller). */
   /** The expected delivery date on a parcel: whoever chases the courier — procurement or operations. */
   planDelivery: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT) || onTeam(u, STAFF_TEAMS.OPERATIONS),
-  /** Why a parcel is overdue: procurement chases the supplier and courier; the admin reads it. */
-  explainOverdue: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT),
+  /**
+   * Why a parcel is overdue: whoever chases it — procurement (supplier) or
+   * operations (courier; they own the parcel and set its date) — and the admin.
+   */
+  explainOverdue: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT) || onTeam(u, STAFF_TEAMS.OPERATIONS),
   decide: (u, order) => isAdmin(u)
     || isHeadOf(u, STAFF_TEAMS.SALES)
     || (onTeam(u, STAFF_TEAMS.SALES) && order.salesUser && idOf(order.salesUser) === idOf(u._id)),
@@ -1478,14 +1481,14 @@ export async function setParcelEta(actor, orderId, shipmentId, { date, previousD
 }
 
 /**
- * Procurement / admin: why this parcel is past its expected delivery date. A pick
+ * Procurement / operations / admin: why this parcel is past its expected delivery date. A pick
  * from OVERDUE_REASONS plus a note ("Other" needs the note). Only while the parcel
  * is in transit AND overdue. The reason is tied to the date it explains, so a new
  * date or a delivery makes it history; every save is kept (who, when, what).
  * `expectedDate` is the date this screen showed — saved only if it still is.
  */
 export async function setParcelOverdueReason(actor, orderId, shipmentId, { code, note, expectedDate } = {}, req) {
-  if (!can.explainOverdue(actor)) throw fail('Only procurement or an admin can give the reason for overdue.', 403);
+  if (!can.explainOverdue(actor)) throw fail('Only procurement, operations or an admin can give the reason for overdue.', 403);
   if (!Object.hasOwn(OVERDUE_REASONS, code)) throw fail('Choose a reason.', 400);
   const text = String(note ?? '').trim();
   if (text.length > MAX_OVERDUE_NOTE) throw fail(`Keep the note under ${MAX_OVERDUE_NOTE} characters.`, 400);
