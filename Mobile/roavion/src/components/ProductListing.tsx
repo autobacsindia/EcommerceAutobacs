@@ -20,7 +20,7 @@
  * price, a discount or a count of its own.
  */
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
@@ -43,6 +43,7 @@ import { Screenful } from './ui';
 import { useHeaderScroll, useScrollToTop } from './useHeaderScroll';
 import { useApp } from '../store';
 import { colors, font, spacing, type } from '../theme';
+import { StripeLoader } from '../ui';
 
 const PAGE_SIZE = 20;
 
@@ -249,7 +250,7 @@ export default function ProductListing({
         }}
         ListFooterComponent={
           listing.isFetchingNextPage ? (
-            <View style={s.footer}><ActivityIndicator color={colors.green} /></View>
+            <View style={s.footer}><StripeLoader /></View>
           ) : products.length >= total && total > PAGE_SIZE ? (
             <Text style={s.end}>That&apos;s all {total} products</Text>
           ) : undefined

@@ -23,9 +23,9 @@ const STATUS: Record<string, { label: string; tone: 'green' | 'amber' | 'grey' |
 
 const TONES = {
   green: { bg: colors.greenSoft, fg: colors.green },
-  amber: { bg: '#fdf3e2', fg: '#9a6700' },
-  grey: { bg: '#eceeed', fg: colors.muted },
-  red: { bg: '#fdeaee', fg: colors.red },
+  amber: { bg: colors.goldSoft, fg: colors.ink2 },
+  grey: { bg: colors.page, fg: colors.muted },
+  red: { bg: colors.redSoft, fg: colors.red },
 };
 
 function OrderCard({ order }: { order: Order }) {

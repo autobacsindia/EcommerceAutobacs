@@ -4,7 +4,7 @@
  * Nothing renders until both fonts are loaded, so text never flashes in the
  * system font and then jump when the brand font arrives.
  */
-import { useEffect } from 'react';
+import { useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -25,6 +25,7 @@ import {
 } from '@expo-google-fonts/dm-sans';
 import { AppProvider } from '../src/store';
 import { colors, font } from '../src/theme';
+import { LaunchIntro, ToastProvider } from '../src/ui';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -53,9 +54,11 @@ export default function RootLayout() {
     Montserrat_800ExtraBold,
   });
 
-  useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded]);
+  // The native splash (void + AB badge) hides only once the animated intro has
+  // laid out on top of it, so the hand-off has no flash of the app underneath.
+  const hideSplash = useCallback(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   if (!fontsLoaded) return null;
 
@@ -63,13 +66,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AppProvider>
+          <ToastProvider>
           <StatusBar style="dark" />
           <Stack
             screenOptions={{
               // Design "A clean light": white bars, ink text, hairline-free.
               headerStyle: { backgroundColor: colors.card },
               headerTintColor: colors.ink,
-              headerTitleStyle: { fontFamily: font.semibold, fontSize: 17 },
+              headerTitleStyle: { fontFamily: font.heading, fontSize: 17, color: colors.ink },
+              headerBackButtonDisplayMode: 'minimal',
               headerShadowVisible: false,
               contentStyle: { backgroundColor: colors.bg },
               animation: 'slide_from_right',
@@ -87,6 +92,8 @@ export default function RootLayout() {
             <Stack.Screen name="reels/new" options={{ title: 'Post a reel', presentation: 'modal' }} />
             <Stack.Screen name="reels/mine" options={{ title: 'My reels' }} />
           </Stack>
+          <LaunchIntro onReady={hideSplash} />
+          </ToastProvider>
         </AppProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

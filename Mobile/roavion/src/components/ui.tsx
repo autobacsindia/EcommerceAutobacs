@@ -1,12 +1,27 @@
 /**
- * The small set of building blocks every screen uses. Keeping them here is what
- * stops the app drifting into ten slightly different buttons.
+ * The original building blocks every screen uses — now thin adapters over the
+ * premium foundation in `src/ui` (design "Premium launch", 2026-11-22), so
+ * existing screens pick up the new look without code changes. New code should
+ * import from `src/ui` directly (PremiumButton, Price, Rating, Shimmer…).
  */
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image, type ImageStyle } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, radius, shadow, spacing, type } from '../theme';
+import { colors, font, radius, spacing, type } from '../theme';
+import {
+  Badge as PBadge,
+  Card as PCard,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PremiumButton,
+  Rating,
+  SectionHeader as PSectionHeader,
+  Shimmer,
+  type BadgeTone,
+} from '../ui';
+
+export { ProductCardSkeleton } from '../ui';
 
 // ── text ─────────────────────────────────────────────────────────────────────
 
@@ -32,6 +47,10 @@ export function T({
 
 // ── button ───────────────────────────────────────────────────────────────────
 
+/**
+ * @deprecated use `PremiumButton` from src/ui. Old variants map to:
+ * primary → green, dark → ink-black, outline → ink outline, ghost → ghost.
+ */
 export function Button({
   label,
   onPress,
@@ -51,67 +70,23 @@ export function Button({
   style?: ViewStyle;
   full?: boolean;
 }) {
-  const off = disabled || loading;
-  const palette = {
-    primary: { bg: colors.green, fg: colors.white, border: colors.green },
-    dark: { bg: colors.header, fg: colors.white, border: colors.header },
-    outline: { bg: 'transparent', fg: colors.green, border: colors.green },
-    ghost: { bg: 'transparent', fg: colors.ink2, border: 'transparent' },
-  }[variant];
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={off}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: !!off, busy: !!loading }}
-      // Android users expect a ripple from the touch point; iOS expects a dim.
-      android_ripple={off ? undefined : { color: 'rgba(255,255,255,0.22)', borderless: false }}
-      style={({ pressed }) => [
-        s.btn,
-        { backgroundColor: palette.bg, borderColor: palette.border },
-        full && { alignSelf: 'stretch' },
-        pressed && !off && { opacity: 0.85 },
-        off && { opacity: 0.5 },
-        style,
-      ]}
-    >
-      {loading ? (
-        <ActivityIndicator color={palette.fg} size="small" />
-      ) : (
-        <>
-          {icon && <Ionicons name={icon} size={18} color={palette.fg} />}
-          <Text style={[s.btnLabel, { color: palette.fg }]}>{label}</Text>
-        </>
-      )}
-    </Pressable>
-  );
+  const v = ({ primary: 'green', dark: 'primary', outline: 'outline', ghost: 'ghost' } as const)[variant];
+  return <PremiumButton label={label} onPress={onPress} variant={v} icon={icon} loading={loading} disabled={disabled} style={style} full={full} />;
 }
 
 // ── surfaces ─────────────────────────────────────────────────────────────────
 
+/** White card with padding (see `Card` in src/ui for tappable / carbon / green tones). */
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  return <View style={[s.card, style]}>{children}</View>;
+  return <PCard style={style}>{children}</PCard>;
 }
 
 export function Divider() {
   return <View style={s.divider} />;
 }
 
-/** Section heading with an optional "See all" on the right. */
-export function SectionHeader({ title, actionLabel, onAction }: { title: string; actionLabel?: string; onAction?: () => void }) {
-  return (
-    <View style={s.sectionHead}>
-      <T kind="h2">{title}</T>
-      {actionLabel && onAction && (
-        <Pressable onPress={onAction} hitSlop={8} accessibilityRole="button">
-          <Text style={s.seeAll}>{actionLabel}</Text>
-        </Pressable>
-      )}
-    </View>
-  );
-}
+/** Section heading with an optional "See all" — see `SectionHeader` in src/ui for overline/stripes. */
+export const SectionHeader = PSectionHeader;
 
 /**
  * The white block a section lives in — the website's defining mobile shape.
@@ -178,7 +153,7 @@ export function Chip({ label, onPress, active }: { label: string; onPress: () =>
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      android_ripple={{ color: 'rgba(10,92,51,0.12)' }}
+      android_ripple={{ color: colors.pressedOnLight }}
       style={({ pressed }) => [s.chip, active && s.chipOn, pressed && { opacity: 0.8 }]}
     >
       <Text style={[s.chipText, active && s.chipTextOn]} numberOfLines={1}>{label}</Text>
@@ -226,28 +201,14 @@ export function MiniTile({
 
 // ── small bits ───────────────────────────────────────────────────────────────
 
+/** @deprecated use `Rating` from src/ui. Compact star + number + count. */
 export function Stars({ rating, reviews }: { rating: number; reviews?: number }) {
-  if (!rating) return null;
-  return (
-    <View style={s.row}>
-      <Ionicons name="star" size={12} color={colors.star} />
-      <Text style={s.starText}>{rating.toFixed(1)}</Text>
-      {reviews ? <Text style={s.reviewText}>({reviews})</Text> : null}
-    </View>
-  );
+  return <Rating rating={rating} count={reviews} compact />;
 }
 
-export function Badge({ text, tone = 'green' }: { text: string; tone?: 'green' | 'red' | 'grey' }) {
-  const palette = {
-    green: { bg: colors.greenSoft, fg: colors.green },
-    red: { bg: '#fdeaee', fg: colors.red },
-    grey: { bg: '#eceeed', fg: colors.muted },
-  }[tone];
-  return (
-    <View style={[s.badge, { backgroundColor: palette.bg }]}>
-      <Text style={[s.badgeText, { color: palette.fg }]}>{text}</Text>
-    </View>
-  );
+/** Status tag — see `Badge` in src/ui for more tones. */
+export function Badge({ text, tone = 'green' }: { text: string; tone?: BadgeTone }) {
+  return <PBadge text={text} tone={tone} />;
 }
 
 /** Product photo with a quiet placeholder while it loads or when missing. */
@@ -255,7 +216,7 @@ export function Photo({ uri, style, contentFit = 'contain' }: { uri?: string; st
   if (!uri) {
     return (
       <View style={[s.photoEmpty, style as StyleProp<ViewStyle>]}>
-        <Ionicons name="image-outline" size={22} color={colors.line} />
+        <Ionicons name="image-outline" size={22} color={colors.chrome} />
       </View>
     );
   }
@@ -270,7 +231,11 @@ export function Photo({ uri, style, contentFit = 'contain' }: { uri?: string; st
   );
 }
 
-/** Full-screen state for loading, an error, or nothing to show. */
+/**
+ * Full-screen state for loading, an error, or nothing to show — now the
+ * branded states from src/ui (network failures show the offline layout when
+ * the screen passes the raw error text; prefer `ErrorState error={err}`).
+ */
 export function Screenful({
   loading,
   error,
@@ -288,100 +253,18 @@ export function Screenful({
   emptyBody?: string;
   action?: { label: string; onPress: () => void };
 }) {
-  if (loading) {
-    return (
-      <View style={s.full}>
-        <ActivityIndicator color={colors.green} size="large" />
-      </View>
-    );
-  }
-  if (error) {
-    return (
-      <View style={s.full}>
-        <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} />
-        <T kind="h3" style={{ marginTop: spacing.md, textAlign: 'center' }}>Something went wrong</T>
-        <T kind="small" style={{ marginTop: 4, textAlign: 'center' }}>{error}</T>
-        {onRetry && <Button label="Try again" onPress={onRetry} variant="outline" style={{ marginTop: spacing.lg }} />}
-      </View>
-    );
-  }
-  return (
-    <View style={s.full}>
-      <Ionicons name={emptyIcon} size={40} color={colors.line} />
-      {emptyTitle && <T kind="h3" style={{ marginTop: spacing.md, textAlign: 'center' }}>{emptyTitle}</T>}
-      {emptyBody && <T kind="small" style={{ marginTop: 4, textAlign: 'center' }}>{emptyBody}</T>}
-      {action && <Button label={action.label} onPress={action.onPress} style={{ marginTop: spacing.lg }} />}
-    </View>
-  );
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState error={new Error(error)} message={error} onRetry={onRetry} />;
+  return <EmptyState icon={emptyIcon} title={emptyTitle ?? 'Nothing here yet'} body={emptyBody} action={action} />;
 }
 
-/**
- * Grey blocks in the shape of the content that is coming.
- *
- * A spinner says "wait"; a skeleton says "this is what is arriving", which is
- * what stops a slow connection feeling broken. Animated so it never looks frozen.
- */
+/** @deprecated use `Shimmer` from src/ui. */
 export function Skeleton({ width, height, radius: r = radius.sm, style }: { width?: number | string; height: number; radius?: number; style?: ViewStyle }) {
-  const [pulse] = useState(() => new Animated.Value(0.4));
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 700, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-  return (
-    <Animated.View
-      style={[{ width: width as number, height, borderRadius: r, backgroundColor: '#e3e7e6', opacity: pulse }, style]}
-    />
-  );
-}
-
-/** The shape of one product card, shown while the real ones load. */
-export function ProductCardSkeleton() {
-  return (
-    <View style={{ width: 172, backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', ...shadow.card }}>
-      <Skeleton width={172} height={148} radius={0} />
-      <View style={{ padding: spacing.md, gap: 6 }}>
-        <Skeleton width={60} height={9} />
-        <Skeleton width={140} height={12} />
-        <Skeleton width={90} height={14} />
-      </View>
-    </View>
-  );
+  return <Shimmer width={width as number} height={height} radius={r} style={style} />;
 }
 
 const s = StyleSheet.create({
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    height: 50,
-    paddingHorizontal: spacing.xl,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-  },
-  btnLabel: { fontFamily: font.semibold, fontSize: 15 },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.lg,
-    ...shadow.card,
-  },
   divider: { height: 1, backgroundColor: colors.line, marginVertical: spacing.lg },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
   seeAll: { fontFamily: font.semibold, fontSize: 13, color: colors.green },
 
   // On the white page a section is defined by whitespace, not a box.
@@ -414,11 +297,5 @@ const s = StyleSheet.create({
 
   miniLabel: { fontFamily: font.medium, fontSize: 11.5, lineHeight: 15, color: colors.ink2, marginTop: 6 },
 
-  row: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  starText: { fontFamily: font.semibold, fontSize: 12, color: colors.ink2 },
-  reviewText: { fontFamily: font.regular, fontSize: 11, color: colors.muted },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.sm, alignSelf: 'flex-start' },
-  badgeText: { fontFamily: font.bold, fontSize: 11 },
-  photoEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#f6f7f7' },
-  full: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: 2 },
+  photoEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.page },
 });

@@ -11,7 +11,7 @@
  * discount or a total of its own.
  */
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import { colors, font, inr, radius, shadow, spacing } from '../theme';
 import type { Product } from '../api/catalogue';
 import { useApp } from '../store';
 import { Photo, Stars } from './ui';
+import { StripeLoader } from '../ui';
 
 export const CARD_WIDTH = 172;
 
@@ -147,7 +148,7 @@ export default function ProductCard({
               accessibilityLabel={`Add ${product.name} to cart`}
             >
               {adding
-                ? <ActivityIndicator size="small" color={colors.white} />
+                ? <StripeLoader size="sm" onDark />
                 : <Ionicons name="bag-handle" size={18} color={colors.white} />}
             </Pressable>
           )}

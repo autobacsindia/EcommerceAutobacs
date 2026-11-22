@@ -12,7 +12,6 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   AppState,
@@ -40,6 +39,7 @@ import { POOL_SIZE, usePlayerPool } from '../../src/reels/usePlayerPool';
 import { useLikeReel, useReelFeed } from '../../src/reels/useReels';
 import { useApp } from '../../src/store';
 import { colors, font, radius, spacing } from '../../src/theme';
+import { StripeLoader } from '../../src/ui';
 
 type Row = { kind: 'reel'; reel: Reel } | { kind: 'end' };
 
@@ -349,7 +349,7 @@ export default function ReelsScreen() {
   if (feed.isPending) {
     body = (
       <View style={s.state}>
-        <ActivityIndicator color={colors.white} size="large" />
+        <StripeLoader size="lg" onDark />
       </View>
     );
   } else if (feed.isError && !reels.length) {
@@ -433,7 +433,7 @@ export default function ReelsScreen() {
 
       {feed.isFetchingNextPage && active >= reels.length - 1 && (
         <View style={s.moreSpinner} pointerEvents="none">
-          <ActivityIndicator color={colors.white} />
+          <StripeLoader onDark />
         </View>
       )}
 
@@ -441,7 +441,7 @@ export default function ReelsScreen() {
         pointerEvents="none"
         style={[s.toast, { top: insets.top + 56, opacity: toast, transform: [{ translateY: toast.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }] }]}
       >
-        <Ionicons name="checkmark-circle" size={18} color="#4ade80" />
+        <Ionicons name="checkmark-circle" size={18} color={colors.greenOnDark} />
         <Text style={s.toastText}>{toastText}</Text>
       </Animated.View>
     </View>
