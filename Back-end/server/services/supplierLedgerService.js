@@ -73,7 +73,22 @@ export const KIND_LABELS = Object.freeze({
   written_off: 'Written off',
   correction_up: 'Correction (owes us more)',
   correction_down: 'Correction (owes us less)',
+  credit_given: 'Credit given to us',
+  adjustment_up: 'Adjustment (owes us more)',
+  adjustment_down: 'Adjustment (owes us less)',
 });
+
+/**
+ * What procurement can add straight from the Suppliers tab (owner, 2026-11-21) →
+ * the ledger kind it is saved as. The type sets the direction; amounts are always > 0.
+ *   credit_given      the supplier gave us credit (a credit note, goods returned)   +
+ *   repaid            the supplier sent money back                                 −
+ *   adjustment_up     the balance is too low — put it right                         +
+ *   adjustment_down   the balance is too high — put it right                        −
+ */
+export const ENTRY_TYPES = Object.freeze(['credit_given', 'repaid', 'adjustment_up', 'adjustment_down']);
+/** Kinds only ever added on the Suppliers tab (a standalone `repaid` is edited by the repaid rules). */
+const STANDALONE_KINDS = Object.freeze(['credit_given', 'adjustment_up', 'adjustment_down']);
 export const METHOD_LABELS = Object.freeze({ upi: 'UPI', bank: 'Bank transfer', cash: 'Cash', credit_note: 'Credit note' });
 export const STATUS_LABELS = Object.freeze({
   pending: 'Waiting for accounts', approved: 'Approved', declined: 'Declined', cancelled: 'Cancelled',
@@ -124,12 +139,12 @@ function cleanRev(v) {
 const revFilter = (rev) => (rev ? { rev } : { rev: { $in: [0, null] } });
 
 /** 'YYYY-MM-DD', not in the future, within a year. */
-function cleanDay(v, now = Date.now()) {
+function cleanDay(v, now = Date.now(), missing = 'Enter the date the money came back.') {
   const d = text(v, 10);
   // Round-trip: 2026-02-30 parses (as 2 March) but is not a real day.
   const real = /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`))
     && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
-  if (!real) throw fail('Enter the date the money came back.', 400);
+  if (!real) throw fail(missing, 400);
   const t = Date.parse(`${d}T00:00:00+05:30`);
   if (t > now + 86400000) throw fail('That date is in the future.', 400);
   if (t < now - 366 * 86400000) throw fail('That date is more than a year ago — check it.', 400);
@@ -183,8 +198,8 @@ export async function balancesForSuppliers(supplierIds) {
 // ── Shape ────────────────────────────────────────────────────────────────────
 
 /** Which entries can be changed, and how (see the header). */
-const EDITABLE_PENDING = Object.freeze(['refund_due', 'repaid']);
-const CORRECTABLE = Object.freeze(['refund_due', 'repaid', 'written_off']);
+const EDITABLE_PENDING = Object.freeze(['refund_due', 'repaid', ...STANDALONE_KINDS]);
+const CORRECTABLE = Object.freeze(['refund_due', 'repaid', 'written_off', ...STANDALONE_KINDS]);
 const mayCorrect = (u, e) => (e.kind === 'written_off' ? isAdmin(u) : mayPropose(u));
 
 /**
@@ -228,6 +243,11 @@ export function shape(e, viewer, fixes = null) {
     amountText: moneyOf(e.amountPaise, e.currency),
     order: e.order ? { id: idOf(e.order), number: e.orderNumber || '' } : null,
     paymentRequest: e.paymentRequest ? { id: idOf(e.paymentRequest), number: e.paymentRequestNumber || '' } : null,
+    // The supplier payment an entry from the Suppliers tab is about (information only).
+    link: e.link?.paymentRequest ? {
+      paymentRequest: { id: idOf(e.link.paymentRequest), number: e.link.paymentRequestNumber || '' },
+      order: e.link.order ? { id: idOf(e.link.order), number: e.link.orderNumber || '' } : null,
+    } : null,
     date: e.date || '',
     reference: e.reference || '',
     note: e.note || '',
@@ -520,6 +540,86 @@ export async function writeOff(actor, supplierId, input = {}, req) {
     return { entry, created: true };
   });
   if (done.created) auditLogger.logAction(req, 'CREATE', 'SupplierLedgerEntry', done.entry._id, { kind: 'written_off', amountPaise, currency, supplier: idOf(s._id) });
+  return shape(done.entry, actor);
+}
+
+// ── Add an entry from the Suppliers tab ─────────────────────────────────────
+
+/*
+  Procurement (or the admin) adds credit for a supplier without a cancelled order
+  (owner, 2026-11-21). Like every entry it waits for accounts, and only approved
+  entries count:
+
+    G S Enterprises sends credit note CN-112 for ₹5,000
+      procurement: credit_given ₹5,000, reason "credit note CN-112"   → ₹5,000 waiting for accounts
+      accounts approves                                               → owes us ₹5,000
+
+  An entry that takes the balance down (refund received, adjustment down) may not be
+  more than what the supplier owes now — and is checked again under the supplier's
+  lock when it is approved (approve()). A retried / double-clicked submit (same
+  formKey) saves once and stores its proof once.
+*/
+
+/** "PR-0088" → that supplier payment, which must be this supplier's. */
+async function linkedPayment(number, supplier) {
+  const n = text(number, 40).toUpperCase();
+  if (!n) return null;
+  const r = await paymentRequestRepository.findByNumber(n);
+  if (!r || r.kind !== 'supplier') throw fail(`There is no supplier payment ${n}.`, 404);
+  if (idOf(r.supplier) !== idOf(supplier._id)) throw fail(`${n} was paid to ${r.payee?.name || 'a different supplier'}, not ${supplier.name}.`, 409);
+  return {
+    paymentRequest: r._id, paymentRequestNumber: r.number,
+    order: r.order || null, orderNumber: r.orderNumber || '',
+  };
+}
+
+export async function addEntry(actor, supplierId, input = {}, files = [], req) {
+  if (!mayPropose(actor)) throw fail('Only procurement (or the admin) adds supplier credit.', 403);
+  const key = `entry:${cleanFormKey(input.formKey)}`;
+  const s = await loadSupplier(supplierId);
+  // A double click / retry: the first submit was saved — the same answer, nothing stored twice.
+  const again = await supplierLedgerRepository.findByKey(key);
+  if (again) {
+    if (idOf(again.supplier) !== idOf(s._id)) throw fail('This form is out of date — refresh the page and try again.', 409);
+    return shape(again, actor);
+  }
+  const kind = text(input.type, 30);
+  if (!ENTRY_TYPES.includes(kind)) throw fail('Choose what kind of entry it is.', 400);
+  const currency = cleanCurrency(input.currency);
+  const amountPaise = cleanAmountPaise(input.amount);
+  const date = cleanDay(input.date, Date.now(), 'Enter the date.');
+  const note = text(input.reason ?? input.note, 1000);
+  if (!note) throw fail('Say why — the reason is shown to accounts.', 400);
+  const reference = text(input.reference, 120);
+  const link = await linkedPayment(input.paymentNumber, s);
+  if (LEDGER_SIGN[kind] < 0) {
+    const owed = await owedPaise(s._id, currency);
+    if (amountPaise > owed) {
+      throw fail(owed > 0
+        ? `${s.name} owes us ${moneyOf(owed, currency)} — this cannot be more than that.`
+        : `${s.name} owes us nothing in ${currency} — there is nothing to take off.`, 409);
+    }
+  }
+  const proof = files?.length ? await storeProof(files, actor) : [];
+  let done;
+  try {
+    done = await insertOnce({
+      supplier: s._id, supplierName: s.name, kind, currency, amountPaise, status: 'pending', key,
+      date, reference, note, files: proof, ...(link ? { link } : {}),
+      createdBy: actor._id, createdByName: actor.name || '',
+      history: [historyEntry(actor, 'raised', note)],
+    });
+  } catch (err) {
+    await Promise.allSettled(proof.map(dropProof));
+    throw err;
+  }
+  // The same submit twice at the same moment: the unique key kept one — drop our copies of the files.
+  if (!done.created) await Promise.allSettled(proof.map(dropProof));
+  else {
+    auditLogger.logAction(req, 'CREATE', 'SupplierLedgerEntry', done.entry._id, {
+      kind, amountPaise, currency, supplier: idOf(s._id), ...(link ? { paymentRequest: idOf(link.paymentRequest) } : {}),
+    });
+  }
   return shape(done.entry, actor);
 }
 
@@ -851,6 +951,26 @@ async function editPending(actor, e0, input, { reason, formKey, rev }, req) {
       c.set.amountPaise = amountPaise;
       c.changes.push({ field: 'Amount', from: moneyOf(e0.amountPaise, e0.currency), to: moneyOf(amountPaise, currency) });
     }
+  } else if (STANDALONE_KINDS.includes(e0.kind)) {
+    // Added on the Suppliers tab: amount, currency, date, reference. Taking the balance
+    // down: still no more than what the supplier owes (checked again when approved).
+    const currency = has(input, 'currency') ? cleanCurrency(input.currency) : e0.currency;
+    const amountPaise = has(input, 'amount') ? cleanAmountPaise(input.amount) : e0.amountPaise;
+    if (has(input, 'date')) c.add('date', 'Date', e0.date, cleanDay(input.date, Date.now(), 'Enter the date.'));
+    if (has(input, 'reference')) c.add('reference', 'Reference', e0.reference, text(input.reference, 120));
+    if (LEDGER_SIGN[e0.kind] < 0 && (currency !== e0.currency || amountPaise !== e0.amountPaise)) {
+      const owed = await owedPaise(e0.supplier, currency);
+      if (amountPaise > owed) {
+        throw fail(owed > 0
+          ? `${e0.supplierName} owes us ${moneyOf(owed, currency)} — this cannot be more than that.`
+          : `${e0.supplierName} owes us nothing in ${currency}.`, 409);
+      }
+    }
+    c.add('currency', 'Currency', e0.currency, currency);
+    if (amountPaise !== e0.amountPaise || currency !== e0.currency) {
+      c.set.amountPaise = amountPaise;
+      c.changes.push({ field: 'Amount', from: moneyOf(e0.amountPaise, e0.currency), to: moneyOf(amountPaise, currency) });
+    }
   } else {
     // refund_due: the payment it is for (re-checked), and the amount (at most that payment's bill).
     const moving = has(input, 'paymentRequestId') && String(input.paymentRequestId) !== '' && String(input.paymentRequestId) !== idOf(e0.paymentRequest);
@@ -914,7 +1034,7 @@ async function correctApproved(actor, e0, input, { reason, formKey, rev }, req) 
   }
   const c = changeList();
   if (has(input, 'note')) c.add('note', 'Note', e0.note, text(input.note, 1000));
-  if (has(input, 'reference') && e0.kind === 'repaid') c.add('reference', 'Reference', e0.reference, text(input.reference, 120));
+  if (has(input, 'reference') && (e0.kind === 'repaid' || STANDALONE_KINDS.includes(e0.kind))) c.add('reference', 'Reference', e0.reference, text(input.reference, 120));
   const newPaise = has(input, 'amount') ? cleanAmountOrZero(input.amount) : null;
   const billPaise = newPaise != null && e0.kind === 'refund_due' && e0.paymentRequest
     ? billPaiseOf(await paymentRequestRepository.findById(e0.paymentRequest) || {}) : null;
@@ -1047,6 +1167,6 @@ export async function restoreCredit(request, note = '') {
 }
 
 export default {
-  forSupplier, pending, owing, report, claimRefund, recordRepayment, recordOrderRefund, getFile, writeOff, approve, decline, cancel, edit,
+  forSupplier, pending, owing, report, claimRefund, recordRepayment, addEntry, recordOrderRefund, getFile, writeOff, approve, decline, cancel, edit,
   checkCreditUse, useCredit, restoreCredit, claimsFor, balancesForSuppliers, owedPaise, shape,
 };

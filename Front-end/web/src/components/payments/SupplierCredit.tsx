@@ -7,8 +7,9 @@ import { Download, Loader2 } from 'lucide-react';
 import { errorMessage, money, paymentKeys, type SupplierRefund } from './api';
 import {
   creditKeys, creditReportHref, decideCredit, editCredit, getOwing, getPendingCredit, getSupplierCredit, istToday, newFormKey,
-  claimRefund, recordRepayment, recordOrderRefund, creditFileHref, writeOff, REFUND_METHODS,
-  type CreditBalance, type CreditEditInput, type CreditEntry, type RefundMethod,
+  claimRefund, recordOrderRefund, creditFileHref, writeOff, REFUND_METHODS, addCreditEntry,
+  CREDIT_ENTRY_TYPES, DATED_KINDS,
+  type CreditBalance, type CreditEditInput, type CreditEntry, type CreditEntryType, type RefundMethod,
 } from './credit';
 import type { SupplierRefundClaim } from './api';
 import { useSlipReader } from './slipReader';
@@ -280,7 +281,8 @@ function EditEntryForm({ e, onDone, onCancel }: { e: CreditEntry; onDone: (msg: 
   const qc = useQueryClient();
   const [formKey] = useState(newFormKey);
   const approved = e.status === 'approved';
-  const repaid = e.kind === 'repaid';
+  // A repayment or an entry added on the Suppliers tab: currency, date and reference too.
+  const repaid = DATED_KINDS.includes(e.kind);
   const startAmount = approved && e.correctedAmount != null ? e.correctedAmount : e.amount;
   const [amount, setAmount] = useState(String(startAmount));
   const [currency, setCurrency] = useState(e.currency);
@@ -334,7 +336,7 @@ function EditEntryForm({ e, onDone, onCancel }: { e: CreditEntry; onDone: (msg: 
         </div>
         {!approved && repaid && (
           <div>
-            <label className={label} htmlFor={id('date')}>Date received</label>
+            <label className={label} htmlFor={id('date')}>{e.kind === 'repaid' ? 'Date received' : 'Date'}</label>
             <input id={id('date')} className={input} required type="date" max={istToday()} value={date} onChange={(ev) => setDate(ev.target.value)} />
           </div>
         )}
@@ -400,7 +402,9 @@ export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupp
             {[
               e.paymentRequest && `payment ${e.paymentRequest.number}`,
               e.order?.number && `order ${e.order.number}`,
-              e.date && `repaid ${day(e.date)}`,
+              e.link && `about payment ${e.link.paymentRequest.number}`,
+              e.link?.order?.number && `order ${e.link.order.number}`,
+              e.date && `${e.kind === 'repaid' ? 'repaid' : 'dated'} ${day(e.date)}`,
               e.methodLabel && `by ${e.methodLabel}`,
               e.reference && `ref ${e.reference}`,
             ].filter(Boolean).join(' · ')}
@@ -441,11 +445,10 @@ export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupp
   );
 }
 
-/** Record a repayment (procurement) or a write-off (admin) — the server re-checks the balance. */
-function MoneyForm({ supplierId, balances, kind, onDone, onCancel }: {
+/** Write off what a supplier owes (admin only, takes effect at once) — the server re-checks the balance. */
+function WriteOffForm({ supplierId, balances, onDone, onCancel }: {
   supplierId: string;
   balances: CreditBalance[];
-  kind: 'repayment' | 'writeoff';
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
@@ -453,24 +456,19 @@ function MoneyForm({ supplierId, balances, kind, onDone, onCancel }: {
   const [formKey] = useState(newFormKey);
   const [currency, setCurrency] = useState(balances[0]?.currency || 'INR');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(istToday);
-  const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const owed = balances.find((b) => b.currency === currency);
-  const repay = kind === 'repayment';
 
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     setBusy(true);
     setError('');
     try {
-      const res = repay
-        ? await recordRepayment(supplierId, { currency, amount: Number(amount), date, reference, note, formKey })
-        : await writeOff(supplierId, { currency, amount: Number(amount), note, formKey });
+      const res = await writeOff(supplierId, { currency, amount: Number(amount), note, formKey });
       await qc.invalidateQueries({ queryKey: ['suppliers'] });
-      onDone(repay ? `${res.entry.amountText} repayment sent to accounts to approve.` : `${res.entry.amountText} written off.`);
+      onDone(`${res.entry.amountText} written off.`);
     } catch (err) {
       setError(errorMessage(err, 'Could not save it. Please try again.'));
     } finally {
@@ -479,41 +477,126 @@ function MoneyForm({ supplierId, balances, kind, onDone, onCancel }: {
   }
 
   return (
-    <form onSubmit={submit} aria-label={repay ? 'Record a repayment' : 'Write off'} className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-      <p className="text-sm font-semibold text-gray-900">{repay ? 'The supplier paid money back' : 'Write off what the supplier owes'}</p>
+    <form onSubmit={submit} aria-label="Write off" className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <p className="text-sm font-semibold text-gray-900">Write off what the supplier owes</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
-          <label className={label} htmlFor={`cr-cur-${kind}`}>Currency</label>
-          <select id={`cr-cur-${kind}`} className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+          <label className={label} htmlFor="cr-cur-writeoff">Currency</label>
+          <select id="cr-cur-writeoff" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
             {balances.map((b) => <option key={b.currency} value={b.currency}>{b.currency}</option>)}
           </select>
         </div>
         <div>
-          <label className={label} htmlFor={`cr-amt-${kind}`}>Amount</label>
-          <input id={`cr-amt-${kind}`} className={input} required inputMode="decimal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <label className={label} htmlFor="cr-amt-writeoff">Amount</label>
+          <input id="cr-amt-writeoff" className={input} required inputMode="decimal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
           {owed && <p className="mt-1 text-xs text-gray-500">Owes us {owed.owedText}</p>}
         </div>
-        {repay && (
-          <div>
-            <label className={label} htmlFor="cr-date">Date received</label>
-            <input id="cr-date" className={input} required type="date" max={istToday()} value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-        )}
       </div>
-      {repay && (
-        <div>
-          <label className={label} htmlFor="cr-ref">UTR / reference</label>
-          <input id="cr-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} />
-        </div>
-      )}
       <div>
-        <label className={label} htmlFor={`cr-note-${kind}`}>{repay ? 'Note' : 'Why it is written off'}</label>
-        <input id={`cr-note-${kind}`} className={input} maxLength={1000} required={!repay} value={note} onChange={(e) => setNote(e.target.value)} />
+        <label className={label} htmlFor="cr-note-writeoff">Why it is written off</label>
+        <input id="cr-note-writeoff" className={input} maxLength={1000} required value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {repay ? 'Send to accounts' : 'Write off'}
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Write off
+        </button>
+        <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Add supplier credit straight from the Suppliers tab (procurement / admin): credit
+ * given to us, refund received, or an adjustment either way — with a reason, date,
+ * optional payment number and proof. It waits for accounts; only approved entries
+ * count. The server checks the amount and that nothing takes the balance below zero.
+ */
+function AddEntryForm({ supplierId, balances, onDone, onCancel }: {
+  supplierId: string;
+  balances: CreditBalance[];
+  onDone: (msg: string) => void;
+  onCancel: () => void;
+}) {
+  const qc = useQueryClient();
+  const [formKey] = useState(newFormKey);
+  const [type, setType] = useState<CreditEntryType>('credit_given');
+  const [currency, setCurrency] = useState(balances[0]?.currency || 'INR');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(istToday);
+  const [reason, setReason] = useState('');
+  const [reference, setReference] = useState('');
+  const [paymentNumber, setPaymentNumber] = useState('');
+  const [proof, setProof] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const owed = balances.find((b) => b.currency === currency);
+  const hint = CREDIT_ENTRY_TYPES.find((t) => t.value === type)?.hint;
+
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const res = await addCreditEntry(supplierId, { type, currency, amount: Number(amount), date, reason, reference, paymentNumber, formKey }, proof);
+      // ['suppliers'] covers this history, accounts' queue and the directory's "Owes us" chip.
+      await qc.invalidateQueries({ queryKey: ['suppliers'] });
+      onDone(`${res.entry.kindLabel} ${res.entry.amountText} sent to accounts to approve. It counts once approved.`);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save it. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} aria-label="Add credit entry" className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <p className="text-sm font-semibold text-gray-900">Add a credit entry</p>
+      <div>
+        <label className={label} htmlFor="cr-add-type">Type</label>
+        <select id="cr-add-type" className={input} value={type} onChange={(e) => setType(e.target.value as CreditEntryType)}>
+          {CREDIT_ENTRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className={label} htmlFor="cr-add-cur">Currency</label>
+          <input id="cr-add-cur" className={input} required maxLength={3} value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+        </div>
+        <div>
+          <label className={label} htmlFor="cr-add-amt">Amount</label>
+          <input id="cr-add-amt" className={input} required inputMode="decimal" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <p className="mt-1 text-xs text-gray-500">Owes us {owed ? owed.owedText : 'nothing'} now</p>
+        </div>
+        <div>
+          <label className={label} htmlFor="cr-add-date">Date</label>
+          <input id="cr-add-date" className={input} required type="date" max={istToday()} value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+      </div>
+      <div>
+        <label className={label} htmlFor="cr-add-why">Reason</label>
+        <input id="cr-add-why" className={input} required maxLength={1000} placeholder="e.g. Credit note CN-112 for the returned bumper" value={reason} onChange={(e) => setReason(e.target.value)} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className={label} htmlFor="cr-add-ref">Reference (optional)</label>
+          <input id="cr-add-ref" className={input} maxLength={120} placeholder="UTR / credit note number" value={reference} onChange={(e) => setReference(e.target.value)} />
+        </div>
+        <div>
+          <label className={label} htmlFor="cr-add-pay">Supplier payment (optional)</label>
+          <input id="cr-add-pay" className={input} maxLength={40} placeholder="e.g. PR-0088" value={paymentNumber} onChange={(e) => setPaymentNumber(e.target.value)} />
+        </div>
+      </div>
+      <div>
+        <label className={label} htmlFor="cr-add-proof">Proof (optional)</label>
+        <input id="cr-add-proof" type="file" multiple accept="image/*,application/pdf" className="text-sm" onChange={(e) => setProof(Array.from(e.target.files || []))} />
+      </div>
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Send to accounts
         </button>
         <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
       </div>
@@ -523,7 +606,7 @@ function MoneyForm({ supplierId, balances, kind, onDone, onCancel }: {
 
 /** One supplier's credit: what they owe us (per currency), the actions, and the full history. */
 export function SupplierCreditPanel({ supplierId }: { supplierId: string }) {
-  const [form, setForm] = useState<'repayment' | 'writeoff' | null>(null);
+  const [form, setForm] = useState<'add' | 'writeoff' | null>(null);
   const [notice, setNotice] = useState('');
   const q = useInfiniteQuery({
     queryKey: creditKeys.supplier(supplierId),
@@ -555,18 +638,22 @@ export function SupplierCreditPanel({ supplierId }: { supplierId: string }) {
         <p className="mt-1 text-xs text-gray-500">Credit is used on this supplier&apos;s next payment, in the same currency.</p>
       </div>
       {notice && <p role="status" className="rounded-lg bg-green-50 p-2 text-sm text-green-800">{notice}</p>}
-      {!form && owing.length > 0 && (
+      {!form && (first.can.propose || (first.can.writeOff && owing.length > 0)) && (
         <div className="flex flex-wrap gap-2">
           {first.can.propose && (
-            <button type="button" onClick={() => { setForm('repayment'); setNotice(''); }} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">Record a repayment</button>
+            <button type="button" onClick={() => { setForm('add'); setNotice(''); }} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">Add credit entry</button>
           )}
-          {first.can.writeOff && (
+          {first.can.writeOff && owing.length > 0 && (
             <button type="button" onClick={() => { setForm('writeoff'); setNotice(''); }} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">Write off</button>
           )}
         </div>
       )}
-      {form && (
-        <MoneyForm supplierId={supplierId} balances={owing} kind={form}
+      {form === 'add' && (
+        <AddEntryForm supplierId={supplierId} balances={owing}
+          onDone={(m) => { setForm(null); setNotice(m); }} onCancel={() => setForm(null)} />
+      )}
+      {form === 'writeoff' && (
+        <WriteOffForm supplierId={supplierId} balances={owing}
           onDone={(m) => { setForm(null); setNotice(m); }} onCancel={() => setForm(null)} />
       )}
       {entries.length > 0 && (

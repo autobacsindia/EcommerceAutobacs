@@ -9,7 +9,22 @@ import { postForm } from './api';
  *   refund due (order cancelled after we paid)   + owes us more
  *   supplier paid back / credit used / written off − owes us less
  */
-export type CreditKind = 'refund_due' | 'repaid' | 'credit_used' | 'credit_restored' | 'written_off' | 'correction_up' | 'correction_down';
+export type CreditKind = 'refund_due' | 'repaid' | 'credit_used' | 'credit_restored' | 'written_off' | 'correction_up' | 'correction_down'
+  | 'credit_given' | 'adjustment_up' | 'adjustment_down';
+
+/**
+ * What procurement can add straight from the Suppliers tab. The type sets the
+ * direction — the amount is always more than 0.
+ */
+export type CreditEntryType = 'credit_given' | 'repaid' | 'adjustment_up' | 'adjustment_down';
+export const CREDIT_ENTRY_TYPES: { value: CreditEntryType; label: string; hint: string }[] = [
+  { value: 'credit_given', label: 'Credit given to us', hint: 'e.g. a credit note — adds to what they owe us' },
+  { value: 'repaid', label: 'Refund received', hint: 'the supplier sent money back — takes it down' },
+  { value: 'adjustment_up', label: 'Adjustment (owes us more)', hint: 'the balance is too low — adds to it' },
+  { value: 'adjustment_down', label: 'Adjustment (owes us less)', hint: 'the balance is too high — takes it down' },
+];
+/** Kinds whose date / currency / reference are edited while waiting (the others follow their payment). */
+export const DATED_KINDS: CreditKind[] = ['repaid', 'credit_given', 'adjustment_up', 'adjustment_down'];
 export type CreditStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
 
 export type RefundMethod = 'upi' | 'bank' | 'cash' | 'credit_note';
@@ -44,6 +59,8 @@ export type CreditEntry = {
   amountText: string;
   order: { id: string; number: string } | null;
   paymentRequest: { id: string; number: string } | null;
+  /** An entry added on the Suppliers tab: the supplier payment it is about (information only). */
+  link?: { paymentRequest: { id: string; number: string }; order: { id: string; number: string } | null } | null;
   date: string;
   reference: string;
   note: string;
@@ -130,10 +147,18 @@ export const recordOrderRefund = (fields: {
   for (const f of proof) form.append('proof', f);
   return postForm<{ entry: CreditEntry }>('/suppliers/credit/order-refunds', form);
 };
+/** Supplier credit added on the Suppliers tab, with optional proof. Waits for accounts. */
+export const addCreditEntry = (supplierId: string, fields: {
+  type: CreditEntryType; currency: string; amount: number; date: string; reason: string;
+  reference: string; paymentNumber: string; formKey: string;
+}, proof: File[] = []) => {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) form.append(k, String(v));
+  for (const f of proof) form.append('proof', f);
+  return postForm<{ entry: CreditEntry }>(`/suppliers/${enc(supplierId)}/credit/entries`, form);
+};
 /** A refund's proof, streamed through the API (never a public link). */
 export const creditFileHref = (entryId: string, fileId: string) => `/api/v1/suppliers/credit/${enc(entryId)}/files/${enc(fileId)}`;
-export const recordRepayment = (supplierId: string, body: { currency: string; amount: number; date: string; reference: string; note: string; formKey: string }) =>
-  apiClient.post<{ entry: CreditEntry }>(`/suppliers/${enc(supplierId)}/credit/repayments`, body);
 export const writeOff = (supplierId: string, body: { currency: string; amount: number; note: string; formKey: string }) =>
   apiClient.post<{ entry: CreditEntry }>(`/suppliers/${enc(supplierId)}/credit/write-offs`, body);
 export const decideCredit = (entryId: string, action: 'approve' | 'decline' | 'cancel', note = '', rev?: number) =>

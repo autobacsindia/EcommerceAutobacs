@@ -11,6 +11,8 @@ import { SlipReadSchema } from './shared/slipReadSchema.js';
  *   that payment declined → the credit comes back         credit_restored  +15,000
  *   the admin gives up on what is left                    written_off      − …
  *   an approved ₹30,000 refund should have been ₹25,000   correction_down   −5,000  (correctionOf → that row)
+ *   supplier issues a ₹5,000 credit note (Suppliers tab)  credit_given      +5,000
+ *   a balance that is off, put right (Suppliers tab)      adjustment_up / adjustment_down ±
  *
  * What the supplier owes = Σ APPROVED rows (+ for refund_due / credit_restored,
  * − for the rest), per currency — always worked out on the server, never stored as
@@ -24,10 +26,15 @@ import { SlipReadSchema } from './shared/slipReadSchema.js';
  * Amounts are hundredths of `currency` (paise, satang, cents) as integers, so sums
  * never drift the way floats do.
  */
-export const LEDGER_KINDS = Object.freeze(['refund_due', 'repaid', 'credit_used', 'credit_restored', 'written_off', 'correction_up', 'correction_down']);
+export const LEDGER_KINDS = Object.freeze([
+  'refund_due', 'repaid', 'credit_used', 'credit_restored', 'written_off', 'correction_up', 'correction_down',
+  // Added straight from the Suppliers tab, not tied to a cancelled payment (owner, 2026-11-21).
+  'credit_given', 'adjustment_up', 'adjustment_down',
+]);
 /** +1: the supplier owes us more; −1: less. */
 export const LEDGER_SIGN = Object.freeze({
-  refund_due: 1, credit_restored: 1, correction_up: 1, repaid: -1, credit_used: -1, written_off: -1, correction_down: -1,
+  refund_due: 1, credit_restored: 1, correction_up: 1, credit_given: 1, adjustment_up: 1,
+  repaid: -1, credit_used: -1, written_off: -1, correction_down: -1, adjustment_down: -1,
 });
 /** The kinds that add to what the supplier owes (the balance aggregate reads this). */
 export const OWES_MORE_KINDS = Object.freeze(LEDGER_KINDS.filter((k) => LEDGER_SIGN[k] > 0));
@@ -112,6 +119,15 @@ const SupplierLedgerEntrySchema = new mongoose.Schema(
     // its proof. `paymentRequest` then names the paid supplier payment it refunds.
     method: { type: String, enum: [...REFUND_METHODS, ''], default: '' },
     files: { type: [FileSchema], default: [] },
+    // An entry added on the Suppliers tab may name the supplier payment it is about —
+    // for people to follow only. It is NOT `paymentRequest` (that ties a row to a
+    // payment's refund claim and its checks).
+    link: {
+      paymentRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'PaymentRequest', default: null },
+      paymentRequestNumber: { type: String, default: '' },
+      order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null },
+      orderNumber: { type: String, default: '' },
+    },
     // Which of reference / date / amount were read from the slip vs typed (shared/slipReadSchema.js).
     slipRead: { type: SlipReadSchema, default: null },
 

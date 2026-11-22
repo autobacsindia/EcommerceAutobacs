@@ -189,7 +189,7 @@ const paymentRequestRepository = {
   findByIds: (ids) => PaymentRequest.find({ _id: { $in: ids } }).select('-history').lean(),
 
   /** One request by its PR-0000 number (index payment_request_number). */
-  findByNumber: (number) => PaymentRequest.findOne({ number }).select('number kind status supplier payee.name').lean(),
+  findByNumber: (number) => PaymentRequest.findOne({ number }).select('number kind status supplier payee.name order orderNumber').lean(),
 
   /**
    * Run `fn(session)` in one transaction: every write in it lands, or none does.

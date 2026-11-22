@@ -94,29 +94,33 @@ describe('"Supplier must refund"', () => {
 });
 
 describe('the supplier\'s credit and the accounts tab', () => {
-  it('shows what the supplier owes and its history; a repayment is sent with a one-time form key', async () => {
+  it('shows what the supplier owes and its history; a refund received is sent as an entry with a one-time form key', async () => {
     get.mockResolvedValue({
       supplier: { id: 's1', name: 'ARB Supplies' },
       balances: [{ currency: 'INR', owed: 30000, owedText: '₹30,000', pending: -15000, pendingText: '₹15,000' }],
       entries: [entry(), entry({ id: 'e0', kind: 'refund_due', kindLabel: 'Refund due', status: 'approved', statusLabel: 'Approved', signedAmount: 30000, amount: 30000, amountText: '₹30,000', can: { approve: false, decline: false, cancel: false, edit: false } })],
       nextAfter: null, can: { propose: true, writeOff: false },
     });
-    post.mockResolvedValue({ entry: entry() });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ entry: entry() }) });
     wrap(<SupplierCreditPanel supplierId="s1" />);
     const panel = await screen.findByRole('region', { name: 'Supplier credit — ARB Supplies' });
     expect(panel).toHaveTextContent('Owes us ₹30,000');
     expect(panel).toHaveTextContent('−₹15,000 waiting for accounts');
     expect(within(panel).getByLabelText('Refund due ₹30,000')).toHaveTextContent('+₹30,000');
     expect(within(panel).queryByRole('button', { name: 'Write off' })).toBeNull();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Record a repayment' }));
-    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '15000' } });
-    fireEvent.change(screen.getByLabelText('UTR / reference'), { target: { value: 'UTR-BACK-1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts' }));
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    const [url, body] = post.mock.calls[0];
-    expect(url).toBe('/suppliers/s1/credit/repayments');
-    expect(body).toMatchObject({ currency: 'INR', amount: 15000, reference: 'UTR-BACK-1' });
-    expect(body.formKey).toMatch(/^[A-Za-z0-9_-]{8,}$/);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add credit entry' }));
+    const form = screen.getByRole('form', { name: 'Add credit entry' });
+    fireEvent.change(within(form).getByLabelText('Type'), { target: { value: 'repaid' } });
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '15000' } });
+    fireEvent.change(within(form).getByLabelText('Reason'), { target: { value: 'UPI refund for the cancelled kit' } });
+    fireEvent.change(within(form).getByLabelText('Reference (optional)'), { target: { value: 'UTR-BACK-1' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Send to accounts' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/suppliers\/s1\/credit\/entries$/);
+    const body = init.body as FormData;
+    expect(Object.fromEntries(['type', 'currency', 'amount', 'reference'].map((k) => [k, body.get(k)]))).toEqual({ type: 'repaid', currency: 'INR', amount: '15000', reference: 'UTR-BACK-1' });
+    expect(String(body.get('formKey'))).toMatch(/^[A-Za-z0-9_-]{8,}$/);
   });
 
   it('accounts approves what is waiting; sees who owes us; downloads the CSV', async () => {
@@ -191,5 +195,101 @@ describe('editing a credit entry', () => {
     expect(within(row).queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(row).toHaveTextContent('Corrected to ₹28,000');
     expect(row).toHaveTextContent('A correction is waiting for accounts');
+  });
+});
+
+describe('adding supplier credit on the Suppliers tab (per role)', () => {
+  const page = (over: Record<string, unknown> = {}) => ({
+    supplier: { id: 's1', name: 'G S Enterprises' }, balances: [], entries: [], nextAfter: null,
+    can: { propose: true, writeOff: false }, ...over,
+  });
+  const given = entry({
+    id: 'g1', kind: 'credit_given', kindLabel: 'Credit given to us', amount: 5000, signedAmount: 5000, amountText: '₹5,000',
+    note: 'Credit note CN-112', reference: 'CN-112', date: '2026-11-20', paymentRequest: null,
+    link: { paymentRequest: { id: 'r1', number: 'PR-0088' }, order: { id: 'o1', number: '#AB12' } },
+  });
+
+  it('procurement: can add even when the supplier owes nothing; sends type, reason, payment number and proof', async () => {
+    get.mockResolvedValue(page());
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ entry: given }) });
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    const panel = await screen.findByRole('region', { name: 'Supplier credit — G S Enterprises' });
+    expect(panel).toHaveTextContent('Owes us nothing.');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add credit entry' }));
+    const form = screen.getByRole('form', { name: 'Add credit entry' });
+    expect(within(form).getByLabelText('Type')).toHaveValue('credit_given');
+    expect(form).toHaveTextContent('adds to what they owe us');
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '5000' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Send to accounts' }));
+    expect(fetchMock).not.toHaveBeenCalled(); // reason is required
+    fireEvent.change(within(form).getByLabelText('Reason'), { target: { value: 'Credit note CN-112' } });
+    fireEvent.change(within(form).getByLabelText('Supplier payment (optional)'), { target: { value: 'PR-0088' } });
+    const file = new File(['%PDF-1.4'], 'cn-112.pdf', { type: 'application/pdf' });
+    fireEvent.change(within(form).getByLabelText('Proof (optional)'), { target: { files: [file] } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Send to accounts' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = fetchMock.mock.calls[0][1].body as FormData;
+    expect(body.get('type')).toBe('credit_given');
+    expect(body.get('amount')).toBe('5000');
+    expect(body.get('reason')).toBe('Credit note CN-112');
+    expect(body.get('paymentNumber')).toBe('PR-0088');
+    expect((body.get('proof') as File).name).toBe('cn-112.pdf');
+    expect(await screen.findByRole('status')).toHaveTextContent('Credit given to us ₹5,000 sent to accounts to approve. It counts once approved.');
+  });
+
+  it('procurement: the server\'s refusal is shown (e.g. it would take the balance below zero)', async () => {
+    get.mockResolvedValue(page());
+    fetchMock.mockResolvedValue({ ok: false, status: 409, json: async () => ({ message: 'G S Enterprises owes us nothing in INR — there is nothing to take off.' }) });
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add credit entry' }));
+    const form = screen.getByRole('form', { name: 'Add credit entry' });
+    fireEvent.change(within(form).getByLabelText('Type'), { target: { value: 'adjustment_down' } });
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '100' } });
+    fireEvent.change(within(form).getByLabelText('Reason'), { target: { value: 'Double counted' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Send to accounts' }));
+    expect(await within(form).findByRole('alert')).toHaveTextContent('owes us nothing in INR');
+  });
+
+  it('accounts: no Add button; sees the waiting entry, what it is about, and can approve it', async () => {
+    get.mockResolvedValue(page({
+      balances: [{ currency: 'INR', owed: 0, owedText: '₹0', pending: 5000, pendingText: '₹5,000' }],
+      entries: [given], can: { propose: false, writeOff: false },
+    }));
+    post.mockResolvedValue({ entry: { ...given, status: 'approved' } });
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    const panel = await screen.findByRole('region', { name: 'Supplier credit — G S Enterprises' });
+    expect(panel).toHaveTextContent('+₹5,000 waiting for accounts');
+    expect(within(panel).queryByRole('button', { name: 'Add credit entry' })).toBeNull();
+    const row = within(panel).getByLabelText('Credit given to us ₹5,000');
+    expect(row).toHaveTextContent('about payment PR-0088 · order #AB12 · dated 20 Nov 2026 · ref CN-112');
+    expect(row).toHaveTextContent('Credit note CN-112');
+    fireEvent.click(within(row).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/suppliers/credit/g1/approve', { note: '', rev: 0 }));
+  });
+
+  it('procurement: a waiting entry is edited with its date and reference, and a reason', async () => {
+    get.mockResolvedValue(page({ entries: [{ ...given, can: { approve: false, decline: false, cancel: true, edit: true } }] }));
+    post.mockResolvedValue({ entry: given });
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    const form = screen.getByRole('form', { name: 'Edit Credit given to us' });
+    expect(within(form).getByLabelText('Date')).toHaveValue('2026-11-20');
+    fireEvent.change(within(form).getByLabelText('Amount (INR)'), { target: { value: '4500' } });
+    fireEvent.change(within(form).getByLabelText('Why are you changing it?'), { target: { value: 'CN revised' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/suppliers/credit/g1/edit', expect.objectContaining({
+      amount: 4500, reason: 'CN revised', rev: 0, currency: 'INR', date: '2026-11-20', reference: 'CN-112',
+    })));
+  });
+
+  it('admin: adds entries, and writes off only while something is owed', async () => {
+    get.mockResolvedValue(page({ can: { propose: true, writeOff: true } }));
+    const { unmount } = wrap(<SupplierCreditPanel supplierId="s1" />);
+    expect(await screen.findByRole('button', { name: 'Add credit entry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Write off' })).toBeNull();
+    unmount();
+    get.mockResolvedValue(page({ can: { propose: true, writeOff: true }, balances: [{ currency: 'INR', owed: 5000, owedText: '₹5,000', pending: 0, pendingText: '' }] }));
+    wrap(<SupplierCreditPanel supplierId="s1" />);
+    expect(await screen.findByRole('button', { name: 'Write off' })).toBeInTheDocument();
   });
 });
