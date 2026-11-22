@@ -103,6 +103,38 @@ export const trackCheckoutAbandoned = (input: { lastStep: CheckoutStep; value: n
     last_step: input.lastStep, value: input.value, item_count: input.itemCount,
   });
 
+/*
+  Razorpay window funnel: opened → (paid | dismissed | failed). Before these, a shopper
+  who reached "Place Order" and then vanished was invisible — the audit could not tell
+  a closed window from a declined card. No PII: ids, amounts and Razorpay's error
+  codes only (never the error description, card or contact details).
+*/
+export interface RazorpayEventBase { orderId: string; amount: number; method?: string | null }
+
+export const trackRazorpayOpened = (input: RazorpayEventBase) =>
+  capture('razorpay_opened', {
+    order_id: input.orderId, value: input.amount, currency: 'INR', start_method: input.method ?? null,
+  });
+
+export const trackRazorpayDismissed = (input: RazorpayEventBase) =>
+  capture('razorpay_dismissed', {
+    order_id: input.orderId, value: input.amount, currency: 'INR', start_method: input.method ?? null,
+  });
+
+export const trackPaymentFailed = (input: RazorpayEventBase & {
+  errorCode?: string | null; errorReason?: string | null; errorSource?: string | null; errorStep?: string | null;
+}) =>
+  capture('payment_failed', {
+    order_id: input.orderId,
+    value: input.amount,
+    currency: 'INR',
+    method: input.method ?? null,
+    error_code: input.errorCode ?? null,
+    error_reason: input.errorReason ?? null,
+    error_source: input.errorSource ?? null,
+    error_step: input.errorStep ?? null,
+  });
+
 export const trackBeginCheckout = (input: { value: number; itemCount: number; currency?: string }) =>
   capture('begin_checkout', {
     value: input.value, item_count: input.itemCount, currency: input.currency ?? 'INR',

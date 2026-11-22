@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import type { RazorpayStartMethod } from '@/lib/paymentChoices';
+import { trackPaymentFailed, trackRazorpayDismissed, trackRazorpayOpened } from '@/lib/analytics';
 
 interface RazorpayOptions {
   key: string;
@@ -151,6 +152,10 @@ export const useRazorpay = ({
     
     // Track if payment outcome has been determined (success or failure) to prevent ondismiss from firing inappropriately
     let isPaymentProcessed = false;
+    // Funnel analytics, once each per window: Razorpay can call ondismiss more than once
+    // and emits payment.failed per attempt — one event per failed payment id.
+    let dismissTracked = false;
+    const failedTracked = new Set<string>();
 
     try {
       // CRITICAL: Check online status
@@ -187,6 +192,14 @@ export const useRazorpay = ({
       if (!razorpayKey) {
         throw new Error('Payment gateway is not configured. Please contact support.');
       }
+
+      // Analytics amount = the SERVER's Razorpay order amount (paise → rupees), the
+      // figure actually being charged — not the browser's `amount` argument.
+      const funnel = {
+        orderId,
+        amount: Number(razorpayResponse.data.amount) / 100,
+        method: displayOptions.startMethod ?? null,
+      };
 
       // 2. Configure Razorpay options
       const options: RazorpayOptions = {
@@ -239,6 +252,7 @@ export const useRazorpay = ({
         modal: {
           ondismiss: async function () {
             if (isPaymentProcessed) return;
+            if (!dismissTracked) { dismissTracked = true; trackRazorpayDismissed(funnel); }
 
             toast('Payment cancelled', { icon: 'ℹ️' });
 
@@ -282,6 +296,19 @@ export const useRazorpay = ({
       const rzp = new (window as any).Razorpay(options);
       
       rzp.on('payment.failed', async function (response: any) {
+        const failKey = String(response?.error?.metadata?.payment_id ?? '__no_payment_id__');
+        if (!failedTracked.has(failKey)) {
+          failedTracked.add(failKey);
+          trackPaymentFailed({
+            // `method` = the section the window opened on: Razorpay's failure payload
+            // carries only payment/order ids in its metadata, not the method.
+            ...funnel,
+            errorCode: response?.error?.code ?? null,
+            errorReason: response?.error?.reason ?? null,
+            errorSource: response?.error?.source ?? null,
+            errorStep: response?.error?.step ?? null,
+          });
+        }
         const reason =
           (response && (response.error?.description || response.error?.reason)) ||
           'Payment declined. Please try another card or method.';
@@ -303,6 +330,7 @@ export const useRazorpay = ({
       });
 
       rzp.open();
+      trackRazorpayOpened(funnel);
 
     } catch (err: any) {
       const error = new Error(err.message || 'Failed to initiate Razorpay payment');
