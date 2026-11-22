@@ -74,6 +74,7 @@ import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymen
 import { pinnedIds, inPinOrder } from './orderPinService.js';
 import { listDateOf } from '../utils/orderListDate.js';
 import { toPaise, fromPaise } from '../utils/money.js';
+import { refundableForLines, orderGoodsNetPaise } from './refundMathService.js';
 import { saleHistoryOf } from './orderAttributionService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -285,9 +286,24 @@ const savedRupees = (n) => (typeof n === 'number' && Number.isFinite(n) ? n : nu
  * panel never shows a sum that silently skips a line.
  */
 function moneyOf(o) {
-  const lines = (o.items || []).map((it) => {
+  const items = o.items || [];
+  const priced = items.every((it) => savedRupees(it.price) != null);
+  // Each line's share of the order's coupon/points discount, from the SAME math the
+  // refunds use (refundMathService), so "what this item was paid" here is exactly
+  // what refunding the whole line would return. Only when every line has a saved
+  // price — a share of an unknown gross would be invented.
+  const goodsNetPaise = priced ? orderGoodsNetPaise(o) : 0;
+  const taxPaise = toPaise(savedRupees(o.tax) || 0);
+  const lines = items.map((it) => {
     const price = savedRupees(it.price);
     const listPrice = savedRupees(it.listPrice);
+    let split = { discountShare: null, paid: null, gst: null };
+    if (priced) {
+      const { netRupees, discountShareRupees } = refundableForLines(o, [{ itemId: it._id, quantity: it.quantity }]);
+      // GST is inside the price: the line's share of the order's saved GST, by what it was paid.
+      const gstPaise = goodsNetPaise > 0 ? Math.floor((toPaise(netRupees) * taxPaise) / goodsNetPaise) : 0;
+      split = { discountShare: discountShareRupees, paid: netRupees, gst: fromPaise(gstPaise) };
+    }
     return {
       itemId: idOf(it._id),
       quantity: it.quantity,
@@ -295,13 +311,19 @@ function moneyOf(o) {
       // GTM offer price: what the line listed at before the rep's discount.
       listPrice: listPrice != null && price != null && listPrice > price ? listPrice : null,
       lineTotal: price == null ? null : fromPaise(toPaise(price) * Number(it.quantity || 0)),
+      ...split,
     };
   });
-  const priced = lines.every((l) => l.lineTotal != null);
+  // Shares are floored (never round a refund up), so they can fall a few paise short
+  // of the order's goods amount; that gap is shown, so the items still add up.
+  const paidSumPaise = priced ? lines.reduce((sum, l) => sum + toPaise(l.paid), 0) : 0;
   const offer = o.gatewayOffer && savedRupees(o.gatewayOffer.discount) ? o.gatewayOffer : null;
   return {
     lines,
     itemsTotal: priced ? fromPaise(lines.reduce((sum, l) => sum + toPaise(l.lineTotal), 0)) : null,
+    // Σ what each item was paid (after its discount share) and the paise left over.
+    itemsPaid: priced ? fromPaise(paidSumPaise) : null,
+    rounding: priced ? fromPaise(Math.max(0, goodsNetPaise - paidSumPaise)) : null,
     subtotal: savedRupees(o.subtotal),
     discount: savedRupees(o.discount) || 0,
     couponCode: o.couponCode || '',

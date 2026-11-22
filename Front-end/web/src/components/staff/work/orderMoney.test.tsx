@@ -70,6 +70,37 @@ describe('item prices on the order (accounts)', () => {
     expect(within(summary).getByText('Includes GST of ₹1,449.15')).toBeInTheDocument();
   });
 
+  it('splits a discounted order per item — on the journey and the items — and it adds up', async () => {
+    // e.g. CECADF9B: two items, a coupon, delivery; the server sends each item's share.
+    const lines = [line(1, 70000, 1), line(2, 33333.33, 3)];
+    const money = moneyFor(lines, {
+      discount: 1000, couponCode: 'SAVE', shipping: 150, tax: 25779.66, total: 169149.99,
+      itemsPaid: 168999.98, rounding: 0.01,
+    });
+    Object.assign(money.lines[0], { discountShare: 411.76, paid: 69588.24, gst: 10615.16 });
+    Object.assign(money.lines[1], { discountShare: 588.25, paid: 99411.74, gst: 15164.49 });
+    show(order(lines, money));
+    const amounts = await screen.findAllByTestId('journey-amount');
+    expect(amounts.map((a) => a.textContent)).toEqual([' · ₹69,588.24', ' · ₹99,411.74']);
+    const splits = screen.getAllByTestId('line-split');
+    expect(splits[0]).toHaveTextContent('Discount share −₹411.76 → paid ₹69,588.24');
+    expect(screen.getAllByTestId('line-gst')[1]).toHaveTextContent('Includes GST of ₹15,164.49');
+    const summary = screen.getByLabelText('Order amount');
+    expect(within(summary).getByText('Items after discount').nextSibling).toHaveTextContent('₹1,68,999.98');
+    expect(within(summary).getByText('Paise rounding').nextSibling).toHaveTextContent('₹0.01');
+  });
+
+  it('no discount: the journey shows each line total and no split lines', async () => {
+    const lines = [line(1, 5000, 1), line(2, 1000, 2)];
+    const money = moneyFor(lines, { itemsPaid: 7000, rounding: 0 });
+    money.lines.forEach((l) => Object.assign(l, { discountShare: 0, paid: l.lineTotal, gst: 0 }));
+    show(order(lines, money));
+    const amounts = await screen.findAllByTestId('journey-amount');
+    expect(amounts.map((a) => a.textContent)).toEqual([' · ₹5,000', ' · ₹2,000']);
+    expect(screen.queryByTestId('line-split')).not.toBeInTheDocument();
+    expect(screen.queryByText('Items after discount')).not.toBeInTheDocument();
+  });
+
   it('a legacy line with no saved price says so instead of a made-up number', async () => {
     const lines = [line(1, 5000, 1), line(2, 0, 2)];
     const money = moneyFor(lines, { itemsTotal: null, subtotal: 7000, total: 7000 });
@@ -86,5 +117,6 @@ describe('item prices on the order (accounts)', () => {
     await screen.findByText('Part 1');
     expect(screen.queryByTestId('line-price')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Order amount')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('journey-amount')).not.toBeInTheDocument();
   });
 });
