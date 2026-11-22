@@ -46,3 +46,6 @@ coverage
 # Logs
 logs
 *.log
+
+# HR face models are fetched + checksum-verified in the image build
+ml-models

@@ -121,3 +121,6 @@ retention-reports/
 
 # ClickUp import snapshots hold a workspace's private task data (scripts/import-clickup.js).
 clickup-snapshot*.json
+
+# HR face models (scripts/fetch-face-models.js) — fetched, never committed
+ml-models/
