@@ -757,6 +757,12 @@ export async function ensureCriticalIndexes() {
       { requestedBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'payment_request_client_id', background: true }
     );
+    // Subscriptions & dues "Mark paid" (services/subscriptionDueService.js): one expense per
+    // cycle — the guard must exist before the first write, so it is built here.
+    await db.collection('paymentrequests').createIndex(
+      { 'subscription.cycle': 1 },
+      { unique: true, partialFilterExpression: { 'subscription.cycle': { $type: 'objectId' } }, name: 'payment_request_subscription_cycle', background: true }
+    );
     console.log('✓ SupplierDeal indexes confirmed');
 
     // Supplier credit (models/SupplierLedgerEntry.js) — same names as the schema.

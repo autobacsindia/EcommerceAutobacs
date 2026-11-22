@@ -14,7 +14,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SubscriptionList from './SubscriptionList';
 import SubscriptionForm from './SubscriptionForm';
 import SubscriptionDetail from './SubscriptionDetail';
-import { looksLikeCardNumber, type Subscription } from './api';
+import { looksLikeCardNumber, type BillCycle, type Subscription } from './api';
 import { addressBar } from '@/test-utils/addressBarMock';
 
 jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
@@ -39,7 +39,8 @@ const item = (over: Partial<Subscription> = {}): Subscription => ({
   status: 'pending', statusLabel: 'Waiting for check', rejectReason: '', verifiedByName: '', verifiedAt: null,
   addedBy: 'u1', addedByName: 'Dev', archived: false, rev: 3, createdAt: '2026-11-01T05:00:00Z', updatedAt: '2026-11-01T05:00:00Z',
   history: [{ at: '2026-11-01T05:00:00Z', byName: 'Dev', role: 'developer', action: 'added', note: '' }],
-  can: { edit: true, delete: true, verify: false, reject: false, recordBill: false },
+  current: null,
+  can: { edit: true, delete: true, verify: false, reject: false, markPaid: false },
   ...over,
 });
 
@@ -48,11 +49,15 @@ const OPTIONS = {
   methods: [{ value: 'card', label: 'Card' }, { value: 'upi', label: 'UPI' }, { value: 'bank_transfer', label: 'Bank transfer' }],
   currencies: [{ code: 'INR', label: 'Indian rupee', approxInrPerUnit: 1 }, { code: 'USD', label: 'US dollar', approxInrPerUnit: 88 }],
   baseCurrency: 'INR', teams: [], team: 'developer', canCheck: false,
+  paidVia: [{ value: 'card', label: 'Card' }, { value: 'upi', label: 'UPI' }, { value: 'bank', label: 'Bank transfer' }, { value: 'auto_debit', label: 'Auto-debit' }],
+  markPaidFromDays: 3,
 };
 
 let fetchMock: jest.Mock;
 let current: Subscription;
+let months: { month: string; bills: number; rupees: number; unpriced: number }[];
 beforeEach(() => {
+  months = [];
   addressBar.reset('/team/payments');
   current = item();
   get.mockReset();
@@ -60,6 +65,7 @@ beforeEach(() => {
   get.mockImplementation((url: string) => {
     if (url === '/subscription-dues/options') return Promise.resolve({ options: OPTIONS });
     if (url.startsWith('/subscription-dues/s1')) return Promise.resolve({ item: current });
+    if (url.startsWith('/subscription-dues/monthly')) return Promise.resolve({ months });
     return Promise.resolve({ items: [current], nextCursor: null, summary: { count: 1, capped: false } });
   });
   fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ item: current }) });
@@ -73,7 +79,9 @@ const lastList = () => {
   const urls = get.mock.calls.map((c) => String(c[0])).filter((u) => u.startsWith('/subscription-dues?'));
   return Object.fromEntries(new URLSearchParams(urls[urls.length - 1].split('?')[1]));
 };
-const sentForm = () => fetchMock.mock.calls[0][1].body as FormData;
+// The receipt reader may ask whether it is on first: the save is the call to the API path.
+const saveCall = () => fetchMock.mock.calls.find((c) => !String(c[0]).includes('/slip-reader/'));
+const sentForm = () => (saveCall() ?? fetchMock.mock.calls[0])[1].body as FormData;
 
 describe('the list', () => {
   it('shows each item with its due day, money (rough rupees as a label) and status', async () => {
@@ -213,14 +221,14 @@ describe('the detail', () => {
   });
 
   it('someone else’s item: no buttons at all', async () => {
-    current = item({ can: { edit: false, delete: false, verify: false, reject: false, recordBill: false } });
+    current = item({ can: { edit: false, delete: false, verify: false, reject: false, markPaid: false } });
     wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
     await screen.findByRole('heading', { name: /Railway/ });
     expect(screen.queryByRole('button', { name: /Edit|Delete|Verify|Reject/ })).not.toBeInTheDocument();
   });
 
   it('accounts verifies with the version on screen', async () => {
-    current = item({ can: { edit: true, delete: true, verify: true, reject: true, recordBill: false } });
+    current = item({ can: { edit: true, delete: true, verify: true, reject: true, markPaid: false } });
     post.mockResolvedValue({ item: { ...current, status: 'verified' } });
     wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Verify' }));
@@ -251,7 +259,7 @@ describe('usage-based bills (amount varies)', () => {
   const fill = (name: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(name), { target: { value } });
   const atlas = (over: Partial<Subscription> = {}) => item({
     name: 'MongoDB Atlas', amount: 100, variableAmount: true, status: 'verified', statusLabel: 'Verified', dueDate: '2026-11-30',
-    can: { edit: true, delete: true, verify: false, reject: false, recordBill: true }, cycles: [], ...over,
+    can: { edit: true, delete: true, verify: false, reject: false, markPaid: true }, cycles: [], ...over,
   });
 
   it('the list shows the amount as an estimate; a fixed one is unchanged', async () => {
@@ -284,52 +292,151 @@ describe('usage-based bills (amount varies)', () => {
     expect(screen.getByLabelText('Amount on the bill')).toBeInTheDocument();
   });
 
-  it('a fixed item has no bill button', async () => {
-    current = item({ status: 'verified', statusLabel: 'Verified' });
+  it('a fixed item has no bills yet: no history', async () => {
+    current = item({ status: 'verified', statusLabel: 'Verified', cycles: [] });
     wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
     await screen.findByRole('heading', { name: /Railway/ });
-    expect(screen.queryByRole('button', { name: /bill/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mark paid/ })).not.toBeInTheDocument();
     expect(screen.queryByText('Bills paid')).not.toBeInTheDocument();
   });
 
-  it('the bill needs the actual amount and the invoice before it is sent; then it sends both with the version', async () => {
+  it('a usage-based bill needs its actual amount and invoice before it is sent', async () => {
     current = atlas();
     wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
-    expect(await screen.findByText('No bills recorded yet.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Enter this month.s bill/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save bill' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Mark paid/ }));
+    fill(/Rupees charged/, '9500');
+    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/actual amount/);
     fill(/Actual amount/, '112');
-    fireEvent.click(screen.getByRole('button', { name: 'Save bill' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/Attach the invoice/);
     expect(fetchMock).not.toHaveBeenCalled();
 
     const file = new File(['%PDF-1.4'], 'nov.pdf', { type: 'application/pdf' });
-    const picker = document.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(picker, { target: { files: [file] } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save bill' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('/api/v1/subscription-dues/s1/bills');
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts' }));
+    await waitFor(() => expect(saveCall()).toBeDefined());
+    const [url, init] = saveCall()!;
+    expect(url).toBe('/api/v1/subscription-dues/s1/mark-paid');
     expect(init.method).toBe('POST');
     expect(sentForm().get('amount')).toBe('112');
+    expect(sentForm().get('rupees')).toBe('9500');
     expect(sentForm().get('rev')).toBe('3');
+    expect(sentForm().get('paidVia')).toBe('auto_debit');
     expect(sentForm().getAll('invoice')).toHaveLength(1);
   });
 
   it('shows the paid history, newest first, actual beside the estimate', async () => {
     const cycle = (id: string, dueDate: string, amount: number) => ({
-      id, dueDate, amount, currency: 'USD', estimate: 100, approxInr: null, note: '', paidByName: 'Anu', paidAt: '2026-11-01T05:00:00Z',
+      id, dueDate, amount, currency: 'USD', estimate: 100, approxInr: null, rupees: null, state: 'paid' as const, stateLabel: 'Paid',
+      expense: null, alreadyPaid: false, paidVia: '' as const, paidViaLabel: '', paidOn: '', reference: '', amountReason: '', rejectReason: '',
+      note: '', paidByName: 'Anu', paidAt: '2026-11-01T05:00:00Z',
       invoices: [{ id: `f${id}`, name: 'inv.pdf', contentType: 'application/pdf', bytes: 9 }],
     });
     current = atlas({ cycles: [cycle('1', '2026-10-31', 95), cycle('2', '2026-11-30', 112), cycle('3', '2026-12-31', 104)] });
     wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
     const list = await screen.findByRole('list', { name: 'Bills paid' });
     const rows = within(list).getAllByRole('listitem').map((li) => li.textContent);
-    expect(rows[0]).toMatch(/Dec 2026.*USD 104.*estimate USD 100/);
+    expect(rows[0]).toMatch(/Dec 2026.*USD 104.*estimate USD 100.*Paid/);
     expect(rows[1]).toMatch(/Nov 2026.*USD 112/);
     expect(rows[2]).toMatch(/Oct 2026.*USD 95/);
     expect(within(list).getAllByRole('link', { name: /Invoice/ })[0]).toHaveAttribute('href', '/api/v1/subscription-dues/s1/files/f3');
+  });
+});
+
+describe('mark paid → expense', () => {
+  const fill = (name: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(name), { target: { value } });
+  const rent = (over: Partial<Subscription> = {}) => item({
+    name: 'Office rent', amount: 50000, currency: 'INR', approxInr: null, status: 'verified', statusLabel: 'Verified',
+    dueInDays: 1, payment: { method: 'bank_transfer', methodLabel: 'Bank transfer', cardLast4: '', autoDebit: false },
+    can: { edit: true, delete: true, verify: false, reject: false, markPaid: true }, cycles: [], ...over,
+  });
+  const cycle = (over: Partial<BillCycle> = {}): BillCycle => ({
+    id: 'c1', dueDate: '2026-12-02', amount: 50000, currency: 'INR', estimate: 50000, approxInr: null, rupees: 50000,
+    state: 'waiting', stateLabel: 'Waiting for accounts', expense: { id: 'e1', number: 'PR-0912' }, alreadyPaid: true,
+    paidVia: 'bank', paidViaLabel: 'Bank transfer', paidOn: '2026-12-01', reference: 'UTR1', amountReason: '', rejectReason: '',
+    note: '', paidByName: 'Dev', paidAt: '2026-12-01T05:00:00Z', invoices: [], ...over,
+  } as BillCycle);
+
+  it('is filled from the item; sends paid-already details, the version and the receipt — not the amount', async () => {
+    current = rent();
+    wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Mark paid/ }));
+    expect(screen.getByLabelText(/^Amount/)).toHaveValue('50000');
+    expect(screen.getByLabelText('How was it paid?')).toHaveValue('bank');
+    expect(screen.queryByLabelText(/Rupees charged/)).not.toBeInTheDocument();
+    fill(/Reference/, 'UTR123');
+    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const f = sentForm();
+    expect(f.get('alreadyPaid')).toBe('true');
+    expect(f.get('paidVia')).toBe('bank');
+    expect(f.get('reference')).toBe('UTR123');
+    expect(f.get('paidOn')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // The server takes the fixed amount from the item: nothing to tamper with.
+    expect(f.get('amount')).toBeNull();
+  });
+
+  it('a different amount needs a reason; "not paid yet" sends no payment details', async () => {
+    current = rent();
+    wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Mark paid/ }));
+    fill(/^Amount/, '51200');
+    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/say why/);
+    fill(/Why is it different/, 'Late fee');
+    fireEvent.click(screen.getByLabelText(/Not paid yet/));
+    expect(screen.queryByLabelText('How was it paid?')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const f = sentForm();
+    expect(f.get('alreadyPaid')).toBe('false');
+    expect(f.get('amount')).toBe('51200');
+    expect(f.get('amountReason')).toBe('Late fee');
+    expect(f.get('paidVia')).toBeNull();
+  });
+
+  it('a double click sends once', async () => {
+    current = rent();
+    let finish: (v: unknown) => void = () => {};
+    fetchMock.mockImplementation(() => new Promise((r) => { finish = r; }));
+    wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Mark paid/ }));
+    const send = screen.getByRole('button', { name: 'Send to accounts' });
+    fireEvent.click(send);
+    fireEvent.click(send);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    finish({ ok: true, json: async () => ({ item: current }) });
+  });
+
+  it('waiting for accounts: shows the expense, no Mark paid; rejected: shows why and offers it again', async () => {
+    current = rent({ current: cycle(), can: { edit: true, delete: true, verify: false, reject: false, markPaid: false } });
+    const { unmount } = wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    const status = await screen.findByText(/Waiting for accounts/, { selector: 'strong' });
+    expect(status.closest('[role="status"]')).toHaveTextContent(/PR-0912/);
+    expect(screen.queryByRole('button', { name: /Mark paid/ })).not.toBeInTheDocument();
+    unmount();
+
+    current = rent({ current: cycle({ state: 'rejected', stateLabel: 'Rejected', rejectReason: 'Wrong UTR' }) });
+    wrap(<SubscriptionDetail id="s1" onClose={jest.fn()} />);
+    expect(await screen.findByText(/“Wrong UTR” — fix it and mark it paid again/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Mark paid/ })).toBeInTheDocument();
+  });
+
+  it('the list shows "Mark paid" when due, the cycle state once marked, and the monthly totals', async () => {
+    months = [{ month: '2026-11', bills: 3, rupees: 54700, unpriced: 1 }];
+    current = rent({ overdue: true, dueInDays: -2 });
+    const { unmount } = wrap(<SubscriptionList />);
+    const row = await screen.findByRole('button', { name: /Office rent/ });
+    expect(row).toHaveTextContent('Mark paid');
+    expect(row.className).toMatch(/border-red-500/);
+    const totals = await screen.findByRole('region', { name: 'Paid per month' });
+    expect(totals).toHaveTextContent(/Nov 2026.*₹54,700.*3 bills · 1 without rupees yet/);
+    unmount();
+
+    current = rent({ current: cycle(), can: { edit: true, delete: true, verify: false, reject: false, markPaid: false } });
+    wrap(<SubscriptionList />);
+    expect(await screen.findByRole('button', { name: /Office rent/ })).toHaveTextContent('Waiting for accounts');
   });
 });
 

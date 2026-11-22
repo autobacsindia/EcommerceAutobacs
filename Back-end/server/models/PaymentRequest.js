@@ -142,6 +142,30 @@ const PaymentRequestSchema = new mongoose.Schema(
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffProject', default: null },
     projectCode: { type: String, default: '' },
     projectName: { type: String, default: '' },
+    // A subscription / due's cycle marked paid (models/SubscriptionDue.js): raised by
+    // "Mark paid", never typed. Snapshotted like the project link. `alreadyPaid`: the
+    // money already left (company card, auto-debit) — accounts' approval closes it as
+    // paid with `paid` (how / when / reference) instead of asking the admin to pay.
+    subscription: {
+      type: new mongoose.Schema({
+        item: { type: mongoose.Schema.Types.ObjectId, ref: 'SubscriptionDue', required: true },
+        number: { type: String, required: true },
+        name: { type: String, default: '' },
+        cycle: { type: mongoose.Schema.Types.ObjectId, required: true },
+        cycleDueDate: { type: String, required: true },
+        alreadyPaid: { type: Boolean, default: false },
+        paid: {
+          type: new mongoose.Schema({
+            method: { type: String, enum: ['bank', 'upi', 'card', 'other'], required: true },
+            autoDebit: { type: Boolean, default: false },
+            on: { type: Date, required: true },
+            reference: { type: String, default: '', maxlength: 120 },
+          }, { _id: false }),
+          default: undefined,
+        },
+      }, { _id: false }),
+      default: undefined,
+    },
     // Optional: any other ID the cost belongs to (a supplier invoice number, a
     // courier AWB, a ClickUp task) — free text, searched by the admin's lookup.
     reference: { type: String, default: '', maxlength: 60 },
@@ -268,6 +292,12 @@ PaymentRequestSchema.index(
 PaymentRequestSchema.index(
   { deal: 1, createdAt: 1 },
   { name: 'payment_request_deal', partialFilterExpression: { deal: { $type: 'objectId' } } }
+);
+
+// One expense per marked cycle: a retried "Mark paid" can never raise a second one.
+PaymentRequestSchema.index(
+  { 'subscription.cycle': 1 },
+  { unique: true, name: 'payment_request_subscription_cycle', partialFilterExpression: { 'subscription.cycle': { $type: 'objectId' } } }
 );
 
 export default mongoose.models.PaymentRequest || mongoose.model('PaymentRequest', PaymentRequestSchema);
