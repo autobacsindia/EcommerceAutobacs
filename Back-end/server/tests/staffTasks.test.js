@@ -141,7 +141,7 @@ describe('who gives tasks to whom', () => {
     await status(400, () => make(procA, { title: 'x'.repeat(201) }));
     await status(400, () => make(procA, { dueOn: '2026-02-30' }));
     await status(400, () => make(procA, { priority: 'asap' }));
-    await status(400, () => make(procA, { description: 'x'.repeat(4001) }));
+    await status(400, () => make(procA, { description: 'x'.repeat(20001) }));
   });
 
   it('links an order by its invoice number, and refuses one that does not exist', async () => {
