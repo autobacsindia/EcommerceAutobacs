@@ -10,8 +10,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, elevation, font, radius, spacing, type } from '../../src/theme';
-import { GlassChip, Overline, PremiumButton, PressScale, Shimmer, Stripes } from '../../src/ui';
+import { font, noir, noirSurface, spacing, type } from '../../src/theme';
+import { Crest, GlassChip, GoldRule, Overline, PremiumButton, PressScale, SerifTitle, Shimmer } from '../../src/ui';
 import { useApp } from '../../src/store';
 
 const SITE = (Constants.expoConfig?.extra as { siteUrl?: string } | undefined)?.siteUrl ?? 'https://www.autobacsindia.com';
@@ -39,11 +39,11 @@ function RowList({ title, rows }: { title: string; rows: Row[] }) {
             style={[s.row, i < rows.length - 1 && s.rowBorder]}
             accessibilityLabel={r.label}
           >
-            <View style={[s.rowIcon, r.danger && { backgroundColor: colors.redSoft }]}>
-              <Ionicons name={r.icon} size={18} color={r.danger ? colors.red : colors.green} />
+            <View style={[s.rowIcon, r.danger && { borderColor: noir.sale }]}>
+              <Ionicons name={r.icon} size={18} color={r.danger ? noir.sale : noir.gold} />
             </View>
-            <Text style={[s.rowLabel, r.danger && { color: colors.red }]} numberOfLines={1}>{r.label}</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.chrome} />
+            <Text style={[s.rowLabel, r.danger && { color: noir.sale }]} numberOfLines={1}>{r.label}</Text>
+            <Ionicons name="chevron-forward" size={16} color={noir.textFaint} />
           </PressScale>
         ))}
       </View>
@@ -93,10 +93,10 @@ export default function AccountScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
         {/* Avatar header — carbon band with the brand stripes. */}
         <View style={[s.hero, { paddingTop: insets.top + spacing.lg }]}>
-          <View style={s.heroStripes} pointerEvents="none">
-            <Stripes width={44} height={120} gap={10} onDark />
+          <View style={s.heroTop}>
+            <Crest />
+            <Overline tone="gold">{customer ? 'My account' : 'Welcome'}</Overline>
           </View>
-          <Overline onDark>{customer ? 'My account' : 'Welcome'}</Overline>
           {customer === undefined ? (
             <View style={[s.identity, { marginTop: spacing.lg }]}>
               <Shimmer width={64} height={64} radius={32} dark />
@@ -111,21 +111,22 @@ export default function AccountScreen() {
                 <Text style={s.avatarText}>{initial}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.name} numberOfLines={1}>{customer.name || 'Autobacs customer'}</Text>
+                <SerifTitle size="title" numberOfLines={1}>{customer.name || 'Autobacs customer'}</SerifTitle>
                 <Text style={s.email} numberOfLines={1}>{customer.email}</Text>
               </View>
             </View>
           ) : (
             <View style={{ marginTop: spacing.sm }}>
-              <Text style={s.name}>Sign in to Autobacs</Text>
+              <SerifTitle size="title" italicLast>Sign in to Autobacs</SerifTitle>
               <Text style={[s.email, { marginTop: 4 }]}>Track orders, save your car and check out faster.</Text>
               <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
-                <PremiumButton label="Sign in" variant="light" onPress={() => router.push('/login')} style={{ flex: 1 }} />
-                <PremiumButton label="Register" variant="outlineLight" onPress={() => router.push('/register')} style={{ flex: 1 }} />
+                <PremiumButton label="Sign in" variant="noir" onPress={() => router.push('/login')} style={{ flex: 1 }} />
+                <PremiumButton label="Register" variant="noirOutline" onPress={() => router.push('/register')} style={{ flex: 1 }} />
               </View>
             </View>
           )}
           <GlassChip
+            tone="gold"
             icon="car-sport-outline"
             label={garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : 'Add your car'}
             action={garage ? 'Change' : undefined}
@@ -133,6 +134,7 @@ export default function AccountScreen() {
             style={{ marginTop: spacing.lg, alignSelf: 'flex-start' }}
           />
         </View>
+        <GoldRule />
 
         <View style={{ paddingHorizontal: spacing.lg }}>
         {customer && (
@@ -195,28 +197,27 @@ export default function AccountScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: noir.page },
 
-  hero: {
-    backgroundColor: colors.carbon, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl,
-    borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, overflow: 'hidden',
-  },
-  heroStripes: { position: 'absolute', right: spacing.lg, top: 28, opacity: 0.18 },
+  hero: { backgroundColor: noir.page, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   avatar: {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: colors.green,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.onDarkFaint,
+    width: 64, height: 64, borderRadius: 32, backgroundColor: noir.green,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: noir.gold,
   },
-  avatarText: { fontFamily: font.extrabold, fontSize: 26, color: colors.white },
-  name: { ...type.h1, color: colors.white },
-  email: { ...type.small, color: colors.onDarkMuted },
+  avatarText: { fontFamily: font.serif, fontSize: 28, color: noir.text },
+  email: { ...type.smallNoir, marginTop: 2 },
 
-  groupTitle: { ...type.overline, color: colors.muted, marginBottom: spacing.sm, marginLeft: 4 },
-  group: { backgroundColor: colors.white, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', ...elevation.e1 },
+  groupTitle: { ...type.capsNoir, color: noir.greenText, marginBottom: spacing.sm, marginLeft: 2 },
+  group: { ...noirSurface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 56 },
-  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  rowIcon: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.greenFaint, alignItems: 'center', justifyContent: 'center' },
-  rowLabel: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink },
+  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: noir.hairline },
+  rowIcon: {
+    width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: noir.goldLine,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rowLabel: { flex: 1, fontFamily: font.medium, fontSize: 15, color: noir.text },
 
-  version: { ...type.caption, color: colors.muted, textAlign: 'center', marginTop: spacing.xl },
+  version: { ...type.smallNoir, fontSize: 12, color: noir.textFaint, textAlign: 'center', marginTop: spacing.xl },
 });

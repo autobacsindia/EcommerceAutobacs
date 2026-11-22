@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { colors, font, spacing, type } from '../src/theme';
+import { font, noir, spacing, type } from '../src/theme';
 import { PremiumButton, PressScale } from '../src/ui';
 import { AuthShell, Field, FormMessage } from '../src/account/AuthShell';
 import { useApp } from '../src/store';
@@ -88,7 +88,7 @@ export default function LoginScreen() {
       <FormMessage text={error} tone="error" />
       <FormMessage text={notice} tone="notice" />
 
-      <PremiumButton label="Sign in" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
+      <PremiumButton label="Sign in" onPress={submit} loading={busy} iconRight="arrow-forward" variant="noir" full style={{ marginTop: spacing.sm }} />
 
       <View style={s.footer}>
         <Text style={s.footText}>New to Autobacs?</Text>
@@ -102,7 +102,7 @@ export default function LoginScreen() {
 
 const s = StyleSheet.create({
   forgot: { alignSelf: 'flex-end', marginTop: -spacing.sm, marginBottom: spacing.lg, paddingVertical: spacing.xs },
-  linkText: { fontFamily: font.semibold, fontSize: 14, color: colors.green },
+  linkText: { fontFamily: font.semibold, fontSize: 14, color: noir.gold },
   footer: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: spacing.xxl },
-  footText: { ...type.small, color: colors.muted },
+  footText: { ...type.smallNoir },
 });

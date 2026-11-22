@@ -11,8 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchVehicles } from '../src/api/catalogue';
-import { colors, elevation, font, radius, spacing, type } from '../src/theme';
-import { EmptyState, ErrorState, IconButton, Overline, PremiumButton, PressScale, SectionHeader, Shimmer, Stripes } from '../src/ui';
+import { font, noir, noirSurface, radius, spacing, type } from '../src/theme';
+import { EmptyState, ErrorState, GoldRule, IconButton, Overline, PremiumButton, PressScale, SectionHeader, SerifTitle, Shimmer } from '../src/ui';
 import { useApp } from '../src/store';
 
 export default function GarageScreen() {
@@ -59,14 +59,12 @@ export default function GarageScreen() {
             icon="chevron-back"
             label="Back"
             tone="plain"
+            color={noir.text}
             onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
           />
           <View style={{ flex: 1 }}>
-            <View style={s.overRow}>
-              <Stripes width={10} height={3} gap={2} />
-              <Overline>Fits your car</Overline>
-            </View>
-            <Text style={s.title} accessibilityRole="header">My garage</Text>
+            <Overline noir>Fits your car</Overline>
+            <SerifTitle size="title" italicLast accessibilityRole="header">My garage</SerifTitle>
           </View>
         </View>
         <Text style={s.subtitle}>Save your car to see parts that fit</Text>
@@ -75,22 +73,20 @@ export default function GarageScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
         {garage && (
           <View style={s.carCard}>
-            <View style={s.carStripes} pointerEvents="none">
-              <Stripes width={40} height={140} gap={10} onDark />
-            </View>
-            <Overline onDark>Your car</Overline>
+            <GoldRule style={s.carRule} />
+            <Overline tone="gold">Your car</Overline>
             <View style={s.savedRow}>
               <View style={s.savedIcon}>
-                <Ionicons name="car-sport" size={26} color={colors.white} />
+                <Ionicons name="car-sport" size={26} color={noir.text} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.carMake} numberOfLines={1}>{garage.make}</Text>
+                <SerifTitle size="title" numberOfLines={1}>{garage.make}</SerifTitle>
                 {!!garage.model && <Text style={s.carModel} numberOfLines={1}>{garage.model}</Text>}
               </View>
             </View>
             <PremiumButton
               label="Shop parts that fit"
-              variant="light"
+              variant="noir"
               icon="search"
               full
               onPress={() =>
@@ -109,16 +105,16 @@ export default function GarageScreen() {
         {vehicles.isLoading ? (
           <View style={s.grid}>
             {Array.from({ length: 9 }, (_, i) => (
-              <Shimmer key={i} width={tileW} height={64} radius={radius.lg} />
+              <Shimmer key={i} width={tileW} height={64} radius={radius.square} dark />
             ))}
           </View>
         ) : vehicles.error ? (
-          <ErrorState error={vehicles.error} onRetry={() => vehicles.refetch()} />
+          <ErrorState error={vehicles.error} onRetry={() => vehicles.refetch()} onDark />
         ) : makes.length === 0 ? (
-          <EmptyState icon="car-sport-outline" title="No cars listed yet" body="Our specialists can still help you find parts that fit." />
+          <EmptyState icon="car-sport-outline" title="No cars listed yet" body="Our specialists can still help you find parts that fit." onDark />
         ) : (
           <>
-            <SectionHeader inset={false} overline={garage ? 'Change vehicle' : 'Step 1'} title={garage ? 'Pick another make' : 'Pick your make'} />
+            <SectionHeader noir italicLast inset={false} overline={garage ? 'Change vehicle' : 'Step 1'} title={garage ? 'Pick another make' : 'Pick your make'} />
             <View style={s.grid}>
               {makes.map((m) => {
                 const on = make === m;
@@ -131,11 +127,11 @@ export default function GarageScreen() {
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={m}
                   >
-                    <Ionicons name="car-sport-outline" size={18} color={on ? colors.green : colors.steel} />
+                    <Ionicons name="car-sport-outline" size={18} color={on ? noir.gold : noir.textFaint} />
                     <Text style={[s.makeText, on && s.tileTextOn]} numberOfLines={1}>{m}</Text>
                     {on && (
                       <View style={s.tick}>
-                        <Ionicons name="checkmark" size={10} color={colors.white} />
+                        <Ionicons name="checkmark" size={10} color={noir.ctaText} />
                       </View>
                     )}
                   </PressScale>
@@ -158,11 +154,14 @@ export default function GarageScreen() {
                   label={`Show all ${make} parts`}
                   onPress={() => shop(make)}
                   iconRight="arrow-forward"
+                  variant="noir"
                   full
                   style={{ marginTop: spacing.lg }}
                 />
 
                 <SectionHeader
+                  noir
+                  italicLast
                   inset={false}
                   overline="Optional"
                   title="Or pick your model"
@@ -183,13 +182,13 @@ export default function GarageScreen() {
                         accessibilityLabel={v.model}
                       >
                         <Text style={[s.modelText, on && s.tileTextOn]}>{v.model}</Text>
-                        <Ionicons name="chevron-forward" size={13} color={on ? colors.green : colors.chrome} />
+                        <Ionicons name="chevron-forward" size={13} color={on ? noir.gold : noir.textFaint} />
                       </PressScale>
                     );
                   })}
                 </View>
                 {models.length === 0 && (
-                  <Text style={[type.small, { marginTop: spacing.sm, color: colors.muted }]}>
+                  <Text style={[type.smallNoir, { marginTop: spacing.sm }]}>
                     No specific models listed for {make} yet — the button above still
                     shows every {make} part we carry.
                   </Text>
@@ -199,9 +198,9 @@ export default function GarageScreen() {
 
             <View style={s.help}>
               <View style={s.helpIcon}>
-                <Ionicons name="headset-outline" size={18} color={colors.green} />
+                <Ionicons name="headset-outline" size={18} color={noir.gold} />
               </View>
-              <Text style={[type.small, { flex: 1, color: colors.ink2 }]}>
+              <Text style={[type.smallNoir, { flex: 1 }]}>
                 Can&apos;t find your car? Our specialists can still help you find parts that fit.
               </Text>
             </View>
@@ -213,49 +212,44 @@ export default function GarageScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  screen: { flex: 1, backgroundColor: noir.page },
+  header: { backgroundColor: noir.page, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  overRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { ...type.h1 },
-  subtitle: { ...type.small, color: colors.muted, marginTop: 2, marginLeft: 48 },
+  subtitle: { ...type.smallNoir, marginTop: 2, marginLeft: 48 },
 
-  carCard: {
-    backgroundColor: colors.carbon, borderRadius: radius.xl, padding: spacing.xl, marginBottom: spacing.xl,
-    overflow: 'hidden', ...elevation.e2,
-  },
-  carStripes: { position: 'absolute', right: spacing.lg, top: spacing.lg, opacity: 0.16 },
+  carCard: { ...noirSurface, padding: spacing.xl, marginBottom: spacing.xl, overflow: 'hidden' },
+  carRule: { position: 'absolute', top: 0, left: 0, right: 0 },
   savedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
   savedIcon: {
-    width: 52, height: 52, borderRadius: radius.lg, backgroundColor: colors.green,
+    width: 52, height: 52, borderRadius: 26, backgroundColor: noir.green, borderWidth: 1.5, borderColor: noir.gold,
     alignItems: 'center', justifyContent: 'center',
   },
-  carMake: { ...type.h1, color: colors.white },
-  carModel: { ...type.body, color: colors.onDarkMuted },
+  carModel: { ...type.bodyNoir, color: noir.textMuted },
   clear: { marginTop: spacing.md, alignSelf: 'center', padding: spacing.xs },
-  clearText: { fontFamily: font.medium, fontSize: 13, color: colors.onDarkMuted, textDecorationLine: 'underline' },
+  clearText: { fontFamily: font.medium, fontSize: 13, color: noir.textMuted, textDecorationLine: 'underline' },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   makeTile: {
-    height: 64, borderRadius: radius.lg, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line,
-    alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: spacing.xs, ...elevation.e1,
+    ...noirSurface, height: 64, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: spacing.xs,
   },
-  makeText: { fontFamily: font.semibold, fontSize: 12.5, color: colors.ink },
-  tileOn: { backgroundColor: colors.greenFaint, borderColor: colors.green, borderWidth: 1.5 },
-  tileTextOn: { color: colors.green },
+  makeText: { fontFamily: font.semibold, fontSize: 12.5, color: noir.text },
+  tileOn: { borderColor: noir.gold, backgroundColor: noir.goldFaint },
+  tileTextOn: { color: noir.text },
   tick: {
     position: 'absolute', top: 6, right: 6, width: 16, height: 16, borderRadius: 8,
-    backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: noir.gold, alignItems: 'center', justifyContent: 'center',
   },
   modelPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.white, borderRadius: radius.pill,
-    borderWidth: 1, borderColor: colors.line, paddingLeft: spacing.lg, paddingRight: spacing.md, height: 40,
+    ...noirSurface, flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingLeft: spacing.lg, paddingRight: spacing.md, height: 40,
   },
-  modelText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
+  modelText: { fontFamily: font.medium, fontSize: 13.5, color: noir.text },
 
   help: {
     flexDirection: 'row', gap: spacing.md, alignItems: 'center', marginTop: spacing.xl, padding: spacing.lg,
-    backgroundColor: colors.greenFaint, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: noir.hairline, borderRadius: radius.square,
   },
-  helpIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
+  helpIcon: {
+    width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: noir.goldLine, alignItems: 'center', justifyContent: 'center',
+  },
 });

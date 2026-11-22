@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors, font, spacing, type } from '../src/theme';
+import { font, noir, spacing, type } from '../src/theme';
 import { PremiumButton, PressScale } from '../src/ui';
 import { AuthShell, Field, FormMessage } from '../src/account/AuthShell';
 import { useApp } from '../src/store';
@@ -55,7 +55,7 @@ export default function RegisterScreen() {
 
       <FormMessage text={error} tone="error" />
 
-      <PremiumButton label="Create account" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
+      <PremiumButton label="Create account" onPress={submit} loading={busy} iconRight="arrow-forward" variant="noir" full style={{ marginTop: spacing.sm }} />
 
       <Text style={s.legal}>By continuing you agree to our Terms and Privacy Policy.</Text>
 
@@ -70,8 +70,8 @@ export default function RegisterScreen() {
 }
 
 const s = StyleSheet.create({
-  legal: { ...type.tiny, color: colors.muted, textAlign: 'center', marginTop: spacing.md },
-  linkText: { fontFamily: font.semibold, fontSize: 14, color: colors.green },
+  legal: { ...type.tiny, color: noir.textFaint, textAlign: 'center', marginTop: spacing.md },
+  linkText: { fontFamily: font.semibold, fontSize: 14, color: noir.gold },
   footer: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: spacing.xxl },
-  footText: { ...type.small, color: colors.muted },
+  footText: { ...type.smallNoir },
 });

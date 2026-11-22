@@ -10,8 +10,8 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOrders, type Order } from '../src/api/account';
 import { Photo } from '../src/components/ui';
-import { colors, elevation, font, inr, radius, spacing, type } from '../src/theme';
-import { EmptyState, ErrorState, ListSkeleton } from '../src/ui';
+import { font, inr, noir, noirSurface, radius, spacing, type } from '../src/theme';
+import { EmptyState, ErrorState, ListSkeleton, SerifTitle } from '../src/ui';
 import { useApp } from '../src/store';
 
 const STATUS: Record<string, { label: string; tone: 'green' | 'amber' | 'grey' | 'red' }> = {
@@ -24,10 +24,10 @@ const STATUS: Record<string, { label: string; tone: 'green' | 'amber' | 'grey' |
 };
 
 const TONES = {
-  green: { bg: colors.greenSoft, fg: colors.green },
-  amber: { bg: colors.goldSoft, fg: colors.ink2 },
-  grey: { bg: colors.page, fg: colors.muted },
-  red: { bg: colors.redSoft, fg: colors.red },
+  green: { bg: noir.greenWash, fg: noir.text, dot: noir.greenText },
+  amber: { bg: noir.goldFaint, fg: noir.text, dot: noir.gold },
+  grey: { bg: noir.page, fg: noir.textMuted, dot: noir.textFaint },
+  red: { bg: noir.page, fg: noir.sale, dot: noir.sale },
 };
 
 /** Where each status sits on the delivery timeline; absent = no timeline (returned/cancelled). */
@@ -44,7 +44,7 @@ function Timeline({ stage }: { stage: number }) {
             <View style={s.tlTrack}>
               <View style={[s.tlLine, { opacity: i === 0 ? 0 : 1 }, i <= stage && s.tlLineOn]} />
               <View style={[s.tlDot, on && s.tlDotOn, i === stage && s.tlDotNow]}>
-                {on && i < stage && <Ionicons name="checkmark" size={9} color={colors.white} />}
+                {on && i < stage && <Ionicons name="checkmark" size={9} color={noir.text} />}
               </View>
               <View style={[s.tlLine, { opacity: i === STAGES.length - 1 ? 0 : 1 }, i < stage && s.tlLineOn]} />
             </View>
@@ -69,11 +69,11 @@ function OrderCard({ order }: { order: Order }) {
       <View style={s.head}>
         <View>
           <Text style={s.overline}>Order</Text>
-          <Text style={s.code}>{order.code}</Text>
+          <SerifTitle size="section">{order.code}</SerifTitle>
           <Text style={s.when}>{when}</Text>
         </View>
         <View style={[s.pill, { backgroundColor: tone.bg }]}>
-          <View style={[s.pillDot, { backgroundColor: tone.fg }]} />
+          <View style={[s.pillDot, { backgroundColor: tone.dot }]} />
           <Text style={[s.pillText, { color: tone.fg }]}>{status.label}</Text>
         </View>
       </View>
@@ -112,6 +112,7 @@ export default function OrdersScreen() {
           title="Sign in to see your orders"
           body="Your order history and tracking live in your account."
           action={{ label: 'Sign in', onPress: () => router.push('/login?next=/orders') }}
+          onDark
         />
       </View>
     );
@@ -120,7 +121,7 @@ export default function OrdersScreen() {
   if (orders.isLoading) {
     return (
       <View style={s.screen}>
-        <ListSkeleton rows={4} thumb={56} />
+        <ListSkeleton rows={4} thumb={56} dark />
       </View>
     );
   }
@@ -128,7 +129,7 @@ export default function OrdersScreen() {
   if (orders.error) {
     return (
       <View style={s.screen}>
-        <ErrorState error={orders.error} onRetry={() => orders.refetch()} />
+        <ErrorState error={orders.error} onRetry={() => orders.refetch()} onDark />
       </View>
     );
   }
@@ -141,6 +142,7 @@ export default function OrdersScreen() {
           title="No orders yet"
           body="When you place an order it will appear here."
           action={{ label: 'Start shopping', onPress: () => router.push('/(tabs)/shop') }}
+          onDark
         />
       </View>
     );
@@ -154,7 +156,7 @@ export default function OrdersScreen() {
       contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={orders.isFetching} onRefresh={() => { orders.refetch(); }} tintColor={colors.green} colors={[colors.green]} />
+        <RefreshControl refreshing={orders.isFetching} onRefresh={() => { orders.refetch(); }} tintColor={noir.gold} colors={[noir.green]} />
       }
       renderItem={({ item }) => <OrderCard order={item} />}
     />
@@ -162,42 +164,41 @@ export default function OrdersScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  card: {
-    backgroundColor: colors.white, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.line,
-    padding: spacing.lg, gap: spacing.md, ...elevation.e1,
-  },
+  screen: { flex: 1, backgroundColor: noir.page },
+  card: { ...noirSurface, padding: spacing.lg, gap: spacing.md },
   head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  overline: { ...type.overline, fontSize: 10 },
-  code: { fontFamily: font.heading, fontSize: 16, color: colors.ink },
-  when: { ...type.caption, color: colors.muted },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
+  overline: { ...type.capsNoir },
+  when: { ...type.smallNoir, fontSize: 12, color: noir.textFaint },
+  pill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 5,
+    borderRadius: radius.square, borderWidth: 1, borderColor: noir.hairlineStrong,
+  },
   pillDot: { width: 6, height: 6, borderRadius: 3 },
-  pillText: { fontFamily: font.semibold, fontSize: 11.5 },
+  pillText: { fontFamily: font.heading, fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },
 
   timeline: { flexDirection: 'row', paddingVertical: spacing.xs },
   tlStep: { flex: 1, alignItems: 'center', gap: 6 },
   tlTrack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' },
-  tlLine: { flex: 1, height: 2, backgroundColor: colors.line },
-  tlLineOn: { backgroundColor: colors.green },
+  tlLine: { flex: 1, height: 1, backgroundColor: noir.hairlineStrong },
+  tlLineOn: { backgroundColor: noir.gold },
   tlDot: {
-    width: 16, height: 16, borderRadius: 8, backgroundColor: colors.white, borderWidth: 2, borderColor: colors.line,
+    width: 16, height: 16, borderRadius: 8, backgroundColor: noir.page, borderWidth: 1.5, borderColor: noir.hairlineStrong,
     alignItems: 'center', justifyContent: 'center',
   },
-  tlDotOn: { backgroundColor: colors.green, borderColor: colors.green },
-  tlDotNow: { borderColor: colors.greenSoft, borderWidth: 3, width: 18, height: 18, borderRadius: 9 },
-  tlLabel: { ...type.tiny, color: colors.steel },
-  tlLabelOn: { fontFamily: font.semibold, color: colors.ink },
+  tlDotOn: { backgroundColor: noir.green, borderColor: noir.gold },
+  tlDotNow: { borderWidth: 2.5, width: 18, height: 18, borderRadius: 9 },
+  tlLabel: { fontFamily: font.medium, fontSize: 10.5, color: noir.textFaint },
+  tlLabelOn: { fontFamily: font.semibold, color: noir.text },
 
   item: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  itemImage: { width: 52, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line },
-  itemName: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
-  itemMeta: { ...type.caption, color: colors.muted },
-  more: { ...type.caption, color: colors.muted },
+  itemImage: { width: 52, height: 52, borderRadius: radius.square },
+  itemName: { fontFamily: font.serif, fontSize: 14, color: noir.text },
+  itemMeta: { ...type.smallNoir, fontSize: 12, color: noir.textFaint },
+  more: { ...type.smallNoir, fontSize: 12, color: noir.textFaint },
   foot: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: noir.goldLine, paddingTop: spacing.md,
   },
-  footLabel: { ...type.small, color: colors.muted },
-  total: { fontFamily: font.heading, fontSize: 17, color: colors.ink },
+  footLabel: { ...type.capsNoir, color: noir.textMuted },
+  total: { fontFamily: font.heading, fontSize: 17, color: noir.text },
 });

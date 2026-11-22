@@ -19,8 +19,8 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
 import { Photo } from '../src/components/ui';
-import { colors, elevation, font, inr, radius, spacing, type } from '../src/theme';
-import { Card, EmptyState, Overline, PremiumButton } from '../src/ui';
+import { colors, font, inr, noir, radius, spacing, type } from '../src/theme';
+import { Card, EmptyState, GoldRule, Overline, PremiumButton, SerifTitle } from '../src/ui';
 import { useApp } from '../src/store';
 
 interface Address {
@@ -193,6 +193,7 @@ export default function CheckoutScreen() {
             title="Thank you — your order is placed"
             body="We have emailed your confirmation. You can follow it in My orders."
             action={{ label: 'View my orders', onPress: () => router.replace('/orders') }}
+            onDark
           />
         </View>
       </>
@@ -208,6 +209,7 @@ export default function CheckoutScreen() {
             icon="bag-handle-outline"
             title="Your cart is empty"
             action={{ label: 'Start shopping', onPress: () => router.replace('/(tabs)/shop') }}
+            onDark
           />
         </View>
       </>
@@ -225,25 +227,25 @@ export default function CheckoutScreen() {
               <View key={label} style={s.step}>
                 <View style={[s.stepDot, i <= 1 && s.stepDotOn]}>
                   {i === 0 ? (
-                    <Ionicons name="checkmark" size={12} color={colors.white} />
+                    <Ionicons name="checkmark" size={12} color={noir.text} />
                   ) : (
-                    <Text style={[s.stepNum, i <= 1 && { color: colors.white }]}>{i + 1}</Text>
+                    <Text style={[s.stepNum, i <= 1 && { color: noir.text }]}>{i + 1}</Text>
                   )}
                 </View>
-                <Text style={[s.stepLabel, i <= 1 && { color: colors.ink }]}>{label}</Text>
-                {i < 2 && <View style={[s.stepLine, i === 0 && { backgroundColor: colors.green }]} />}
+                <Text style={[s.stepLabel, i <= 1 && { color: noir.text }]}>{label}</Text>
+                {i < 2 && <View style={[s.stepLine, i === 0 && { backgroundColor: noir.greenText }]} />}
               </View>
             ))}
           </View>
 
-          <Card>
+          <Card tone="noir">
             <View style={s.cardHead}>
               <View style={s.cardIcon}>
-                <Ionicons name="location-outline" size={18} color={colors.green} />
+                <Ionicons name="location-outline" size={18} color={noir.greenText} />
               </View>
               <View>
-                <Overline>Step 2</Overline>
-                <Text style={type.h3}>Delivery address</Text>
+                <Overline noir>Step 2</Overline>
+                <SerifTitle size="section" italicLast>Delivery address</SerifTitle>
               </View>
             </View>
             <View style={{ marginTop: spacing.lg }}>
@@ -265,8 +267,8 @@ export default function CheckoutScreen() {
                     onBlur={() => setFocused((f) => (f === key ? null : f))}
                     style={[s.input, focused === key && s.inputFocus]}
                     placeholder={placeholder}
-                    placeholderTextColor={colors.steel}
-                    selectionColor={colors.green}
+                    placeholderTextColor={noir.textFaint}
+                    selectionColor={noir.gold}
                     keyboardType={key === 'phone' || key === 'postalCode' ? 'number-pad' : 'default'}
                     maxLength={key === 'postalCode' ? 6 : key === 'phone' ? 16 : 120}
                     accessibilityLabel={label}
@@ -276,14 +278,14 @@ export default function CheckoutScreen() {
             </View>
           </Card>
 
-          <Card style={{ marginTop: spacing.lg }}>
+          <Card tone="noir" style={{ marginTop: spacing.lg }}>
             <View style={s.cardHead}>
               <View style={s.cardIcon}>
-                <Ionicons name="receipt-outline" size={18} color={colors.green} />
+                <Ionicons name="receipt-outline" size={18} color={noir.greenText} />
               </View>
               <View>
-                <Overline>Review</Overline>
-                <Text style={type.h3}>Order summary</Text>
+                <Overline noir>Review</Overline>
+                <SerifTitle size="section" italicLast>Order summary</SerifTitle>
               </View>
             </View>
             {cart.items.map((i) => (
@@ -301,7 +303,7 @@ export default function CheckoutScreen() {
               <Text style={s.sumTotalValue}>{inr(cart.totalPrice)}</Text>
             </View>
             <View style={s.secure}>
-              <Ionicons name="lock-closed" size={13} color={colors.green} />
+              <Ionicons name="lock-closed" size={13} color={noir.greenText} />
               <Text style={s.secureText}>
                 Delivery and taxes are added by our server on the payment screen. You always pay the amount Razorpay shows.
               </Text>
@@ -310,13 +312,14 @@ export default function CheckoutScreen() {
 
           {!!error && (
             <View style={s.errorBox} accessibilityLiveRegion="polite">
-              <Ionicons name="alert-circle" size={18} color={colors.red} />
+              <Ionicons name="alert-circle" size={18} color={noir.sale} />
               <Text style={s.error}>{error}</Text>
             </View>
           )}
         </ScrollView>
 
         <View style={[s.bar, { paddingBottom: insets.bottom + spacing.md }]}>
+          <GoldRule style={s.barRule} />
           <View style={s.barRow}>
             <Text style={s.barLabel}>Subtotal</Text>
             <Text style={s.barTotal}>{inr(cart.totalPrice)}</Text>
@@ -327,11 +330,11 @@ export default function CheckoutScreen() {
             loading={busy}
             disabled={missing.length > 0}
             icon="lock-closed"
-            variant="green"
+            variant="noir"
             full
           />
           <View style={s.barTrust}>
-            <Ionicons name="shield-checkmark-outline" size={12} color={colors.muted} />
+            <Ionicons name="shield-checkmark-outline" size={12} color={noir.textFaint} />
             <Text style={s.barTrustText}>Secured by Razorpay · UPI, cards, netbanking</Text>
           </View>
         </View>
@@ -357,64 +360,64 @@ export default function CheckoutScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: noir.page },
 
   steps: { flexDirection: 'row', marginBottom: spacing.lg, paddingHorizontal: spacing.xs },
   step: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   stepDot: {
-    width: 22, height: 22, borderRadius: 11, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.chrome,
+    width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: noir.hairlineStrong,
     alignItems: 'center', justifyContent: 'center',
   },
-  stepDotOn: { backgroundColor: colors.green, borderColor: colors.green },
-  stepNum: { fontFamily: font.bold, fontSize: 11, color: colors.muted },
-  stepLabel: { fontFamily: font.semibold, fontSize: 12, color: colors.muted },
-  stepLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: colors.line, marginHorizontal: 4 },
+  stepDotOn: { backgroundColor: noir.green, borderColor: noir.gold },
+  stepNum: { fontFamily: font.bold, fontSize: 11, color: noir.textFaint },
+  stepLabel: { ...type.capsNoir, color: noir.textFaint },
+  stepLine: { flex: 1, height: 1, backgroundColor: noir.hairlineStrong, marginHorizontal: 4 },
 
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   cardIcon: {
-    width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.greenSoft,
+    width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: noir.goldLine,
     alignItems: 'center', justifyContent: 'center',
   },
 
-  label: { fontFamily: font.semibold, fontSize: 12.5, color: colors.ink2, marginBottom: 6 },
+  label: { ...type.capsNoir, color: noir.textMuted, marginBottom: 6 },
   input: {
-    backgroundColor: colors.page, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: noir.page, borderRadius: radius.square, borderWidth: 1, borderColor: noir.hairlineStrong,
     paddingHorizontal: spacing.md, height: 50, fontFamily: font.regular, fontSize: 15,
-    color: colors.ink, marginBottom: spacing.md,
+    color: noir.text, marginBottom: spacing.md,
   },
-  inputFocus: { backgroundColor: colors.white, borderColor: colors.green, borderWidth: 1.5 },
+  inputFocus: { borderColor: noir.gold },
 
   sumRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
-  sumImage: { width: 48, height: 48, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.line },
-  sumName: { fontFamily: font.medium, fontSize: 13.5, lineHeight: 18, color: colors.ink },
-  sumQty: { ...type.caption, color: colors.muted },
-  sumValue: { fontFamily: font.semibold, fontSize: 14, color: colors.ink },
+  sumImage: { width: 48, height: 48, borderRadius: radius.square },
+  sumName: { fontFamily: font.serif, fontSize: 14, lineHeight: 18, color: noir.text },
+  sumQty: { ...type.smallNoir, fontSize: 12, color: noir.textFaint },
+  sumValue: { fontFamily: font.semibold, fontSize: 14, color: noir.text },
   sumTotal: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.lg,
-    paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.line,
+    paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: noir.goldLine,
   },
-  sumTotalLabel: { fontFamily: font.semibold, fontSize: 15, color: colors.ink },
-  sumTotalValue: { fontFamily: font.heading, fontSize: 18, color: colors.ink },
+  sumTotalLabel: { ...type.capsNoir, color: noir.textMuted },
+  sumTotalValue: { fontFamily: font.heading, fontSize: 18, color: noir.text },
   secure: {
     flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginTop: spacing.md,
-    padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.greenFaint,
+    padding: spacing.md, borderRadius: radius.square, borderWidth: 1, borderColor: noir.hairline,
   },
-  secureText: { ...type.caption, color: colors.ink2, flex: 1 },
+  secureText: { ...type.smallNoir, fontSize: 12, flex: 1 },
 
   errorBox: {
     flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginTop: spacing.lg,
-    padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.redSoft,
+    padding: spacing.md, borderRadius: radius.square, borderWidth: 1, borderColor: noir.sale,
   },
-  error: { fontFamily: font.medium, fontSize: 13, color: colors.red, lineHeight: 19, flex: 1 },
+  error: { fontFamily: font.medium, fontSize: 13, color: noir.text, lineHeight: 19, flex: 1 },
 
   bar: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white,
-    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
-    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md, ...elevation.e3,
+    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: noir.glassStrong,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md,
   },
+  barRule: { position: 'absolute', top: 0, left: 0, right: 0 },
   barRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  barLabel: { fontFamily: font.semibold, fontSize: 14, color: colors.ink2 },
-  barTotal: { fontFamily: font.extrabold, fontSize: 20, color: colors.ink },
+  barLabel: { ...type.capsNoir, color: noir.textMuted },
+  barTotal: { fontFamily: font.extrabold, fontSize: 20, color: noir.text },
   barTrust: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
-  barTrustText: { ...type.tiny, color: colors.muted },
+  barTrustText: { fontFamily: font.medium, fontSize: 11, color: noir.textFaint },
 });
