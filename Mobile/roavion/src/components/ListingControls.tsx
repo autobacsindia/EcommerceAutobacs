@@ -13,15 +13,20 @@
  * disappears when it would return nothing — so no filter can lead to an empty
  * grid, and "Bushranger 14" means fourteen.
  *
+ * ── Presentation (2026-11-22) ────────────────────────────────────────────────
+ * Sort and filter open as bottom sheets (the shared `Sheet`) instead of
+ * panels pushed into the list, so the grid never jumps under the customer.
+ *
  * ── Why everything is multi-select except price ─────────────────────────────
  * Brands and ratings are unions: a customer comparing Ironman and Bushranger
  * wants both, and single-select would make them look twice. Price is a single
  * range because two disjoint price windows is not a thing anyone shops for.
  */
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Facets } from '../api/catalogue';
 import { colors, font, inr, radius, spacing } from '../theme';
+import { PremiumButton, PressScale, Sheet, StripeLoader } from '../ui';
 
 export const SORTS = [
   { key: '', label: 'Relevance' },
@@ -70,64 +75,93 @@ export function ListingToolbar({
   onToggleFilter: () => void;
 }) {
   const count = activeFilterCount(filters);
+  const sortLabel = SORTS.find((x) => x.key === filters.sort)?.label;
   return (
     <View style={s.toolbar}>
-      <Text style={s.count}>{total} {total === 1 ? 'product' : 'products'}</Text>
+      <Text style={s.count}>
+        <Text style={s.countNum}>{total}</Text> {total === 1 ? 'product' : 'products'}
+      </Text>
       <View style={s.toolbarBtns}>
-        <Pressable onPress={onToggleFilter} style={[s.pill, count > 0 && s.pillOn]} accessibilityRole="button" accessibilityLabel="Filter">
-          <Ionicons name="options-outline" size={15} color={count > 0 ? colors.green : colors.ink2} />
+        <PressScale onPress={onToggleSort} haptic="selection" style={[s.pill, !!filters.sort && s.pillOn]} accessibilityLabel={`Sort: ${sortLabel ?? 'Relevance'}`}>
+          <Ionicons name="swap-vertical" size={15} color={filters.sort ? colors.white : colors.ink} />
+          <Text style={[s.pillText, !!filters.sort && s.pillTextOn]} numberOfLines={1}>{filters.sort ? sortLabel : 'Sort'}</Text>
+        </PressScale>
+        <PressScale onPress={onToggleFilter} haptic="selection" style={[s.pill, count > 0 && s.pillOn]} accessibilityLabel={count ? `Filter, ${count} on` : 'Filter'}>
+          <Ionicons name="options-outline" size={15} color={count > 0 ? colors.white : colors.ink} />
           <Text style={[s.pillText, count > 0 && s.pillTextOn]}>Filter</Text>
           {count > 0 && (
             <View style={s.badge}>
               <Text style={s.badgeText}>{count}</Text>
             </View>
           )}
-        </Pressable>
-        <Pressable onPress={onToggleSort} style={s.pill} accessibilityRole="button" accessibilityLabel="Sort">
-          <Ionicons name="swap-vertical" size={15} color={colors.ink2} />
-          <Text style={s.pillText}>{SORTS.find((x) => x.key === filters.sort)?.label ?? 'Sort'}</Text>
-        </Pressable>
+        </PressScale>
       </View>
     </View>
   );
 }
 
-export function SortSheet({ sort, onPick }: { sort: string; onPick: (key: string) => void }) {
+export function SortSheet({
+  visible,
+  sort,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  sort: string;
+  onPick: (key: string) => void;
+  onClose: () => void;
+}) {
   return (
-    <View style={s.sheet}>
-      {SORTS.map((o) => (
-        <Pressable
-          key={o.key || 'relevance'}
-          onPress={() => onPick(o.key)}
-          style={s.option}
-          accessibilityRole="button"
-          accessibilityState={{ selected: sort === o.key }}
-        >
-          <Text style={[s.optionText, sort === o.key && s.optionOn]}>{o.label}</Text>
-          {sort === o.key && <Ionicons name="checkmark" size={16} color={colors.green} />}
-        </Pressable>
-      ))}
-    </View>
+    <Sheet visible={visible} onClose={onClose} title="Sort by">
+      {SORTS.map((o) => {
+        const on = sort === o.key;
+        return (
+          <PressScale
+            key={o.key || 'relevance'}
+            onPress={() => onPick(o.key)}
+            haptic="selection"
+            style={[s.option, on && s.optionRowOn]}
+            accessibilityState={{ selected: on }}
+          >
+            <Text style={[s.optionText, on && s.optionOn]}>{o.label}</Text>
+            <View style={[s.radio, on && s.radioOn]}>{on && <View style={s.radioDot} />}</View>
+          </PressScale>
+        );
+      })}
+    </Sheet>
   );
 }
 
 /** One tappable option with its count, used for brands and ratings alike. */
 function Choice({ label, count, on, onPress }: { label: string; count: number; on: boolean; onPress: () => void }) {
   return (
-    <Pressable
+    <PressScale
       onPress={onPress}
+      haptic="selection"
       style={[s.choice, on && s.choiceOn]}
-      accessibilityRole="button"
       accessibilityState={{ selected: on }}
       accessibilityLabel={`${label}, ${count} products`}
     >
+      {on && <Ionicons name="checkmark" size={14} color={colors.white} />}
       <Text style={[s.choiceText, on && s.choiceTextOn]} numberOfLines={1}>{label}</Text>
-      <Text style={[s.choiceCount, on && s.choiceTextOn]}>{count}</Text>
-    </Pressable>
+      <Text style={[s.choiceCount, on && s.choiceCountOn]}>{count}</Text>
+    </PressScale>
+  );
+}
+
+function Toggle({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  return (
+    <PressScale onPress={onPress} haptic="selection" scaleTo={0.99} style={s.toggleRow} accessibilityRole="switch" accessibilityState={{ checked: on }}>
+      <Text style={[s.optionText, on && s.optionOn]} numberOfLines={1}>{label}</Text>
+      <View style={[s.switch, on && s.switchOn]}>
+        <View style={[s.knob, on && s.knobOn]} />
+      </View>
+    </PressScale>
   );
 }
 
 export function FilterSheet({
+  visible,
   filters,
   facets,
   carLabel,
@@ -135,6 +169,7 @@ export function FilterSheet({
   onClear,
   onClose,
 }: {
+  visible: boolean;
   filters: Filters;
   /** Null while the first facet request is in flight. */
   facets: Facets | null;
@@ -150,124 +185,121 @@ export function FilterSheet({
   };
 
   const inStockFacet = facets?.availability.find((a) => a.value === 'in');
+  const count = activeFilterCount(filters);
 
   return (
-    <View style={s.sheet}>
-      <ScrollView style={s.sheetScroll} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-        {/* Fitment first: it is the app's whole premise, and it cuts the list hardest. */}
-        {carLabel && (
-          <>
-            <Text style={s.group}>Fitment</Text>
-            <Pressable
-              onPress={() => onChange({ ...filters, fitsMyCar: !filters.fitsMyCar })}
-              style={s.option}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: filters.fitsMyCar }}
-            >
-              <Text style={[s.optionText, filters.fitsMyCar && s.optionOn]} numberOfLines={1}>
-                Only parts that fit my {carLabel}
-              </Text>
-              <Ionicons
-                name={filters.fitsMyCar ? 'checkbox' : 'square-outline'}
-                size={20}
-                color={filters.fitsMyCar ? colors.green : colors.muted}
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="Filters"
+      footer={
+        <View style={s.actions}>
+          <PressScale onPress={onClear} haptic="selection" disabled={!count} style={s.clear}>
+            <Text style={[s.clearText, !count && { color: colors.chrome }]}>Clear all</Text>
+          </PressScale>
+          <PremiumButton
+            label={facets ? `Show ${facets.total} ${facets.total === 1 ? 'result' : 'results'}` : 'Show results'}
+            onPress={onClose}
+            style={{ flex: 1 }}
+            full
+          />
+        </View>
+      }
+    >
+      {!facets && (
+        <View style={s.loading}>
+          <StripeLoader label="Loading filters" />
+        </View>
+      )}
+
+      {/* Fitment first: it is the app's whole premise, and it cuts the list hardest. */}
+      {carLabel && (
+        <>
+          <Text style={s.group}>Fitment</Text>
+          <Toggle
+            label={`Only parts that fit my ${carLabel}`}
+            on={filters.fitsMyCar}
+            onPress={() => onChange({ ...filters, fitsMyCar: !filters.fitsMyCar })}
+          />
+        </>
+      )}
+
+      {!!facets?.brands.length && (
+        <>
+          <Text style={s.group}>Brand</Text>
+          <View style={s.choices}>
+            {facets.brands.slice(0, 20).map((b) => (
+              <Choice
+                key={b.value}
+                label={b.value}
+                count={b.count}
+                on={filters.brands.includes(b.value)}
+                onPress={() => onChange({ ...filters, brands: toggle(filters.brands, b.value) })}
               />
-            </Pressable>
-          </>
-        )}
+            ))}
+          </View>
+        </>
+      )}
 
-        {!!facets?.brands.length && (
-          <>
-            <Text style={s.group}>Brand</Text>
-            <View style={s.choices}>
-              {facets.brands.slice(0, 20).map((b) => (
-                <Choice
-                  key={b.value}
-                  label={b.value}
-                  count={b.count}
-                  on={filters.brands.includes(b.value)}
-                  onPress={() => onChange({ ...filters, brands: toggle(filters.brands, b.value) })}
-                />
-              ))}
-            </View>
-          </>
-        )}
-
-        <Text style={s.group}>
-          Price{facets?.price ? ` · ${inr(facets.price.min)} – ${inr(facets.price.max)}` : ''}
-        </Text>
-        <View style={s.range}>
+      <Text style={s.group}>
+        Price{facets?.price ? ` · ${inr(facets.price.min)} – ${inr(facets.price.max)}` : ''}
+      </Text>
+      <View style={s.range}>
+        <View style={s.inputWrap}>
+          <Text style={s.rupee}>₹</Text>
           <TextInput
             value={filters.minPrice != null ? String(filters.minPrice) : ''}
             onChangeText={(t) => setBound('minPrice', t)}
-            placeholder={facets?.price ? String(facets.price.min) : 'Min ₹'}
+            placeholder={facets?.price ? String(facets.price.min) : 'Min'}
             placeholderTextColor={colors.muted}
             keyboardType="number-pad"
             style={s.input}
             accessibilityLabel="Minimum price"
           />
-          <Text style={s.dash}>—</Text>
+        </View>
+        <Text style={s.dash}>to</Text>
+        <View style={s.inputWrap}>
+          <Text style={s.rupee}>₹</Text>
           <TextInput
             value={filters.maxPrice != null ? String(filters.maxPrice) : ''}
             onChangeText={(t) => setBound('maxPrice', t)}
-            placeholder={facets?.price ? String(facets.price.max) : 'Max ₹'}
+            placeholder={facets?.price ? String(facets.price.max) : 'Max'}
             placeholderTextColor={colors.muted}
             keyboardType="number-pad"
             style={s.input}
             accessibilityLabel="Maximum price"
           />
         </View>
-
-        {!!facets?.ratings.length && (
-          <>
-            <Text style={s.group}>Customer rating</Text>
-            <View style={s.choices}>
-              {facets.ratings.map((r) => (
-                <Choice
-                  key={r.value}
-                  label={`${r.value}★ & up`}
-                  count={r.count}
-                  on={filters.ratings.includes(r.value)}
-                  onPress={() => onChange({ ...filters, ratings: toggle(filters.ratings, r.value) })}
-                />
-              ))}
-            </View>
-          </>
-        )}
-
-        {!!inStockFacet && (
-          <>
-            <Text style={s.group}>Availability</Text>
-            <Pressable
-              onPress={() => onChange({ ...filters, inStock: !filters.inStock })}
-              style={s.option}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: filters.inStock }}
-            >
-              <Text style={[s.optionText, filters.inStock && s.optionOn]}>
-                In stock only ({inStockFacet.count})
-              </Text>
-              <Ionicons
-                name={filters.inStock ? 'checkbox' : 'square-outline'}
-                size={20}
-                color={filters.inStock ? colors.green : colors.muted}
-              />
-            </Pressable>
-          </>
-        )}
-      </ScrollView>
-
-      <View style={s.actions}>
-        <Pressable onPress={onClear} style={s.clear} accessibilityRole="button">
-          <Text style={s.clearText}>Clear all</Text>
-        </Pressable>
-        <Pressable onPress={onClose} style={s.apply} accessibilityRole="button">
-          <Text style={s.applyText}>
-            Show {facets ? facets.total : ''} {facets?.total === 1 ? 'result' : 'results'}
-          </Text>
-        </Pressable>
       </View>
-    </View>
+
+      {!!facets?.ratings.length && (
+        <>
+          <Text style={s.group}>Customer rating</Text>
+          <View style={s.choices}>
+            {facets.ratings.map((r) => (
+              <Choice
+                key={r.value}
+                label={`${r.value}★ & up`}
+                count={r.count}
+                on={filters.ratings.includes(r.value)}
+                onPress={() => onChange({ ...filters, ratings: toggle(filters.ratings, r.value) })}
+              />
+            ))}
+          </View>
+        </>
+      )}
+
+      {!!inStockFacet && (
+        <>
+          <Text style={s.group}>Availability</Text>
+          <Toggle
+            label={`In stock only (${inStockFacet.count})`}
+            on={filters.inStock}
+            onPress={() => onChange({ ...filters, inStock: !filters.inStock })}
+          />
+        </>
+      )}
+    </Sheet>
   );
 }
 
@@ -276,28 +308,32 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
   },
-  count: { fontFamily: font.medium, fontSize: 13, color: colors.muted },
-  toolbarBtns: { flexDirection: 'row', gap: spacing.sm },
+  count: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
+  countNum: { fontFamily: font.bold, color: colors.ink },
+  toolbarBtns: { flexDirection: 'row', gap: spacing.sm, flexShrink: 1 },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
+    height: 36,
+    maxWidth: 190,
     backgroundColor: colors.card,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
+    paddingHorizontal: spacing.md + 2,
     borderWidth: 1,
     borderColor: colors.line,
   },
-  pillOn: { borderColor: colors.green, backgroundColor: colors.greenFaint },
-  pillText: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink2 },
-  pillTextOn: { fontFamily: font.semibold, color: colors.green },
+  pillOn: { borderColor: colors.ink, backgroundColor: colors.ink },
+  pillText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13, color: colors.ink },
+  pillTextOn: { fontFamily: font.bold, color: colors.white },
   badge: {
-    minWidth: 17,
-    height: 17,
+    minWidth: 18,
+    height: 18,
     paddingHorizontal: 4,
     borderRadius: 9,
     backgroundColor: colors.green,
@@ -306,86 +342,75 @@ const s = StyleSheet.create({
   },
   badgeText: { fontFamily: font.bold, fontSize: 10, color: colors.white },
 
-  sheet: {
-    backgroundColor: colors.card,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-  },
-  // Capped so a department with twenty brands cannot push the grid off screen.
-  sheetScroll: { maxHeight: 360 },
+  loading: { paddingVertical: spacing.xl, alignItems: 'center' },
   group: {
-    fontFamily: font.semibold,
-    fontSize: 12,
-    color: colors.muted,
+    fontFamily: font.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.steel,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
   },
-  optionText: { flex: 1, fontFamily: font.regular, fontSize: 14, color: colors.ink2 },
-  optionOn: { fontFamily: font.semibold, color: colors.green },
+  optionRowOn: { backgroundColor: colors.greenFaint },
+  optionText: { flex: 1, fontFamily: font.regular, fontSize: 15, color: colors.ink2 },
+  optionOn: { fontFamily: font.bold, color: colors.ink },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.chrome, alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: colors.green },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.green },
 
-  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 44 },
+  switch: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.line, padding: 3, justifyContent: 'center' },
+  switchOn: { backgroundColor: colors.green },
+  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white },
+  knobOn: { alignSelf: 'flex-end' },
+
+  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     maxWidth: '100%',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    height: 38,
+    paddingHorizontal: spacing.md + 2,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.subtle,
+    backgroundColor: colors.card,
   },
-  choiceOn: { backgroundColor: colors.greenSoft, borderColor: colors.green },
-  choiceText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13, color: colors.ink2 },
-  choiceTextOn: { fontFamily: font.semibold, color: colors.green },
-  choiceCount: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted },
+  choiceOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  choiceText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
+  choiceTextOn: { fontFamily: font.bold, color: colors.white },
+  choiceCount: { fontFamily: font.regular, fontSize: 12, color: colors.muted },
+  choiceCountOn: { color: colors.onDarkMuted },
 
-  range: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  input: {
+  range: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  inputWrap: {
     flex: 1,
-    height: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 46,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.subtle,
-    fontFamily: font.regular,
-    fontSize: 14,
-    color: colors.ink,
+    backgroundColor: colors.page,
   },
-  dash: { fontFamily: font.regular, fontSize: 14, color: colors.muted },
+  rupee: { fontFamily: font.medium, fontSize: 15, color: colors.muted },
+  input: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink, padding: 0 },
+  dash: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
 
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-  },
-  clear: { paddingVertical: spacing.md, paddingHorizontal: spacing.md },
-  clearText: { fontFamily: font.medium, fontSize: 14, color: colors.muted },
-  apply: {
-    flex: 1,
-    height: 46,
-    borderRadius: radius.pill,
-    backgroundColor: colors.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  applyText: { fontFamily: font.semibold, fontSize: 15, color: colors.white },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  clear: { paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
+  clearText: { fontFamily: font.bold, fontSize: 14, color: colors.ink, textDecorationLine: 'underline' },
 });
