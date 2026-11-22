@@ -513,6 +513,11 @@ describe('listings: ownership, status gating, allow-list, rev', () => {
     const tooMany = await api.upload(`/listings/${id}/photos`, 'photo', [1, 2, 3, 4, 5].map((n) => png(`${n}.png`)));
     expect(tooMany.status).toBe(400);
     expect(tooMany.body.code).toBe('TOO_MANY_PHOTOS');
+    // The list signs only the cover photo (optimization pass); the detail view signs all.
+    const listed = (await api.get('/listings')).body.listings[0].images;
+    expect(listed[0].url).toMatch(/X-Amz-Signature=/);
+    expect(listed[1].url).toBeNull();
+    expect((await api.get(`/listings/${id}`)).body.listing.images[1].url).toMatch(/X-Amz-Signature=/);
     const photoId = up.body.listing.images[0].key.split('/').pop();
     const removed = await api.del(`/listings/${id}/photos/${photoId}`);
     expect(removed.body.listing.images).toHaveLength(1);

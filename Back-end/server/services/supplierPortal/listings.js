@@ -34,8 +34,9 @@ const isId = (v) => /^[a-f0-9]{24}$/i.test(String(v || ''));
 
 // ── views ────────────────────────────────────────────────────────────────────
 
-export async function viewsOf(rows) {
-  const urls = await signedUrlMap(rows);
+/** `coverOnly`: list rows carry a URL for the first photo only (others: url null). */
+export async function viewsOf(rows, { coverOnly = false } = {}) {
+  const urls = await signedUrlMap(rows, { coverOnly });
   const imageUrl = (key) => urls.get(key) ?? null;
   return rows.map((l) => toSupplierListingView(l, { imageUrl }));
 }
@@ -102,7 +103,7 @@ export async function list(ownerId, { cursor, status, limit } = {}) {
   const rows = await listings.listOwned(ownerId, { status: status || null, after, limit: size + 1 });
   const page = rows.slice(0, size);
   return {
-    listings: await viewsOf(page),
+    listings: await viewsOf(page, { coverOnly: true }),
     nextCursor: rows.length > size ? encodeCursor(page[page.length - 1]) : null,
   };
 }

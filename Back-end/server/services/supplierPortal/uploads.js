@@ -54,9 +54,14 @@ export const removeFiles = (refs = []) => Promise.all(refs.filter((r) => r?.key)
   publicId: r.key, provider: r.provider, resourceType: resourceTypeOf(r.contentType),
 })));
 
-/** key → short-lived URL for every image of these listings. Failures map to null. */
-export async function signedUrlMap(listings = []) {
-  const refs = listings.flatMap((l) => l?.images || []);
+/**
+ * key → short-lived URL for the images of these listings. Failures map to null.
+ * `coverOnly` signs just the first photo of each listing: presigning is ~0.2 ms
+ * of CPU per URL (measured), so a 50-row page × 6 photos cost ~63 ms per request
+ * for photos the list screen never shows.
+ */
+export async function signedUrlMap(listings = [], { coverOnly = false } = {}) {
+  const refs = listings.flatMap((l) => (coverOnly ? (l?.images || []).slice(0, 1) : (l?.images || [])));
   const entries = await Promise.all(refs.map(async (r) => {
     try {
       return [r.key, (await signedAttachmentUrl(r.key, resourceTypeOf(r.contentType), r)) || null];
