@@ -7,20 +7,48 @@ import { type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, elevation, font, inr, radius, spacing, type } from '../theme';
+import { colors, elevation, font, inr, noir, radius, spacing, type } from '../theme';
 import { PressScale, type HapticKind } from './motion';
 import { StripeLoader, Stripes } from './loaders';
+import { SerifTitle } from './noir';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
 // ── Overline ────────────────────────────────────────────────────────────────
 
+export type OverlineTone = 'green' | 'gold';
+
 /**
  * Letter-spaced caps above a title.
- *   <Overline>New arrivals</Overline>
- *   <Overline onDark>Shop the reel</Overline>
+ *   <Overline>New arrivals</Overline>                 // green, on light
+ *   <Overline onDark>Shop the reel</Overline>          // on-dark green
+ *   <Overline tone="gold">Profender</Overline>         // Heritage Noir: brand / hero overline
+ *   <Overline tone="green" noir>Watch & shop</Overline> // Heritage Noir: section overline
+ *
+ * `tone` switches to the Heritage Noir caps (Montserrat 600, 10pt, spacing 2.2).
  */
-export function Overline({ children, onDark, style }: { children: ReactNode; onDark?: boolean; style?: StyleProp<TextStyle> }) {
+export function Overline({
+  children,
+  onDark,
+  tone,
+  noir: isNoir,
+  style,
+}: {
+  children: ReactNode;
+  onDark?: boolean;
+  /** Heritage Noir caps in gold or on-dark green. */
+  tone?: OverlineTone;
+  /** Heritage Noir caps (green unless `tone`). */
+  noir?: boolean;
+  style?: StyleProp<TextStyle>;
+}) {
+  if (tone || isNoir) {
+    return (
+      <Text style={[type.capsNoir, { color: tone === 'gold' ? noir.gold : noir.greenText }, style]} numberOfLines={1}>
+        {children}
+      </Text>
+    );
+  }
   return (
     <Text style={[type.overline, onDark && { color: colors.greenOnDark }, style]} numberOfLines={1}>
       {children}
@@ -30,10 +58,14 @@ export function Overline({ children, onDark, style }: { children: ReactNode; onD
 
 // ── PremiumButton ───────────────────────────────────────────────────────────
 
-export type ButtonVariant = 'primary' | 'green' | 'outline' | 'ghost' | 'light' | 'outlineLight';
+export type ButtonVariant = 'primary' | 'green' | 'outline' | 'ghost' | 'light' | 'outlineLight' | 'noir' | 'noirOutline';
 
 const BTN: Record<ButtonVariant, { bg: string; fg: string; border: string; onDarkLoader: boolean }> = {
-  /** Ink-black pill — the default call to action ("Buy now", "Continue"). */
+  /** Heritage Noir primary — white fill, ink label ("BUY NOW", "SHOP NOW"). Use on carbon / photos. */
+  noir: { bg: noir.cta, fg: noir.ctaText, border: noir.cta, onDarkLoader: false },
+  /** Heritage Noir secondary — 1px white outline ("ADD TO CART", "FOLLOW"). */
+  noirOutline: { bg: 'transparent', fg: noir.text, border: noir.text, onDarkLoader: true },
+  /** Ink-black — the call to action on a LIGHT (not yet restyled) screen. */
   primary: { bg: colors.ink, fg: colors.white, border: colors.ink, onDarkLoader: true },
   /** Brand green — use for the one green action on a screen ("Add to cart", "Pay"). */
   green: { bg: colors.green, fg: colors.white, border: colors.green, onDarkLoader: true },
@@ -48,15 +80,19 @@ const BTN: Record<ButtonVariant, { bg: string; fg: string; border: string; onDar
 };
 
 const BTN_SIZE = {
-  sm: { h: 38, px: spacing.lg, fs: 13, icon: 16 },
-  md: { h: 50, px: spacing.xl, fs: 15, icon: 18 },
-  lg: { h: 56, px: spacing.xl, fs: 16, icon: 20 },
+  sm: { h: 36, px: spacing.lg, fs: 10.5, icon: 15 },
+  md: { h: 48, px: spacing.xl, fs: 12, icon: 17 },
+  lg: { h: 54, px: spacing.xl, fs: 13, icon: 18 },
 } as const;
 
 /**
- * The pill button.
+ * The square Heritage Noir button: uppercase Montserrat 700, letter-spaced,
+ * corner radius 2, 1px border. Every variant shares the shape; pick the
+ * colour by the background it sits on.
  *
- *   <PremiumButton label="Buy now" onPress={buy} />                 // ink-black
+ *   <PremiumButton label="Buy now" variant="noir" onPress={buy} />          // white on carbon (Heritage Noir primary)
+ *   <PremiumButton label="Add to cart" variant="noirOutline" onPress={add} />
+ *   <PremiumButton label="Buy now" onPress={buy} />                 // ink-black (light screens)
  *   <PremiumButton label="Add to cart" variant="green" icon="cart-outline" full />
  *   <PremiumButton label="See details" variant="outline" size="sm" />
  *   <PremiumButton label="Shop now" variant="light" />              // on a hero photo
@@ -95,7 +131,8 @@ export function PremiumButton({
   const off = !!disabled || !!loading;
   const p = BTN[variant];
   const z = BTN_SIZE[size];
-  const h = hapticKind === false ? undefined : hapticKind ?? (variant === 'primary' || variant === 'green' ? 'light' : undefined);
+  const h =
+    hapticKind === false ? undefined : hapticKind ?? (variant === 'primary' || variant === 'green' || variant === 'noir' ? 'light' : undefined);
   return (
     <PressScale
       onPress={onPress}
@@ -116,7 +153,7 @@ export function PremiumButton({
       ) : (
         <>
           {icon && <Ionicons name={icon} size={z.icon} color={p.fg} />}
-          <Text style={[s.btnLabel, { color: p.fg, fontSize: z.fs }]} numberOfLines={1}>
+          <Text style={[type.ctaLabel, { color: p.fg, fontSize: z.fs }]} numberOfLines={1}>
             {label}
           </Text>
           {iconRight && <Ionicons name={iconRight} size={z.icon} color={p.fg} />}
@@ -213,29 +250,36 @@ export function GlassChip({
   /** Trailing green/white call-out after a dot ("Change"). */
   action?: string;
   onPress?: () => void;
-  tone?: 'dark' | 'light';
+  /** dark/light: round frosted pill. gold: square carbon glass with a gold hairline ("Watch in reels · 3"). */
+  tone?: 'dark' | 'light' | 'gold';
   style?: StyleProp<ViewStyle>;
 }) {
-  const fg = tone === 'dark' ? colors.white : colors.ink;
+  const dark = tone !== 'light';
+  const fg = dark ? colors.white : colors.ink;
   const inner = (
     <>
       {Platform.OS === 'ios' ? (
-        <BlurView intensity={40} tint={tone === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+        <BlurView intensity={40} tint={dark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
       ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: tone === 'dark' ? colors.glassDark : colors.glassLight }]} />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: dark ? colors.glassDark : colors.glassLight }]} />
       )}
-      {icon && <Ionicons name={icon} size={15} color={fg} />}
+      {icon && <Ionicons name={icon} size={15} color={tone === 'gold' ? noir.gold : fg} />}
       <Text style={[s.chipText, { color: fg }]} numberOfLines={1}>
         {label}
       </Text>
       {!!action && (
-        <Text style={[s.chipAction, { color: tone === 'dark' ? colors.greenOnDark : colors.green }]} numberOfLines={1}>
+        <Text style={[s.chipAction, { color: tone === 'gold' ? noir.gold : dark ? colors.greenOnDark : colors.green }]} numberOfLines={1}>
           · {action}
         </Text>
       )}
     </>
   );
-  const box = [s.glass, { borderColor: tone === 'dark' ? colors.onDarkFaint : colors.line }, style];
+  const box = [
+    s.glass,
+    { borderColor: tone === 'gold' ? noir.goldLine : dark ? colors.onDarkFaint : colors.line },
+    tone === 'gold' && { borderRadius: radius.square, borderWidth: 1 },
+    style,
+  ];
   if (!onPress) return <View style={box}>{inner}</View>;
   return (
     <PressScale onPress={onPress} haptic="selection" accessibilityLabel={action ? `${label}, ${action}` : label} style={box}>
@@ -293,7 +337,7 @@ export function Price({
       <View style={s.priceRow} accessibilityLabel={`Price ${inr(shown)}${was ? `, was ${inr(was)}` : ''}${off > 0 ? `, ${off}% off` : ''}`}>
         <Text style={[s.price, { fontSize: fs, color: main }, size === 'lg' && { fontFamily: font.heading }]}>{inr(shown)}</Text>
         {was != null && <Text style={[s.mrp, { color: sub, fontSize: Math.max(11, fs - 4) }]}>{inr(was)}</Text>}
-        {!hideOff && off > 0 && <Text style={[s.off, { fontSize: Math.max(11, fs - 4) }, onDark && { color: colors.white }]}>{off}% off</Text>}
+        {!hideOff && off > 0 && <Text style={[s.off, { fontSize: Math.max(11, fs - 4) }, onDark && { color: noir.greenText }]}>{off}% off</Text>}
       </View>
     </View>
   );
@@ -385,6 +429,8 @@ export function Badge({ text, tone = 'green', icon, style }: { text: string; ton
  *   <SectionHeader title="Fits your car" />
  *   <SectionHeader overline="Curated" title="Detailing essentials" actionLabel="See all" onAction={go} />
  *   <SectionHeader title="Shop the reel" onDark stripes />
+ *   <SectionHeader noir overline="Watch & shop" title="Shop the reel" italicLast actionLabel="See all" onAction={go} />
+ *     → Heritage Noir: green caps overline, Playfair title ("Shop the *reel*"), gold SEE ALL.
  *
  * Old call sites (`title`, `actionLabel`, `onAction`) keep working.
  */
@@ -397,9 +443,15 @@ export function SectionHeader({
   onDark,
   stripes,
   inset = true,
+  noir: isNoir,
+  italicLast,
   style,
 }: {
   title: string;
+  /** Heritage Noir: serif title, letter-spaced overline, gold SEE ALL. */
+  noir?: boolean;
+  /** Heritage Noir: set the title's last word in italic. */
+  italicLast?: boolean;
   overline?: string;
   subtitle?: string;
   actionLabel?: string;
@@ -411,6 +463,28 @@ export function SectionHeader({
   inset?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  if (isNoir) {
+    return (
+      <View style={[s.section, inset && { paddingHorizontal: spacing.lg }, style]}>
+        <View style={{ flex: 1 }}>
+          {!!overline && (
+            <Overline noir style={{ marginBottom: 3 }}>
+              {overline}
+            </Overline>
+          )}
+          <SerifTitle size="section" italicLast={italicLast} accessibilityRole="header" numberOfLines={2}>
+            {title}
+          </SerifTitle>
+          {!!subtitle && <Text style={[type.smallNoir, { marginTop: 2 }]}>{subtitle}</Text>}
+        </View>
+        {!!actionLabel && !!onAction && (
+          <PressScale onPress={onAction} hitSlop={12} haptic="selection" accessibilityLabel={`${actionLabel}: ${title}`} style={s.seeAll}>
+            <Text style={type.capsNoir}>{actionLabel}</Text>
+          </PressScale>
+        )}
+      </View>
+    );
+  }
   return (
     <View style={[s.section, inset && { paddingHorizontal: spacing.lg }, style]}>
       <View style={{ flex: 1 }}>
@@ -454,7 +528,8 @@ export function Card({
 }: {
   children: ReactNode;
   onPress?: () => void;
-  tone?: 'white' | 'carbon' | 'green';
+  /** noir = Heritage Noir surface (carbon-2, hairline, no shadow). */
+  tone?: 'white' | 'carbon' | 'green' | 'noir';
   padded?: boolean;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
@@ -463,6 +538,7 @@ export function Card({
     s.card,
     tone === 'carbon' && { backgroundColor: colors.carbon, borderColor: colors.carbon2 },
     tone === 'green' && { backgroundColor: colors.greenFaint, borderColor: colors.greenSoft, ...elevation.e0 },
+    tone === 'noir' && { backgroundColor: noir.surface, borderColor: noir.hairline, borderWidth: 1, ...elevation.e0 },
     padded && { padding: spacing.lg },
     style,
   ];
@@ -480,10 +556,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
+    borderRadius: radius.square,
+    borderWidth: 1,
   },
-  btnLabel: { fontFamily: font.semibold, letterSpacing: 0.1 },
 
   bubble: {
     minWidth: 18,
@@ -513,9 +588,9 @@ const s = StyleSheet.create({
   chipAction: { fontFamily: font.bold, fontSize: 13 },
 
   priceRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
-  price: { fontFamily: font.bold },
+  price: { fontFamily: font.heading, fontVariant: ['tabular-nums'] },
   mrp: { fontFamily: font.regular, textDecorationLine: 'line-through' },
-  off: { fontFamily: font.bold, color: colors.red },
+  off: { fontFamily: font.heading, color: colors.red },
   festive: { fontFamily: font.bold, fontSize: 11, letterSpacing: 0.3, marginBottom: 2 },
 
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },

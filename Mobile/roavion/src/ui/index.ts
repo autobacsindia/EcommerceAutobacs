@@ -28,7 +28,9 @@ export {
   Card,
   type ButtonVariant,
   type BadgeTone,
+  type OverlineTone,
 } from './primitives';
+export { Crest, SerifTitle, HeroScrim, GoldRule, Hairline, LineDots, SearchBar, type SerifSize } from './noir';
 export { Sheet } from './Sheet';
 export { ToastProvider, useToast, type ToastOptions } from './Toast';
 export { EmptyState, ErrorState, OfflineState, LoadingState, StateLayout, isOfflineError } from './states';

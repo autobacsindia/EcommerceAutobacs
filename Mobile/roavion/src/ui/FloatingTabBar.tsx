@@ -1,5 +1,7 @@
 /**
- * Floating ink-black pill tab bar with a raised green Reels button.
+ * Heritage Noir tab bar: frosted carbon pill (real blur on iOS), steel icons,
+ * gold active icon, and a raised racing-green Reels disc wrapped in a carbon +
+ * gold double ring.
  *
  *   <Tabs tabBar={(p) => <FloatingTabBar {...p} darkRoutes={['reels']} centerRoute="reels" />} …>
  *
@@ -15,12 +17,13 @@
  */
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform, StyleSheet, Text, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import type { Tabs } from 'expo-router';
-import { colors, elevation, font, radius } from '../theme';
+import { colors, elevation, font, noir, radius } from '../theme';
 import { PressScale, haptic } from './motion';
 import { CountBubble } from './primitives';
 
@@ -69,12 +72,15 @@ export function FloatingTabBar({
   const flat = StyleSheet.flatten(focusedOpts?.tabBarStyle) as { display?: string } | undefined;
   if (kb || flat?.display === 'none') return null;
 
-  const page = darkRoutes.includes(focused.name) ? colors.black : colors.bg;
+  // Heritage Noir: every page is dark; Reels (darkRoutes) is void black.
+  const onVoid = darkRoutes.includes(focused.name);
+  const page = onVoid ? noir.void : noir.page;
   const bottom = Math.max(insets.bottom, MIN_BOTTOM);
 
   return (
     <View style={{ backgroundColor: page, paddingTop: TOP, paddingBottom: bottom, paddingHorizontal: SIDE }}>
-      <View style={[s.pill, page === colors.black && s.pillOnBlack]} accessibilityRole="tablist">
+      <View style={s.pill} accessibilityRole="tablist">
+        {Platform.OS === 'ios' && <BlurView intensity={30} tint="dark" style={[StyleSheet.absoluteFill, s.blur]} />}
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = index === state.index;
@@ -94,15 +100,17 @@ export function FloatingTabBar({
           if (route.name === centerRoute) {
             return (
               <PressScale key={route.key} onPress={onPress} onLongPress={onLongPress} scaleTo={0.9} style={s.item} {...a11y}>
-                <View style={[s.centerRing, isFocused && elevation.glow]}>
+                <View style={[s.goldRing, isFocused && elevation.glow]}>
+                  <View style={s.carbonRing}>
                   <LinearGradient
                     colors={isFocused ? [colors.greenMid, colors.green] : [colors.green, colors.greenDeep]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={s.centerDisc}
                   >
-                    <Ionicons name={isFocused ? 'play' : 'play-outline'} size={22} color={colors.white} style={{ marginLeft: 2 }} />
+                    <Ionicons name="play" size={20} color={colors.white} style={{ marginLeft: 2 }} />
                   </LinearGradient>
+                  </View>
                 </View>
                 <Text style={[s.label, s.centerLabel, isFocused && s.labelOn]} numberOfLines={1}>
                   {label}
@@ -111,7 +119,7 @@ export function FloatingTabBar({
             );
           }
 
-          const color = isFocused ? colors.white : colors.chrome;
+          const color = isFocused ? noir.gold : noir.textFaint;
           const badge = typeof options.tabBarBadge === 'number' ? options.tabBarBadge : 0;
           return (
             <PressScale key={route.key} onPress={onPress} onLongPress={onLongPress} scaleTo={0.9} style={s.item} {...a11y}>
@@ -122,7 +130,6 @@ export function FloatingTabBar({
               <Text style={[s.label, isFocused && s.labelOn]} numberOfLines={1}>
                 {label}
               </Text>
-              <View style={[s.dot, isFocused && s.dotOn]} />
             </PressScale>
           );
         })}
@@ -137,23 +144,26 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: radius.pill,
-    backgroundColor: colors.ink,
+    // iOS: blur underneath shows through this translucent carbon; Android/web: the fill alone.
+    backgroundColor: Platform.OS === 'ios' ? noir.glass : noir.surface,
+    borderWidth: 1,
+    borderColor: noir.hairlineStrong,
     paddingHorizontal: 6,
     ...elevation.e3,
   },
-  pillOnBlack: { backgroundColor: colors.carbon2, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.onDarkFaint },
-  item: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center', gap: 2 },
-  label: { fontFamily: font.medium, fontSize: 10.5, color: colors.chrome, marginTop: 2 },
-  labelOn: { fontFamily: font.bold, color: colors.white },
+  blur: { borderRadius: radius.pill, overflow: 'hidden' },
+  item: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  label: { fontFamily: font.medium, fontSize: 10, letterSpacing: 0.3, color: noir.textFaint },
+  labelOn: { fontFamily: font.bold, color: noir.text },
   centerLabel: { marginTop: 0 },
-  dot: { width: 4, height: 4, borderRadius: 2, marginTop: 1, backgroundColor: 'transparent' },
-  dotOn: { backgroundColor: colors.greenOnDark },
   badge: { position: 'absolute', top: -6, right: -12 },
-  centerRing: {
-    marginTop: -26,
-    padding: 4,
-    borderRadius: 32,
-    backgroundColor: colors.ink,
+  // Double ring: 1px gold outside, 3px carbon inside, then the green disc.
+  goldRing: {
+    marginTop: -24,
+    padding: 1,
+    borderRadius: 30,
+    backgroundColor: noir.gold,
   },
-  centerDisc: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
+  carbonRing: { padding: 3, borderRadius: 29, backgroundColor: noir.page },
+  centerDisc: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
 });

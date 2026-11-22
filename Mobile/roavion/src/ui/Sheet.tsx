@@ -1,4 +1,7 @@
 /**
+ * Heritage Noir bottom sheet (carbon-2, square, gold top hairline, serif
+ * title). Put light-on-dark content inside: `noir.text`, `noir.textMuted`.
+ *
  * Bottom sheet — filter/sort, size pickers, "choose your car", share.
  *
  *   const [open, setOpen] = useState(false);
@@ -16,7 +19,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, elevation, font, motion, radius, spacing } from '../theme';
+import { elevation, motion, noir, radius, spacing, type } from '../theme';
 import { IconButton } from './primitives';
 
 export function Sheet({
@@ -69,7 +72,7 @@ export function Sheet({
 
   return (
     <Modal transparent visible statusBarTranslucent navigationBarTranslucent animationType="none" onRequestClose={onClose}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.scrim }, backdrop]}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: noir.backdrop }, backdrop]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
       </Animated.View>
       <Animated.View
@@ -79,10 +82,10 @@ export function Sheet({
         <View style={s.handle} />
         {!!title && (
           <View style={s.head}>
-            <Text style={s.title} accessibilityRole="header">
+            <Text style={type.serifSection} accessibilityRole="header">
               {title}
             </Text>
-            <IconButton icon="close" label="Close" onPress={onClose} tone="plain" size={36} />
+            <IconButton icon="close" label="Close" onPress={onClose} tone="plain" color={noir.text} size={36} />
           </View>
         )}
         {scroll ? (
@@ -104,13 +107,14 @@ const s = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    backgroundColor: noir.surface,
+    borderTopLeftRadius: radius.square,
+    borderTopRightRadius: radius.square,
+    borderTopWidth: 1,
+    borderTopColor: noir.goldLine,
     ...elevation.e3,
   },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, marginTop: 8, marginBottom: 4 },
+  handle: { alignSelf: 'center', width: 36, height: 3, backgroundColor: noir.hairlineStrong, marginTop: 8, marginBottom: 4 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: spacing.lg, paddingRight: spacing.sm, paddingVertical: spacing.sm },
-  title: { fontFamily: font.heading, fontSize: 18, color: colors.ink },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: noir.hairline },
 });

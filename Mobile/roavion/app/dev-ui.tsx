@@ -6,10 +6,18 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, Stack } from 'expo-router';
-import { colors, palette, spacing, type } from '../src/theme';
+import { colors, noir, palette, spacing, type } from '../src/theme';
 import {
   Badge,
   Card,
+  Crest,
+  GoldRule,
+  Hairline,
+  HeroScrim,
+  LineDots,
+  Overline,
+  SearchBar,
+  SerifTitle,
   EmptyState,
   GlassChip,
   IconButton,
@@ -38,6 +46,45 @@ export default function DevUi() {
     <>
       <Stack.Screen options={{ title: 'Design system' }} />
       <ScrollView contentContainerStyle={{ paddingVertical: spacing.lg, gap: spacing.xl }}>
+        {/* Heritage Noir */}
+        <View style={s.noir}>
+          <View style={s.hero}>
+            <HeroScrim style={{ backgroundColor: noir.green }} />
+            <View style={s.heroHead}>
+              <Crest />
+              <Text style={s.wordmark}>AUTOBACS</Text>
+              <Crest ring="gold" />
+            </View>
+            <View style={{ gap: spacing.sm }}>
+              <Overline tone="gold">The Heritage Collection</Overline>
+              <SerifTitle size="hero" italicLast>
+                Make it yours.
+              </SerifTitle>
+              <View style={s.heroFoot}>
+                <PremiumButton label="Shop now" variant="noir" size="sm" onPress={noop} />
+                <LineDots count={3} index={0} />
+              </View>
+            </View>
+          </View>
+          <View style={{ paddingHorizontal: spacing.lg, gap: spacing.lg }}>
+            <SearchBar onPress={noop} />
+            <SectionHeader noir inset={false} overline="Watch & shop" title="Shop the reel" italicLast actionLabel="See all" onAction={noop} />
+            <Card tone="noir">
+              <Overline tone="gold">Profender</Overline>
+              <SerifTitle size="product">Drift Series Suspension Kit</SerifTitle>
+              <Price price={112500} mrp={140625} onDark size="lg" style={{ marginTop: spacing.sm }} />
+            </Card>
+            <GoldRule />
+            <View style={s.row}>
+              <PremiumButton label="Add to cart" variant="noirOutline" onPress={noop} style={{ flex: 1 }} />
+              <PremiumButton label="Buy now" variant="noir" onPress={noop} style={{ flex: 1 }} />
+            </View>
+            <GoldRule label="Heritage" />
+            <Hairline />
+            <ProductCardSkeleton width={160} dark />
+            <PremiumButton label="Toast" variant="noirOutline" size="sm" onPress={() => toast.show({ message: 'Added to cart', tone: 'success' })} />
+          </View>
+        </View>
         <SectionHeader overline="Foundation" title="Palette" stripes />
         <View style={s.swatches}>
           {Object.entries(palette).map(([k, v]) => (
@@ -125,9 +172,9 @@ export default function DevUi() {
           <OfflineState onRetry={noop} />
         </View>
       </ScrollView>
-      <Sheet visible={sheet} onClose={() => setSheet(false)} title="Sort by" footer={<PremiumButton label="Show results" onPress={() => setSheet(false)} full />}>
+      <Sheet visible={sheet} onClose={() => setSheet(false)} title="Sort by" footer={<PremiumButton label="Show results" variant="noir" onPress={() => setSheet(false)} full />}>
         {['Recommended', 'Price: low to high', 'Price: high to low', 'Newest'].map((t) => (
-          <Text key={t} style={[type.body, { paddingVertical: spacing.md }]}>
+          <Text key={t} style={[type.bodyNoir, { paddingVertical: spacing.md }]}>
             {t}
           </Text>
         ))}
@@ -138,6 +185,11 @@ export default function DevUi() {
 
 const s = StyleSheet.create({
   pad: { paddingHorizontal: spacing.lg },
+  noir: { backgroundColor: noir.page, paddingBottom: spacing.xl, gap: spacing.lg },
+  hero: { height: 340, padding: spacing.lg, justifyContent: 'space-between' },
+  heroHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
+  wordmark: { ...type.serifSection, fontSize: 17, letterSpacing: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   dark: { backgroundColor: colors.carbon, paddingVertical: spacing.xl, gap: spacing.md, marginHorizontal: spacing.lg, borderRadius: 22 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, paddingHorizontal: spacing.lg },

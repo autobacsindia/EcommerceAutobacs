@@ -21,7 +21,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { colors, elevation, palette, radius, spacing, stripes as stripeColors } from '../theme';
+import { colors, elevation, noir, palette, radius, spacing, stripes as stripeColors } from '../theme';
 
 // ── Stripes (static accent) ─────────────────────────────────────────────────
 
@@ -179,8 +179,8 @@ export function Shimmer({
     transform: [{ translateX: interpolate(t.value, [0, 1], [-w, w]) }],
   }));
 
-  const base = dark ? colors.carbon2 : colors.skeleton;
-  const shine = dark ? colors.onDarkFaint : colors.skeletonSheen;
+  const base = dark ? noir.skeleton : colors.skeleton;
+  const shine = dark ? noir.skeletonSheen : colors.skeletonSheen;
 
   return (
     <View
@@ -204,54 +204,57 @@ export function Shimmer({
 }
 
 // ── skeleton layouts ────────────────────────────────────────────────────────
+// Every layout takes `dark` for Heritage Noir screens (carbon-2 blocks on the
+// carbon page, square, hairline). Default stays light for screens not yet
+// restyled.
 
 /** One product card while loading (rail width 172 by default). */
-export function ProductCardSkeleton({ width = 172 }: { width?: number }) {
+export function ProductCardSkeleton({ width = 172, dark }: { width?: number; dark?: boolean }) {
   return (
-    <View style={[sk.card, { width }]}>
-      <Shimmer width={width} height={Math.round(width * 0.86)} radius={0} />
+    <View style={[sk.card, dark && sk.cardDark, { width }]}>
+      <Shimmer width={width} height={Math.round(width * 0.86)} radius={0} dark={dark} />
       <View style={{ padding: spacing.md, gap: 6 }}>
-        <Shimmer width={60} height={9} />
-        <Shimmer width={width - 32} height={12} />
-        <Shimmer width={90} height={14} />
+        <Shimmer width={60} height={9} dark={dark} />
+        <Shimmer width={width - 32} height={12} dark={dark} />
+        <Shimmer width={90} height={14} dark={dark} />
       </View>
     </View>
   );
 }
 
 /** Two-column product grid (Shop, category, search). */
-export function ProductGridSkeleton({ count = 6, columnWidth }: { count?: number; columnWidth: number }) {
+export function ProductGridSkeleton({ count = 6, columnWidth, dark }: { count?: number; columnWidth: number; dark?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, padding: spacing.lg }}>
       {Array.from({ length: count }, (_, i) => (
-        <ProductCardSkeleton key={i} width={columnWidth} />
+        <ProductCardSkeleton key={i} width={columnWidth} dark={dark} />
       ))}
     </View>
   );
 }
 
 /** Horizontal rail of product cards (Home sections). */
-export function RailSkeleton({ count = 3 }: { count?: number }) {
+export function RailSkeleton({ count = 3, dark }: { count?: number; dark?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg }}>
       {Array.from({ length: count }, (_, i) => (
-        <ProductCardSkeleton key={i} />
+        <ProductCardSkeleton key={i} dark={dark} />
       ))}
     </View>
   );
 }
 
 /** List rows with a thumbnail (orders, cart, my reels). */
-export function ListSkeleton({ rows = 4, thumb = 64 }: { rows?: number; thumb?: number }) {
+export function ListSkeleton({ rows = 4, thumb = 64, dark }: { rows?: number; thumb?: number; dark?: boolean }) {
   return (
     <View style={{ padding: spacing.lg, gap: spacing.md }}>
       {Array.from({ length: rows }, (_, i) => (
-        <View key={i} style={[sk.row]}>
-          <Shimmer width={thumb} height={thumb} radius={radius.md} />
+        <View key={i} style={[sk.row, dark && sk.cardDark]}>
+          <Shimmer width={thumb} height={thumb} radius={radius.square} dark={dark} />
           <View style={{ flex: 1, gap: 8 }}>
-            <Shimmer width="70%" height={12} />
-            <Shimmer width="45%" height={10} />
-            <Shimmer width={80} height={14} />
+            <Shimmer width="70%" height={12} dark={dark} />
+            <Shimmer width="45%" height={10} dark={dark} />
+            <Shimmer width={80} height={14} dark={dark} />
           </View>
         </View>
       ))}
@@ -260,34 +263,39 @@ export function ListSkeleton({ rows = 4, thumb = 64 }: { rows?: number; thumb?: 
 }
 
 /** Product detail page: gallery, title, price, button. */
-export function ProductDetailSkeleton() {
+export function ProductDetailSkeleton({ dark }: { dark?: boolean }) {
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Shimmer width="100%" height={340} radius={0} />
+    <View style={{ flex: 1, backgroundColor: dark ? noir.page : colors.bg }}>
+      <Shimmer width="100%" height={340} radius={0} dark={dark} />
       <View style={{ padding: spacing.lg, gap: 10 }}>
-        <Shimmer width={90} height={10} />
-        <Shimmer width="85%" height={20} />
-        <Shimmer width="60%" height={20} />
-        <Shimmer width={120} height={12} style={{ marginTop: 4 }} />
-        <Shimmer width={150} height={26} style={{ marginTop: 8 }} />
-        <Shimmer width="100%" height={52} radius={radius.pill} style={{ marginTop: spacing.lg }} />
+        <Shimmer width={90} height={10} dark={dark} />
+        <Shimmer width="85%" height={20} dark={dark} />
+        <Shimmer width="60%" height={20} dark={dark} />
+        <Shimmer width={120} height={12} style={{ marginTop: 4 }} dark={dark} />
+        <Shimmer width={150} height={26} style={{ marginTop: 8 }} dark={dark} />
+        <Shimmer width="100%" height={48} radius={radius.square} style={{ marginTop: spacing.lg }} dark={dark} />
       </View>
     </View>
   );
 }
 
-/** Home: hero + section header + rail. */
-export function HomeSkeleton() {
+/** Home: hero + section header + rail. `dark` = full-bleed Heritage Noir hero. */
+export function HomeSkeleton({ dark }: { dark?: boolean }) {
   return (
-    <View style={{ gap: spacing.xl, paddingTop: spacing.lg }}>
-      <View style={{ paddingHorizontal: spacing.lg }}>
-        <Shimmer width="100%" height={200} radius={radius.xl} />
+    <View style={{ gap: spacing.xl, paddingTop: dark ? 0 : spacing.lg }}>
+      <View style={{ paddingHorizontal: dark ? 0 : spacing.lg }}>
+        <Shimmer width="100%" height={dark ? 372 : 200} radius={dark ? 0 : radius.xl} dark={dark} />
       </View>
+      {dark && (
+        <View style={{ paddingHorizontal: spacing.lg }}>
+          <Shimmer width="100%" height={46} radius={radius.square} dark />
+        </View>
+      )}
       <View style={{ paddingHorizontal: spacing.lg, gap: 8 }}>
-        <Shimmer width={80} height={9} />
-        <Shimmer width={180} height={18} />
+        <Shimmer width={80} height={9} dark={dark} />
+        <Shimmer width={180} height={18} dark={dark} />
       </View>
-      <RailSkeleton />
+      <RailSkeleton dark={dark} />
     </View>
   );
 }
@@ -301,6 +309,7 @@ const sk = StyleSheet.create({
     overflow: 'hidden',
     ...elevation.e1,
   },
+  cardDark: { backgroundColor: noir.surface, borderColor: noir.hairline, ...elevation.e0 },
   row: {
     flexDirection: 'row',
     gap: spacing.md,
