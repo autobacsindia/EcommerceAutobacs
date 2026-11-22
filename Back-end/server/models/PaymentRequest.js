@@ -58,6 +58,34 @@ const HistorySchema = new mongoose.Schema(
   { _id: false }
 );
 
+/*
+  One edit made before approval (services/paymentRequestService.js update): why,
+  who, when, and each field's old → new value as shown to people (₹ amounts,
+  names). Accounts reads these before approving. Never rewritten.
+*/
+const EditSchema = new mongoose.Schema(
+  {
+    at: { type: Date, required: true },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    byName: { type: String, default: '' },
+    role: { type: String, default: '' },
+    reason: { type: String, required: true, maxlength: 1000 },
+    // The status it was edited from: an on-hold or declined request goes back to accounts.
+    fromStatus: { type: String, default: '' },
+    changes: {
+      type: [new mongoose.Schema({
+        field: { type: String, required: true },
+        from: { type: String, default: '', maxlength: 300 },
+        to: { type: String, default: '', maxlength: 300 },
+      }, { _id: false })],
+      default: [],
+    },
+    // The form's one-time key: a double-submitted edit is saved once.
+    formKey: { type: String, default: undefined, maxlength: 64 },
+  },
+  { _id: false }
+);
+
 const PaymentRequestSchema = new mongoose.Schema(
   {
     // PR-0001 … from the 'payment_request' counter: what people quote on the phone.
@@ -238,6 +266,14 @@ const PaymentRequestSchema = new mongoose.Schema(
     decisionNote: { type: String, default: '', maxlength: 1000 },
 
     history: { type: [HistorySchema], default: [] },
+
+    // Bumped by every edit. Approve sends the rev it showed accounts, so an edit
+    // that lands first makes the approval fail ("changed — check it again")
+    // instead of approving figures nobody looked at. Old records have none (= 0).
+    rev: { type: Number, default: 0 },
+    // Set by the first edit after submitting: the lists' "Edited after submit" tag.
+    editedAt: { type: Date, default: null },
+    edits: { type: [EditSchema], default: [] },
   },
   { timestamps: true }
 );

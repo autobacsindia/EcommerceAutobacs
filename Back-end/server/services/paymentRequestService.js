@@ -118,27 +118,27 @@ const mayPay = (u) => isAdmin(u);
 const mayHold = (u) => mayDecide(u) || mayPay(u);
 
 /*
-  Editing. The person who raised a request (or their team head) may correct it,
-  with no time limit, while it still waits for accounts (an approved amount is not changed under
-  accounts' feet). The admin may edit anything not yet finished; if that changes
-  the money (amount or who is paid) on an approved / held request, it goes back
-  to accounts to approve again. Paid, declined and cancelled requests are
-  financial records and are never edited.
+  Editing (owner decision 2026-11-21, "edit until accounts or admin approves"):
+  only WHOEVER RAISED IT, or the admin, and only before approval —
+    submitted  edit in place; it stays waiting for accounts.
+    on_hold    edit (e.g. answer a queried bill); it goes back to accounts as submitted.
+    declined   edit and send again: the same PR goes back to accounts as submitted.
+               Not a supplier deal part or one that used supplier credit — declining
+               gave their share / credit back, so those are raised afresh.
+  Approved, paid and cancelled are locked. Every edit needs a reason and is kept
+  in `edits` (old → new); `rev` makes an edit and an approval at the same moment
+  end with exactly one of them landing (update + approve compare-and-set on it).
 */
-const EDITABLE = Object.freeze(['submitted', 'approved', 'on_hold']);
-/*
-  Who may edit (owner decision 2026-11-06, "edit everywhere for what we created"):
-  whoever raised it, their team head, or the admin — until it is PAID. Once accounts
-  has approved it, any change to the money or to who is paid sends it back to accounts
-  to approve again (update → backToAccounts); a wording-only change stays approved.
-  A paid request is locked: a wrong amount is corrected with a new entry, and the
-  admin can still correct the payment record (editPayment).
-*/
-const mayEdit = (u, r) => EDITABLE.includes(r.status) && (
-  isAdmin(u)
-  || idOf(r.requestedBy) === idOf(u?._id)
-  || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team)
-);
+const EDITABLE = Object.freeze(['submitted', 'on_hold', 'declined']);
+const resubmittable = (r) => r.status !== 'declined' || r.kind === 'expense' || (!r.deal && !r.credit?.amount);
+// A subscription / due expense ("Mark paid") is not edited here: its money follows the
+// item's own rules, and a declined one reopens the cycle to be marked paid again —
+// resending it as well could pay that cycle twice.
+const fromSubscription = (r) => Boolean(r.subscription?.item);
+const mayEdit = (u, r) => EDITABLE.includes(r.status) && resubmittable(r) && !fromSubscription(r)
+  && (isAdmin(u) || idOf(r.requestedBy) === idOf(u?._id));
+/** The compare-and-set clause for "still the version that was read" (old records have no rev). */
+const revIs = (rev) => ({ rev: Number(rev) > 0 ? Number(rev) : { $in: [0, null] } });
 
 /** Who may link / unlink a request to an order, project or reference: who raised it, their team head, accounts, the admin. */
 const mayLinkOrder = (u, r) => seesAll(u)
@@ -551,6 +551,14 @@ export function shape(r, viewer) {
     decisionNote: r.decisionNote || '',
     hold: holdOf(r),
     history: (r.history || []).map((h) => ({ at: h.at, byName: h.byName, role: h.role, action: h.action, note: h.note })),
+    // Changed after it was submitted: accounts sees the tag in lists and the full
+    // old → new history on the request before approving. Lists carry no `edits`.
+    rev: r.rev || 0,
+    editedAt: r.editedAt || null,
+    edits: r.edits ? r.edits.map((e) => ({
+      at: e.at, byName: e.byName, role: e.role, reason: e.reason, fromStatus: e.fromStatus || '',
+      changes: (e.changes || []).map((c) => ({ field: c.field, from: c.from, to: c.to })),
+    })) : undefined,
     createdAt: r.createdAt,
     approver: 'accounts',
     can: {
@@ -754,28 +762,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     ? deal.itemIds.map(idOf)
     : [...new Set((Array.isArray(input.itemIds) ? input.itemIds : [input.itemIds]).filter(Boolean).map(String))];
   if (!wanted.length) throw fail('Choose the item(s) this payment is for.', 400);
-  const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER
-    // A split item: one part's payment waiting does not stop paying another part.
-    || (l.split && l.stage === STAGE.PAYMENT_PENDING)).map((l) => l.itemId));
-  // An item still at its stock check can be paid for too: raising the payment IS
-  // "ordered from this supplier" (recorded below, once everything else checks out).
-  const atCheck = new Set(view.lines.filter((l) => l.stage === STAGE.STOCK_CHECK).map((l) => l.itemId));
-  const ours = new Set(view.lines.filter((l) => l.stage === STAGE.OWN_STOCK).map((l) => l.itemId));
-  if (wanted.some((id) => ours.has(id))) {
-    throw fail('This item ships from our warehouse — there is no supplier to pay. Undo "Our Warehouse" first if a supplier is sending it.', 409);
-  }
-  if (wanted.some((id) => !payable.has(id) && !atCheck.has(id))) {
-    throw fail('A supplier can only be paid for items not yet shipped (and not out of stock or being refunded).', 409);
-  }
-  const target = supplierPartTarget(view, wanted, input.partId, deal);
-  const open = await paymentRequestRepository.findOpenForOrder(order._id);
-  const busy = open.find((r) => clashes(r, wanted, target));
-  if (busy) throw fail(`${busy.number} for this ${target ? 'part' : 'item'} is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
-  if (!deal) {
-    // Paid in parts: every payment for the item goes through its deal, so the agreed total holds.
-    const [dealt] = (await deals.forOrder(actor, idOf(order._id))).filter((d) => d.itemIds.some((id) => wanted.includes(id)));
-    if (dealt) throw fail(`This item is paid in parts (agreed ${deals.moneyOf(Math.round(dealt.agreedTotal * 100), dealt.currency)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
-  }
+  const target = await checkPayableLines(actor, order, view, wanted, { partId: input.partId, deal });
 
   const bill = supplierMoney(input, deal);
   const extra = await otherLinks(actor, input);
@@ -881,6 +868,40 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
+}
+
+/**
+ * May these items of the order be paid for now? The checks every supplier payment
+ * passes when it is raised — and again when a declined one is sent back to
+ * accounts (update): the item has not shipped, is not ours, its part is still the
+ * active one, no other open payment covers it, and an item paid in parts goes
+ * through its deal. Returns the split-item part target (or null). `exceptId`: the
+ * request being resubmitted, which is not a clash with itself.
+ */
+async function checkPayableLines(actor, order, view, wanted, { partId, deal = null, exceptId = null } = {}) {
+  const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER
+    // A split item: one part's payment waiting does not stop paying another part.
+    || (l.split && l.stage === STAGE.PAYMENT_PENDING)).map((l) => l.itemId));
+  // An item still at its stock check can be paid for too: raising the payment IS
+  // "ordered from this supplier" (recorded below, once everything else checks out).
+  const atCheck = new Set(view.lines.filter((l) => l.stage === STAGE.STOCK_CHECK).map((l) => l.itemId));
+  const ours = new Set(view.lines.filter((l) => l.stage === STAGE.OWN_STOCK).map((l) => l.itemId));
+  if (wanted.some((id) => ours.has(id))) {
+    throw fail('This item ships from our warehouse — there is no supplier to pay. Undo "Our Warehouse" first if a supplier is sending it.', 409);
+  }
+  if (wanted.some((id) => !payable.has(id) && !atCheck.has(id))) {
+    throw fail('A supplier can only be paid for items not yet shipped (and not out of stock or being refunded).', 409);
+  }
+  const target = supplierPartTarget(view, wanted, partId, deal);
+  const open = (await paymentRequestRepository.findOpenForOrder(order._id)).filter((r) => idOf(r._id) !== exceptId);
+  const busy = open.find((r) => clashes(r, wanted, target));
+  if (busy) throw fail(`${busy.number} for this ${target ? 'part' : 'item'} is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
+  if (!deal) {
+    // Paid in parts: every payment for the item goes through its deal, so the agreed total holds.
+    const [dealt] = (await deals.forOrder(actor, idOf(order._id))).filter((d) => d.itemIds.some((id) => wanted.includes(id)));
+    if (dealt) throw fail(`This item is paid in parts (agreed ${deals.moneyOf(Math.round(dealt.agreedTotal * 100), dealt.currency)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
+  }
+  return target;
 }
 
 /**
@@ -1063,19 +1084,31 @@ function alreadyPaidSet(r, now) {
   };
 }
 
-export async function approve(actor, id, { note } = {}, req) {
+const EDITED_SINCE = 'This payment was edited since you opened it. Check the new details, then approve again.';
+
+/**
+ * `rev` (optional): the version accounts was shown. When sent, an edit that
+ * landed in between makes this fail with EDITED_SINCE instead of approving
+ * figures nobody looked at; the edit and the approval cannot both win.
+ */
+export async function approve(actor, id, { note, rev } = {}, req) {
   const r0 = await loadVisible(actor, id);   // 404s a request this person may not see
   if (!mayDecide(actor)) throw fail('Only accounts (or an admin) approves payments.', 403);
   if (ownSubscriptionExpense(actor, r0)) throw fail('You marked this one paid yourself — someone else in accounts (or the admin) approves it.', 403);
+  const pinned = rev != null && rev !== '';
+  if (pinned && Number(rev) !== (r0.rev || 0)) throw fail(EDITED_SINCE, 409);
   await assertOrderLive(r0);
   const now = new Date();
   // Paid already (company card, auto-debit): approving it closes it as paid — the
   // admin is not asked to pay money that has already left.
   const settled = alreadyPaidSet(r0, now);
-  const r = await paymentRequestRepository.transition(id, ['submitted'],
+  const r = await paymentRequestRepository.transitionInSession(id, ['submitted'], pinned ? revIs(rev) : {},
     { status: 'approved', approvedBy: actor._id, approvedAt: now, decisionNote: String(note || '').slice(0, 1000), ...settled },
-    entry(actor, settled ? 'approved — already paid' : 'approved', note));
-  if (!r) throw fail(MOVED, 409);
+    entry(actor, settled ? 'approved — already paid' : 'approved', note), {}, undefined);
+  if (!r) {
+    const cur = pinned ? await paymentRequestRepository.findById(id) : null;
+    throw fail(cur && cur.status === 'submitted' && (cur.rev || 0) !== Number(rev) ? EDITED_SINCE : MOVED, 409);
+  }
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: settled ? 'approved (already paid)' : 'approved' });
   await followOnSubscription(r);
   await tellChat(r, 'approved', settled
@@ -1259,18 +1292,50 @@ export async function cancelForSupplierChange(actor, id, note, req) {
   return r;
 }
 
+/** Rich-text details as one short line for the edit history. */
+const plainLine = (html) => String(html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+/** How the payee is paid, for the edit history (the account number masked). */
+const payText = (p = {}) => {
+  if (p.method === 'upi') return `UPI ${p.upiId || '(their QR)'}`;
+  if (p.method === 'bank') return `Bank ${maskAccount(p.accountNumber || '') || '—'} ${p.ifsc || p.swift || ''}`.trim();
+  if (p.method === 'card') return `Card ${p.cardLast4 ? `••${p.cardLast4}` : ''}`.trim();
+  return 'not given';
+};
+const FILE_NOUN = Object.freeze({ bill: 'Bill', qr: 'QR code', proof: 'Payment screenshot' });
+
 /**
- * Correct a request: amount, details, who is paid (a saved supplier or typed
- * details) and, for an expense, what it was for. Items and files stay as they
- * are. Compare-and-set on the version read, so two edits at once cannot both land.
+ * Correct a request before it is approved (who and when: mayEdit): the amount,
+ * what it is for, the details, who is paid (a saved supplier or typed details)
+ * and the attached bills / QR (`uploaded` new ones, `removeFileIds` old ones).
+ * The linked order / project / other ID are changed with linkOrder / setLinks.
+ *
+ * A reason is required. Each edit is kept in `edits` (old → new) and the history;
+ * an on-hold or declined request goes back to accounts as submitted. The write is
+ * a compare-and-set on status + rev, so an edit and an approval at the same
+ * moment cannot both land (approve pins rev too). The order's and the project's
+ * money are read from the requests themselves, so they follow at once; a deal
+ * part moves its lock on the agreed total by the difference.
  */
-export async function update(actor, id, input = {}, req) {
+export async function update(actor, id, input = {}, uploaded = {}, req) {
   const r0 = await loadVisible(actor, id);
   if (!mayEdit(actor, r0)) {
-    throw fail(!EDITABLE.includes(r0.status)
-      ? 'A paid, declined or cancelled request cannot be edited.'
-      : 'Only whoever raised it, their team head or the admin can edit it.', 403);
+    if (!EDITABLE.includes(r0.status)) {
+      throw fail(r0.status === 'approved'
+        ? 'Accounts has approved this payment, so it can no longer be edited. Ask accounts to put it on hold if something is wrong.'
+        : 'A paid or cancelled payment cannot be edited.', 403);
+    }
+    if (fromSubscription(r0)) throw fail('A subscription payment is not edited here — ask accounts to decline it, then mark it paid again with the right details.', 409);
+    if (!resubmittable(r0)) throw fail('A declined deal part or a payment that used supplier credit cannot be sent again — raise a new payment instead.', 409);
+    throw fail('Only whoever raised it, or the admin, can edit it.', 403);
   }
+  // A double-submitted edit (same form key): the answer the first one got.
+  const formKey = input.formKey ? String(input.formKey).slice(0, 64) : '';
+  if (formKey && (r0.edits || []).some((e) => e.formKey === formKey)) return shape(r0, actor);
+  // The version the editor's form was opened on: someone else's edit in between is refused.
+  if (input.rev != null && input.rev !== '' && Number(input.rev) !== (r0.rev || 0)) throw fail(MOVED, 409);
+  const reason = String(input.reason || '').trim();
+  if (reason.length < 3) throw fail('Say why you are changing it — accounts sees this.', 400);
+
   const isExpense = r0.kind === 'expense';
   const before = { currency: r0.currency || BASE_CURRENCY, foreignAmount: r0.foreignAmount ?? null, fxRate: r0.fxRate ?? null };
   // Either kind may be a foreign bill (worked out in cleanMoney). A deal part stays
@@ -1312,53 +1377,135 @@ export async function update(actor, id, input = {}, req) {
     payee = cleanPayee(input.payee, { optional: isExpense });
     if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) { supplier = null; bankNotice = null; }
   }
-  requireUpiOrQr(payee, (r0.files || []).map((f) => f.kind), { optional: isExpense });
   if (creditPaise && idOf(supplier) !== idOf(r0.supplier)) {
     throw fail(`${r0.number} uses ${deals.moneyOf(creditPaise, before.currency)} of ${r0.payee?.name || 'this supplier'}'s credit, so the supplier cannot change. Cancel it and raise a new payment instead.`, 409);
   }
 
-  const changes = [];
-  // A foreign bill without rupees yet has no rupee amount to compare: its bill line says it.
-  if (amount !== r0.amount && !rupeesPending(money) && !rupeesPending(r0)) changes.push(`amount ${inr(r0.amount)} → ${inr(amount)}`);
-  if (fxChanged) changes.push(`bill ${foreignLine(before) || 'in rupees'} → ${foreignLine(money) || 'in rupees'}`);
-  if (payee.name !== r0.payee.name) changes.push(`payee ${r0.payee.name || '(none)'} → ${payee.name || '(none)'}`);
-  if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) changes.push('payment details');
-  if (description !== (r0.description || '')) changes.push('details');
-  if (category !== r0.category) changes.push(`for ${categoryLabel(r0.category)} → ${categoryLabel(category)}`);
-  if (!changes.length) return shape(r0, actor);
+  // Attachments: remove bills / QR (never payment screenshots), add new ones.
+  let removeIds = input.removeFileIds;
+  if (typeof removeIds === 'string') { try { removeIds = JSON.parse(removeIds); } catch { removeIds = [removeIds]; } }
+  removeIds = new Set((Array.isArray(removeIds) ? removeIds : []).map(String));
+  const removing = (r0.files || []).filter((f) => f.kind !== 'proof' && removeIds.has(idOf(f._id)));
+  const { files: newFiles, kinds: newKinds } = filesFrom(uploaded);
+  const kept = (r0.files || []).filter((f) => !removing.includes(f));
+  if (newKinds.includes('qr') && kept.some((f) => f.kind === 'qr')) throw fail('Remove the old QR code before attaching a new one.', 400);
+  requireUpiOrQr(payee, [...kept.map((f) => f.kind), ...newKinds], { optional: isExpense });
 
-  const moneyChanged = amount !== r0.amount || fxChanged || payee.name !== r0.payee.name || payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x');
-  const backToAccounts = r0.status !== 'submitted' && moneyChanged;
-  const note = changes.join(', ') + (backToAccounts ? ' — back to accounts to approve again' : '');
+  const changes = [];
+  const change = (field, from, to) => changes.push({ field, from: String(from ?? '').slice(0, 300), to: String(to ?? '').slice(0, 300) });
+  // A foreign bill without rupees yet has no rupee amount to compare: its bill line says it.
+  if (amount !== r0.amount && !rupeesPending(money) && !rupeesPending(r0)) change('Amount', inr(r0.amount), inr(amount));
+  if (fxChanged) change('Bill', foreignLine(before) || 'in rupees', foreignLine(money) || 'in rupees');
+  if (payee.name !== r0.payee.name) change('Pay to', r0.payee.name || '(none)', payee.name || '(none)');
+  if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) change('Payment details', payText(r0.payee), payText(payee));
+  if (category !== r0.category) change('What for', categoryLabel(r0.category), categoryLabel(category));
+  if (description !== (r0.description || '')) change('Details', plainLine(r0.description), plainLine(description));
+  for (const f of removing) change('Attachment removed', `${FILE_NOUN[f.kind]}${f.name ? ` (${f.name})` : ''}`, '');
+  newFiles.forEach((f, i) => { if (f?.buffer?.length) change('Attachment added', '', `${FILE_NOUN[newKinds[i]]}${f.originalname ? ` (${String(f.originalname).slice(0, 120)})` : ''}`); });
+  const backToAccounts = r0.status !== 'submitted';
+  // Nothing changed on a waiting request: nothing to save. A held / declined one may
+  // be sent back with only the reason (e.g. the answer to accounts' query).
+  if (!changes.length && !backToAccounts) return shape(r0, actor);
+
+  // A declined supplier payment gave its items back (followOnOrder): before it goes
+  // back to accounts, they must still be payable — the same checks as raising it.
+  const resubmitSupplier = r0.status === 'declined' && r0.kind === 'supplier' && r0.order;
+  let order = null;
+  let target = null;
+  if (resubmitSupplier) {
+    order = await orderRepository.findForWorkflow(idOf(r0.order));
+    const view = order && workflowView(order);
+    if (!view) throw fail('Its order is no longer in the team workflow — raise a new payment instead.', 409);
+    target = await checkPayableLines(actor, order, view, (r0.itemIds || []).map(idOf), { partId: r0.partId ? idOf(r0.partId) : undefined, exceptId: idOf(r0._id) });
+  }
+
+  const note = [reason, changes.length ? changes.map((c) => `${c.field}${c.from || c.to ? `: ${c.from || '—'} → ${c.to || '—'}` : ''}`).join('; ') : '']
+    .filter(Boolean).join(' — ') + (backToAccounts ? ' — sent back to accounts' : '');
   // A deal part's new amount must still fit the agreed total: move the lock by the difference first.
-  // In hundredths of the deal's currency.
+  // In hundredths of the deal's currency. (A declined deal part is never edited: resubmittable.)
   const wasUnits = toPaise(deals.unitsOf(r0));
   const nowUnits = toPaise(deals.unitsOf(money));
   const delta = r0.deal ? nowUnits - wasUnits : 0;
   let part = r0.part || '';
   if (delta > 0) {
-    const before = await deals.reserve(r0.deal, delta);
-    part = deals.partFor({ ...before, reservedPaise: before.reservedPaise - wasUnits }, nowUnits);
+    const was = await deals.reserve(r0.deal, delta);
+    part = deals.partFor({ ...was, reservedPaise: was.reservedPaise - wasUnits }, nowUnits);
   } else if (delta < 0) {
     // Named against the other parts: what is asked for besides this one.
     const now = await deals.dealForPayment(r0.deal, r0.order);
     part = deals.partFor({ ...now, reservedPaise: now.reservedPaise - wasUnits }, nowUnits);
   }
-  const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, {
+  const undoLock = async () => { if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`); };
+
+  let stored = [];
+  try {
+    stored = newFiles.length ? await storeFiles(newFiles, newKinds, actor, { existing: kept.length }) : [];
+  } catch (err) {
+    await undoLock();
+    throw err;
+  }
+  const at = new Date();
+  const editRow = {
+    at, by: actor._id, byName: actor.name || '', role: roleOf(actor), reason: reason.slice(0, 1000),
+    fromStatus: r0.status, changes, ...(formKey ? { formKey } : {}),
+  };
+  const set = {
     amount, currency: money.currency, foreignAmount: money.foreignAmount, fxRate: money.fxRate,
     description, category, payee, supplier, bankNotice,
+    files: [...kept, ...stored],
+    rev: (r0.rev || 0) + 1,
+    editedAt: at,
     ...(r0.deal ? { part } : {}),
     ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
-  }, entry(actor, 'edited', note), {}, undefined);
+  };
+  let r;
+  try {
+    const write = (session) => paymentRequestRepository.transitionInSession(id, [r0.status], revIs(r0.rev),
+      set, entry(actor, backToAccounts ? 'resubmitted' : 'edited', note), { edits: editRow }, session);
+    r = resubmitSupplier
+      // The same guard as raising one: two payments for the item at the same moment cannot both be live.
+      ? await paymentRequestRepository.inTransaction(async (session) => {
+        await orderRepository.bumpSupplierPayGuard(order._id, session);
+        const live = await paymentRequestRepository.findOpenForOrder(order._id, session);
+        const clash = live.find((x) => idOf(x._id) !== idOf(r0._id) && clashes(x, (r0.itemIds || []).map(idOf), target));
+        if (clash) throw fail(`${clash.number} for this item is already ${STATUS_LABELS[clash.status].toLowerCase()}.`, 409);
+        return write(session);
+      })
+      : await write(undefined);
+  } catch (err) {
+    r = null;
+    await undoLock();
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    throw err;
+  }
   if (!r) {
-    // Lost the race: put the lock back where it was.
-    if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit lost a race`);
-    throw fail(MOVED, 409);
+    // Lost the race (approved, held or edited by someone else first): put everything back.
+    await undoLock();
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    const now = await paymentRequestRepository.findById(id);
+    throw fail(now?.status === 'approved' ? 'Accounts approved this payment just now, so your changes were not saved.' : MOVED, 409);
   }
   // A smaller amount gives its share back only once the edit has landed.
   if (delta < 0) await deals.release(r0.deal, -delta, `${r0.number} edited`);
-  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'edited', fields: changes, backToAccounts });
-  await tellChat(r, 'edited', `✏️ ${actor.name || 'Someone'} edited ${what(r)}: ${note}.`, { mentionAdmins: false, mentionRequester: idOf(r.requestedBy) !== idOf(actor._id) });
+  // Only now, with no request pointing at them any more, delete the removed files.
+  await Promise.all(removing.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+  if (resubmitSupplier) {
+    // Its items read "Payment Pending" again, as when it was first raised. Logged on failure; the shipping guard still holds.
+    const wf = await import('./teamWorkflowService.js');
+    for (const itemId of (r.itemIds || []).map(idOf)) {
+      try {
+        await wf.markPaymentPending(actor, idOf(r.order), itemId, { supplierName: r.payee?.name, ref: r.number, partId: r.partId }, req);
+      } catch (err) {
+        console.error(`[PaymentRequest] ${r.number}: could not mark ${itemId} payment pending on resubmit:`, err.message);
+      }
+    }
+  }
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: backToAccounts ? 'resubmitted' : 'edited', fields: changes.map((c) => c.field), fromStatus: r0.status });
+  const said = changes.length ? changes.map((c) => c.field.toLowerCase()).join(', ') : 'no changes';
+  await tellChat(r, backToAccounts ? 'resubmitted' : 'edited', backToAccounts
+    ? `🔁 ${actor.name || 'Someone'} edited ${what(r)} (${said}) and sent it back — it was ${STATUS_LABELS[r0.status].toLowerCase()}. Reason: “${reason.slice(0, 200)}”. Accounts: please approve or decline.`
+    : `✏️ ${actor.name || 'Someone'} edited ${what(r)} (${said}). Reason: “${reason.slice(0, 200)}”.`,
+  { mentionRequester: idOf(r.requestedBy) !== idOf(actor._id) });
   return shape(r, actor);
 }
 

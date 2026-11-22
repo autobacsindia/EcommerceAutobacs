@@ -97,7 +97,7 @@ const paymentRequestRepository = {
   page: (query, { sort, limit }) => PaymentRequest.find(query)
     .sort(sort)
     .limit(limit)
-    .select('-history -files.publicId -files.provider')
+    .select('-history -edits -files.publicId -files.provider')
     .lean(),
 
   /**
@@ -163,7 +163,7 @@ const paymentRequestRepository = {
   findSupplierToPay: (limit) => PaymentRequest.find({ status: { $in: ['approved', 'on_hold'] }, kind: 'supplier', currency: { $in: ['INR', null] } })
     .sort({ createdAt: 1, _id: 1 })
     .limit(limit)
-    .select('-history -files.publicId -files.provider')
+    .select('-history -edits -files.publicId -files.provider')
     .lean(),
 
   /** Just the history of these requests — for the held rows of a list read without it (holdOf). */

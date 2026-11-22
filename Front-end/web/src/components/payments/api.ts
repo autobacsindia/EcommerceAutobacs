@@ -11,6 +11,14 @@ export type PaymentStatus = 'submitted' | 'approved' | 'on_hold' | 'paid' | 'dec
 /** Why a payment is on hold, and who held it and when (null unless it is on hold now). */
 export type PaymentHold = { note: string; byName: string; role: string; at: string | null };
 
+/** One edit made before approval: why, who, when, and what changed (old → new). */
+export type PaymentEdit = {
+  at: string; byName: string; role: string; reason: string;
+  /** The status it was edited from: 'on_hold' / 'declined' means it was sent back to accounts. */
+  fromStatus: string;
+  changes: { field: string; from: string; to: string }[];
+};
+
 export type PaymentRequest = {
   id: string;
   number: string;
@@ -67,6 +75,12 @@ export type PaymentRequest = {
   decisionNote: string;
   hold?: PaymentHold | null;
   history: { at: string; byName: string; role: string; action: string; note: string }[];
+  /** Bumped by every edit; sent back with Approve so an edit in between is not approved unseen. */
+  rev?: number;
+  /** Set once it was edited after being submitted: the "Edited" tag. */
+  editedAt?: string | null;
+  /** Each edit's reason and old → new values (on the single request only, not in lists). */
+  edits?: PaymentEdit[];
   createdAt: string;
   can: {
     approve: boolean; decline: boolean; pay: boolean; hold: boolean; release?: boolean; cancel: boolean; edit?: boolean; editPayment?: boolean;
@@ -334,8 +348,9 @@ export type PaymentPerson = { id: string; name: string; team: string };
 export type ListFilterOptions = { categories: { value: string; label: string }[]; people: PaymentPerson[] };
 export const getListFilterOptions = () => apiClient.get<ListFilterOptions>('/payment-requests/filter-options');
 export const getRequest = (id: string) => apiClient.get<{ request: PaymentRequest }>(`/payment-requests/${id}`);
-export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'release' | 'cancel', note = '') =>
-  apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, { note });
+/** `rev`: with Approve, the version on screen — the server refuses if it was edited since. */
+export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'release' | 'cancel', note = '', rev?: number) =>
+  apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, { note, ...(action === 'approve' && rev != null ? { rev } : {}) });
 
 /** 'YYYY-MM-DD' → "8 Nov 2026" (a calendar day: no time zone shift). */
 export const dayText = (d: string) => (d

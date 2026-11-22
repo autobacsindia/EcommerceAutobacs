@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
+import EditHistory from './EditHistory';
 import { cardLabelOf } from './CardFields';
 import {
   accountName, actOn, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
@@ -210,7 +211,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
   };
   const act = useMutation({
     mutationFn: async (a: 'approve' | 'decline' | 'hold' | 'release' | 'cancel' | 'pay') => {
-      if (a !== 'pay') return (await actOn(id, a, note)).request;
+      if (a !== 'pay') return (await actOn(id, a, note, q.data?.request.rev)).request;
       const form = new FormData();
       form.append('method', pay.method);
       form.append('reference', pay.reference.trim());
@@ -312,6 +313,8 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               {r.hold && heldByText(r.hold) && <Row k="Held" v={heldByText(r.hold).replace(/^Held /, '')} />}
             </dl>
 
+            <EditHistory edits={r.edits} />
+
             <div className="flex flex-wrap gap-2">
               <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className={`${btn} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`}>
                 <FileText className="h-4 w-4 text-emerald-700" /> {r.status === 'paid' ? 'Payment receipt (PDF)' : 'Request slip (PDF)'}
@@ -342,7 +345,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                     {r.can.edit && (
                       <button type="button" onClick={() => setMode('edit')} className={`${btn} border border-gray-300 text-gray-800 hover:bg-gray-50`}
                         title={r.editableUntil ? `You can edit until ${formatDateTimeIST(r.editableUntil)}` : undefined}>
-                        <Pencil className="h-4 w-4" /> Edit
+                        <Pencil className="h-4 w-4" /> {r.status === 'submitted' ? 'Edit' : 'Edit & send again'}
                       </button>
                     )}
                     {r.can.approve && <button type="button" disabled={act.isPending} onClick={() => act.mutate('approve')} className={`${btn} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
