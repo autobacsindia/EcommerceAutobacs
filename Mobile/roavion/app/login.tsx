@@ -4,10 +4,11 @@
  * "too many attempts" read the same here as on the website.
  */
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Button, T } from '../src/components/ui';
-import { colors, font, radius, spacing } from '../src/theme';
+import { colors, font, spacing, type } from '../src/theme';
+import { PremiumButton, PressScale } from '../src/ui';
+import { AuthShell, Field, FormMessage } from '../src/account/AuthShell';
 import { useApp } from '../src/store';
 import { requestPasswordReset } from '../src/api/account';
 
@@ -52,81 +53,56 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
-        <T kind="h1">Welcome back</T>
-        <T kind="small" style={{ marginTop: 4, marginBottom: spacing.xl }}>
-          Sign in to track orders and check out faster.
-        </T>
+    <AuthShell title="Welcome back" subtitle="Sign in to track orders and check out faster.">
+      <Field
+        label="Email"
+        icon="mail-outline"
+        value={email}
+        onChangeText={setEmail}
+        placeholder="you@example.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+        accessibilityLabel="Email"
+      />
 
-        <Text style={s.label}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          style={s.input}
-          placeholder="you@example.com"
-          placeholderTextColor={colors.muted}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-          accessibilityLabel="Email"
-        />
+      <Field
+        label="Password"
+        icon="lock-closed-outline"
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Your password"
+        secureTextEntry={!show}
+        secureToggle={{ shown: show, onToggle: () => setShow((v) => !v) }}
+        autoCapitalize="none"
+        autoComplete="current-password"
+        accessibilityLabel="Password"
+        onSubmitEditing={submit}
+        returnKeyType="go"
+      />
 
-        <Text style={s.label}>Password</Text>
-        <View style={s.passwordRow}>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            style={[s.input, { flex: 1, marginBottom: 0 }]}
-            placeholder="Your password"
-            placeholderTextColor={colors.muted}
-            secureTextEntry={!show}
-            autoCapitalize="none"
-            autoComplete="current-password"
-            accessibilityLabel="Password"
-            onSubmitEditing={submit}
-            returnKeyType="go"
-          />
-          <Pressable onPress={() => setShow((v) => !v)} style={s.showBtn} accessibilityRole="button">
-            <Text style={s.showText}>{show ? 'Hide' : 'Show'}</Text>
-          </Pressable>
-        </View>
+      <PressScale onPress={forgot} style={s.forgot} accessibilityLabel="Forgot password?">
+        <Text style={s.linkText}>Forgot password?</Text>
+      </PressScale>
 
-        {!!error && <Text style={s.error}>{error}</Text>}
-        {!!notice && <Text style={s.notice}>{notice}</Text>}
+      <FormMessage text={error} tone="error" />
+      <FormMessage text={notice} tone="notice" />
 
-        <Button label="Sign in" onPress={submit} loading={busy} full style={{ marginTop: spacing.lg }} />
+      <PremiumButton label="Sign in" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
 
-        <Pressable onPress={forgot} style={s.link} accessibilityRole="button">
-          <Text style={s.linkText}>Forgot password?</Text>
-        </Pressable>
-
-        <View style={s.footer}>
-          <T kind="small">New to Autobacs?</T>
-          <Pressable onPress={() => router.replace('/register')} accessibilityRole="button">
-            <Text style={s.linkText}>Create an account</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={s.footer}>
+        <Text style={s.footText}>New to Autobacs?</Text>
+        <PressScale onPress={() => router.replace('/register')} accessibilityLabel="Create an account">
+          <Text style={s.linkText}>Create an account</Text>
+        </PressScale>
+      </View>
+    </AuthShell>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  body: { padding: spacing.xl, paddingTop: spacing.xxl },
-  label: { fontFamily: font.semibold, fontSize: 13, color: colors.ink2, marginBottom: 6 },
-  input: {
-    backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
-    paddingHorizontal: spacing.lg, height: 50, fontFamily: font.regular, fontSize: 15,
-    color: colors.ink, marginBottom: spacing.lg,
-  },
-  passwordRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
-  showBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.md },
-  showText: { fontFamily: font.semibold, fontSize: 13, color: colors.green },
-  error: { fontFamily: font.medium, fontSize: 13, color: colors.red, marginBottom: spacing.sm },
-  notice: { fontFamily: font.medium, fontSize: 13, color: colors.green, marginBottom: spacing.sm },
-  link: { alignSelf: 'center', marginTop: spacing.lg, padding: spacing.sm },
+  forgot: { alignSelf: 'flex-end', marginTop: -spacing.sm, marginBottom: spacing.lg, paddingVertical: spacing.xs },
   linkText: { fontFamily: font.semibold, fontSize: 14, color: colors.green },
   footer: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: spacing.xxl },
+  footText: { ...type.small, color: colors.muted },
 });

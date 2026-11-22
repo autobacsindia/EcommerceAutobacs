@@ -622,6 +622,65 @@ export const emailAdminRefundFailedAlert = async (orderId) => {
 };
 
 /**
+ * Razorpay captured a SECOND payment for an order that was already paid (two tabs, a
+ * stale payment link, paying again after a slow confirmation). The first payment stays
+ * the order's payment; this extra one must be refunded by hand from the Razorpay
+ * dashboard — the system never auto-refunds. Admin inbox (throws → job retries) first,
+ * then the accounts heads (best-effort, never throws) so a retry can't re-send to them.
+ *
+ * @param {{orderId: string, gatewayPaymentId: string}} data
+ * @returns {Promise<{status: string}>}
+ */
+export const emailAdminDuplicatePaymentAlert = async ({ orderId, gatewayPaymentId }) => {
+  const order = await orderRepository.findById(orderId, [{ path: 'user', select: 'name email' }]);
+  if (!order) return { status: 'not-found' };
+  const extra = (order.duplicateCaptures || []).find((d) => d.gatewayPaymentId === gatewayPaymentId);
+  // Only alert off what was actually persisted — a hand-queued or stale job is ignored.
+  if (!extra) return { status: 'skipped-not-recorded' };
+
+  const ref = orderRef(order);
+  const customer = orderCustomer(order);
+  const adminLink = adminOrderLink(order);
+  const amount = Number(extra.amount) || 0;
+
+  const subject = `⚠ PAID TWICE — refund ${inr(amount)} — ${ref}`;
+  const intro =
+    'The customer was charged again for an order that was already paid. The first payment is kept on the order. Please refund this extra payment from the Razorpay dashboard — it is NOT refunded automatically.';
+
+  const text = [
+    intro,
+    '',
+    `** EXTRA PAYMENT TO REFUND: ${inr(amount)} **`,
+    '',
+    `Order        : ${ref}`,
+    `Extra payment: ${gatewayPaymentId}`,
+    `Amount       : ${inr(amount)}`,
+    extra.method ? `Method       : ${extra.method}` : null,
+    `Customer     : ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
+    customer.phone ? `Phone        : ${customer.phone}` : null,
+    '',
+    `Open order: ${adminLink}`,
+  ]
+    .filter((v) => v !== null)
+    .join('\n');
+
+  const rows = [
+    ['Order', escapeHtml(ref)],
+    ['Extra payment', escapeHtml(gatewayPaymentId)],
+    ['Amount to refund', `<strong style="color:#b91c1c;">${escapeHtml(inr(amount))}</strong>`],
+    ['Method', escapeHtml(extra.method || '')],
+    ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
+    ['Phone', escapeHtml(customer.phone)],
+  ];
+  const banner = alertBanner(`PAID TWICE — REFUND ${escapeHtml(inr(amount))}`, escapeHtml(gatewayPaymentId));
+  const html = renderEmail(subject, intro, rows, 'Open order', adminLink, banner);
+
+  const result = await sendToAdmins({ subject, text, html }, `duplicate-capture ${orderId}`);
+  await sendToStaff(await teamStaff('accounts', { headsOnly: true }), { subject, text, html }, `Duplicate capture (order ${orderId})`);
+  return result;
+};
+
+/**
  * Notify the support inbox that a customer raised a return request — so the team
  * can review it (target: within 3–5 business days) from the admin returns queue.
  * Best-effort, safe to retry.
@@ -763,6 +822,7 @@ export default {
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
+  emailAdminDuplicatePaymentAlert,
   emailAdminReturnAlert,
   emailAdminReturnRefundedAlert,
 };

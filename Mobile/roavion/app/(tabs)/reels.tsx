@@ -13,7 +13,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Animated,
   AppState,
   FlatList,
   Platform,
@@ -28,18 +27,18 @@ import {
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import Constants from 'expo-constants';
-import { Ionicons } from '@expo/vector-icons';
-import { ApiError } from '../../src/api/client';
 import { attributeReel, recordView, reportReel, REELS_MOCK, type Reel } from '../../src/api/reels';
 import { ReelSlide } from '../../src/reels/ReelSlide';
 import { POOL_SIZE, usePlayerPool } from '../../src/reels/usePlayerPool';
 import { useLikeReel, useReelFeed } from '../../src/reels/useReels';
+import { toggleFollow, toggleSave } from '../../src/reels/localPrefs';
+import { ReelFeedSkeleton } from '../../src/reels/ReelFeedSkeleton';
+import { ApiError } from '../../src/api/client';
 import { useApp } from '../../src/store';
-import { colors, font, radius, spacing } from '../../src/theme';
-import { StripeLoader } from '../../src/ui';
+import { alpha, colors, font, palette, radius, spacing } from '../../src/theme';
+import { EmptyState, ErrorState, IconButton, PressScale, StateLayout, StripeLoader, Stripes, haptic, useToast } from '../../src/ui';
 
 type Row = { kind: 'reel'; reel: Reel } | { kind: 'end' };
 
@@ -65,8 +64,7 @@ export default function ReelsScreen() {
   const [muted, setMuted] = useState(false);
   const [busy, setBusy] = useState<{ id: string; kind: 'add' | 'buy' } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [toast] = useState(() => new Animated.Value(0));
-  const [toastText, setToastText] = useState('');
+  const toast = useToast();
   const listRef = useRef<FlatList<Row>>(null);
   // Opened from a reel circle on Home: start at that reel.
   const { start } = useLocalSearchParams<{ start?: string }>();
@@ -164,15 +162,8 @@ export default function ReelsScreen() {
 
   // ── toast ─────────────────────────────────────────────────────────────────
   const showToast = useCallback(
-    (text: string) => {
-      setToastText(text);
-      toast.setValue(0);
-      Animated.sequence([
-        Animated.spring(toast, { toValue: 1, useNativeDriver: true, friction: 7 }),
-        Animated.delay(1600),
-        Animated.timing(toast, { toValue: 0, duration: 220, useNativeDriver: true }),
-      ]).start();
-    },
+    (message: string, tone: 'success' | 'error' | 'info' = 'success', icon?: 'checkmark-circle' | 'bookmark' | 'person-add' | 'alert-circle') =>
+      toast.show({ message, tone: tone === 'info' ? undefined : tone, icon }),
     [toast],
   );
 
@@ -191,10 +182,28 @@ export default function ReelsScreen() {
     (reel: Reel, forceOn?: boolean) => {
       if (!customer) return requireSignIn('Sign in to like reels.');
       const next = forceOn ? true : !reel.viewerLiked;
-      if (next !== reel.viewerLiked) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      like(reel, next).catch(() => showToast("Couldn't save your like"));
+      // Double tap already fired its own (stronger) haptic with the heart burst.
+      if (!forceOn && next !== reel.viewerLiked) haptic.light();
+      like(reel, next).catch(() => showToast("Couldn't save your like", 'error', 'alert-circle'));
     },
     [customer, like, requireSignIn, showToast],
+  );
+
+  // Follow + Save are on-device only for now (no API yet) — see src/reels/localPrefs.ts.
+  const onSave = useCallback(
+    (reel: Reel) => {
+      const on = toggleSave(reel.id);
+      if (on) showToast('Saved', 'info', 'bookmark');
+    },
+    [showToast],
+  );
+  const onFollow = useCallback(
+    (reel: Reel) => {
+      if (!reel.creator.id) return;
+      const on = toggleFollow(reel.creator.id);
+      if (on) showToast(`Following ${reel.creator.name}`, 'info', 'person-add');
+    },
+    [showToast],
   );
 
   const onShare = useCallback((reel: Reel) => {
@@ -216,7 +225,7 @@ export default function ReelsScreen() {
           onPress: () =>
             reportReel(reel.id, reason)
               .then(() => showToast('Thanks — our team will review it'))
-              .catch(() => showToast("Couldn't send the report. Try again.")),
+              .catch(() => showToast("Couldn't send the report. Try again.", 'error', 'alert-circle')),
         })),
         { text: 'Cancel', style: 'cancel' as const },
       ]);
@@ -239,7 +248,7 @@ export default function ReelsScreen() {
     async (reel: Reel, kind: 'add' | 'buy') => {
       const product = reel.product;
       if (!product || product.availability === 'out' || busy) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      haptic.medium();
       setBusy({ id: reel.id, kind });
       try {
         await attributeReel(reel.id);
@@ -249,38 +258,36 @@ export default function ReelsScreen() {
           return;
         }
         await addItem(product.id, 1);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        // Success haptic only now — after the server's cart confirmed the add.
+        haptic.success();
         if (kind === 'buy') router.push(customer ? '/checkout' : '/login?next=/checkout');
-        else showToast('Added to cart');
+        else toast.show({ message: 'Added to cart', icon: 'bag-check', action: { label: 'View cart', onPress: () => router.push('/cart') } });
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : 'Could not add to cart. Please try again.';
         if (/variant|option/i.test(msg)) {
           // A product with options (size, colour, vehicle) needs a choice first.
           router.push(`/product/${product.slug}`);
         } else {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+          haptic.error();
           Alert.alert('Not added', msg);
         }
       } finally {
         setBusy(null);
       }
     },
-    [addItem, busy, customer, router, showToast],
+    [addItem, busy, customer, router, toast],
   );
   const onAdd = useCallback((r: Reel) => shop(r, 'add'), [shop]);
   const onBuy = useCallback((r: Reel) => shop(r, 'buy'), [shop]);
 
   const onTogglePause = useCallback(() => {
-    Haptics.selectionAsync().catch(() => {});
+    haptic.selection();
     setPaused((p) => !p);
   }, []);
-  const onToggleMute = useCallback(() => {
-    Haptics.selectionAsync().catch(() => {});
-    setMuted((m) => !m);
-  }, []);
+  const onToggleMute = useCallback(() => setMuted((m) => !m), []);
 
   const onPost = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    haptic.light();
     router.push(customer ? '/reels/new' : '/login?next=/reels/new');
   };
 
@@ -298,23 +305,14 @@ export default function ReelsScreen() {
     if (item.kind === 'end') {
       return (
         <View style={[s.endPage, { height }]}>
-          <View style={s.endBadge}>
-            <Ionicons name="checkmark-done" size={30} color={colors.white} />
-          </View>
-          <Text style={s.endTitle}>You&apos;re all caught up</Text>
-          <Text style={s.endBody}>New reels from the Autobacs community land here every day.</Text>
-          <Pressable
-            style={s.endBtn}
-            onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
-            accessibilityRole="button"
-          >
-            <Ionicons name="arrow-up" size={16} color={colors.ink} />
-            <Text style={s.endBtnText}>Watch from the start</Text>
-          </Pressable>
-          <Pressable style={[s.endBtn, s.endBtnGhost]} onPress={onPost} accessibilityRole="button">
-            <Ionicons name="add" size={18} color={colors.white} />
-            <Text style={[s.endBtnText, { color: colors.white }]}>Post your own reel</Text>
-          </Pressable>
+          <StateLayout
+            icon="checkmark-done"
+            title="You're all caught up"
+            body="New reels from the Autobacs community land here every day."
+            action={{ label: 'Watch from the start', onPress: () => listRef.current?.scrollToOffset({ offset: 0, animated: true }) }}
+            secondary={{ label: 'Post your own reel', onPress: onPost }}
+            onDark
+          />
         </View>
       );
     }
@@ -330,11 +328,14 @@ export default function ReelsScreen() {
         slot={mine ? slotState : null}
         paused={paused}
         muted={muted}
+        topInset={insets.top}
         bottomInset={0}
         busy={busy?.id === item.reel.id ? busy.kind : null}
         onTogglePause={onTogglePause}
         onToggleMute={onToggleMute}
         onLike={onLike}
+        onSave={onSave}
+        onFollow={onFollow}
         onShare={onShare}
         onReport={onReport}
         onOpenProduct={openProduct}
@@ -347,36 +348,25 @@ export default function ReelsScreen() {
 
   let body: React.ReactNode;
   if (feed.isPending) {
-    body = (
-      <View style={s.state}>
-        <StripeLoader size="lg" onDark />
-      </View>
-    );
+    body = <ReelFeedSkeleton topInset={insets.top} />;
   } else if (feed.isError && !reels.length) {
     body = (
-      <View style={s.state}>
-        <Ionicons name="cloud-offline-outline" size={44} color="rgba(255,255,255,0.8)" />
-        <Text style={s.stateTitle}>Couldn&apos;t load reels</Text>
-        <Text style={s.stateBody}>
-          {feed.error instanceof ApiError ? feed.error.message : 'Check your internet connection and try again.'}
-        </Text>
-        <Pressable style={s.endBtn} onPress={() => feed.refetch()} accessibilityRole="button">
-          <Ionicons name="refresh" size={16} color={colors.ink} />
-          <Text style={s.endBtnText}>Try again</Text>
-        </Pressable>
-      </View>
+      <ErrorState
+        error={feed.error}
+        message={feed.error instanceof ApiError ? feed.error.message : "We couldn't load reels right now."}
+        onRetry={() => feed.refetch()}
+        onDark
+      />
     );
   } else if (!reels.length) {
     body = (
-      <View style={s.state}>
-        <Ionicons name="film-outline" size={44} color="rgba(255,255,255,0.8)" />
-        <Text style={s.stateTitle}>No reels yet</Text>
-        <Text style={s.stateBody}>Be the first — show off the gear on your car.</Text>
-        <Pressable style={s.endBtn} onPress={onPost} accessibilityRole="button">
-          <Ionicons name="add" size={18} color={colors.ink} />
-          <Text style={s.endBtnText}>Post a reel</Text>
-        </Pressable>
-      </View>
+      <EmptyState
+        icon="film-outline"
+        title="No reels yet"
+        body="Be the first — film the gear on your car and tag the product."
+        action={{ label: 'Post a reel', onPress: onPost }}
+        onDark
+      />
     );
   } else if (height > 0) {
     body = (
@@ -402,8 +392,8 @@ export default function ReelsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.white} colors={[colors.green]} progressViewOffset={insets.top + 40} />}
         ListFooterComponent={
           feed.isFetchingNextPage ? undefined : feed.isError && feed.hasNextPage ? (
-            <Pressable style={[s.footerRetry, { height: 80 }]} onPress={() => feed.fetchNextPage()}>
-              <Text style={s.stateBody}>Couldn&apos;t load more. Tap to retry.</Text>
+            <Pressable style={[s.footerRetry, { height }]} onPress={() => feed.fetchNextPage()} accessibilityRole="button">
+              <ErrorState message="Couldn't load more reels." onRetry={() => feed.fetchNextPage()} onDark />
             </Pressable>
           ) : undefined
         }
@@ -417,75 +407,59 @@ export default function ReelsScreen() {
       {body}
 
       {/* Floating header over the video */}
-      <View style={[s.header, { paddingTop: insets.top + spacing.sm }]} pointerEvents="box-none">
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={s.headerTitle}>Reels</Text>
+      <View style={[s.header, { paddingTop: insets.top + spacing.md }]} pointerEvents="box-none">
+        <View style={s.titleRow}>
+          <Text style={s.headerTitle} accessibilityRole="header">Reels</Text>
+          <Stripes width={12} height={5} gap={3} onDark />
           {REELS_MOCK && (
             <View style={s.demo}>
               <Text style={s.demoText}>DEMO</Text>
             </View>
           )}
         </View>
-        <Pressable onPress={onPost} style={({ pressed }) => [s.plus, pressed && { transform: [{ scale: 0.92 }] }]} accessibilityRole="button" accessibilityLabel="Post a reel" hitSlop={8}>
-          <Ionicons name="add" size={24} color={colors.white} />
-        </Pressable>
+        <View style={s.headerActions}>
+          {customer && (
+            <IconButton icon="albums-outline" label="My reels" tone="glass" size={38} onPress={() => router.push('/reels/mine')} />
+          )}
+          <PressScale onPress={onPost} style={s.post} accessibilityLabel="Post a reel" scaleTo={0.94}>
+            <Text style={s.postText}>Post</Text>
+            <Text style={s.postPlus}>+</Text>
+          </PressScale>
+        </View>
       </View>
 
       {feed.isFetchingNextPage && active >= reels.length - 1 && (
         <View style={s.moreSpinner} pointerEvents="none">
-          <StripeLoader onDark />
+          <StripeLoader onDark label="Loading more reels" />
         </View>
       )}
-
-      <Animated.View
-        pointerEvents="none"
-        style={[s.toast, { top: insets.top + 56, opacity: toast, transform: [{ translateY: toast.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }] }]}
-      >
-        <Ionicons name="checkmark-circle" size={18} color={colors.greenOnDark} />
-        <Text style={s.toastText}>{toastText}</Text>
-      </Animated.View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.black },
+  screen: { flex: 1, backgroundColor: colors.void },
   header: {
     position: 'absolute', top: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerTitle: {
-    fontFamily: font.extrabold, fontSize: 24, color: colors.white, letterSpacing: -0.3,
-    textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 6,
+    fontFamily: font.extrabold, fontSize: 24, color: colors.white, letterSpacing: -0.4,
+    textShadowColor: alpha(palette.black, 0.4), textShadowRadius: 6,
   },
-  demo: { backgroundColor: 'rgba(242,165,22,0.9)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+  demo: { backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   demoText: { fontFamily: font.bold, fontSize: 10, color: colors.ink, letterSpacing: 0.8 },
-  plus: {
-    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  post: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, height: 38, paddingHorizontal: spacing.md + 2,
+    borderRadius: radius.pill, backgroundColor: colors.green,
   },
+  postText: { fontFamily: font.bold, fontSize: 13.5, color: colors.white },
+  postPlus: { fontFamily: font.bold, fontSize: 18, lineHeight: 20, color: colors.white },
 
-  state: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
-  stateTitle: { fontFamily: font.heading, fontSize: 20, color: colors.white, marginTop: spacing.sm },
-  stateBody: { fontFamily: font.regular, fontSize: 14, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 20 },
-
-  endPage: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm, backgroundColor: colors.header },
-  endBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
-  endTitle: { fontFamily: font.heading, fontSize: 21, color: colors.white },
-  endBody: { fontFamily: font.regular, fontSize: 14, color: 'rgba(255,255,255,0.72)', textAlign: 'center', marginBottom: spacing.md },
-  endBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.white,
-    paddingHorizontal: spacing.xl, height: 44, borderRadius: radius.pill, marginTop: spacing.sm, minWidth: 220, justifyContent: 'center',
-  },
-  endBtnGhost: { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
-  endBtnText: { fontFamily: font.bold, fontSize: 14, color: colors.ink },
-  footerRetry: { alignItems: 'center', justifyContent: 'center' },
+  endPage: { backgroundColor: colors.carbon },
+  footerRetry: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.carbon },
   moreSpinner: { position: 'absolute', bottom: 24, alignSelf: 'center' },
-
-  toast: {
-    position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(18,20,20,0.92)', paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill,
-  },
-  toastText: { fontFamily: font.bold, fontSize: 13.5, color: colors.white },
 });

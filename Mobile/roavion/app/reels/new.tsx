@@ -10,7 +10,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,17 +20,16 @@ import { Stack, useNavigation, useRouter, usePreventRemove } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchProducts, type Product } from '../../src/api/catalogue';
 import { createReel, reelVideoType, uploadReelVideo, REELS_MOCK, type PickedVideo } from '../../src/api/reels';
 import { reelKeys } from '../../src/reels/useReels';
-import { Button } from '../../src/components/ui';
+import { ProgressRing } from '../../src/reels/ProgressRing';
 import { useApp } from '../../src/store';
-import { colors, font, inr, radius, shadow, spacing } from '../../src/theme';
-import { StripeLoader } from '../../src/ui';
+import { alpha, colors, elevation, font, palette, radius, spacing, type } from '../../src/theme';
+import { GlassChip, Overline, PremiumButton, Price, PressScale, StripeLoader, Stripes, haptic } from '../../src/ui';
 
 const MAX_SECONDS = 60;
 /** Client-side guard only; the server's maxBytes (and its size check) is the real limit. */
@@ -122,7 +120,7 @@ export default function NewReelScreen() {
       Alert.alert('Video too large', 'Please choose a video under 100 MB.');
       return;
     }
-    Haptics.selectionAsync().catch(() => {});
+    haptic.selection();
     setVideo({ uri: a.uri, mimeType: a.mimeType, fileName: a.fileName, durationSec, fileSize: a.fileSize ?? null });
   };
 
@@ -177,13 +175,17 @@ export default function NewReelScreen() {
       cancelRef.current = null;
       await createReel({ publicId, productId: product.id, caption: caption.trim() });
       qc.invalidateQueries({ queryKey: reelKeys.mine });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      // Success only once the server has the reel.
+      haptic.success();
       setPhase('done');
     } catch (err) {
       cancelRef.current = null;
       setPhase('edit');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      Alert.alert('Upload failed', (err as Error)?.message || 'Please try again.');
+      const msg = (err as Error)?.message || 'Please try again.';
+      // Cancelling on purpose needs no error dialog.
+      if (msg === 'Upload cancelled.') return;
+      haptic.error();
+      Alert.alert('Upload failed', msg);
     }
   };
 
@@ -192,208 +194,291 @@ export default function NewReelScreen() {
     return (
       <View style={[s.doneWrap, { paddingBottom: insets.bottom + spacing.xl }]}>
         <Stack.Screen options={{ title: 'Reel posted', headerBackVisible: false, gestureEnabled: false }} />
-        <View style={s.doneBadge}>
-          <Ionicons name="time-outline" size={40} color={colors.green} />
-        </View>
-        <Text style={s.doneTitle}>Under review</Text>
-        <Text style={s.doneBody}>
-          Thanks for sharing! Our team checks every reel before it goes live — usually within a day. You can see its
-          status any time in Account → My reels.
+        <ProgressRing progress={1} size={112} stroke={6}>
+          <View style={s.doneDisc}>
+            <Ionicons name="time-outline" size={38} color={colors.green} />
+          </View>
+        </ProgressRing>
+        <Overline style={{ marginTop: spacing.xl }}>Submitted</Overline>
+        <Text style={[type.display, s.centerText, { marginTop: spacing.xs }]}>Under review</Text>
+        <Text style={[type.body, s.centerText, { marginTop: spacing.sm }]}>
+          Thanks for sharing! Our team checks every reel before it goes live — usually within a day.
         </Text>
-        <Button label="See my reels" onPress={() => router.replace('/reels/mine')} full style={{ marginTop: spacing.xl }} />
-        <Button label="Back to reels" variant="outline" onPress={() => router.back()} full style={{ marginTop: spacing.md }} />
+
+        <View style={s.timeline}>
+          {[
+            { label: 'Uploaded', state: 'done' as const },
+            { label: 'Under review', state: 'now' as const },
+            { label: 'Live in Reels', state: 'next' as const },
+          ].map((step, i, all) => (
+            <View key={step.label} style={s.tlItem}>
+              <View style={s.tlTrack}>
+                <View style={[s.tlDot, step.state === 'done' && s.tlDotDone, step.state === 'now' && s.tlDotNow]}>
+                  {step.state === 'done' && <Ionicons name="checkmark" size={12} color={colors.white} />}
+                </View>
+                {i < all.length - 1 && <View style={[s.tlLine, step.state === 'done' && { backgroundColor: colors.green }]} />}
+              </View>
+              <Text style={[s.tlLabel, step.state === 'next' && { color: colors.muted }]}>{step.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <PremiumButton label="See my reels" iconRight="arrow-forward" onPress={() => router.replace('/reels/mine')} full style={{ marginTop: spacing.xl }} />
+        <PremiumButton label="Back to reels" variant="ghost" onPress={() => router.back()} full style={{ marginTop: spacing.xs }} />
       </View>
     );
   }
 
-  const uploading = phase === 'uploading';
+  // ── uploading ─────────────────────────────────────────────────────────────
+  if (phase === 'uploading') {
+    const pct = Math.round(progress * 100);
+    return (
+      <View style={[s.doneWrap, { paddingBottom: insets.bottom + spacing.xl }]}>
+        <Stack.Screen options={{ title: 'Uploading', gestureEnabled: false }} />
+        <ProgressRing progress={progress} size={168} stroke={8}>
+          <View style={s.ringInner}>
+            {video && <Preview uri={video.uri} />}
+            <View style={s.ringShade} />
+            <Text style={s.ringPct}>{pct}%</Text>
+          </View>
+        </ProgressRing>
+        <Text style={[type.h1, s.centerText, { marginTop: spacing.xl }]}>
+          {progress < 1 ? 'Uploading your reel' : 'Finishing up'}
+        </Text>
+        <Text style={[type.small, s.centerText, { marginTop: spacing.xs }]}>
+          Keep the app open — this usually takes under a minute.
+        </Text>
+        {product && (
+          <View style={[s.tagged, { marginTop: spacing.xl, alignSelf: 'stretch' }]}>
+            <Image source={{ uri: product.image }} style={s.tagImg} contentFit="contain" />
+            <View style={{ flex: 1 }}>
+              <Text style={s.tagOver}>Tagged product</Text>
+              <Text style={s.tagTitle} numberOfLines={1}>{product.name}</Text>
+            </View>
+          </View>
+        )}
+        <PremiumButton
+          label="Cancel upload"
+          variant="ghost"
+          size="sm"
+          onPress={() => cancelRef.current?.()}
+          disabled={progress >= 1}
+          style={{ marginTop: spacing.lg }}
+        />
+      </View>
+    );
+  }
+
+  const steps = [!!video, !!product, caption.trim().length > 0];
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 120 }} keyboardShouldPersistTaps="handled">
         {REELS_MOCK && (
-          <Text style={s.demoNote}>Demo mode: nothing is uploaded. Your video stays on this phone.</Text>
+          <View style={s.demoNote}>
+            <Ionicons name="information-circle" size={16} color={colors.ink2} />
+            <Text style={s.demoText}>Demo mode: nothing is uploaded. Your video stays on this phone.</Text>
+          </View>
         )}
 
         {/* 1 — video */}
-        <Text style={s.step}>1 · Your video</Text>
+        <StepHead n={1} title="Your video" done={steps[0]} />
         {video ? (
           <View style={s.previewRow}>
             <View style={s.preview}>
               <Preview uri={video.uri} />
-              <View style={s.duration}>
-                <Text style={s.durationText}>{Math.round(video.durationSec)}s</Text>
-              </View>
+              <GlassChip icon="time-outline" label={`${Math.round(video.durationSec)}s`} style={s.duration} />
             </View>
-            <View style={{ flex: 1, gap: spacing.sm }}>
-              <Text style={s.help}>Looks good! Vertical videos with the product clearly in view do best.</Text>
-              <Button label="Change video" variant="outline" icon="swap-horizontal" onPress={pick} disabled={uploading} />
+            <View style={{ flex: 1, gap: spacing.md }}>
+              <View style={s.tip}>
+                <Ionicons name="sparkles-outline" size={16} color={colors.green} />
+                <Text style={s.help}>Looks good! Vertical videos with the product clearly in view do best.</Text>
+              </View>
+              <PremiumButton label="Change video" variant="outline" size="sm" icon="swap-horizontal" onPress={pick} />
             </View>
           </View>
         ) : (
-          <View style={s.pickRow}>
-            <Pressable style={s.pickTile} onPress={record} accessibilityRole="button">
-              <Ionicons name="videocam" size={28} color={colors.green} />
-              <Text style={s.pickText}>Record</Text>
-            </Pressable>
-            <Pressable style={s.pickTile} onPress={pick} accessibilityRole="button">
-              <Ionicons name="images" size={28} color={colors.green} />
-              <Text style={s.pickText}>From gallery</Text>
-            </Pressable>
+          <View style={s.pickHero}>
+            <Stripes width={16} height={5} gap={4} onDark />
+            <Text style={s.pickTitle}>Show off the gear on your car</Text>
+            <Text style={s.pickBody}>Up to {MAX_SECONDS} seconds · under 100 MB · MP4 or MOV</Text>
+            <View style={s.pickRow}>
+              <PremiumButton label="Record" icon="videocam" variant="green" onPress={record} style={{ flex: 1 }} />
+              <PremiumButton label="Gallery" icon="images-outline" variant="light" onPress={pick} style={{ flex: 1 }} />
+            </View>
           </View>
         )}
-        <Text style={s.hint}>Up to {MAX_SECONDS} seconds, under 100 MB.</Text>
 
         {/* 2 — product */}
-        <Text style={[s.step, { marginTop: spacing.xl }]}>2 · Tag the product</Text>
+        <StepHead n={2} title="Tag the product" done={steps[1]} />
         {product ? (
           <View style={s.tagged}>
             <Image source={{ uri: product.image }} style={s.tagImg} contentFit="contain" />
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, gap: 2 }}>
               <Text style={s.tagTitle} numberOfLines={2}>{product.name}</Text>
-              <Text style={s.tagPrice}>{inr(product.price)}</Text>
+              <Price price={product.price} mrp={product.mrp} offPercent={product.discountPercent} size="sm" />
             </View>
-            {!uploading && (
-              <Pressable onPress={() => setProduct(null)} hitSlop={10} accessibilityLabel="Remove product">
-                <Ionicons name="close-circle" size={22} color={colors.muted} />
-              </Pressable>
-            )}
+            <PressScale onPress={() => setProduct(null)} hitSlop={10} haptic="selection" accessibilityLabel="Remove product">
+              <Ionicons name="close-circle" size={24} color={colors.chrome} />
+            </PressScale>
           </View>
         ) : (
           <>
             <View style={s.searchBox}>
-              <Ionicons name="search" size={18} color={colors.muted} />
+              <Ionicons name="search" size={18} color={colors.steel} />
               <TextInput
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Search Autobacs products"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={colors.steel}
                 style={s.searchInput}
                 returnKeyType="search"
                 autoCorrect={false}
               />
-              {results.isFetching && <StripeLoader size="sm" />}
+              {results.isFetching && <StripeLoader size="sm" label="Searching" />}
             </View>
+            {search.length < 2 && <Text style={s.hint}>Type at least 2 letters — e.g. “wiper” or “seat cover”.</Text>}
             {search.length >= 2 && results.data && results.data.products.length === 0 && (
               <Text style={s.hint}>No products match “{search}”.</Text>
             )}
             {results.isError && <Text style={[s.hint, { color: colors.red }]}>Search failed. Check your connection.</Text>}
-            {(results.data?.products ?? []).map((p) => (
-              <Pressable
-                key={p.id}
-                style={({ pressed }) => [s.result, pressed && { backgroundColor: colors.greenFaint }]}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setProduct(p);
-                  setQuery('');
-                }}
-              >
-                <Image source={{ uri: p.image }} style={s.resultImg} contentFit="contain" />
-                <Text style={s.resultTitle} numberOfLines={2}>{p.name}</Text>
-                <Text style={s.resultPrice}>{inr(p.price)}</Text>
-              </Pressable>
-            ))}
+            {(results.data?.products ?? []).length > 0 && (
+              <View style={s.results}>
+                {(results.data?.products ?? []).map((p, i) => (
+                  <PressScale
+                    key={p.id}
+                    haptic="selection"
+                    scaleTo={0.98}
+                    style={[s.result, i > 0 && s.resultDivider]}
+                    onPress={() => {
+                      setProduct(p);
+                      setQuery('');
+                    }}
+                    accessibilityLabel={`Tag ${p.name}`}
+                  >
+                    <Image source={{ uri: p.image }} style={s.resultImg} contentFit="contain" />
+                    <Text style={s.resultTitle} numberOfLines={2}>{p.name}</Text>
+                    <Price price={p.price} size="sm" hideOff />
+                  </PressScale>
+                ))}
+              </View>
+            )}
           </>
         )}
 
         {/* 3 — caption */}
-        <Text style={[s.step, { marginTop: spacing.xl }]}>3 · Caption</Text>
+        <StepHead n={3} title="Caption" done={steps[2]} optional />
         <TextInput
           value={caption}
           onChangeText={(t) => setCaption(t.slice(0, CAPTION_MAX))}
           placeholder="What do you love about it?"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.steel}
           style={s.caption}
           multiline
-          editable={!uploading}
         />
         <Text style={[s.hint, { textAlign: 'right' }]}>{caption.length}/{CAPTION_MAX}</Text>
       </ScrollView>
 
       <View style={[s.bar, { paddingBottom: insets.bottom + spacing.md }]}>
-        {uploading ? (
-          <View>
-            <View style={s.progressRow}>
-              <Text style={s.progressLabel}>{progress < 1 ? 'Uploading your reel…' : 'Finishing up…'}</Text>
-              <Text style={s.progressPct}>{Math.round(progress * 100)}%</Text>
-            </View>
-            <View style={s.track}>
-              <View style={[s.fill, { width: `${Math.max(3, progress * 100)}%` }]} />
-            </View>
-          </View>
-        ) : (
-          <Button
-            label={!video ? 'Add a video to continue' : !product ? 'Tag a product to continue' : 'Post for review'}
-            icon="cloud-upload-outline"
-            onPress={post}
-            disabled={!canPost}
-            full
-          />
-        )}
+        <PremiumButton
+          label={!video ? 'Add a video to continue' : !product ? 'Tag a product to continue' : 'Post for review'}
+          icon={canPost ? 'arrow-up-circle-outline' : undefined}
+          onPress={post}
+          disabled={!canPost}
+          full
+        />
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+function StepHead({ n, title, done, optional }: { n: number; title: string; done: boolean; optional?: boolean }) {
+  return (
+    <View style={s.stepHead}>
+      <View style={[s.stepNum, done && s.stepNumDone]}>
+        {done ? <Ionicons name="checkmark" size={14} color={colors.white} /> : <Text style={s.stepNumText}>{n}</Text>}
+      </View>
+      <View>
+        <Overline>{`Step ${n} of 3${optional ? ' · optional' : ''}`}</Overline>
+        <Text style={type.h2}>{title}</Text>
+      </View>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   demoNote: {
-    fontFamily: font.medium, fontSize: 12.5, color: colors.ink2, backgroundColor: colors.goldSoft,
-    padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.lg,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.goldSoft, padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.sm,
   },
-  step: { fontFamily: font.semibold, fontSize: 15, color: colors.ink, marginBottom: spacing.sm },
-  hint: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 6 },
-  help: { fontFamily: font.regular, fontSize: 13, color: colors.ink2, lineHeight: 18 },
-
-  pickRow: { flexDirection: 'row', gap: spacing.md },
-  pickTile: {
-    flex: 1, height: 120, borderRadius: radius.lg, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.green,
-    backgroundColor: colors.greenFaint, alignItems: 'center', justifyContent: 'center', gap: 6,
+  demoText: { flex: 1, fontFamily: font.medium, fontSize: 12.5, color: colors.ink2 },
+  stepHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.xl, marginBottom: spacing.md },
+  stepNum: {
+    width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: colors.chrome,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white,
   },
-  pickText: { fontFamily: font.bold, fontSize: 14, color: colors.green },
+  stepNumDone: { backgroundColor: colors.green, borderColor: colors.green },
+  stepNumText: { fontFamily: font.heading, fontSize: 13, color: colors.ink2 },
+  hint: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: spacing.sm },
+  help: { flex: 1, fontFamily: font.regular, fontSize: 13, color: colors.ink2, lineHeight: 18 },
+  tip: { flexDirection: 'row', gap: spacing.sm, backgroundColor: colors.greenFaint, borderRadius: radius.md, padding: spacing.md },
 
-  previewRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  preview: { width: 110, height: 196, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.black },
-  duration: { position: 'absolute', right: 6, bottom: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
-  durationText: { fontFamily: font.bold, fontSize: 11, color: colors.white },
+  pickHero: {
+    backgroundColor: colors.carbon, borderRadius: radius.xl, padding: spacing.xl, gap: spacing.sm, overflow: 'hidden', ...elevation.e2,
+  },
+  pickTitle: { fontFamily: font.heading, fontSize: 20, lineHeight: 26, color: colors.white, marginTop: spacing.sm },
+  pickBody: { fontFamily: font.regular, fontSize: 13, color: colors.onDarkMuted },
+  pickRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+
+  previewRow: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
+  preview: { width: 124, height: 220, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.carbon, ...elevation.e2 },
+  duration: { position: 'absolute', left: 8, bottom: 8 },
 
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card,
-    borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, paddingHorizontal: spacing.md, height: 46,
+    borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, paddingHorizontal: spacing.lg, height: 50, ...elevation.e1,
   },
   searchInput: { flex: 1, fontFamily: font.regular, fontSize: 15, color: colors.ink },
-  result: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: colors.line,
-  },
-  resultImg: { width: 44, height: 44, borderRadius: 6, backgroundColor: colors.white },
-  resultTitle: { flex: 1, fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
-  resultPrice: { fontFamily: font.bold, fontSize: 13.5, color: colors.ink },
+  results: { marginTop: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
+  result: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md },
+  resultDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  resultImg: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.white },
+  resultTitle: { flex: 1, fontFamily: font.medium, fontSize: 13.5, lineHeight: 18, color: colors.ink },
 
   tagged: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.card, padding: spacing.md,
-    borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.green, ...shadow.card,
+    borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.green, ...elevation.e1,
   },
-  tagImg: { width: 52, height: 52, borderRadius: 8, backgroundColor: colors.white },
-  tagTitle: { fontFamily: font.medium, fontSize: 14, color: colors.ink },
-  tagPrice: { fontFamily: font.bold, fontSize: 14, color: colors.green, marginTop: 2 },
+  tagImg: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: colors.white },
+  tagOver: { fontFamily: font.medium, fontSize: 11.5, color: colors.muted },
+  tagTitle: { fontFamily: font.semibold, fontSize: 14, lineHeight: 19, color: colors.ink },
 
   caption: {
-    minHeight: 96, backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
-    padding: spacing.md, fontFamily: font.regular, fontSize: 15, color: colors.ink, textAlignVertical: 'top',
+    minHeight: 110, backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line,
+    padding: spacing.lg, fontFamily: font.regular, fontSize: 15, lineHeight: 21, color: colors.ink, textAlignVertical: 'top',
   },
 
   bar: {
     position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card,
-    borderTopWidth: 1, borderTopColor: colors.line, paddingHorizontal: spacing.lg, paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingHorizontal: spacing.lg, paddingTop: spacing.md, ...elevation.e3,
   },
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  progressLabel: { fontFamily: font.medium, fontSize: 14, color: colors.ink },
-  progressPct: { fontFamily: font.bold, fontSize: 14, color: colors.green },
-  track: { height: 8, borderRadius: 4, backgroundColor: colors.greenSoft, overflow: 'hidden', marginBottom: spacing.sm },
-  fill: { height: 8, borderRadius: 4, backgroundColor: colors.green },
 
   doneWrap: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  doneBadge: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
-  doneTitle: { fontFamily: font.heading, fontSize: 24, color: colors.ink, marginTop: spacing.lg },
-  doneBody: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: colors.ink2, textAlign: 'center', marginTop: spacing.sm },
+  doneDisc: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
+  centerText: { textAlign: 'center', maxWidth: 320 },
+  ringInner: { width: 144, height: 144, borderRadius: 72, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.carbon },
+  ringShade: { ...StyleSheet.absoluteFill, backgroundColor: alpha(palette.ink, 0.45) },
+  ringPct: { fontFamily: font.extrabold, fontSize: 30, color: colors.white },
+
+  timeline: { flexDirection: 'row', marginTop: spacing.xl, alignSelf: 'stretch', justifyContent: 'space-between' },
+  tlItem: { flex: 1, alignItems: 'center' },
+  tlTrack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', justifyContent: 'center' },
+  tlDot: {
+    width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.chrome, backgroundColor: colors.white,
+    alignItems: 'center', justifyContent: 'center', zIndex: 1,
+  },
+  tlDotDone: { backgroundColor: colors.green, borderColor: colors.green },
+  tlDotNow: { borderColor: colors.green, borderWidth: 6 },
+  tlLine: { position: 'absolute', left: '50%', right: '-50%', height: 2, backgroundColor: colors.line },
+  tlLabel: { fontFamily: font.medium, fontSize: 12, color: colors.ink2, marginTop: spacing.sm, textAlign: 'center' },
 });

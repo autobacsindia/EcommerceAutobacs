@@ -16,13 +16,18 @@
  * controls. The app used to open straight onto a toolbar on grey, which told
  * the customer nothing about where they had landed.
  *
+ * ── Premium look (2026-11-22) ────────────────────────────────────────────────
+ * Optional pinned `stickyTop` (Shop's search bar stays put while the grid
+ * scrolls), skeleton grid on first load instead of a spinner, sort/filter as
+ * bottom sheets, ink department chips, cards sized to the column exactly.
+ *
  * Everything shown is a value the server sent. This component never computes a
  * price, a discount or a count of its own.
  */
 import { useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, FlatList, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   fetchFacets,
   fetchProducts,
@@ -39,15 +44,36 @@ import {
   activeFilterCount,
   type Filters,
 } from './ListingControls';
-import { Screenful } from './ui';
 import { useHeaderScroll, useScrollToTop } from './useHeaderScroll';
 import { useApp } from '../store';
 import { colors, font, spacing, type } from '../theme';
-import { StripeLoader } from '../ui';
+import { EmptyState, ErrorState, Overline, PressScale, ProductCardSkeleton, Shimmer, StripeLoader } from '../ui';
 
 const PAGE_SIZE = 20;
 
+const GAP = spacing.md;
+
+/** Width of one grid column at the current window size. */
+export function useGridColumn() {
+  const { width } = useWindowDimensions();
+  return Math.floor((width - spacing.lg * 2 - GAP) / 2);
+}
+
+/** First-load placeholder: two columns of card skeletons. */
+export function GridSkeleton({ count = 6 }: { count?: number }) {
+  const col = useGridColumn();
+  return (
+    <View style={s.skelGrid}>
+      {Array.from({ length: count }, (_, i) => (
+        <ProductCardSkeleton key={i} width={col} />
+      ))}
+    </View>
+  );
+}
+
 export default function ProductListing({
+  stickyTop,
+  overline,
   topSlot,
   title,
   blurb,
@@ -55,6 +81,10 @@ export default function ProductListing({
   chips,
   onPickChip,
 }: {
+  /** Pinned above the list (does not scroll) — Shop's search bar. */
+  stickyTop?: React.ReactNode;
+  /** Small caps line above the title ("Department"). */
+  overline?: string;
   /**
    * Rendered above the page title, INSIDE the scroll view — so a screen can
    * put the app header here and have it scroll away with the content, exactly
@@ -75,6 +105,7 @@ export default function ProductListing({
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sheet, setSheet] = useState<'none' | 'sort' | 'filter'>('none');
 
+  const col = useGridColumn();
   const grid = useRef<FlatList<Product>>(null);
   const { onScroll, showTop } = useHeaderScroll(0);
   const scrollToTop = useScrollToTop(grid);
@@ -120,7 +151,11 @@ export default function ProductListing({
     // `pages` is authoritative. Stopping on a short page would end the list
     // early whenever a filter happens to return a partial final page.
     getNextPageParam: (last, all) => (all.length < (last.pages ?? 1) ? all.length + 1 : undefined),
+    // A filter/sort change keeps the current grid on screen (dimmed) until the
+    // new results land, instead of unmounting the list and jumping to the top.
+    placeholderData: keepPreviousData,
   });
+  const refreshing = listing.isPlaceholderData;
 
   const products = useMemo(
     () => (listing.data?.pages ?? []).flatMap((p) => p.products),
@@ -134,6 +169,7 @@ export default function ProductListing({
     <View>
       {topSlot}
       <View style={s.pageHead}>
+        {!!overline && <Overline>{overline}</Overline>}
         <Text style={s.pageTitle}>{title}</Text>
         {!!blurb && <Text style={s.pageBlurb} numberOfLines={2}>{blurb}</Text>}
       </View>
@@ -144,31 +180,36 @@ export default function ProductListing({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={s.chipRow}
         >
-          <Pressable
+          <PressScale
             onPress={() => onPickChip?.(null)}
+            haptic="selection"
             style={[s.chip, !categorySlug && s.chipOn]}
-            accessibilityRole="button"
             accessibilityState={{ selected: !categorySlug }}
           >
-            <Text style={[s.chipText, !categorySlug && s.chipTextOn]}>All categories</Text>
-          </Pressable>
+            <Text style={[s.chipText, !categorySlug && s.chipTextOn]}>All</Text>
+          </PressScale>
           {chips.map((c) => {
             const on = c.slug === categorySlug;
             return (
-              <Pressable
+              <PressScale
                 key={c.id}
                 onPress={() => onPickChip?.(c.slug)}
+                haptic="selection"
                 style={[s.chip, on && s.chipOn]}
-                accessibilityRole="button"
                 accessibilityState={{ selected: on }}
               >
                 <Text style={[s.chipText, on && s.chipTextOn]}>{c.name}</Text>
-              </Pressable>
+              </PressScale>
             );
           })}
         </Animated.ScrollView>
       )}
 
+      {refreshing && (
+        <View style={s.updating}>
+          <StripeLoader size="sm" label="Updating results" />
+        </View>
+      )}
       <ListingToolbar
         total={total}
         filters={filters}
@@ -176,62 +217,83 @@ export default function ProductListing({
         onToggleFilter={() => setSheet((v) => (v === 'filter' ? 'none' : 'filter'))}
       />
 
-      {sheet === 'sort' && (
-        <SortSheet
-          sort={filters.sort}
-          onPick={(key) => { setFilters((f) => ({ ...f, sort: key })); setSheet('none'); }}
-        />
-      )}
-      {sheet === 'filter' && (
-        <FilterSheet
-          filters={filters}
-          facets={facets.data ?? null}
-          carLabel={carLabel}
-          onChange={setFilters}
-          onClear={() => setFilters(EMPTY_FILTERS)}
-          onClose={() => setSheet('none')}
-        />
-      )}
     </View>
   );
 
-  // Only the FIRST load is a full-screen spinner. A filter change keeps the
-  // grid on screen and swaps it when the new page lands, so the screen never
-  // flashes empty under the customer's thumb.
+  // Modals: rendered once, outside the list, so opening one never shifts the grid.
+  const sheets = (
+    <>
+      <SortSheet
+        visible={sheet === 'sort'}
+        sort={filters.sort}
+        onPick={(key) => { setFilters((f) => ({ ...f, sort: key })); setSheet('none'); }}
+        onClose={() => setSheet('none')}
+      />
+      <FilterSheet
+        visible={sheet === 'filter'}
+        filters={filters}
+        facets={facets.data ?? null}
+        carLabel={carLabel}
+        onChange={setFilters}
+        onClear={() => setFilters(EMPTY_FILTERS)}
+        onClose={() => setSheet('none')}
+      />
+    </>
+  );
+
+  // Only the FIRST load shows skeletons. A filter change keeps the grid on
+  // screen and swaps it when the new page lands, so the screen never flashes
+  // empty under the customer's thumb.
   if (listing.isPending || listing.error) {
     return (
       <View style={s.screen}>
-        {topSlot}
-        <View style={s.pageHead}>
-          <Text style={s.pageTitle}>{title}</Text>
-        </View>
-        <Screenful
-          loading={listing.isPending}
-          error={listing.error ? (listing.error as Error).message : null}
-          onRetry={() => listing.refetch()}
-        />
+        {stickyTop}
+        <Animated.ScrollView showsVerticalScrollIndicator={false} scrollEnabled={!listing.isPending}>
+          {topSlot}
+          <View style={s.pageHead}>
+            {!!overline && <Overline>{overline}</Overline>}
+            <Text style={s.pageTitle}>{title}</Text>
+          </View>
+          {listing.isPending ? (
+            <>
+              <View style={s.skelBar}>
+                <Shimmer width={90} height={12} />
+                <Shimmer width={150} height={36} radius={18} />
+              </View>
+              <GridSkeleton />
+            </>
+          ) : (
+            <ErrorState error={listing.error} onRetry={() => listing.refetch()} />
+          )}
+        </Animated.ScrollView>
       </View>
     );
   }
 
   return (
     <View style={s.screen}>
+      {stickyTop}
       <Animated.FlatList
         ref={grid}
+        style={refreshing && s.dim}
         onScroll={onScroll}
         scrollEventThrottle={16}
         data={products}
         keyExtractor={(p: Product) => p.id}
         numColumns={2}
-        columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
-        contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.md }}
+        columnWrapperStyle={s.column}
+        contentContainerStyle={s.content}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        removeClippedSubviews
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={header}
         ListEmptyComponent={
-          <Screenful
-            emptyIcon="cube-outline"
-            emptyTitle={filtered ? 'Nothing matches those filters' : 'Nothing here yet'}
-            emptyBody={
+          <EmptyState
+            icon="cube-outline"
+            title={filtered ? 'Nothing matches those filters' : 'Nothing here yet'}
+            body={
               filtered
                 ? 'Try a wider price range, or clear the filters.'
                 : 'There are no products here at the moment.'
@@ -255,12 +317,10 @@ export default function ProductListing({
             <Text style={s.end}>That&apos;s all {total} products</Text>
           ) : undefined
         }
-        renderItem={({ item }: { item: Product }) => (
-          <View style={{ flex: 1 }}>
-            <ProductCard product={item} />
-          </View>
-        )}
+        renderItem={({ item }: { item: Product }) => <ProductCard product={item} width={col} />}
       />
+
+      {sheets}
 
       <ScrollTopButton visible={showTop} onPress={scrollToTop} />
     </View>
@@ -270,25 +330,39 @@ export default function ProductListing({
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
 
-  pageHead: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: 6 },
+  pageHead: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: 4 },
+  column: { gap: GAP, paddingHorizontal: spacing.lg },
+  content: { paddingBottom: spacing.xxl, gap: GAP },
+  skelGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, paddingHorizontal: spacing.lg },
+  skelBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
   // Montserrat 700 at 23/28 with -0.23 tracking — the site's own page h1.
   pageTitle: { ...type.h1 },
   pageBlurb: { ...type.body, fontSize: 14, lineHeight: 20 },
 
   chipRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
   chip: {
+    height: 38,
+    justifyContent: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.card,
   },
-  chipOn: { backgroundColor: colors.green, borderColor: colors.green },
+  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
   chipTextOn: { fontFamily: font.bold, color: colors.white },
 
   footer: { paddingVertical: spacing.xl },
+  dim: { opacity: 0.55 },
+  updating: { alignItems: 'center', paddingTop: spacing.md },
   end: {
     textAlign: 'center',
     paddingVertical: spacing.xl,

@@ -4,14 +4,19 @@
  * It doubles as the results page for a brand, a vehicle or a saved garage,
  * because they are all the same question with a different filter, and the API
  * answers them all through /products.
+ *
+ * Premium look (2026-11-22): pill search field, product thumbnails in the
+ * suggestions, departments as quick picks before typing, skeleton grid while
+ * loading, sort/filter as bottom sheets, cards sized to the column.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { FlatList, Keyboard, ScrollView, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchFacets, fetchProducts, fetchSuggestions } from '../src/api/catalogue';
+import { Image } from 'expo-image';
+import { fetchCategories, fetchFacets, fetchProducts, fetchSuggestions } from '../src/api/catalogue';
 import {
   EMPTY_FILTERS,
   FilterSheet,
@@ -20,9 +25,10 @@ import {
   type Filters,
 } from '../src/components/ListingControls';
 import ProductCard from '../src/components/ProductCard';
-import { Screenful } from '../src/components/ui';
+import { GridSkeleton, useGridColumn } from '../src/components/ProductListing';
 import { useApp } from '../src/store';
-import { colors, font, radius, spacing } from '../src/theme';
+import { colors, elevation, font, radius, spacing, type } from '../src/theme';
+import { EmptyState, ErrorState, IconButton, Overline, PressScale } from '../src/ui';
 
 export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string; brand?: string; vehicleMake?: string; vehicleModel?: string }>();
@@ -32,6 +38,8 @@ export default function SearchScreen() {
 
   const [text, setText] = useState(params.q ?? '');
   const [query, setQuery] = useState(params.q ?? '');
+  // Suggestions are for while typing; pressing Search (or picking a term) shows the grid.
+  const [typing, setTyping] = useState(!params.q);
   // The same controls the category screen uses: arriving here from the garage
   // or from a department must not present two different filter menus.
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -92,14 +100,20 @@ export default function SearchScreen() {
     staleTime: 60_000,
   });
 
+  // Quick picks before the customer types — real departments, cached from Home/Shop.
+  const categories = useQuery({ queryKey: ['categories'], queryFn: () => fetchCategories(), enabled: !filtered });
+  const departments = (categories.data ?? []).filter((c) => !c.parentId).slice(0, 12);
+  const col = useGridColumn();
+
   const title = useMemo(() => {
     if (params.brand) return params.brand;
     if (params.vehicleMake) return `${params.vehicleMake}${params.vehicleModel ? ` ${params.vehicleModel}` : ''}`;
     return 'Search';
   }, [params.brand, params.vehicleMake, params.vehicleModel]);
 
-  const showSuggestions = !filtered && !!suggestions.data?.length && text.trim().length >= 2;
+  const showSuggestions = typing && !filtered && !!suggestions.data?.length && text.trim().length >= 2;
   const products = results.data?.products ?? [];
+  const searching = filtered || query.trim().length >= 2;
 
   return (
     <>
@@ -107,62 +121,43 @@ export default function SearchScreen() {
       <View style={s.screen}>
         <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
           <View style={s.searchRow}>
-            <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
-              <Ionicons name="arrow-back" size={22} color={colors.ink} />
-            </Pressable>
+            <IconButton icon="arrow-back" label="Go back" onPress={() => router.back()} tone="plain" size={40} iconSize={22} />
             {filtered ? (
               <View style={s.filterTitle}>
+                <Overline>{params.brand ? 'Brand' : 'Parts that fit'}</Overline>
                 <Text style={s.filterTitleText} numberOfLines={1}>{title}</Text>
               </View>
             ) : (
               <View style={s.inputWrap}>
-                <Ionicons name="search" size={18} color={colors.muted} />
+                <Ionicons name="search" size={18} color={colors.green} />
                 <TextInput
                   ref={input}
                   value={text}
-                  onChangeText={setText}
+                  onChangeText={(t) => { setText(t); setTyping(true); }}
                   placeholder="Search parts, brands or your car"
                   placeholderTextColor={colors.muted}
                   style={s.input}
                   returnKeyType="search"
-                  onSubmitEditing={() => { setQuery(text); Keyboard.dismiss(); }}
+                  onSubmitEditing={() => { setQuery(text); setTyping(false); Keyboard.dismiss(); }}
                   accessibilityLabel="Search products"
                 />
                 {!!text && (
-                  <Pressable onPress={() => setText('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+                  <PressScale onPress={() => setText('')} haptic="selection" hitSlop={8} accessibilityLabel="Clear search">
                     <Ionicons name="close-circle" size={18} color={colors.muted} />
-                  </Pressable>
+                  </PressScale>
                 )}
               </View>
             )}
           </View>
         </View>
 
-        {(filtered || query.trim().length >= 2) && !results.isLoading && (
-          <>
-            <ListingToolbar
-              total={results.data?.total ?? products.length}
-              filters={filters}
-              onToggleSort={() => setSheet((v) => (v === 'sort' ? 'none' : 'sort'))}
-              onToggleFilter={() => setSheet((v) => (v === 'filter' ? 'none' : 'filter'))}
-            />
-            {sheet === 'sort' && (
-              <SortSheet
-                sort={filters.sort}
-                onPick={(key) => { setFilters((f) => ({ ...f, sort: key })); setSheet('none'); }}
-              />
-            )}
-            {sheet === 'filter' && (
-              <FilterSheet
-                filters={filters}
-                facets={facets.data ?? null}
-                carLabel={garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : null}
-                onChange={setFilters}
-                onClear={() => setFilters(EMPTY_FILTERS)}
-                onClose={() => setSheet('none')}
-              />
-            )}
-          </>
+        {searching && !results.isLoading && !results.error && !showSuggestions && (
+          <ListingToolbar
+            total={results.data?.total ?? products.length}
+            filters={filters}
+            onToggleSort={() => setSheet((v) => (v === 'sort' ? 'none' : 'sort'))}
+            onToggleFilter={() => setSheet((v) => (v === 'filter' ? 'none' : 'filter'))}
+          />
         )}
 
         {showSuggestions ? (
@@ -170,38 +165,62 @@ export default function SearchScreen() {
             data={suggestions.data ?? []}
             keyExtractor={(x) => x.id}
             keyboardShouldPersistTaps="handled"
+            contentContainerStyle={s.suggestList}
             renderItem={({ item }) => (
-              <Pressable
+              <PressScale
                 onPress={() => {
                   Keyboard.dismiss();
                   if (item.type === 'product' && item.slug) router.push(`/product/${item.slug}`);
-                  else { setText(item.text); setQuery(item.text); }
+                  else { setText(item.text); setQuery(item.text); setTyping(false); }
                 }}
+                haptic="selection"
+                scaleTo={0.99}
                 style={s.suggestion}
-                accessibilityRole="button"
               >
-                <Ionicons name={item.type === 'product' ? 'cube-outline' : 'search'} size={16} color={colors.muted} />
-                <Text style={s.suggestionText} numberOfLines={1}>{item.text}</Text>
-              </Pressable>
+                <View style={s.suggestThumb}>
+                  {item.imageUrl ? (
+                    <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
+                  ) : (
+                    <Ionicons name={item.type === 'product' ? 'cube-outline' : 'search'} size={16} color={colors.green} />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.suggestionText} numberOfLines={1}>{item.text}</Text>
+                  {!!item.category && <Text style={s.suggestionSub} numberOfLines={1}>{item.category}</Text>}
+                </View>
+                <Ionicons name="arrow-forward" size={16} color={colors.chrome} />
+              </PressScale>
             )}
           />
-        ) : results.isLoading || results.error ? (
-          <Screenful
-            loading={results.isLoading}
-            error={results.error ? (results.error as Error).message : null}
-            onRetry={() => results.refetch()}
-          />
-        ) : !filtered && query.trim().length < 2 ? (
-          <Screenful
-            emptyIcon="search-outline"
-            emptyTitle="What are you looking for?"
-            emptyBody="Try a part name, a brand, or your car model."
-          />
+        ) : results.isLoading ? (
+          <ScrollView scrollEnabled={false} contentContainerStyle={{ paddingTop: spacing.lg }}>
+            <GridSkeleton />
+          </ScrollView>
+        ) : results.error ? (
+          <ErrorState error={results.error} onRetry={() => results.refetch()} />
+        ) : !searching ? (
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.idle}>
+            <Overline>Start here</Overline>
+            <Text style={s.idleTitle}>What are you looking for?</Text>
+            <Text style={s.idleBody}>Try a part name, a brand, or your car model.</Text>
+            {departments.length > 0 && (
+              <>
+                <Text style={s.group}>Popular departments</Text>
+                <View style={s.quick}>
+                  {departments.map((c) => (
+                    <PressScale key={c.id} onPress={() => router.push(`/category/${c.slug}`)} haptic="selection" style={s.quickChip}>
+                      <Text style={s.quickText} numberOfLines={1}>{c.name}</Text>
+                    </PressScale>
+                  ))}
+                </View>
+              </>
+            )}
+          </ScrollView>
         ) : products.length === 0 ? (
-          <Screenful
-            emptyIcon="cube-outline"
-            emptyTitle="Nothing matched"
-            emptyBody="Try a different spelling, or browse by department."
+          <EmptyState
+            icon="cube-outline"
+            title="Nothing matched"
+            body="Try a different spelling, or browse by department."
             action={{ label: 'Browse departments', onPress: () => router.push('/(tabs)/shop') }}
           />
         ) : (
@@ -209,17 +228,32 @@ export default function SearchScreen() {
             data={products}
             keyExtractor={(p) => p.id}
             numColumns={2}
-            columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
-            contentContainerStyle={{ paddingVertical: spacing.lg, gap: spacing.md }}
+            columnWrapperStyle={s.column}
+            contentContainerStyle={s.content}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <View style={{ flex: 1 }}>
-                <ProductCard product={item} />
-              </View>
-            )}
+            initialNumToRender={6}
+            windowSize={7}
+            removeClippedSubviews
+            renderItem={({ item }) => <ProductCard product={item} width={col} />}
           />
         )}
+
+        <SortSheet
+          visible={sheet === 'sort'}
+          sort={filters.sort}
+          onPick={(key) => { setFilters((f) => ({ ...f, sort: key })); setSheet('none'); }}
+          onClose={() => setSheet('none')}
+        />
+        <FilterSheet
+          visible={sheet === 'filter'}
+          filters={filters}
+          facets={facets.data ?? null}
+          carLabel={garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : null}
+          onChange={setFilters}
+          onClear={() => setFilters(EMPTY_FILTERS)}
+          onClose={() => setSheet('none')}
+        />
       </View>
     </>
   );
@@ -227,37 +261,77 @@ export default function SearchScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.line },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  header: {
+    backgroundColor: colors.card,
+    paddingLeft: spacing.sm,
+    paddingRight: spacing.lg,
+    paddingBottom: spacing.md,
+    zIndex: 2,
+    ...elevation.e1,
+  },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   inputWrap: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.subtle, borderRadius: radius.md + 2, paddingHorizontal: spacing.lg, height: 44,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.page,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: spacing.lg,
+    height: 46,
   },
-  input: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.ink, padding: 0 },
-  filterTitle: { flex: 1 },
-  filterTitleText: { fontFamily: font.heading, fontSize: 19, color: colors.ink },
+  input: { flex: 1, fontFamily: font.regular, fontSize: 15, color: colors.ink, padding: 0 },
+  filterTitle: { flex: 1, paddingLeft: spacing.xs },
+  filterTitleText: { ...type.h1, fontSize: 20, lineHeight: 26 },
 
-  toolbar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingTop: spacing.md,
-  },
-  sortBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.card,
-    borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 7,
-    borderWidth: 1, borderColor: colors.line,
-  },
-  sortText: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink2 },
-  sortSheet: { backgroundColor: colors.card, marginHorizontal: spacing.lg, marginTop: spacing.sm, borderRadius: radius.lg, overflow: 'hidden' },
-  sortOption: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-  },
-  sortOptionText: { fontFamily: font.regular, fontSize: 14, color: colors.ink2 },
-  sortOptionOn: { fontFamily: font.semibold, color: colors.green },
+  column: { gap: spacing.md, paddingHorizontal: spacing.lg },
+  content: { paddingBottom: spacing.xxl, gap: spacing.md },
 
+  suggestList: { paddingVertical: spacing.sm },
   suggestion: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.line,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
   },
-  suggestionText: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.ink },
+  suggestThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionText: { fontFamily: font.medium, fontSize: 14.5, color: colors.ink },
+  suggestionSub: { ...type.caption, marginTop: 1 },
+
+  idle: { padding: spacing.lg, paddingTop: spacing.xl },
+  idleTitle: { ...type.display, fontSize: 24, lineHeight: 30, marginTop: spacing.xs },
+  idleBody: { ...type.body, color: colors.muted, marginTop: spacing.xs },
+  group: {
+    fontFamily: font.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: colors.steel,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.md,
+  },
+  quick: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  quickChip: {
+    height: 38,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  quickText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
 });
