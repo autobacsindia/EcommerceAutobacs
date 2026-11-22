@@ -15,8 +15,7 @@ import auditLogger from '../auditLogger.js';
 import repo, { PRICE_REVIEW_STATUS as P } from '../../repositories/supplierPartnerAdminRepository.js';
 import { keysetPage } from '../../utils/listQuery.js';
 import { checkPrice } from '../../utils/supplierPricing.js';
-import { resolveMarginRule } from '../supplierPortal/marginRules.js';
-import { PAGE_SIZE, cleanPrice, fail, guard, idOf, iso, priceDecision, requireId, text } from './shared.js';
+import { PAGE_SIZE, categorySetKey, cleanPrice, fail, guard, idOf, iso, priceDecision, requireId, resolveMarginRules, text } from './shared.js';
 import { updateProduct } from './productWrites.js';
 
 const SORTS = Object.freeze({
@@ -68,19 +67,15 @@ async function enrich(rows) {
   const p = new Map(products.map((x) => [String(x._id), x]));
   const l = new Map(listings.map((x) => [String(x._id), x]));
   const a = new Map(accounts.map((x) => [String(x._id), x.companyName]));
-  // Margin rules: one read per distinct category set (usually one or two per page).
-  const rules = new Map();
-  for (const prod of products) {
-    const key = (prod.categories || []).map(String).join(',');
-    if (!rules.has(key)) rules.set(key, await resolveMarginRule(prod.categories || []));
-  }
+  // Margin rules for the whole page in one read.
+  const rules = await resolveMarginRules(products.map((prod) => prod.categories || []));
   return rows.map((r) => {
     const product = p.get(String(r.product));
     return rowOf(r, {
       product,
       listing: l.get(String(r.listing)),
       companyName: a.get(String(r.supplierAccount)),
-      rule: product ? rules.get((product.categories || []).map(String).join(',')) : null,
+      rule: product ? rules.get(categorySetKey(product.categories)) : null,
     });
   });
 }

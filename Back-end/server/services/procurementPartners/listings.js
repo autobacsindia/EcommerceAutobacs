@@ -108,11 +108,17 @@ async function possibleDuplicates(l) {
   const ids = [];
   const add = (id) => { const s = String(id); if (!ids.includes(s)) ids.push(s); };
   try {
+    // The search is a regex scan of the catalogue (find + count) per term, so
+    // terms are spent carefully (measured: 4 full scans per detail before this).
+    // An exact SKU hit already answers "is it the same part" on an index, so the
+    // part-number scan is skipped then; the title scan still finds look-alikes.
+    let exactHit = false;
     if (l.partNumber) {
       const exact = await repo.findProductBySku(l.partNumber);
-      if (exact) add(exact._id);
+      if (exact) { add(exact._id); exactHit = true; }
     }
-    for (const term of [l.partNumber, l.title].map((t) => text(t, 100)).filter((t) => t.length >= 2)) {
+    const terms = [exactHit ? '' : l.partNumber, l.title];
+    for (const term of terms.map((t) => text(t, 100)).filter((t) => t.length >= 2)) {
       if (ids.length >= DUPLICATE_LIMIT) break;
       const { products = [] } = await SearchService.searchProducts({ search: term, limit: DUPLICATE_LIMIT, page: 1 }, { includeInactive: true });
       products.forEach((p) => add(p._id));

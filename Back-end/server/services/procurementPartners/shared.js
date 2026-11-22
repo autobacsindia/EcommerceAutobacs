@@ -7,6 +7,8 @@ import AppError from '../../utils/AppError.js';
 import { STAFF_TEAMS } from '../../config/staff.js';
 import { isObjectId } from '../../utils/listQuery.js';
 import { resolveMarginRule } from '../supplierPortal/marginRules.js';
+import marginRuleRepository, { marginRuleKey } from '../../repositories/marginRuleRepository.js';
+import { DEFAULT_MARGIN_BP, DEFAULT_FLOOR_BP } from '../../config/supplierPortal.js';
 import { suggestSellingPrice, checkPrice } from '../../utils/supplierPricing.js';
 
 export const PAGE_SIZE = 30;
@@ -96,6 +98,32 @@ export async function pricingView({ costPaise, gstPct, categoryIds = [], price =
     suggestedPrice,
     ...(current ? { currentPrice: price, currentMarginBp: current.marginBp, currentBelowFloor: current.belowFloor, currentBelowCost: current.belowCost } : {}),
   };
+}
+
+/** Key for a product's category set, as used by resolveMarginRules. */
+export const categorySetKey = (categoryIds = []) => (categoryIds || []).filter(Boolean).map(String).join(',');
+
+/**
+ * resolveMarginRule for MANY category sets with ONE read (a page of price
+ * reviews had one read per product — measured 30 reads for 30 rows). Same
+ * precedence as services/supplierPortal/marginRules.js: the first category with a
+ * rule → 'default' → built-in. Returns Map(categorySetKey → rule).
+ */
+export async function resolveMarginRules(categorySets) {
+  const sets = categorySets.map((ids) => (ids || []).filter(Boolean).map(String));
+  const keys = [...new Set([...sets.flat().map(marginRuleKey), marginRuleKey(null)])];
+  const rows = await marginRuleRepository.findByKeys(keys);
+  const byKey = new Map(rows.map((r) => [r.key, r]));
+  const out = new Map();
+  for (const ids of sets) {
+    let rule = null;
+    for (const k of [...ids.map(marginRuleKey), marginRuleKey(null)]) {
+      const r = byKey.get(k);
+      if (r) { rule = { targetBp: r.targetBp, floorBp: r.floorBp, source: k }; break; }
+    }
+    out.set(ids.join(','), rule || { targetBp: DEFAULT_MARGIN_BP, floorBp: DEFAULT_FLOOR_BP, source: 'built-in' });
+  }
+  return out;
 }
 
 /** The actor stamp every decision carries. */
