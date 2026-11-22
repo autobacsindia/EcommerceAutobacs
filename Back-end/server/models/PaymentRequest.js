@@ -336,6 +336,9 @@ PaymentRequestSchema.index(
   { 'reimbursement.on': 1 },
   { name: 'payment_request_reimbursement_on', partialFilterExpression: { 'reimbursement.on': { $type: 'string' } } }
 );
+// "My last reimbursement's UPI" — the expense form prefills it on every open (lastOwnPayee).
+// Measured: 6,000 payments read for one without it (tests/reimbursementIndexUsage.test.js).
+PaymentRequestSchema.index({ requestedBy: 1, category: 1, createdAt: -1 }, { name: 'payment_request_requester_category' });
 // "Which payments carry reference INV-2231?" — only rows that have one.
 PaymentRequestSchema.index(
   { reference: 1, createdAt: -1 },
