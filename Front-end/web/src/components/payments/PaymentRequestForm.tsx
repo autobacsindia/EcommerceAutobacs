@@ -1,13 +1,14 @@
 'use client';
 
 import CopyId from '@/components/ui/CopyId';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import {
-  errorMessage, getExpenseOptions, getRequest, money, paymentKeys, postForm, type OrderMatch, type PaymentRequest,
+  errorMessage, getExpenseOptions, getRequest, money, paymentKeys, postForm, REIMBURSEMENT, type OrderMatch, type PaymentRequest,
 } from './api';
+import ReimbursementFields, { claimPayload, claimProblem, emptyClaim, TaskPicker, type ClaimDraft, type PickedTask } from './ReimbursementFields';
 import OrderPicker from './OrderPicker';
 import FilePicker from './FilePicker';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
@@ -95,6 +96,11 @@ export default function PaymentRequestForm({
   // Optional: the project ("PRJ-0007") and any other ID this cost belongs to. The server checks the project exists.
   const [projectCode, setProjectCode] = useState('');
   const [reference, setReference] = useState('');
+  // A Reimbursement: its kind, date and (Fuel) km. The task it was for (any expense may name one).
+  const [claim, setClaim] = useState<ClaimDraft>(emptyClaim);
+  const [task, setTask] = useState<PickedTask | null>(null);
+  // "Paid to" is filled once from this person's last reimbursement (they can change it).
+  const prefilled = useRef(false);
   // One id per form: a double-clicked Submit, or a retry after a dropped reply, raises one expense.
   const clientId = useRef(newClientId());
   const [busy, setBusy] = useState(false);
@@ -110,18 +116,44 @@ export default function PaymentRequestForm({
   });
   const options = optionsQ.data?.options;
   const chosen = options?.categories.find((c) => c.value === category) ?? options?.categories[0];
-  const noteRequired = !supplier && (chosen?.noteRequired ?? true);
+  const reimbursing = !supplier && chosen?.value === REIMBURSEMENT && Boolean(options?.reimbursement);
+  const noteRequired = !supplier && (reimbursing ? claim.type === 'other' : (chosen?.noteRequired ?? true));
   const base = options?.baseCurrency ?? 'INR';
   const foreign = currency !== base;
   const setup = Boolean(supplier?.setUpDeal);
   const deal = supplier?.deal;
   // The currency can be chosen everywhere except a deal part (fixed to the deal's).
-  const chooseCurrency = !deal && Boolean(options && options.currencies.length > 1);
+  // A reimbursement is always rupees.
+  const chooseCurrency = !deal && !reimbursing && Boolean(options && options.currencies.length > 1);
   const unit = foreign ? currency : '₹';
   const codeKind: BankCodeKind = codeChoice ?? (foreign ? 'swift' : 'ifsc');
   // What the picked supplier owes us in this bill's currency (the server re-checks under a lock).
   const available = supplier && picked ? (picked.credit || []).find((b) => b.currency === currency && b.owed > 0) : undefined;
   const creditNum = available && Number(creditToUse) > 0 ? Number(creditToUse) : 0;
+
+  /** A reimbursement is in rupees, and is paid to the person: fill their last UPI / bank once, if "Pay to" is still empty. */
+  function prefillPayee() {
+    const last = options?.reimbursement?.lastPayee;
+    if (prefilled.current || !last || payee.name || payee.upiId || payee.accountNumber) return;
+    prefilled.current = true;
+    setMethod(last.method);
+    setCodeChoice(kindOf(last));
+    setPayee({
+      name: last.name || '', upiId: last.upiId || '', accountName: last.accountName || '',
+      accountNumber: /^X+\d{4}$/.test(last.accountNumber || '') ? '' : last.accountNumber || '',
+      ifsc: last.ifsc || '', swift: last.swift || '', bankName: last.bankName || '', phone: last.phone || '',
+    });
+  }
+  function pickCategory(v: string) {
+    setCategory(v);
+    if (v === REIMBURSEMENT) setCurrency('INR');
+  }
+  // When Reimbursement is (or becomes) the choice and the options have arrived.
+  const lastPayee = options?.reimbursement?.lastPayee;
+  useEffect(() => {
+    if (reimbursing && lastPayee) prefillPayee();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per choice; prefillPayee guards itself
+  }, [reimbursing, lastPayee]);
 
   /** Refill from the previous payment: its saved supplier, or the details typed then. */
   async function fillSame() {
@@ -162,6 +194,10 @@ export default function PaymentRequestForm({
     if (setup && Number(amount) > Number(agreedTotal)) { setError(`The advance cannot be more than the agreed total (${money(Number(agreedTotal), currency)}).`); return; }
     const codeProblem = !picked && method === 'bank' ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
+    if (reimbursing) {
+      const problem = claimProblem(claim, options!.reimbursement!, { amount: Number(amount), details: richTextToPlain(description), bills: bills.length });
+      if (problem) { setError(problem); return; }
+    }
     if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
     const form = new FormData();
     // A foreign bill sends only what was billed: the rupees are recorded when it is paid.
@@ -171,6 +207,10 @@ export default function PaymentRequestForm({
       form.append('advance', amount);
       form.append('completionDate', completionDate);
       form.append('note', richTextToPlain(description).trim());
+    } else if (reimbursing) {
+      // Fuel sends km only: the server works out the amount. The others send what was typed.
+      form.append('reimbursement', JSON.stringify(claimPayload(claim)));
+      if (claim.type !== 'fuel') form.append('amount', amount);
     } else if (foreign) {
       form.append('foreignAmount', amount);
     } else {
@@ -178,6 +218,7 @@ export default function PaymentRequestForm({
     }
     form.append('description', description.trim());
     if (projectCode.trim()) form.append('project', projectCode.trim());
+    if (task) form.append('task', task.id);
     if (reference.trim()) form.append('reference', reference.trim());
     if (!supplier) form.append('clientId', clientId.current);
     // A saved supplier is sent by id: the server copies its details itself.
@@ -267,7 +308,7 @@ export default function PaymentRequestForm({
             ) : !options ? (
               <p className="flex items-center gap-2 py-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
             ) : (
-              <select id="pr-category" className={input} value={chosen?.value ?? ''} onChange={(e) => setCategory(e.target.value)}>
+              <select id="pr-category" className={input} value={chosen?.value ?? ''} onChange={(e) => pickCategory(e.target.value)}>
                 {options.categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             )}
@@ -279,6 +320,14 @@ export default function PaymentRequestForm({
               <p className="mt-1 text-xs text-gray-500">If this cost was for a customer’s order, link it — it then shows on that order.</p>
             </div>
           )}
+        </div>
+      )}
+
+      {!supplier && (
+        <div>
+          <label className={label} htmlFor="pr-task">Task (optional)</label>
+          <TaskPicker picked={task} onPick={setTask} />
+          <p className="mt-1 text-xs text-gray-500">Which of your tasks was this for? It then shows on that task.</p>
         </div>
       )}
 
@@ -310,6 +359,7 @@ export default function PaymentRequestForm({
             <input id="pr-total" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={agreedTotal} onChange={(e) => setAgreedTotal(e.target.value)} placeholder="e.g. 29000" />
           </div>
         )}
+        {!reimbursing && (
         <div>
           <label className={label} htmlFor="pr-amount">{setup ? `Advance now (${unit})` : foreign ? `Bill amount (${currency})` : 'Amount (₹)'}</label>
           <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)}
@@ -323,6 +373,7 @@ export default function PaymentRequestForm({
             <p className="mt-1 text-xs text-gray-600">Balance after the advance: {money(Number(agreedTotal) - Number(amount), currency)}</p>
           )}
         </div>
+        )}
         {setup && (
           <div>
             <label className={label} htmlFor="pr-completion">Supplier finishes making it on</label>
@@ -330,6 +381,10 @@ export default function PaymentRequestForm({
           </div>
         )}
       </div>
+
+      {reimbursing && options?.reimbursement && (
+        <ReimbursementFields value={claim} onChange={setClaim} options={options.reimbursement} amount={amount} onAmount={setAmount} />
+      )}
 
       {foreign && (
         <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">

@@ -90,7 +90,7 @@ const staff = (team, isHead = false) => ({ team, isHead, active: true });
 const UPI = { name: 'Fuel Station', method: 'upi', upiId: 'fuelstation@okaxis' };
 const BANK = { name: 'ARB Supplies', method: 'bank', accountName: 'ARB Supplies Pvt Ltd', accountNumber: '123456789012', ifsc: 'HDFC0001234', bankName: 'HDFC' };
 const expense = (s, over = {}, files = [{ field: 'bill', buffer: JPEG, name: 'bill.jpg', type: 'image/jpeg' }]) =>
-  s.form('/payment-requests/expenses', { category: 'fuel', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
+  s.form('/payment-requests/expenses', { category: 'other', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
 
 async function paidOrder(salesUser = null) {
   const order = await Order.create({
@@ -147,7 +147,7 @@ describe('Payment requests', () => {
       const res = await expense(ops.session);
       expect(res.status).toBe(201);
       expect(res.body.request).toMatchObject({
-        number: 'PR-0001', kind: 'expense', status: 'submitted', team: 'operations', amount: 1250.5, category: 'fuel',
+        number: 'PR-0001', kind: 'expense', status: 'submitted', team: 'operations', amount: 1250.5, category: 'other',
         requestedBy: 'Omar', payee: { name: 'Fuel Station', method: 'upi', upiId: 'fuelstation@okaxis' },
       });
       expect(res.body.request.files).toEqual([expect.objectContaining({ kind: 'bill', contentType: 'image/jpeg' })]);
@@ -736,11 +736,11 @@ describe('Payment requests', () => {
       expect(String(msgs[0].threadOrder)).toBe(id);
       // Raised → accounts is asked. Approved → the admin is asked, and mentioned,
       // because nothing moves until they pay.
-      expect(msgs[0].text).toMatch(/New Fuel expense PR-\d+ .*Accounts: please approve/);
+      expect(msgs[0].text).toMatch(/New Others expense PR-\d+ .*Accounts: please approve/);
       expect(msgs[1].text).toMatch(/Admin: please pay/);
       expect(msgs[1].mentions.map(String)).toContain(String(admin.user._id));
       expect(msgs.slice(1).every((m) => String(m.threadRoot) === String(msgs[0]._id))).toBe(true);
-      expect(msgs[2].text).toMatch(/Paid Fuel expense .*UPI ref UPI12345678/);
+      expect(msgs[2].text).toMatch(/Paid Others expense .*UPI ref UPI12345678/);
 
       const opsSpace = await ChatChannel.findOne({ key: 'team:operations' }).lean();
       expect(await ChatMessage.countDocuments({ channel: opsSpace._id })).toBe(3);

@@ -88,7 +88,7 @@ const staff = (team, isHead = false) => ({ team, isHead, active: true });
 const UPI = { name: 'Fuel Station', method: 'upi', upiId: 'fuelstation@okaxis' };
 const BANK = { name: 'ARB Supplies', method: 'bank', accountName: 'ARB Supplies Pvt Ltd', accountNumber: '123456789012', ifsc: 'HDFC0001234', bankName: 'HDFC' };
 const expense = (s, over = {}, files = [{ field: 'bill', buffer: JPEG, name: 'bill.jpg', type: 'image/jpeg' }]) =>
-  s.form('/payment-requests/expenses', { category: 'fuel', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
+  s.form('/payment-requests/expenses', { category: 'other', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
 
 async function paidOrder(salesUser = null) {
   const order = await Order.create({

@@ -147,7 +147,8 @@ describe('Expense options per team, and foreign-currency bills', () => {
       expect(cfg.categoryLabel('mystery')).toBe('mystery');
       // A value off the team's list (an old record) keeps the old "details required" rule.
       expect(cfg.noteRequiredFor('procurement', 'fuel')).toBe(true);
-      expect(cfg.noteRequiredFor('operations', 'fuel')).toBe(false);
+      expect(cfg.noteRequiredFor('operations', 'fuel')).toBe(true); // operations' old Fuel is off its list now (reimbursements replaced it)
+      expect(cfg.noteRequiredFor('operations', 'reimbursement')).toBe(false);
     });
   });
 
@@ -155,7 +156,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
     it('gives each person their own team’s options; every team gets every currency', async () => {
       const opsRes = await ops.session.get('/payment-requests/expense-options');
       expect(opsRes.status).toBe(200);
-      expect(opsRes.body.options.categories.map((c) => c.value)).toEqual(['fuel', 'food', 'travel', 'other']);
+      expect(opsRes.body.options.categories.map((c) => c.value)).toEqual(['reimbursement', 'other']);
       // Every team pays in any currency on the list (owner, 2026-11-05), rupees first.
       expect(opsRes.body.options.currencies[0]).toEqual({ code: 'INR', label: 'Indian rupee (₹)' });
       expect(opsRes.body.options.currencies.map((c) => c.code)).toEqual(expect.arrayContaining(['THB', 'USD']));
@@ -164,18 +165,19 @@ describe('Expense options per team, and foreign-currency bills', () => {
       expect(sneaky.body.options.team).toBe('operations');
 
       const proc = (await procurement.session.get('/payment-requests/expense-options')).body.options;
-      expect(proc.categories.map((c) => c.value)).toEqual(['product_purchase', 'import_purchase', 'forwarder_cha', 'dispatch', 'other']);
+      expect(proc.categories.map((c) => c.value)).toEqual(['reimbursement', 'product_purchase', 'import_purchase', 'forwarder_cha', 'dispatch', 'other']);
       expect(proc.currencies.map((c) => c.code)).toEqual(expect.arrayContaining(['INR', 'THB', 'USD', 'CNY', 'EUR', 'JPY']));
       expect(proc.currencies[0].code).toBe('INR');
 
       const acc = (await accounts.session.get('/payment-requests/expense-options')).body.options;
-      expect(acc.categories.every((c) => c.noteRequired)).toBe(true);
+      // Reimbursement keeps its own rule (only its Others sub-type needs details).
+      expect(acc.categories.filter((c) => c.value !== 'reimbursement').every((c) => c.noteRequired)).toBe(true);
     });
 
     it('an admin names the team; a customer cannot ask', async () => {
       expect((await admin.session.get('/payment-requests/expense-options')).status).toBe(400);
       const mkt = await admin.session.get('/payment-requests/expense-options?team=marketing');
-      expect(mkt.body.options.categories.map((c) => c.value)).toEqual(['meta_ads', 'google_ads', 'claude', 'tools', 'other']);
+      expect(mkt.body.options.categories.map((c) => c.value)).toEqual(['reimbursement', 'meta_ads', 'google_ads', 'claude', 'tools', 'other']);
       const customer = await makeUser('Cara', 'customer');
       expect((await customer.session.get('/payment-requests/expense-options')).status).toBe(403);
     });
@@ -185,7 +187,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
     it('refuses another team’s option with a 400 that says what this team can claim', async () => {
       const res = await expense(procurement.session, { category: 'fuel', description: 'Diesel' });
       expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/Procurement can claim: Product purchase, Import purchase, Freight forwarder \/ CHA \(customs agent\), Dispatch \(courier \/ shipping\), Others/);
+      expect(res.body.message).toMatch(/Procurement can claim: Reimbursement, Product purchase, Import purchase, Freight forwarder \/ CHA \(customs agent\), Dispatch \(courier \/ shipping\), Others/);
       expect((await expense(ops.session, { category: 'import_purchase', description: 'x'.repeat(5) })).status).toBe(400);
       expect((await expense(marketing.session, { category: 'purchase', description: 'Old option' })).status).toBe(400);
       expect((await expense(ops.session, { description: 'No category' })).status).toBe(400);
@@ -195,7 +197,6 @@ describe('Expense options per team, and foreign-currency bills', () => {
 
     it('takes each team’s own options', async () => {
       const cases = [
-        [ops, 'fuel'], [ops, 'food'], [ops, 'travel'],
         [marketing, 'meta_ads'], [marketing, 'google_ads'], [marketing, 'claude'],
         [procurement, 'import_purchase'], [procurement, 'forwarder_cha'], [procurement, 'product_purchase'], [procurement, 'dispatch'],
         [developer, 'hosting'], [developer, 'ai_tools'],
@@ -218,7 +219,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
 
   describe('raising: details where they are required', () => {
     it('optional on a plain option, required on Others / Tools / every Accounts option', async () => {
-      expect((await expense(ops.session, { category: 'fuel' })).status).toBe(201);
+      expect((await expense(developer.session, { category: 'hosting' })).status).toBe(201);
       expect((await expense(marketing.session, { category: 'meta_ads', description: '' })).status).toBe(201);
 
       for (const [who, category] of [[ops, 'other'], [marketing, 'tools'], [marketing, 'other'], [accounts, 'gst'],
@@ -269,9 +270,9 @@ describe('Expense options per team, and foreign-currency bills', () => {
       const raised = (await expense(marketing.session, { category: 'tools', description: 'Figma seats' })).body.request;
       expect((await marketing.session.put(`/payment-requests/${raised.id}`, { reason: "Correction", description: '' })).status).toBe(400);
       expect((await marketing.session.put(`/payment-requests/${raised.id}`, { reason: "Correction", category: 'claude', description: '' })).status).toBe(200);
-      const plain = (await expense(ops.session, { category: 'fuel' })).body.request;
-      expect((await ops.session.put(`/payment-requests/${plain.id}`, { reason: "Correction", category: 'other' })).status).toBe(400);
-      expect((await ops.session.put(`/payment-requests/${plain.id}`, { reason: "Correction", category: 'other', description: 'Parking fee' })).status).toBe(200);
+      const plain = (await expense(developer.session, { category: 'hosting' })).body.request;
+      expect((await developer.session.put(`/payment-requests/${plain.id}`, { reason: "Correction", category: 'other' })).status).toBe(400);
+      expect((await developer.session.put(`/payment-requests/${plain.id}`, { reason: "Correction", category: 'other', description: 'Parking fee' })).status).toBe(200);
     });
   });
 
@@ -321,13 +322,13 @@ describe('Expense options per team, and foreign-currency bills', () => {
     });
 
     it('every team may claim a foreign bill; an unknown currency is refused', async () => {
-      const res = await expense(ops.session, { category: 'fuel', amount: undefined, currency: 'THB', foreignAmount: 100 });
+      const res = await expense(ops.session, { category: 'other', description: 'Hotel in Bangkok', amount: undefined, currency: 'THB', foreignAmount: 100 });
       expect(res.status).toBe(201);
       expect(res.body.request).toMatchObject({ currency: 'THB', foreignAmount: 100, amount: 0, rupeesPending: true });
-      const bad = await expense(ops.session, { category: 'fuel', amount: undefined, currency: 'XYZ', foreignAmount: 100 });
+      const bad = await expense(ops.session, { category: 'other', description: 'Hotel in Bangkok', amount: undefined, currency: 'XYZ', foreignAmount: 100 });
       expect(bad.status).toBe(400);
       expect(bad.body.message).toMatch(/XYZ is not a currency we pay in/);
-      expect((await expense(ops.session, { category: 'fuel', currency: 'INR' })).status).toBe(201);
+      expect((await expense(ops.session, { category: 'other', description: 'Parking fee', currency: 'INR' })).status).toBe(201);
     });
 
     it('paying it needs the rupees the bank debited; the rate is worked out from them', async () => {

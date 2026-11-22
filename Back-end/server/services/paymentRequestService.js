@@ -43,8 +43,10 @@ import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import {
   BASE_CURRENCY, MAX_FX_RATE, MIN_FX_RATE, categoriesFor, categoriesNamed, categoryLabel, expenseOptionsFor,
-  filterCategories, findCategory, isCurrencyAllowed, noteRequiredFor, SUBSCRIPTION_CATEGORY,
+  filterCategories, findCategory, isCurrencyAllowed, noteRequiredFor, SUBSCRIPTION_CATEGORY, REIMBURSEMENT, REIMBURSEMENT_TYPES,
 } from '../config/expenseCategories.js';
+import * as claims from './reimbursement.js';
+import { taskForLink, taskFields, taskCode } from './taskLink.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 import { bankCodeLabel, cardLabelOf, cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
@@ -232,6 +234,26 @@ function cleanMoney(team, input, current = null) {
   }
   return { amount: 0, currency, foreignAmount, fxRate: null };
 }
+
+/**
+ * The money on a Reimbursement (services/reimbursement.js): always rupees. Fuel is
+ * km × the per-km rate — any amount the browser sent is ignored. Food /
+ * Transportation / Others are the typed amount (on an edit, unchanged if not sent).
+ * `current`: the request as stored (an edit), whose claim details and rate carry over.
+ */
+async function claimMoney(input, current = null) {
+  if (filled(input.currency) && String(input.currency).trim().toUpperCase() !== BASE_CURRENCY) {
+    throw fail('A reimbursement is paid in rupees — enter the amount in ₹.', 400);
+  }
+  const was = current?.category === REIMBURSEMENT ? current.reimbursement || null : null;
+  const { reimbursement, amount: worked } = await claims.cleanClaim(input.reimbursement, { current: was });
+  const amount = worked ?? (filled(input.amount) || !current ? cleanAmount(input.amount) : current.amount);
+  if (worked != null && worked > MAX_AMOUNT) throw fail('That amount looks too large — check the km.', 400);
+  return { reimbursement, money: { amount, currency: BASE_CURRENCY, foreignAmount: null, fxRate: null } };
+}
+
+/** The parts of a claim an edit compares. */
+const claimDiffKey = (c) => [c.type, c.on, c.km ?? null, c.ratePerKm ?? null, c.from || '', c.to || ''];
 
 /**
  * The money on a supplier payment. A part of a supplier deal is always in the
@@ -438,7 +460,12 @@ async function tellChat(req, action, text, { mentionAdmins = false, mentionReque
 
 const what = (r) => (r.kind === 'supplier'
   ? `supplier payment ${r.number} — ${moneyText(r)} to ${r.payee.name}${r.orderNumber ? ` for ${r.orderNumber}` : ''}`
-  : `${categoryLabel(r.category)} expense ${r.number} — ${moneyText(r)}${r.payee?.name ? ` to ${r.payee.name}` : ''}`);
+  : `${expenseLabel(r)} expense ${r.number} — ${moneyText(r)}${r.payee?.name ? ` to ${r.payee.name}` : ''}`);
+
+/** "Reimbursement – Fuel (42 km × ₹15)" for a reimbursement; the category's name otherwise. */
+export const expenseLabel = (r) => (r?.category === REIMBURSEMENT && r.reimbursement?.type
+  ? `${categoryLabel(r.category)} – ${claims.claimLabel(r.reimbursement)}`
+  : categoryLabel(r?.category));
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -521,7 +548,16 @@ export function shape(r, viewer) {
     // Paid from a foreign-currency account: what was sent, from which account. No rupees.
     paidFrom: paidFromForeign(r) ? { currency: r.payment.fromAccount.currency, amount: r.payment.fromAccount.amount, label: r.payment.fromAccount.label || '' } : null,
     category: r.category,
-    categoryLabel: categoryLabel(r.category),
+    categoryLabel: r.kind === 'expense' ? expenseLabel(r) : categoryLabel(r.category),
+    // A Reimbursement's kind, date, and for Fuel the km and the rate it was claimed at.
+    reimbursement: r.reimbursement?.type ? {
+      type: r.reimbursement.type,
+      on: r.reimbursement.on,
+      km: r.reimbursement.km ?? null,
+      ratePerKm: r.reimbursement.ratePerKm ?? null,
+      from: r.reimbursement.from || '',
+      to: r.reimbursement.to || '',
+    } : null,
     description: r.description,
     payee: {
       ...r.payee,
@@ -531,6 +567,7 @@ export function shape(r, viewer) {
     order: r.order ? { id: idOf(r.order), number: r.orderNumber } : null,
     // The snapshot taken when it was linked: still reads right after a rename or delete.
     project: r.project ? { id: idOf(r.project), code: r.projectCode || '', name: r.projectName || '' } : null,
+    task: r.task ? { id: idOf(r.task), code: taskCode(r.taskNumber), title: r.taskTitle || '' } : null,
     reference: r.reference || '',
     // Raised by "Mark paid" on a subscription / due: which one, which cycle, and how it was paid already.
     subscription: subscriptionOf(r),
@@ -597,8 +634,11 @@ export async function createExpense(actor, input, uploaded, req) {
   if (!EXPENSE_TEAMS.includes(team)) throw fail('Choose the team the expense is for.', 400);
   const category = checkCategory(team, input.category);
   const description = cleanDetails(input.description);
-  checkNote(team, category, description);
-  const money = cleanMoney(team, input);
+  // A reimbursement: its details, and for Fuel the server's own amount (km × rate).
+  const claim = category === REIMBURSEMENT ? await claimMoney(input) : null;
+  if (claim) claims.checkClaimNote(claim.reimbursement, description);
+  else checkNote(team, category, description);
+  const money = claim ? claim.money : cleanMoney(team, input);
   const { amount } = money;
   // Every pay detail is optional on an expense: accounts usually fills them in.
   const payee = cleanPayee(input.payee, { optional: true });
@@ -614,12 +654,14 @@ export async function createExpense(actor, input, uploaded, req) {
 
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds, { optional: true });
+  if (claim) claims.checkClaimBill(claim.reimbursement, amount, kinds);
   const stored = await storeFiles(files, kinds, actor);
   let doc;
   try {
     doc = await paymentRequestRepository.create({
       number: await nextNumber(),
       kind: 'expense',
+      ...(claim ? { reimbursement: claim.reimbursement } : {}),
       ...link,
       ...extra,
       status: 'submitted',
@@ -725,9 +767,13 @@ async function expenseOrderLink(orderId) {
 
 /** The optional project (typed as "PRJ-0007") and other ID on a request: checked, then snapshotted. */
 async function otherLinks(actor, input) {
-  const p = await projectForLink(actor, input.project, { seesAll: seesAll(actor) });
+  const [p, t] = await Promise.all([
+    projectForLink(actor, input.project, { seesAll: seesAll(actor) }),
+    taskForLink(actor, input.task, { seesAll: seesAll(actor) }),
+  ]);
   return {
     ...(p ? { project: p._id, projectCode: projectCode(p.number), projectName: p.name || '' } : {}),
+    ...(t ? taskFields(t) : {}),
     reference: cleanReference(input.reference),
   };
 }
@@ -1345,7 +1391,11 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   const billBefore = !creditPaise ? before
     : before.currency === BASE_CURRENCY ? before : { ...before, foreignAmount: fromPaise(toPaise(r0.foreignAmount) + creditPaise) };
   const billAmount = creditPaise && before.currency === BASE_CURRENCY ? fromPaise(toPaise(r0.amount) + creditPaise) : r0.amount;
-  const billMoney = isExpense
+  // A reimbursement (now, or after this edit) is priced by claimMoney: a Fuel claim's
+  // amount is ALWAYS km × its rate, recomputed here, never a typed figure.
+  const nextCategory = isExpense && input.category != null ? String(input.category) : r0.category;
+  const claim = isExpense && nextCategory === REIMBURSEMENT ? await claimMoney(input, r0) : null;
+  const billMoney = claim ? claim.money : isExpense
     ? cleanMoney(r0.team, input, { amount: r0.amount, ...before })
     : supplierMoney(input, r0.deal || creditPaise ? { currency: before.currency } : null, { amount: billAmount, ...billBefore });
   const money = creditPaise ? { ...netOfCredit(billMoney, creditPaise), credit: r0.credit } : billMoney;
@@ -1361,9 +1411,14 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   if (isExpense && input.category != null && String(input.category) !== r0.category) {
     category = checkCategory(r0.team, input.category);
   }
-  if (isExpense && (category !== r0.category || description !== (r0.description || ''))) {
+  if (claim) {
+    claims.checkClaimNote(claim.reimbursement, description);
+  } else if (isExpense && (category !== r0.category || description !== (r0.description || ''))) {
     checkNote(r0.team, category, description);
   }
+  const claimWas = r0.category === REIMBURSEMENT && r0.reimbursement?.type ? r0.reimbursement : null;
+  const claimNow = claim?.reimbursement || null;
+  const claimChanged = JSON.stringify(claimWas && claimDiffKey(claimWas)) !== JSON.stringify(claimNow && claimDiffKey(claimNow));
   const fxChanged = money.currency !== before.currency || money.foreignAmount !== before.foreignAmount || money.fxRate !== before.fxRate;
 
   let payee = r0.payee;
@@ -1390,6 +1445,8 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   const kept = (r0.files || []).filter((f) => !removing.includes(f));
   if (newKinds.includes('qr') && kept.some((f) => f.kind === 'qr')) throw fail('Remove the old QR code before attaching a new one.', 400);
   requireUpiOrQr(payee, [...kept.map((f) => f.kind), ...newKinds], { optional: isExpense });
+  // The bill rule is checked on what the request will carry after this edit.
+  if (claim) claims.checkClaimBill(claim.reimbursement, amount, [...kept.map((f) => f.kind), ...newKinds]);
 
   const changes = [];
   const change = (field, from, to) => changes.push({ field, from: String(from ?? '').slice(0, 300), to: String(to ?? '').slice(0, 300) });
@@ -1400,6 +1457,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) change('Payment details', payText(r0.payee), payText(payee));
   if (category !== r0.category) change('What for', categoryLabel(r0.category), categoryLabel(category));
   if (description !== (r0.description || '')) change('Details', plainLine(r0.description), plainLine(description));
+  if (claimChanged && claimNow) change('Reimbursement', claimWas ? `${claims.claimLabel(claimWas)} (${claimWas.on})` : '', `${claims.claimLabel(claimNow)} (${claimNow.on})`);
   for (const f of removing) change('Attachment removed', `${FILE_NOUN[f.kind]}${f.name ? ` (${f.name})` : ''}`, '');
   newFiles.forEach((f, i) => { if (f?.buffer?.length) change('Attachment added', '', `${FILE_NOUN[newKinds[i]]}${f.originalname ? ` (${String(f.originalname).slice(0, 120)})` : ''}`); });
   const backToAccounts = r0.status !== 'submitted';
@@ -1455,6 +1513,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
     files: [...kept, ...stored],
     rev: (r0.rev || 0) + 1,
     editedAt: at,
+    ...(claimChanged ? { reimbursement: claimNow } : {}),
     ...(r0.deal ? { part } : {}),
     ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
   };
@@ -1628,6 +1687,7 @@ const SEARCH_FIELDS = Object.freeze([
   'projectCode', 'projectName', 'reference',
 ]);
 const SUMMARY_CAP = 1000;
+const REIMBURSEMENT_SUB = new Set(REIMBURSEMENT_TYPES.map((t) => `${REIMBURSEMENT}:${t.value}`));
 
 /** The Mongo query for a viewer and a set of list filters (exported for tests). */
 export function listQuery(actor, f = {}) {
@@ -1644,6 +1704,8 @@ export function listQuery(actor, f = {}) {
     ['supplier', 'expense'].includes(f.kind) ? { kind: f.kind } : null,
     // An equality match on a stored value, so any well-formed one is safe — old values included.
     /^[a-z][a-z0-9_]{1,39}$/.test(f.category || '') ? { category: f.category } : null,
+    // "Reimbursement – Fuel": the sub-type the filter offers (filterCategories).
+    REIMBURSEMENT_SUB.has(f.category) ? { category: REIMBURSEMENT, 'reimbursement.type': f.category.slice(REIMBURSEMENT.length + 1) } : null,
     isObjectId(f.by) ? { requestedBy: new mongoose.Types.ObjectId(f.by) } : null,
     PAID_METHODS.includes(f.method) ? { 'payment.method': f.method } : null,
     // A foreign bill not yet priced (amount 0) has no rupee figure to filter on.
@@ -1690,11 +1752,61 @@ export async function list(actor, params = {}) {
  * What the expense form offers this person: their team's options and currencies.
  * An admin asks for a team (`team`), as when raising on its behalf.
  */
-export function expenseOptions(actor, { team } = {}) {
+export async function expenseOptions(actor, { team } = {}) {
   const which = isAdmin(actor) ? String(team || '') : (isActiveStaff(actor) ? actor.staff.team : '');
   if (!isAdmin(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
   if (!EXPENSE_TEAMS.includes(which)) throw fail('Choose the team the expense is for.', 400);
-  return expenseOptionsFor(which);
+  const [reimbursement, last] = await Promise.all([
+    claims.claimOptions(),
+    paymentRequestRepository.lastOwnPayee(actor._id, REIMBURSEMENT),
+  ]);
+  return {
+    ...expenseOptionsFor(which),
+    reimbursement: {
+      ...reimbursement,
+      // Pre-fills "paid to" with the UPI / bank of this person's last reimbursement (they can change it).
+      lastPayee: last?.payee?.method ? cleanPayee(last.payee, { optional: true }) : null,
+    },
+  };
+}
+
+/** The per-km fuel rate and who last changed it — for anyone who may raise a reimbursement. */
+export async function reimbursementSettings(actor) {
+  if (!isAdmin(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  return claims.readSettings();
+}
+
+/** People / tasks on one month's report: far above our staff, and a bound on the read. */
+export const REPORT_ROWS_MAX = 200;
+const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+/**
+ * One month's reimbursements, by the day they were spent (IST): what each person
+ * claimed and was paid (by kind, and fuel km), and what each linked task cost.
+ * Declined and cancelled claims are left out. Admin and accounts only.
+ */
+export async function reimbursementReport(actor, { month } = {}) {
+  if (!seesAll(actor)) throw fail('Only accounts and the admin see the reimbursement report.', 403);
+  const m = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!m || +m[2] < 1 || +m[2] > 12) throw fail('Pick a month (YYYY-MM).', 400);
+  const from = `${m[1]}-${m[2]}-01`;
+  const next = new Date(Date.UTC(+m[1], +m[2], 1)).toISOString().slice(0, 7);
+  const [out] = await paymentRequestRepository.reimbursementReport(from, `${next}-01`, REPORT_ROWS_MAX);
+  const t = out?.total?.[0] || {};
+  return {
+    month: `${m[1]}-${m[2]}`,
+    total: { count: t.count || 0, amount: r2(t.amount), paid: r2(t.paid), waiting: r2((t.amount || 0) - (t.paid || 0)), km: r2(t.km) },
+    people: (out?.people || []).map((p) => ({
+      id: idOf(p._id), name: p.name || '', team: p.team || '', teamLabel: STAFF_TEAM_LABELS[p.team] || p.team || '',
+      count: p.count, amount: r2(p.amount), paid: r2(p.paid), waiting: r2(p.amount - p.paid), km: r2(p.km),
+      byType: { fuel: r2(p.fuel), food: r2(p.food), transport: r2(p.transport), other: r2(p.other) },
+    })),
+    tasks: (out?.tasks || []).map((x) => ({
+      id: idOf(x._id), code: taskCode(x.number), title: x.title || '',
+      count: x.count, amount: r2(x.amount), paid: r2(x.paid), waiting: r2(x.amount - x.paid), km: r2(x.km),
+    })),
+    capped: (out?.people || []).length >= REPORT_ROWS_MAX || (out?.tasks || []).length >= REPORT_ROWS_MAX,
+  };
 }
 
 /**
@@ -1824,6 +1936,15 @@ export async function setLinks(actor, id, input = {}, req) {
       const now = p ? projectCode(p.number) : '';
       Object.assign(set, p ? { project: p._id, projectCode: now, projectName: p.name || '' } : { project: null, projectCode: '', projectName: '' });
       notes.push(!now ? `project ${was} removed` : was ? `project ${was} → ${now}` : `linked to project ${now}`);
+    }
+  }
+  if ('task' in input) {
+    const t = await taskForLink(actor, input.task, { seesAll: seesAll(actor) });
+    if (String(r0.task || '') !== String(t?._id || '')) {
+      const was = taskCode(r0.taskNumber);
+      const now = t ? taskCode(t.number) : '';
+      Object.assign(set, taskFields(t));
+      notes.push(!now ? `task ${was} removed` : was ? `task ${was} → ${now}` : `linked to task ${now}`);
     }
   }
   if ('reference' in input) {
