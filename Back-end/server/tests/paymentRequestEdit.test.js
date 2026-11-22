@@ -77,7 +77,7 @@ const staff = (team, isHead = false) => ({ team, isHead, active: true });
 const UPI = { name: 'Fuel Station', method: 'upi', upiId: 'fuelstation@okaxis' };
 const BANK = { name: 'ARB Supplies', method: 'bank', accountName: 'ARB Supplies Pvt Ltd', accountNumber: '123456789012', ifsc: 'HDFC0001234', bankName: 'HDFC' };
 const expense = (s, over = {}, files = [{ field: 'bill', buffer: JPEG, name: 'bill.jpg', type: 'image/jpeg' }]) =>
-  s.form('/payment-requests/expenses', { category: 'fuel', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
+  s.form('/payment-requests/expenses', { category: 'other', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
 
 async function paidOrder(salesUser = null) {
   const order = await Order.create({
@@ -166,14 +166,17 @@ describe('Edit a payment until accounts approves it (owner 2026-11-21)', () => {
   describe('history', () => {
     it('keeps old → new, who, when and why; accounts sees "edited" and the history', async () => {
       const r = await raised();
-      await edit(ops.session, r.id, { amount: 1100, category: 'travel', description: 'Taxi to the warehouse', reason: 'Picked the wrong option' });
+      // Others → a Transportation reimbursement (operations' old Travel option became a reimbursement sub-type).
+      const on = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+      await edit(ops.session, r.id, { amount: 150, category: 'reimbursement', reimbursement: { type: 'transport', on }, description: 'Taxi to the warehouse', reason: 'Picked the wrong option' });
       const seen = (await accounts.session.get(`/payment-requests/${r.id}`)).body.request;
       expect(seen.editedAt).toBeTruthy();
       expect(seen.edits).toHaveLength(1);
       expect(seen.edits[0]).toMatchObject({ byName: 'Omar', reason: 'Picked the wrong option', fromStatus: 'submitted' });
       expect(seen.edits[0].changes).toEqual(expect.arrayContaining([
-        { field: 'Amount', from: '₹1,250.5', to: '₹1,100' },
-        { field: 'What for', from: 'Fuel', to: 'Travel' },
+        { field: 'Amount', from: '₹1,250.5', to: '₹150' },
+        { field: 'What for', from: 'Others', to: 'Reimbursement' },
+        { field: 'Reimbursement', from: '', to: `Transportation (${on})` },
         { field: 'Details', from: 'Diesel for delivery van', to: 'Taxi to the warehouse' },
       ]));
       expect(seen.history.at(-1)).toMatchObject({ action: 'edited', note: expect.stringContaining('Picked the wrong option') });
