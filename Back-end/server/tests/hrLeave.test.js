@@ -35,6 +35,10 @@ jest.unstable_mockModule('../services/pushService.js', () => ({ ...pushMock, def
 const request = (await import('supertest')).default;
 const { app, cronService, adaptiveThrottlingService } = await import('../app.js');
 const dbHandler = await import('./db-handler.js');
+// One server bound to 127.0.0.1 for the whole file. supertest's default (a fresh
+// listen(0) per request on '::') can collide with another process holding
+// 127.0.0.1:<same port> on a shared machine, which answers with its own 404.
+const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
 const { default: User } = await import('../models/User.js');
 const { default: LeaveLedgerEntry } = await import('../models/hr/LeaveLedgerEntry.js');
 const { default: LeaveRequest } = await import('../models/hr/LeaveRequest.js');
@@ -49,9 +53,9 @@ const leaveApi = await import('../services/hr/leave/index.js');
 const PW = 'SecurePass123!';
 let n = 0;
 async function signIn(email) {
-  const agent = request.agent(app);
+  const agent = request.agent(server);
   const res = await agent.post('/api/v1/auth/login').send({ email, password: PW });
-  expect(res.status).toBe(200);
+  expect([res.status, res.status === 200 ? '' : JSON.stringify(res.body)]).toEqual([200, '']);
   const x = (res.headers['set-cookie'] || []).find((c) => c.startsWith('XSRF-TOKEN='));
   const csrf = x ? x.split(';')[0].split('=')[1] : '';
   return {
@@ -131,6 +135,7 @@ describe('HR leave API', () => {
     await Promise.all((await loadHrModels()).map((M) => M.init()));
   });
   afterAll(async () => {
+    await new Promise((resolve) => { server.close(resolve); });
     await dbHandler.closeDatabase();
     if (cronService?.shutdown) cronService.shutdown();
     if (adaptiveThrottlingService?.shutdown) adaptiveThrottlingService.shutdown();
@@ -190,7 +195,7 @@ describe('HR leave API', () => {
   describe('authentication', () => {
     test('no token → 401; a revoked session → 401, never 200', async () => {
       for (const p of ['/api/v1/hr/me/leave', '/api/v1/hr/leave/inbox', '/api/v1/hr/holidays?year=2027', `/api/v1/hr/employees/${aliceP.id}/leave/balances`, '/api/v1/hr/leave-types']) {
-        expect((await request(app).get(p)).status).toBe(401);
+        expect((await request(server).get(p)).status).toBe(401);
       }
       await User.updateOne({ _id: alice.user._id }, { $inc: { sessionVersion: 1 } });
       expect((await alice.agent.get('/api/v1/hr/me/leave/balances')).status).toBe(401);

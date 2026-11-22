@@ -52,6 +52,10 @@ jest.unstable_mockModule('../services/storage/privateAssetUrl.js', () => ({
 const request = (await import('supertest')).default;
 const { app, cronService, adaptiveThrottlingService } = await import('../app.js');
 const dbHandler = await import('./db-handler.js');
+// One server bound to 127.0.0.1 for the whole file. supertest's default (a fresh
+// listen(0) per request on '::') can collide with another process holding
+// 127.0.0.1:<same port> on a shared machine, which answers with its own 404.
+const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
 const { default: User } = await import('../models/User.js');
 const { default: EmployeeDocument } = await import('../models/hr/EmployeeDocument.js');
 const { default: HrAuditLog } = await import('../models/hr/HrAuditLog.js');
@@ -65,7 +69,7 @@ const EXE = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(200)]);
 
 let n = 0;
 async function signIn(email) {
-  const agent = request.agent(app);
+  const agent = request.agent(server);
   const res = await agent.post('/api/v1/auth/login').send({ email, password: PW });
   expect(res.status).toBe(200);
   const x = (res.headers['set-cookie'] || []).find((c) => c.startsWith('XSRF-TOKEN='));
@@ -93,6 +97,7 @@ describe('HR documents API', () => {
   });
   afterAll(async () => {
     if (prevProvider === undefined) delete process.env.STORAGE_PROVIDER; else process.env.STORAGE_PROVIDER = prevProvider;
+    await new Promise((resolve) => { server.close(resolve); });
     await dbHandler.closeDatabase();
     if (cronService?.shutdown) cronService.shutdown();
     if (adaptiveThrottlingService?.shutdown) adaptiveThrottlingService.shutdown();
@@ -119,8 +124,8 @@ describe('HR documents API', () => {
   };
 
   test('no token → 401', async () => {
-    expect((await request(app).get(`/api/v1/hr/employees/${aliceP.id}/documents`)).status).toBe(401);
-    expect((await request(app).get(`/api/v1/hr/documents/${new mongoose.Types.ObjectId()}/url`)).status).toBe(401);
+    expect((await request(server).get(`/api/v1/hr/employees/${aliceP.id}/documents`)).status).toBe(401);
+    expect((await request(server).get(`/api/v1/hr/documents/${new mongoose.Types.ObjectId()}/url`)).status).toBe(401);
   });
 
   test('an employee uploads their own document to the private bucket and lists it', async () => {
