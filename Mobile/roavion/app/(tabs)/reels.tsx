@@ -1,296 +1,55 @@
 /**
- * Reels — full-screen, vertically swiped, shoppable videos.
+ * Reels tab — WhatsApp "Updates" layout (owner, 2026-11-22): a big bold title,
+ * a status row of creators (green segmented rings), then a grid of reels to
+ * shop, and a green "Post a reel" button floating bottom-right. Tapping any
+ * circle or tile opens the full-screen viewer (`/reels/watch`), which is where
+ * playback, likes and shopping happen.
  *
- * Playback: three recycled players (see usePlayerPool). The visible reel plays,
- * the next one is preloaded, everything pauses when the tab loses focus or the
- * app goes to the background.
- *
- * Shopping: Add to cart / Buy now first tell the server which reel the buyer
- * came from (`attributeReel` — no price, no amount), then use the SAME cart
- * flow as the rest of the app. The cart API is the authority on price and
- * stock; checkout recomputes everything server-side.
+ * Prices on the tiles are the server's live product block from the feed —
+ * formatting only, nothing is computed here.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  AppState,
-  FlatList,
-  Platform,
-  Pressable,
-  RefreshControl,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-  type LayoutChangeEvent,
-} from 'react-native';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
-import Constants from 'expo-constants';
-import { attributeReel, recordView, reportReel, REELS_MOCK, type Reel } from '../../src/api/reels';
-import { ReelSlide } from '../../src/reels/ReelSlide';
-import { POOL_SIZE, usePlayerPool } from '../../src/reels/usePlayerPool';
-import { useLikeReel, useReelFeed } from '../../src/reels/useReels';
-import { toggleFollow, toggleSave } from '../../src/reels/localPrefs';
-import { ReelFeedSkeleton } from '../../src/reels/ReelFeedSkeleton';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { REELS_MOCK, type Reel } from '../../src/api/reels';
 import { ApiError } from '../../src/api/client';
+import { useReelFeed } from '../../src/reels/useReels';
+import { StatusRow, groupByCreator, type CreatorGroup } from '../../src/reels/StatusRow';
 import { useApp } from '../../src/store';
-import { alpha, colors, font, palette, radius, spacing } from '../../src/theme';
-import { ErrorState, IconButton, PressScale, StateLayout, StripeLoader, Stripes, haptic, useToast } from '../../src/ui';
+import { alpha, colors, elevation, font, palette, radius, spacing, type } from '../../src/theme';
+import { ErrorState, IconButton, PremiumButton, Price, PressScale, Shimmer } from '../../src/ui';
 
-type Row = { kind: 'reel'; reel: Reel } | { kind: 'end' };
-
-const SITE = (Constants.expoConfig?.extra as { siteUrl?: string } | undefined)?.siteUrl ?? 'https://www.autobacsindia.com';
-const VIEW_AFTER_MS = 2000;
 const TEAM_BADGE = require('../../assets/icon.png');
-const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
+const GAP = spacing.sm + 2;
 
-const REPORT_REASONS = ['Spam or misleading', 'Wrong product tagged', 'Inappropriate content', 'Something else'];
-
-export default function ReelsScreen() {
+export default function ReelsTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { customer, addItem } = useApp();
+  const { width } = useWindowDimensions();
+  const { customer } = useApp();
   const feed = useReelFeed();
-  const like = useLikeReel();
-  const pool = usePlayerPool();
-
-  const [height, setHeight] = useState(0);
-  const [active, setActive] = useState(0);
-  const [focused, setFocused] = useState(true);
-  const [appActive, setAppActive] = useState(true);
-  const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [busy, setBusy] = useState<{ id: string; kind: 'add' | 'buy' } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const toast = useToast();
-  const listRef = useRef<FlatList<Row>>(null);
-  // Opened from a reel circle on Home: start at that reel.
   const { start } = useLocalSearchParams<{ start?: string }>();
 
-  const reels = feed.reels;
-  const rows = useMemo<Row[]>(() => {
-    const r: Row[] = reels.map((reel) => ({ kind: 'reel', reel }));
-    if (reels.length > 0 && !feed.hasNextPage && !feed.isFetchingNextPage) r.push({ kind: 'end' });
-    return r;
-  }, [reels, feed.hasNextPage, feed.isFetchingNextPage]);
-
-  // ── lifecycle: pause on blur / background ─────────────────────────────────
-  useFocusEffect(
-    useCallback(() => {
-      setFocused(true);
-      return () => setFocused(false);
-    }, []),
-  );
+  // Home and product pages link to a specific reel: hand it to the viewer.
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => setAppActive(s === 'active'));
-    return () => sub.remove();
-  }, []);
-
-  // ── playback: load active ± 1, play only the active one ───────────────────
-  const { load, players, setMuted: applyMute, pauseAll } = pool;
-  useEffect(() => {
-    if (!reels.length) return;
-    const order = [active, active + 1, active - 1];
-    for (const i of order) if (i >= 0 && i < reels.length) load(i, reels[i]);
-
-    const live = focused && appActive && !paused && active < reels.length;
-    players.forEach((p, slot) => {
-      if (live && slot === active % POOL_SIZE) p.play();
-      else p.pause();
-    });
-
-    // Warm the posters a little further ahead so a fast swipe never shows black.
-    const ahead = reels.slice(active + 1, active + 4).map((r) => r.posterUrl).filter(Boolean) as string[];
-    if (ahead.length) Image.prefetch(ahead).catch(() => {});
-  }, [active, reels, focused, appActive, paused, load, players]);
-
-  useEffect(() => applyMute(muted), [muted, applyMute]);
-  useEffect(() => () => pauseAll(), [pauseAll]);
-
-  // A new reel starts from the top, unpaused.
-  const { restart } = pool;
-  const [shownActive, setShownActive] = useState(-1);
-  if (shownActive !== active) {
-    setShownActive(active);
-    setPaused(false);
-  }
-  useEffect(() => {
-    if (active < reels.length) restart(active);
-  }, [active, reels.length, restart]);
-
-  // Count a view after the reel has been on screen for a moment.
-  const viewed = useRef(new Set<string>());
-  useEffect(() => {
-    const reel = reels[active];
-    if (!reel || !focused || viewed.current.has(reel.id)) return;
-    const t = setTimeout(() => {
-      viewed.current.add(reel.id);
-      recordView(reel.id);
-    }, VIEW_AFTER_MS);
-    return () => clearTimeout(t);
-  }, [active, reels, focused]);
-
-  // Fetch the next page a few reels before the end.
-  useEffect(() => {
-    if (feed.hasNextPage && !feed.isFetchingNextPage && active >= reels.length - 3) feed.fetchNextPage();
-  }, [active, reels.length, feed]);
-
-  // Jump to the requested reel once the list can be measured, then clear the
-  // param so returning to the tab later doesn't jump again.
-  useEffect(() => {
-    if (!start || !height || !reels.length) return;
-    const idx = reels.findIndex((r) => r.id === start);
-    if (idx >= 0) {
-      // The viewability callback then makes it the active (playing) reel.
-      listRef.current?.scrollToOffset({ offset: idx * height, animated: false });
-    }
+    if (!start) return;
     router.setParams({ start: undefined });
-  }, [start, height, reels, router]);
+    router.push({ pathname: '/reels/watch', params: { start } });
+  }, [start, router]);
 
-  // ── paging ─────────────────────────────────────────────────────────────────
-  const onViewable = useCallback(({ viewableItems }: { viewableItems: { index?: number | null; isViewable: boolean }[] }) => {
-    const first = viewableItems.find((v) => v.isViewable && v.index != null);
-    if (first?.index != null) setActive(first.index);
-  }, []);
+  const groups = useMemo(() => groupByCreator(feed.reels), [feed.reels]);
+  const tileW = (width - spacing.lg * 2 - GAP) / 2;
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const h = Math.round(e.nativeEvent.layout.height);
-    if (h > 0 && h !== height) setHeight(h);
-  };
-
-  // ── toast ─────────────────────────────────────────────────────────────────
-  const showToast = useCallback(
-    (message: string, tone: 'success' | 'error' | 'info' = 'success', icon?: 'checkmark-circle' | 'bookmark' | 'person-add' | 'alert-circle') =>
-      toast.show({ message, tone: tone === 'info' ? undefined : tone, icon }),
-    [toast],
-  );
-
-  // ── actions ───────────────────────────────────────────────────────────────
-  const requireSignIn = useCallback(
-    (why: string) => {
-      Alert.alert('Sign in', why, [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'Sign in', onPress: () => router.push('/login') },
-      ]);
-    },
-    [router],
-  );
-
-  const onLike = useCallback(
-    (reel: Reel, forceOn?: boolean) => {
-      if (!customer) return requireSignIn('Sign in to like reels.');
-      const next = forceOn ? true : !reel.viewerLiked;
-      // Double tap already fired its own (stronger) haptic with the heart burst.
-      if (!forceOn && next !== reel.viewerLiked) haptic.light();
-      like(reel, next).catch(() => showToast("Couldn't save your like", 'error', 'alert-circle'));
-    },
-    [customer, like, requireSignIn, showToast],
-  );
-
-  // Follow + Save are on-device only for now (no API yet) — see src/reels/localPrefs.ts.
-  const onSave = useCallback(
-    (reel: Reel) => {
-      const on = toggleSave(reel.id);
-      if (on) showToast('Saved', 'info', 'bookmark');
-    },
-    [showToast],
-  );
-  const onFollow = useCallback(
-    (reel: Reel) => {
-      if (!reel.creator.id) return;
-      const on = toggleFollow(reel.creator.id);
-      if (on) showToast(`Following ${reel.creator.name}`, 'info', 'person-add');
-    },
-    [showToast],
-  );
-
-  const onShare = useCallback((reel: Reel) => {
-    const title = reel.product?.title ?? 'Autobacs';
-    const url = reel.shareUrl ?? (reel.product ? `${SITE}/products/${reel.product.slug}` : SITE);
-    Share.share(
-      Platform.OS === 'ios'
-        ? { url, message: `${title} on Autobacs` }
-        : { message: `${title} on Autobacs\n${url}`, title },
-    ).catch(() => {});
-  }, []);
-
-  const onReport = useCallback(
-    (reel: Reel) => {
-      if (!customer) return requireSignIn('Sign in to report a reel.');
-      Alert.alert('Report this reel', 'Tell us what is wrong. Our team will review it.', [
-        ...REPORT_REASONS.map((reason) => ({
-          text: reason,
-          onPress: () =>
-            reportReel(reel.id, reason)
-              .then(() => showToast('Thanks — our team will review it'))
-              .catch(() => showToast("Couldn't send the report. Try again.", 'error', 'alert-circle')),
-        })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ]);
-    },
-    [customer, requireSignIn, showToast],
-  );
-
-  const openProduct = useCallback(
-    (reel: Reel) => {
-      if (reel.product) router.push(`/product/${reel.product.slug}`);
-    },
-    [router],
-  );
-
-  /**
-   * Attribution first (best-effort, no money), then the normal cart add. The
-   * server's cart response is what the badge shows.
-   */
-  const shop = useCallback(
-    async (reel: Reel, kind: 'add' | 'buy') => {
-      const product = reel.product;
-      if (!product || product.availability === 'out' || busy) return;
-      haptic.medium();
-      setBusy({ id: reel.id, kind });
-      try {
-        await attributeReel(reel.id);
-        if (product.hasVariants) {
-          // Several models/sizes: the customer picks one on the product page.
-          router.push(`/product/${product.slug}`);
-          return;
-        }
-        await addItem(product.id, 1);
-        // Success haptic only now — after the server's cart confirmed the add.
-        haptic.success();
-        if (kind === 'buy') router.push(customer ? '/checkout' : '/login?next=/checkout');
-        else toast.show({ message: 'Added to cart', icon: 'bag-check', action: { label: 'View cart', onPress: () => router.push('/cart') } });
-      } catch (err) {
-        const msg = err instanceof ApiError ? err.message : 'Could not add to cart. Please try again.';
-        if (/variant|option/i.test(msg)) {
-          // A product with options (size, colour, vehicle) needs a choice first.
-          router.push(`/product/${product.slug}`);
-        } else {
-          haptic.error();
-          Alert.alert('Not added', msg);
-        }
-      } finally {
-        setBusy(null);
-      }
-    },
-    [addItem, busy, customer, router, toast],
-  );
-  const onAdd = useCallback((r: Reel) => shop(r, 'add'), [shop]);
-  const onBuy = useCallback((r: Reel) => shop(r, 'buy'), [shop]);
-
-  const onTogglePause = useCallback(() => {
-    haptic.selection();
-    setPaused((p) => !p);
-  }, []);
-  const onToggleMute = useCallback(() => setMuted((m) => !m), []);
-
-  const onPost = () => {
-    haptic.light();
+  const watch = useCallback((reel: Reel) => router.push({ pathname: '/reels/watch', params: { start: reel.id } }), [router]);
+  const openGroup = useCallback((g: CreatorGroup) => watch(g.reels[0]), [watch]);
+  const onPost = useCallback(() => {
     router.push(customer ? '/reels/new' : '/login?next=/reels/new');
-  };
+  }, [customer, router]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -301,181 +60,145 @@ export default function ReelsScreen() {
     }
   };
 
-  // ── render ────────────────────────────────────────────────────────────────
-  const renderItem = ({ item, index }: { item: Row; index: number }) => {
-    if (item.kind === 'end') {
-      return (
-        <View style={[s.endPage, { height }]}>
-          <StateLayout
-            icon="checkmark-done"
-            title="You're all caught up"
-            body="New reels from the Autobacs community land here every day."
-            action={{ label: 'Watch from the start', onPress: () => listRef.current?.scrollToOffset({ offset: 0, animated: true }) }}
-            secondary={{ label: 'Post your own reel', onPress: onPost }}
-            onDark
-          />
-        </View>
-      );
-    }
-    const slot = index % POOL_SIZE;
-    const slotState = pool.slots[slot];
-    const mine = slotState.reelId === item.reel.id;
-    return (
-      <ReelSlide
-        reel={item.reel}
-        height={height}
-        active={index === active}
-        player={mine ? players[slot] : null}
-        slot={mine ? slotState : null}
-        paused={paused}
-        muted={muted}
-        topInset={insets.top}
-        bottomInset={0}
-        busy={busy?.id === item.reel.id ? busy.kind : null}
-        onTogglePause={onTogglePause}
-        onToggleMute={onToggleMute}
-        onLike={onLike}
-        onSave={onSave}
-        onFollow={onFollow}
-        onShare={onShare}
-        onReport={onReport}
-        onOpenProduct={openProduct}
-        onAdd={onAdd}
-        onBuy={onBuy}
-        onRetry={() => pool.reload(index, item.reel)}
-      />
-    );
-  };
+  const loading = feed.isPending;
+  const empty = !loading && !feed.isError && feed.reels.length === 0;
+  const myInitial = customer?.name?.trim().slice(0, 1).toUpperCase() || undefined;
 
-  let body: React.ReactNode;
-  if (feed.isPending) {
-    body = <ReelFeedSkeleton topInset={insets.top} />;
-  } else if (feed.isError && !reels.length) {
-    body = (
-      <ErrorState
-        error={feed.error}
-        message={feed.error instanceof ApiError ? feed.error.message : "We couldn't load reels right now."}
-        onRetry={() => feed.refetch()}
-        onDark
-      />
-    );
-  } else if (!reels.length) {
-    // 0 approved reels (true at launch): an invitation, never a blank screen,
-    // and a way on to the shop so it is not a dead end.
-    body = (
-      <StateLayout
-        title="Be the first to post a reel"
-        body="Film the gear on your car, tag the product, and help other drivers shop it. Our team checks every reel before it goes live."
-        action={{ label: 'Post a reel', onPress: onPost }}
-        secondary={{ label: 'Browse the shop', onPress: () => router.push('/(tabs)/shop') }}
-        onDark
-      >
-        <View style={s.emptyBadges} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Image source={TEAM_BADGE} style={s.emptyBadge} contentFit="cover" />
-          <View style={s.emptyPlus}>
-            <Text style={s.postPlus}>+</Text>
+  const header = (
+    <View>
+      <View style={[s.titleRow, { paddingTop: insets.top + spacing.md }]}>
+        <Text style={s.title} accessibilityRole="header">Reels</Text>
+        {REELS_MOCK && (
+          <View style={s.demo}>
+            <Text style={s.demoText}>DEMO</Text>
           </View>
-        </View>
-      </StateLayout>
-    );
-  } else if (height > 0) {
-    body = (
-      <FlatList
-        ref={listRef}
-        data={rows}
-        keyExtractor={(r) => (r.kind === 'reel' ? r.reel.id : 'end')}
-        renderItem={renderItem}
-        extraData={[active, pool.slots, paused, muted, busy, height]}
-        pagingEnabled
-        snapToInterval={height}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        disableIntervalMomentum
-        showsVerticalScrollIndicator={false}
-        getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
-        onViewableItemsChanged={onViewable}
-        viewabilityConfig={VIEWABILITY}
-        windowSize={3}
-        initialNumToRender={2}
-        maxToRenderPerBatch={2}
-        removeClippedSubviews={Platform.OS === 'android'}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.white} colors={[colors.green]} progressViewOffset={insets.top + 40} />}
-        ListFooterComponent={
-          feed.isFetchingNextPage ? undefined : feed.isError && feed.hasNextPage ? (
-            <Pressable style={[s.footerRetry, { height }]} onPress={() => feed.fetchNextPage()} accessibilityRole="button">
-              <ErrorState message="Couldn't load more reels." onRetry={() => feed.fetchNextPage()} onDark />
-            </Pressable>
-          ) : undefined
-        }
-      />
-    );
-  }
-
-  return (
-    <View style={s.screen} onLayout={onLayout}>
-      <StatusBar style={focused ? "light" : "dark"} />
-      {body}
-
-      {/* Floating header over the video */}
-      <View style={[s.header, { paddingTop: insets.top + spacing.md }]} pointerEvents="box-none">
-        <View style={s.titleRow}>
-          <Text style={s.headerTitle} accessibilityRole="header">Reels</Text>
-          <Stripes width={12} height={5} gap={3} onDark />
-          {REELS_MOCK && (
-            <View style={s.demo}>
-              <Text style={s.demoText}>DEMO</Text>
-            </View>
-          )}
-        </View>
-        <View style={s.headerActions}>
-          {customer && (
-            <IconButton icon="albums-outline" label="My reels" tone="glass" size={38} onPress={() => router.push('/reels/mine')} />
-          )}
-          <PressScale onPress={onPost} style={s.post} accessibilityLabel="Post a reel" scaleTo={0.94}>
-            <Text style={s.postText}>Post</Text>
-            <Text style={s.postPlus}>+</Text>
-          </PressScale>
-        </View>
+        )}
+        <View style={{ flex: 1 }} />
+        {customer && <IconButton icon="albums-outline" label="My reels" tone="plain" onPress={() => router.push('/reels/mine')} />}
       </View>
 
-      {feed.isFetchingNextPage && active >= reels.length - 1 && (
-        <View style={s.moreSpinner} pointerEvents="none">
-          <StripeLoader onDark label="Loading more reels" />
+      <Text style={s.section}>Creators</Text>
+      <StatusRow groups={groups} loading={loading} onOpen={openGroup} onPost={onPost} myInitial={myInitial} />
+      <View style={s.divider} />
+
+      {feed.isError && !feed.reels.length ? (
+        <ErrorState
+          error={feed.error}
+          message={feed.error instanceof ApiError ? feed.error.message : "We couldn't load reels right now."}
+          onRetry={() => feed.refetch()}
+          style={{ paddingVertical: spacing.xxl }}
+        />
+      ) : empty ? (
+        // 0 approved reels (true at launch): an invitation, never a blank page.
+        <View style={s.emptyCard}>
+          <View style={s.emptyBadges} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Image source={TEAM_BADGE} style={s.emptyBadge} contentFit="cover" />
+            <View style={s.emptyPlus}>
+              <Ionicons name="add" size={16} color={colors.white} />
+            </View>
+          </View>
+          <Text style={s.emptyTitle}>Be the first to post a reel</Text>
+          <Text style={s.emptyBody}>
+            Film the gear on your car, tag the product, and help other drivers shop it. Our team checks every reel before it goes live.
+          </Text>
+          <PremiumButton label="Post a reel" icon="videocam-outline" variant="green" onPress={onPost} style={{ marginTop: spacing.lg, minWidth: 200 }} />
+          <PremiumButton label="Browse the shop" variant="ghost" size="sm" onPress={() => router.push('/(tabs)/shop')} style={{ marginTop: spacing.xs }} />
+        </View>
+      ) : (
+        <Text style={s.section}>Watch & shop</Text>
+      )}
+    </View>
+  );
+
+  const renderTile = ({ item }: { item: Reel }) => (
+    <PressScale onPress={() => watch(item)} haptic="selection" scaleTo={0.97} style={[s.tile, { width: tileW }]} accessibilityLabel={`Watch reel by ${item.creator.name}${item.product ? `, ${item.product.title}` : ''}`}>
+      <View style={[s.poster, { height: Math.round(tileW * 1.45) }]}>
+        {(item.posterUrl || item.product?.image) ? (
+          <Image source={{ uri: (item.posterUrl || item.product?.image) ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} cachePolicy="memory-disk" recyclingKey={item.id} />
+        ) : null}
+        <LinearGradient colors={[alpha(palette.black, 0), alpha(palette.black, 0.55)]} style={s.posterScrim} pointerEvents="none" />
+        <View style={s.play}>
+          <Ionicons name="play" size={12} color={colors.white} />
+        </View>
+        <Text style={s.by} numberOfLines={1}>{item.creator.name}</Text>
+      </View>
+      {item.product && (
+        <View style={s.tileBody}>
+          <Text style={s.tileTitle} numberOfLines={1}>{item.product.title}</Text>
+          <Price price={item.product.price} mrp={item.product.mrp} offPercent={item.product.discountPercent} size="sm" />
         </View>
       )}
+    </PressScale>
+  );
+
+  return (
+    <View style={s.screen}>
+      <FlatList
+        data={empty || (feed.isError && !feed.reels.length) ? [] : feed.reels}
+        keyExtractor={(r) => r.id}
+        renderItem={renderTile}
+        numColumns={2}
+        columnWrapperStyle={{ gap: GAP, paddingHorizontal: spacing.lg }}
+        contentContainerStyle={{ gap: GAP, paddingBottom: 96 }}
+        ListHeaderComponent={header}
+        ListFooterComponent={
+          loading ? (
+            <View style={[s.skeletonRow]}>
+              <Shimmer width={tileW} height={Math.round(tileW * 1.45)} radius={radius.lg} />
+              <Shimmer width={tileW} height={Math.round(tileW * 1.45)} radius={radius.lg} />
+            </View>
+          ) : undefined
+        }
+        onEndReached={() => feed.hasNextPage && !feed.isFetchingNextPage && feed.fetchNextPage()}
+        onEndReachedThreshold={0.6}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.green} colors={[colors.green]} />}
+      />
+
+      {/* WhatsApp-style FAB. */}
+      <PressScale onPress={onPost} haptic="medium" scaleTo={0.92} style={s.fab} accessibilityLabel="Post a reel">
+        <Ionicons name="videocam" size={24} color={colors.white} />
+      </PressScale>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.void },
-  header: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-  },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerTitle: {
-    fontFamily: font.extrabold, fontSize: 24, color: colors.white, letterSpacing: -0.4,
-    textShadowColor: alpha(palette.black, 0.4), textShadowRadius: 6,
-  },
+  screen: { flex: 1, backgroundColor: colors.white },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  title: { fontFamily: font.extrabold, fontSize: 30, color: colors.ink, letterSpacing: -0.5 },
   demo: { backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   demoText: { fontFamily: font.bold, fontSize: 10, color: colors.ink, letterSpacing: 0.8 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  post: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, height: 38, paddingHorizontal: spacing.md + 2,
-    borderRadius: radius.pill, backgroundColor: colors.green,
-  },
-  postText: { fontFamily: font.bold, fontSize: 13.5, color: colors.white },
-  postPlus: { fontFamily: font.bold, fontSize: 18, lineHeight: 20, color: colors.white },
+  section: { fontFamily: font.bold, fontSize: 16, color: colors.ink, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: spacing.sm },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.line, marginTop: spacing.md },
 
-  endPage: { backgroundColor: colors.carbon },
-  footerRetry: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.carbon },
-  emptyBadges: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl },
-  emptyBadge: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: colors.greenOnDark },
-  emptyPlus: {
-    width: 30, height: 30, borderRadius: 15, marginLeft: -14, marginTop: 34, backgroundColor: colors.green,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.carbon,
+  tile: { backgroundColor: colors.white, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, overflow: 'hidden' },
+  poster: { backgroundColor: colors.carbon, justifyContent: 'flex-end' },
+  posterScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
+  play: {
+    position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12,
+    backgroundColor: colors.glassDark, alignItems: 'center', justifyContent: 'center',
   },
-  moreSpinner: { position: 'absolute', bottom: 24, alignSelf: 'center' },
+  by: { fontFamily: font.bold, fontSize: 12, color: colors.white, padding: spacing.sm },
+  tileBody: { padding: spacing.sm + 2, gap: 2 },
+  tileTitle: { fontFamily: font.medium, fontSize: 13, color: colors.ink },
+  skeletonRow: { flexDirection: 'row', gap: GAP, paddingHorizontal: spacing.lg, marginTop: GAP },
+
+  emptyCard: {
+    alignItems: 'center', marginHorizontal: spacing.lg, marginTop: spacing.xl, padding: spacing.xl,
+    borderRadius: radius.lg, backgroundColor: colors.greenFaint,
+  },
+  emptyBadges: { flexDirection: 'row', alignItems: 'center' },
+  emptyBadge: { width: 64, height: 64, borderRadius: 32, borderWidth: 2.5, borderColor: colors.green },
+  emptyPlus: {
+    width: 26, height: 26, borderRadius: 13, marginLeft: -16, marginTop: 40, backgroundColor: colors.green,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.white,
+  },
+  emptyTitle: { ...type.h2, textAlign: 'center', marginTop: spacing.lg },
+  emptyBody: { ...type.small, color: colors.muted, textAlign: 'center', marginTop: spacing.xs },
+
+  fab: {
+    position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 56, height: 56, borderRadius: radius.lg,
+    backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', ...elevation.e2,
+  },
 });

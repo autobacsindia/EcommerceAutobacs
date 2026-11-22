@@ -88,7 +88,7 @@ export default function LoginScreen() {
       <FormMessage text={error} tone="error" />
       <FormMessage text={notice} tone="notice" />
 
-      <PremiumButton label="Sign in" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
+      <PremiumButton label="Sign in" variant="green" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
 
       <View style={s.footer}>
         <Text style={s.footText}>New to Autobacs?</Text>

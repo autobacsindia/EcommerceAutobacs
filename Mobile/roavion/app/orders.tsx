@@ -5,12 +5,11 @@
  * describe the same parcel three different ways.
  */
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOrders, type Order } from '../src/api/account';
 import { Photo } from '../src/components/ui';
-import { colors, elevation, font, inr, radius, spacing, type } from '../src/theme';
+import { colors, font, inr, radius, spacing, type } from '../src/theme';
 import { EmptyState, ErrorState, ListSkeleton } from '../src/ui';
 import { useApp } from '../src/store';
 
@@ -30,73 +29,49 @@ const TONES = {
   red: { bg: colors.redSoft, fg: colors.red },
 };
 
-/** Where each status sits on the delivery timeline; absent = no timeline (returned/cancelled). */
-const STAGES = ['Placed', 'Processing', 'Shipped', 'Delivered'] as const;
-const STAGE_OF: Record<string, number> = { awaiting_payment: 0, processing: 1, shipped: 2, delivered: 3 };
-
-function Timeline({ stage }: { stage: number }) {
-  return (
-    <View style={s.timeline} accessibilityLabel={`Progress: ${STAGES[stage]}`}>
-      {STAGES.map((label, i) => {
-        const on = i <= stage;
-        return (
-          <View key={label} style={s.tlStep}>
-            <View style={s.tlTrack}>
-              <View style={[s.tlLine, { opacity: i === 0 ? 0 : 1 }, i <= stage && s.tlLineOn]} />
-              <View style={[s.tlDot, on && s.tlDotOn, i === stage && s.tlDotNow]}>
-                {on && i < stage && <Ionicons name="checkmark" size={9} color={colors.white} />}
-              </View>
-              <View style={[s.tlLine, { opacity: i === STAGES.length - 1 ? 0 : 1 }, i < stage && s.tlLineOn]} />
-            </View>
-            <Text style={[s.tlLabel, on && s.tlLabelOn]} numberOfLines={1}>{label}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function OrderCard({ order }: { order: Order }) {
+/**
+ * One order as a WhatsApp-style chat row: round photo of the first item, the
+ * item name, grey order number + status, and the date / amount on the right.
+ * Amounts are the order's own stored total (a snapshot), never recomputed.
+ */
+function OrderRow({ order, last }: { order: Order; last: boolean }) {
   const status = STATUS[order.status] ?? { label: order.status, tone: 'grey' as const };
   const tone = TONES[status.tone];
-  const stage = STAGE_OF[order.status];
   const when = order.placedAt
     ? new Date(order.placedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : '';
+  const first = order.items[0];
+  const more = order.items.length - 1;
+  const paid = order.paymentStatus === 'paid';
 
   return (
-    <View style={s.card}>
-      <View style={s.head}>
-        <View>
-          <Text style={s.overline}>Order</Text>
-          <Text style={s.code}>{order.code}</Text>
+    <View
+      style={[s.row, !last && s.rowDivider]}
+      accessible
+      accessibilityLabel={`Order ${order.code}, ${status.label}, ${inr(order.total)}${paid ? ' paid' : ''}, ${when}`}
+    >
+      <Photo uri={first?.image ?? ''} style={s.thumb} />
+      <View style={s.rowBody}>
+        <View style={s.rowTop}>
+          <Text style={s.itemName} numberOfLines={1}>{first?.name ?? 'Order'}</Text>
           <Text style={s.when}>{when}</Text>
         </View>
-        <View style={[s.pill, { backgroundColor: tone.bg }]}>
-          <View style={[s.pillDot, { backgroundColor: tone.fg }]} />
-          <Text style={[s.pillText, { color: tone.fg }]}>{status.label}</Text>
+        <View style={s.rowTop}>
+          <Text style={s.sub} numberOfLines={1}>
+            {order.code}
+            {more > 0 ? ` · +${more} more` : ''}
+            {first ? ` · Qty ${first.quantity}` : ''}
+          </Text>
+          <Text style={s.total}>{inr(order.total)}</Text>
         </View>
-      </View>
-
-      {stage !== undefined && <Timeline stage={stage} />}
-
-      {order.items.slice(0, 3).map((item, i) => (
-        <View key={i} style={s.item}>
-          <Photo uri={item.image} style={s.itemImage} />
-          <View style={{ flex: 1 }}>
-            <Text style={s.itemName} numberOfLines={2}>{item.name}</Text>
-            <Text style={s.itemMeta}>Qty {item.quantity} · {inr(item.price)}</Text>
+        <View style={s.rowTop}>
+          <View style={[s.pill, { backgroundColor: tone.bg }]}>
+            <View style={[s.pillDot, { backgroundColor: tone.fg }]} />
+            <Text style={[s.pillText, { color: tone.fg }]}>{status.label}</Text>
           </View>
+          {/* "Paid" only when the server says so. */}
+          <Text style={s.paidNote}>{paid ? 'Paid' : order.paymentStatus === 'refunded' ? 'Refunded' : 'Not paid'}</Text>
         </View>
-      ))}
-      {order.items.length > 3 && <Text style={s.more}>+{order.items.length - 3} more</Text>}
-
-      <View style={s.foot}>
-        {/* Only say "paid" when the server says it was — an unpaid or failed order shows its total, not a payment. */}
-        <Text style={s.footLabel}>
-          {order.paymentStatus === 'paid' ? 'Total paid' : order.paymentStatus === 'refunded' ? 'Total (refunded)' : 'Order total'}
-        </Text>
-        <Text style={s.total}>{inr(order.total)}</Text>
       </View>
     </View>
   );
@@ -151,56 +126,33 @@ export default function OrdersScreen() {
 
   return (
     <FlatList
-      style={s.screen}
+      style={s.list}
       data={orders.data}
       keyExtractor={(o) => o.id}
-      contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+      contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl }}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl refreshing={orders.isFetching} onRefresh={() => { orders.refetch(); }} tintColor={colors.green} colors={[colors.green]} />
       }
-      renderItem={({ item }) => <OrderCard order={item} />}
+      renderItem={({ item, index }) => <OrderRow order={item} last={index === (orders.data?.length ?? 0) - 1} />}
     />
   );
 }
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  card: {
-    backgroundColor: colors.white, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.line,
-    padding: spacing.lg, gap: spacing.md, ...elevation.e1,
-  },
-  head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  overline: { ...type.overline, fontSize: 10 },
-  code: { fontFamily: font.heading, fontSize: 16, color: colors.ink },
+  list: { flex: 1, backgroundColor: colors.white },
+  row: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.md, alignItems: 'flex-start' },
+  rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  thumb: { width: 52, height: 52, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  rowBody: { flex: 1, gap: 3 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  itemName: { flex: 1, fontFamily: font.semibold, fontSize: 15, color: colors.ink },
   when: { ...type.caption, color: colors.muted },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
+  sub: { flex: 1, ...type.small, color: colors.muted },
+  total: { fontFamily: font.heading, fontSize: 15, color: colors.ink },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill },
   pillDot: { width: 6, height: 6, borderRadius: 3 },
   pillText: { fontFamily: font.semibold, fontSize: 11.5 },
-
-  timeline: { flexDirection: 'row', paddingVertical: spacing.xs },
-  tlStep: { flex: 1, alignItems: 'center', gap: 6 },
-  tlTrack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' },
-  tlLine: { flex: 1, height: 2, backgroundColor: colors.line },
-  tlLineOn: { backgroundColor: colors.green },
-  tlDot: {
-    width: 16, height: 16, borderRadius: 8, backgroundColor: colors.white, borderWidth: 2, borderColor: colors.line,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  tlDotOn: { backgroundColor: colors.green, borderColor: colors.green },
-  tlDotNow: { borderColor: colors.greenSoft, borderWidth: 3, width: 18, height: 18, borderRadius: 9 },
-  tlLabel: { ...type.tiny, color: colors.steel },
-  tlLabelOn: { fontFamily: font.semibold, color: colors.ink },
-
-  item: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  itemImage: { width: 52, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line },
-  itemName: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
-  itemMeta: { ...type.caption, color: colors.muted },
-  more: { ...type.caption, color: colors.muted },
-  foot: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: spacing.md,
-  },
-  footLabel: { ...type.small, color: colors.muted },
-  total: { fontFamily: font.heading, fontSize: 17, color: colors.ink },
+  paidNote: { ...type.caption, color: colors.muted },
 });

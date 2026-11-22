@@ -57,7 +57,7 @@ export default function RegisterScreen() {
 
       <FormMessage text={error} tone="error" />
 
-      <PremiumButton label="Create account" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
+      <PremiumButton label="Create account" variant="green" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
 
       <Text style={s.legal}>By continuing you agree to our Terms and Privacy Policy.</Text>
 

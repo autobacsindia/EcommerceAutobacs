@@ -246,7 +246,7 @@ export default function ProductScreen() {
                   icon="play"
                   label="Watch in reels"
                   action={seenIn.length > 1 ? `${seenIn.length}` : undefined}
-                  onPress={() => router.push({ pathname: '/(tabs)/reels', params: { start: seenIn[0].id } })}
+                  onPress={() => router.push({ pathname: '/reels/watch', params: { start: seenIn[0].id } })}
                 />
               ) : (
                 <View />
@@ -348,7 +348,7 @@ export default function ProductScreen() {
                   <PressScale
                     key={r.id}
                     haptic="selection"
-                    onPress={() => router.push({ pathname: '/(tabs)/reels', params: { start: r.id } })}
+                    onPress={() => router.push({ pathname: '/reels/watch', params: { start: r.id } })}
                     style={s.reelThumb}
                     accessibilityLabel={`Reel by ${r.creator.name}`}
                   >
@@ -493,6 +493,7 @@ export default function ProductScreen() {
               <PremiumButton
                 label="Buy now"
                 icon="flash"
+                variant="green"
                 onPress={onBuy}
                 disabled={cartBusy}
                 loading={buying}

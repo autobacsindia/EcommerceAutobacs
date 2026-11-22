@@ -11,9 +11,9 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Photo } from '../../src/components/ui';
-import { colors, elevation, font, inr, radius, spacing, type } from '../../src/theme';
+import { colors, font, inr, radius, spacing, type } from '../../src/theme';
 import { ApiError } from '../../src/api/client';
-import { Badge, EmptyState, ErrorState, ListSkeleton, Overline, PremiumButton, PressScale, Stripes } from '../../src/ui';
+import { EmptyState, ErrorState, ListSkeleton, PremiumButton, PressScale } from '../../src/ui';
 import { useApp } from '../../src/store';
 
 export default function CartScreen() {
@@ -59,20 +59,15 @@ export default function CartScreen() {
 
   const soldOut = cart.items.some((i) => i.stock === 'out');
 
+  // WhatsApp-style large bold title.
   const header = (
     <View style={[s.header, { paddingTop: insets.top + spacing.md }]}>
-      <View style={s.overRow}>
-        <Stripes width={10} height={3} gap={2} />
-        <Overline>Your bag</Overline>
-      </View>
-      <View style={s.titleRow}>
-        <Text style={s.title} accessibilityRole="header">Cart</Text>
-        {cart.items.length > 0 && (
-          <Text style={s.subtitle}>
-            {cart.totalItems} {cart.totalItems === 1 ? 'item' : 'items'}
-          </Text>
-        )}
-      </View>
+      <Text style={s.title} accessibilityRole="header">Cart</Text>
+      {cart.items.length > 0 && (
+        <Text style={s.subtitle}>
+          {cart.totalItems} {cart.totalItems === 1 ? 'item' : 'items'}
+        </Text>
+      )}
     </View>
   );
 
@@ -95,6 +90,7 @@ export default function CartScreen() {
             title="Your cart is empty"
             body="Browse parts and accessories for your car."
             action={{ label: 'Start shopping', onPress: () => router.push('/(tabs)/shop') }}
+            secondary={{ label: 'Watch reels', onPress: () => router.push('/(tabs)/reels') }}
           />
         )}
       </View>
@@ -118,20 +114,29 @@ export default function CartScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.green} colors={[colors.green]} />}
       >
-        {cart.items.map((item) => (
-          <View key={`${item.productId}-${item.variantId ?? 'base'}`} style={[s.line, item.stock === 'out' && s.lineOut]}>
-            <PressScale onPress={() => item.slug && router.push(`/product/${item.slug}`)} style={s.imageWrap} accessibilityLabel={`Open ${item.name}`}>
-              <Photo uri={item.image} style={s.image} />
-            </PressScale>
+        {/* Chat-row list: round photo, name, grey details, line amount on the right. */}
+        <View style={s.list}>
+          {cart.items.map((item, idx) => (
+            <View
+              key={`${item.productId}-${item.variantId ?? 'base'}`}
+              style={[s.line, idx < cart.items.length - 1 && s.lineDivider]}
+            >
+              <PressScale onPress={() => item.slug && router.push(`/product/${item.slug}`)} style={s.imageWrap} accessibilityLabel={`Open ${item.name}`}>
+                <Photo uri={item.image} style={s.image} />
+              </PressScale>
 
-            <View style={s.lineBody}>
-              <Text style={s.name} numberOfLines={2}>{item.name}</Text>
-              {!!item.variantLabel && <Text style={s.variant}>{item.variantLabel}</Text>}
-              <Text style={s.unit}>{inr(item.price)} each</Text>
-              {item.stock === 'out' && <Badge text="Out of stock" tone="red" style={{ alignSelf: 'flex-start', marginTop: 2 }} />}
-              {item.stock === 'low' && <Badge text="Only a few left" tone="gold" style={{ alignSelf: 'flex-start', marginTop: 2 }} />}
+              <View style={s.lineBody}>
+                <View style={s.lineTop}>
+                  <Text style={s.name} numberOfLines={2}>{item.name}</Text>
+                  <Text style={s.lineTotal}>{inr(item.price * item.quantity)}</Text>
+                </View>
+                <Text style={s.unit} numberOfLines={1}>
+                  {item.variantLabel ? `${item.variantLabel} · ` : ''}
+                  {inr(item.price)} each
+                  {item.stock === 'out' ? <Text style={s.outText}>  ·  Out of stock</Text> : null}
+                  {item.stock === 'low' ? <Text style={s.lowText}>  ·  Only a few left</Text> : null}
+                </Text>
 
-              <View style={s.lineFoot}>
                 <View style={s.stepper}>
                   <PressScale
                     onPress={() =>
@@ -140,42 +145,31 @@ export default function CartScreen() {
                         : write(() => setQuantity(item.productId, item.quantity - 1, item.variantId))
                     }
                     disabled={cartBusy}
-                    hitSlop={6}
+                    hitSlop={8}
                     haptic="selection"
                     scaleTo={0.9}
                     style={s.stepBtn}
                     accessibilityLabel={item.quantity <= 1 ? `Remove ${item.name}` : 'Decrease quantity'}
                   >
-                    <Ionicons name={item.quantity <= 1 ? 'trash-outline' : 'remove'} size={16} color={colors.ink} />
+                    <Ionicons name={item.quantity <= 1 ? 'trash-outline' : 'remove'} size={16} color={item.quantity <= 1 ? colors.red : colors.ink} />
                   </PressScale>
                   <Text style={s.qty}>{item.quantity}</Text>
                   <PressScale
                     onPress={() => write(() => setQuantity(item.productId, item.quantity + 1, item.variantId))}
                     disabled={cartBusy || item.stock === 'out'}
-                    hitSlop={6}
+                    hitSlop={8}
                     haptic="selection"
                     scaleTo={0.9}
                     style={[s.stepBtn, (cartBusy || item.stock === 'out') && { opacity: 0.4 }]}
                     accessibilityLabel="Increase quantity"
                   >
-                    <Ionicons name="add" size={16} color={colors.ink} />
+                    <Ionicons name="add" size={16} color={colors.green} />
                   </PressScale>
                 </View>
-                <Text style={s.lineTotal}>{inr(item.price * item.quantity)}</Text>
               </View>
             </View>
-
-            <PressScale
-              onPress={() => confirmRemove(item.productId, item.name, item.variantId)}
-              hitSlop={8}
-              scaleTo={0.9}
-              style={s.remove}
-              accessibilityLabel={`Remove ${item.name}`}
-            >
-              <Ionicons name="close" size={16} color={colors.muted} />
-            </PressScale>
-          </View>
-        ))}
+          ))}
+        </View>
 
         <View style={s.note}>
           <Ionicons name="information-circle-outline" size={16} color={colors.green} />
@@ -221,6 +215,7 @@ export default function CartScreen() {
           onPress={() => router.push(customer ? '/checkout' : '/login?next=/checkout')}
           disabled={soldOut || cartBusy}
           iconRight="arrow-forward"
+          variant="green"
           full
         />
       </View>
@@ -229,39 +224,33 @@ export default function CartScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.bg, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  overRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 2 },
-  title: { ...type.display },
+  screen: { flex: 1, backgroundColor: colors.white },
+  header: { backgroundColor: colors.white, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  title: { fontFamily: font.extrabold, fontSize: 30, color: colors.ink, letterSpacing: -0.5 },
   subtitle: { ...type.small, color: colors.muted },
 
-  line: {
-    flexDirection: 'row', gap: spacing.md, backgroundColor: colors.white, borderRadius: radius.xl,
-    borderWidth: 1, borderColor: colors.line, padding: spacing.md, marginBottom: spacing.md, ...elevation.e1,
+  list: { backgroundColor: colors.white, marginBottom: spacing.md },
+  line: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.md, alignItems: 'flex-start' },
+  // Hairline divider inset past the photo, like chat rows.
+  lineDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, marginLeft: 0 },
+  imageWrap: {
+    width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line,
   },
-  lineOut: { borderColor: colors.redSoft },
-  imageWrap: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
-  image: { width: 88, height: 88 },
-  lineBody: { flex: 1, gap: 3 },
-  name: { fontFamily: font.medium, fontSize: 14, lineHeight: 19, color: colors.ink, paddingRight: spacing.xl },
-  variant: { ...type.overline, fontSize: 10 },
-  unit: { ...type.caption, color: colors.muted },
-  lineFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
+  image: { width: 56, height: 56 },
+  lineBody: { flex: 1, gap: 2 },
+  lineTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  name: { flex: 1, fontFamily: font.semibold, fontSize: 15, lineHeight: 20, color: colors.ink },
+  unit: { ...type.small, color: colors.muted },
+  outText: { color: colors.red, fontFamily: font.semibold },
+  lowText: { color: colors.ink2, fontFamily: font.semibold },
+  lineTotal: { fontFamily: font.heading, fontSize: 15, color: colors.ink },
   stepper: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.page,
-    borderRadius: radius.pill, padding: 3,
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: spacing.sm,
+    borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, padding: 2,
   },
-  stepBtn: {
-    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.white,
-    alignItems: 'center', justifyContent: 'center', ...elevation.e1,
-  },
-  qty: { fontFamily: font.bold, fontSize: 14, color: colors.ink, minWidth: 30, textAlign: 'center' },
-  lineTotal: { fontFamily: font.heading, fontSize: 16, color: colors.ink },
-  remove: {
-    position: 'absolute', top: spacing.sm, right: spacing.sm, width: 28, height: 28, borderRadius: 14,
-    backgroundColor: colors.page, alignItems: 'center', justifyContent: 'center',
-  },
+  stepBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  qty: { fontFamily: font.bold, fontSize: 14, color: colors.ink, minWidth: 28, textAlign: 'center' },
 
   note: {
     flexDirection: 'row', gap: spacing.sm, alignItems: 'center', padding: spacing.md,
@@ -274,8 +263,8 @@ const s = StyleSheet.create({
 
   bar: {
     position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white,
-    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
-    padding: spacing.lg, gap: spacing.md, ...elevation.e3,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line,
+    padding: spacing.lg, gap: spacing.md,
   },
   barRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   barLabel: { fontFamily: font.semibold, fontSize: 15, color: colors.ink },
