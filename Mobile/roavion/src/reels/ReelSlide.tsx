@@ -6,7 +6,7 @@
  * Gestures: single tap pauses/resumes, double tap likes (with a heart burst).
  */
 import { memo, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEvent } from 'expo';
@@ -16,6 +16,7 @@ import type { Reel } from '../api/reels';
 import type { SlotState } from './usePlayerPool';
 import { ReelProductCard } from './ReelProductCard';
 import { colors, font, spacing } from '../theme';
+import { StripeLoader } from '../ui';
 
 const DOUBLE_TAP_MS = 260;
 
@@ -154,7 +155,7 @@ function ReelSlideImpl(props: ReelSlideProps) {
 
       {buffering && (
         <View pointerEvents="none" style={s.center}>
-          <ActivityIndicator color={colors.white} size="large" />
+          <StripeLoader size="lg" onDark />
         </View>
       )}
 
@@ -178,7 +179,7 @@ function ReelSlideImpl(props: ReelSlideProps) {
         pointerEvents="none"
         style={[s.center, { opacity: heart, transform: [{ scale: heart.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }]}
       >
-        <Ionicons name="heart" size={110} color="#ff3b5c" style={s.iconShadow} />
+        <Ionicons name="heart" size={110} color={colors.red} style={s.iconShadow} />
       </Animated.View>
 
       {/* Right rail */}
@@ -192,7 +193,7 @@ function ReelSlideImpl(props: ReelSlideProps) {
         </View>
         <RailButton
           icon={reel.viewerLiked ? 'heart' : 'heart-outline'}
-          color={reel.viewerLiked ? '#ff3b5c' : colors.white}
+          color={reel.viewerLiked ? colors.red : colors.white}
           label={compact(reel.likeCount)}
           onPress={() => props.onLike(reel)}
           a11y={reel.viewerLiked ? 'Unlike' : 'Like'}

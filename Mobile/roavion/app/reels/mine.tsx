@@ -15,10 +15,10 @@ import { useApp } from '../../src/store';
 import { colors, font, radius, shadow, spacing } from '../../src/theme';
 
 const STATUS: Record<ReelStatus, { label: string; bg: string; fg: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  pending: { label: 'Under review', bg: '#fff4dc', fg: '#8a5a00', icon: 'time-outline' },
+  pending: { label: 'Under review', bg: colors.goldSoft, fg: colors.ink2, icon: 'time-outline' },
   approved: { label: 'Live', bg: colors.greenSoft, fg: colors.green, icon: 'checkmark-circle' },
-  rejected: { label: 'Not approved', bg: '#fdeaee', fg: colors.red, icon: 'close-circle' },
-  removed: { label: 'Removed', bg: '#eceeed', fg: colors.muted, icon: 'remove-circle-outline' },
+  rejected: { label: 'Not approved', bg: colors.redSoft, fg: colors.red, icon: 'close-circle' },
+  removed: { label: 'Removed', bg: colors.page, fg: colors.muted, icon: 'remove-circle-outline' },
 };
 
 function Row({ reel }: { reel: Reel }) {
@@ -119,7 +119,7 @@ const s = StyleSheet.create({
   pillText: { fontFamily: font.bold, fontSize: 12 },
   product: { fontFamily: font.bold, fontSize: 14, color: colors.ink },
   caption: { fontFamily: font.regular, fontSize: 13, color: colors.ink2, lineHeight: 18 },
-  reason: { backgroundColor: '#fdeaee', borderRadius: radius.sm, padding: spacing.sm, flexDirection: 'row', flexWrap: 'wrap' },
+  reason: { backgroundColor: colors.redSoft, borderRadius: radius.sm, padding: spacing.sm, flexDirection: 'row', flexWrap: 'wrap' },
   reasonLabel: { fontFamily: font.bold, fontSize: 12.5, color: colors.red },
   reasonText: { fontFamily: font.regular, fontSize: 12.5, color: colors.ink2, flexShrink: 1 },
   date: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted, marginTop: 'auto' },

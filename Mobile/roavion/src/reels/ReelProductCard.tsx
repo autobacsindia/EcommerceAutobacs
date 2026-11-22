@@ -5,17 +5,18 @@
  * the card never computes a price. Tapping the card opens the product page;
  * the two buttons hand off to the normal cart flow (see the feed screen).
  */
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import type { ReelProduct } from '../api/reels';
-import { colors, font, inr, radius, spacing, tints } from '../theme';
+import { colors, font, inr, radius, spacing } from '../theme';
+import { StripeLoader } from '../ui';
 
 const STOCK: Record<ReelProduct['availability'], { label: string; color: string }> = {
   in: { label: 'In stock', color: colors.success },
-  low: { label: 'Only a few left', color: '#b26a00' },
+  low: { label: 'Only a few left', color: colors.red },
   out: { label: 'Out of stock', color: colors.red },
-  backorder: { label: 'Ships when restocked', color: '#1f6fb2' },
+  backorder: { label: 'Ships when restocked', color: colors.steel },
 };
 
 export function ReelProductCard({
@@ -94,7 +95,7 @@ export function ReelProductCard({
           accessibilityState={{ disabled: out || !!busy }}
         >
           {busy === 'add' ? (
-            <ActivityIndicator color={colors.green} size="small" />
+            <StripeLoader size="sm" />
           ) : (
             <>
               <Ionicons name={choose ? 'options-outline' : 'cart-outline'} size={17} color={colors.green} />
@@ -111,7 +112,7 @@ export function ReelProductCard({
           accessibilityState={{ disabled: out || !!busy }}
         >
           {busy === 'buy' ? (
-            <ActivityIndicator color={colors.white} size="small" />
+            <StripeLoader size="sm" onDark />
           ) : (
             <>
               <Ionicons name={out ? 'close-circle-outline' : 'flash'} size={16} color={colors.white} />
@@ -131,7 +132,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: spacing.md,
     gap: spacing.md,
-    shadowColor: '#000000',
+    shadowColor: colors.black,
     shadowOpacity: 0.25,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
@@ -143,8 +144,8 @@ const s = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' },
   price: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
   from: { fontFamily: font.regular, fontSize: 12, color: colors.muted },
-  festive: { backgroundColor: tints[1], borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 1 },
-  festiveText: { fontFamily: font.bold, fontSize: 10.5, color: '#8a5a00' },
+  festive: { backgroundColor: colors.goldSoft, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 1 },
+  festiveText: { fontFamily: font.bold, fontSize: 10.5, color: colors.ink2 },
   mrp: { fontFamily: font.regular, fontSize: 12.5, color: colors.muted, textDecorationLine: 'line-through' },
   off: { backgroundColor: colors.greenSoft, borderRadius: radius.pill, paddingHorizontal: 7, paddingVertical: 1 },
   offText: { fontFamily: font.bold, fontSize: 11, color: colors.green },

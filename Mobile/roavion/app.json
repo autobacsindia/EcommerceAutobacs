@@ -17,7 +17,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#080808"
       },
       "package": "com.roavion.shop"
     },
@@ -30,7 +30,7 @@
         {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#080808"
         }
       ],
       "expo-image",

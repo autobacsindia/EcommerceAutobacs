@@ -7,7 +7,6 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -32,6 +31,7 @@ import { reelKeys } from '../../src/reels/useReels';
 import { Button } from '../../src/components/ui';
 import { useApp } from '../../src/store';
 import { colors, font, inr, radius, shadow, spacing } from '../../src/theme';
+import { StripeLoader } from '../../src/ui';
 
 const MAX_SECONDS = 60;
 /** Client-side guard only; the server's maxBytes (and its size check) is the real limit. */
@@ -272,7 +272,7 @@ export default function NewReelScreen() {
                 returnKeyType="search"
                 autoCorrect={false}
               />
-              {results.isFetching && <ActivityIndicator size="small" color={colors.green} />}
+              {results.isFetching && <StripeLoader size="sm" />}
             </View>
             {search.length >= 2 && results.data && results.data.products.length === 0 && (
               <Text style={s.hint}>No products match “{search}”.</Text>
@@ -337,7 +337,7 @@ export default function NewReelScreen() {
 
 const s = StyleSheet.create({
   demoNote: {
-    fontFamily: font.medium, fontSize: 12.5, color: '#8a5a00', backgroundColor: '#fff4dc',
+    fontFamily: font.medium, fontSize: 12.5, color: colors.ink2, backgroundColor: colors.goldSoft,
     padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.lg,
   },
   step: { fontFamily: font.semibold, fontSize: 15, color: colors.ink, marginBottom: spacing.sm },

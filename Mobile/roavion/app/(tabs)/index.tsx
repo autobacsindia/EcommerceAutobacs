@@ -36,7 +36,7 @@ import { useHeaderScroll, useScrollToTop } from '../../src/components/useHeaderS
 import ProductCard from '../../src/components/ProductCard';
 import { MiniTile, Panel, ProductCardSkeleton, Skeleton, TextLink } from '../../src/components/ui';
 import { useReelFeed } from '../../src/reels/useReels';
-import { colors, font, inr, radius, spacing, tints } from '../../src/theme';
+import { colors, font, inr, radius, spacing } from '../../src/theme';
 import { useApp } from '../../src/store';
 
 const { width: SCREEN } = Dimensions.get('window');
@@ -148,7 +148,7 @@ function Hero({ slides, loading }: { slides: HeroSlide[]; loading: boolean }) {
             {item.cover ? (
               <Image source={{ uri: item.cover }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
             ) : (
-              <LinearGradient colors={['#1c2422', '#0d3b27']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}>
+              <LinearGradient colors={[colors.carbon, colors.greenDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}>
                 {item.product && (
                   <View style={s.heroShotWell}>
                     <Image source={{ uri: item.product }} style={s.heroShot} contentFit="contain" cachePolicy="memory-disk" />
@@ -354,7 +354,7 @@ export default function HomeScreen() {
                     </View>
                   ))
                 : topCategories.slice(0, 8).map((c, i) => (
-                    <MiniTile key={c.id} label={c.name} image={c.image} tint={tints[i % tints.length]} onPress={() => router.push(`/category/${c.slug}`)} width={MINI_W} />
+                    <MiniTile key={c.id} label={c.name} image={c.image} tint={colors.greenFaint} onPress={() => router.push(`/category/${c.slug}`)} width={MINI_W} />
                   ))}
             </View>
           </Panel>
@@ -414,7 +414,7 @@ const s = StyleSheet.create({
     height: HERO_H,
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: '#1c2422',
+    backgroundColor: colors.carbon,
   },
   heroShotWell: { position: 'absolute', right: 12, top: 12, height: HERO_H * 0.56, width: HERO_W * 0.42, alignItems: 'center', justifyContent: 'center' },
   heroShot: { width: '100%', height: '100%' },
