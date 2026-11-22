@@ -40,6 +40,7 @@ import { checkDevice, cleanDevice } from './devices.js';
 import { fenceVerdict, isImpossibleJump } from './geo.js';
 import { isValidSequence, stateAfter, NEXT_TYPES } from './dayRules.js';
 import { recomputeDay, shapeDay, shiftFor } from './dayService.js';
+import { calendarFacts } from './calendar.js';
 import {
   istDate, addDays, DAY_MS, MINUTE_MS, monthOf,
 } from './time.js';
@@ -168,17 +169,25 @@ async function replayOf(employee, clientPunchId) {
  * one transaction. Returns { punch, day, replay }.
  */
 export async function storePunch(employee, doc, { deviceCommit = null, afterInsert = null, actor = null } = {}) {
-  const shift = await shiftFor(employee);
+  // Outside the transaction and in parallel: rarely-changing inputs of the recompute.
+  const [shift, facts] = await Promise.all([
+    shiftFor(employee),
+    calendarFacts(employee._id, doc.date, doc.date, employee.workSites || []),
+  ]);
   try {
     return await withTx(async (session) => {
       // Serialise this employee's punches for this day (see the header).
-      await attendanceDayRepository.touch(employee._id, doc.date, monthOf(doc.date), session);
+      const existing = await attendanceDayRepository.touch(employee._id, doc.date, monthOf(doc.date), session);
       const dayPunches = await attendancePunchRepository.listForDay(employee._id, doc.date, session);
       if (doc.source === 'app') assertSequence(dayPunches, doc.type, doc.at);
       const punch = await attendancePunchRepository.create(doc, session);
       if (deviceCommit) await deviceCommit(session, actor);
       if (afterInsert) await afterInsert(punch, session);
-      const day = await recomputeDay(employee, doc.date, { session, shift });
+      // The day's punches are the ones just read plus the one just written — no re-read.
+      const punches = [...dayPunches, punch].sort(byTime);
+      const day = await recomputeDay(employee, doc.date, {
+        session, shift, punches, existing, facts,
+      });
       return { punch: shapePunch(punch), day: shapeDay(day), replay: false };
     });
   } catch (err) {
@@ -202,17 +211,22 @@ export async function punch(employee, body, frames = [], { actor = null, req = n
   if (employee.status === 'exited') throw fail('Your employment has ended; punches are closed.', 403);
   if (employee.manualAttendance) throw refuse('manual_attendance', 'HR records your attendance. Please tell HR when you arrive and leave.');
 
-  const settings = await getHrSettings();
-  const reviewReasons = [];
-
-  // Time.
+  // Time first: the parallel reads below need the punch's instant.
   let at = now;
   if (input.offline) {
     at = input.at;
     if (at - now > FUTURE_SKEW_MS) throw refuse('bad_time', "Your phone's clock is ahead. Set the time automatically and try again.");
     if (now - at > OFFLINE_HARD_LIMIT_MS) throw refuse('bad_time', 'This offline punch is too old. Ask HR for a correction instead.');
-    if (now - at > settings.offlineMaxHours * 3600000) reviewReasons.push('offline_late');
   }
+  // Independent reads, in parallel (one round-trip of latency instead of four).
+  const [settings, sites, prev, byDate] = await Promise.all([
+    getHrSettings(),
+    (employee.workSites || []).length ? attendanceSetupRepository.findActiveSitesByIds(employee.workSites) : [],
+    attendancePunchRepository.findLastWithGeo(employee._id, at),
+    loadDays(employee._id, at),
+  ]);
+  const reviewReasons = [];
+  if (input.offline && now - at > settings.offlineMaxHours * 3600000) reviewReasons.push('offline_late');
 
   // Phone.
   const device = await checkDevice(employee, input.device, settings, now);
@@ -230,21 +244,17 @@ export async function punch(employee, body, frames = [], { actor = null, req = n
       accuracyM: input.accuracyM, maxAccuracyM: settings.gpsMaxAccuracyM,
     });
   }
-  const sites = (employee.workSites || []).length
-    ? await attendanceSetupRepository.findActiveSitesByIds(employee.workSites) : [];
   const fence = fenceVerdict(input, sites, { anywhereAllowed: !!employee.anywhereAllowed });
   if (fence.verdict === 'outside') {
     throw refuse('outside_fence', sites.length
       ? 'You are not at your work site. Punch when you reach it.'
       : 'No work site is set for you yet. Please ask HR.', { distanceM: fence.distanceM });
   }
-  const prev = await attendancePunchRepository.findLastWithGeo(employee._id, at);
   if (prev && isImpossibleJump({ lat: prev.geo.lat, lng: prev.geo.lng, at: prev.at }, { lat: input.lat, lng: input.lng, at })) {
     reviewReasons.push('impossible_jump');
   }
 
   // Sequence pre-check (authoritative re-check inside the transaction).
-  const byDate = await loadDays(employee._id, at);
   const date = workdayFor(input.type, at, byDate);
   assertSequence(byDate[date] || [], input.type, at);
 

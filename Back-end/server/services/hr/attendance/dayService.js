@@ -41,28 +41,34 @@ const payrollChanged = (before, after) => !before
  * Rebuild one day. `employee` is a lean EmployeeProfile (needs _id, shift, workSites).
  * Runs inside `session` when given (the punch/correction transaction).
  */
-export async function recomputeDay(employee, date, { session = null, now = new Date(), shift = null } = {}) {
+export async function recomputeDay(employee, date, {
+  session = null, now = new Date(), shift = null, punches = null, existing, facts = null,
+} = {}) {
   if (!DATE_RE.test(date)) throw new AppError('Invalid date', 400, { expose: true });
+  // Callers that already hold an input pass it in (the punch path does); the
+  // rest is read here. Sequential on purpose: operations on one transaction
+  // session must not run concurrently.
   const theShift = shift || await shiftFor(employee, session);
-  // Sequential on purpose: operations on one transaction session must not run concurrently.
-  const punches = await attendancePunchRepository.listForDay(employee._id, date, session);
-  const existing = await attendanceDayRepository.find(employee._id, date, session);
-  const locked = existing?.payrollLocked || await attendanceDayRepository.isMonthLocked(monthOf(date), session);
-  const { leaveByDate, holidays } = await calendarFacts(employee._id, date, date, employee.workSites || []);
+  const dayPunches = punches || await attendancePunchRepository.listForDay(employee._id, date, session);
+  const before = existing !== undefined ? existing : await attendanceDayRepository.find(employee._id, date, session);
+  // An existing row carries the lock itself (markMonthLocked flags every row,
+  // markMonthUnlocked clears them); only a brand-new row has to ask the month.
+  const locked = before ? !!before.payrollLocked : await attendanceDayRepository.isMonthLocked(monthOf(date), session);
+  const { leaveByDate, holidays } = facts || await calendarFacts(employee._id, date, date, employee.workSites || []);
 
   const fields = computeDay({
-    date, shift: theShift, punches, leave: leaveByDate.get(date) || null, holiday: holidays.has(date), today: istDate(now),
+    date, shift: theShift, punches: dayPunches, leave: leaveByDate.get(date) || null, holiday: holidays.has(date), today: istDate(now),
   });
   const set = {
     ...fields,
     month: monthOf(date),
     // HR approves overtime on a figure; if the hours later shrink, the approval shrinks with them.
-    overtimeApprovedMinutes: Math.min(existing?.overtimeApprovedMinutes || 0, fields.overtimeMinutes),
+    overtimeApprovedMinutes: Math.min(before?.overtimeApprovedMinutes || 0, fields.overtimeMinutes),
     computedAt: now,
   };
   if (locked) {
     set.payrollLocked = true;
-    if (existing?.changedAfterLock || payrollChanged(existing, set)) set.changedAfterLock = true;
+    if (before?.changedAfterLock || payrollChanged(before, set)) set.changedAfterLock = true;
   }
   return attendanceDayRepository.upsert(employee._id, date, set, session);
 }

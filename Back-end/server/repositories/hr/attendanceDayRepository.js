@@ -14,13 +14,14 @@ const attendanceDayRepository = {
    * Write the day row first thing in a punch transaction: a second concurrent
    * punch of the same employee/day then hits a write conflict and retries, so
    * punches of one person are serialised. A new row gets a placeholder status
-   * the recompute in the same transaction overwrites.
+   * the recompute in the same transaction overwrites. Returns the row as it was
+   * BEFORE (null when this call created it), which the recompute reuses.
    */
-  touch: (employeeId, date, month, session = null) => AttendanceDay.updateOne(
+  touch: (employeeId, date, month, session = null) => AttendanceDay.findOneAndUpdate(
     { employee: employeeId, date },
     { $set: { computedAt: new Date() }, $setOnInsert: { month, status: 'absent' } },
-    { upsert: true, session },
-  ),
+    { upsert: true, new: false, session }, // returns the row as it was (null = just created)
+  ).select('payrollLocked changedAfterLock overtimeApprovedMinutes status workedMinutes isLate').lean(),
   /** Insert or replace the computed fields of one day (unique {employee, date}). */
   upsert: (employeeId, date, set, session = null) => AttendanceDay.findOneAndUpdate(
     { employee: employeeId, date },

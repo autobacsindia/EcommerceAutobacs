@@ -57,6 +57,11 @@ const {
   istDate, istInstant, addDays, weekday, monthOf,
 } = await import('../services/hr/attendance/time.js');
 
+// One server bound to 127.0.0.1 explicitly. supertest's default (app.listen(0) on
+// [::], requests to 127.0.0.1) lets another process on this machine that bound the
+// same port on IPv4 receive our requests — with several Jest runs at once that
+// showed up as random 404s and even a 200 from someone else's app.
+const server = app.listen(0, '127.0.0.1');
 const PW = 'SecurePass123!';
 const API = '/api/v1/hr';
 const SITE = { lat: 12.9716, lng: 77.5946 };
@@ -75,9 +80,9 @@ setFaceEngine(fakeEngine);
 
 let n = 0;
 async function signIn(email) {
-  const agent = request.agent(app);
+  const agent = request.agent(server);
   const res = await agent.post('/api/v1/auth/login').send({ email, password: PW });
-  expect(res.status).toBe(200);
+  if (res.status !== 200) throw new Error(`login ${res.status} ${JSON.stringify(res.body)}`);
   const x = (res.headers['set-cookie'] || []).find((c) => c.startsWith('XSRF-TOKEN='));
   const csrf = x ? x.split(';')[0].split('=')[1] : '';
   return {
@@ -149,6 +154,7 @@ beforeAll(async () => {
   await Promise.all((await loadHrModels()).map((M) => M.init()));
 });
 afterAll(async () => {
+  await new Promise((resolve) => server.close(resolve));
   if (cronService?.shutdown) cronService.shutdown();
   if (adaptiveThrottlingService?.shutdown) adaptiveThrottlingService.shutdown();
 });
@@ -178,11 +184,11 @@ describe('auth and who may see what', () => {
   test('no token → 401 on attendance and face routes (never 200)', async () => {
     for (const [m, path] of [['get', '/me/attendance'], ['get', '/attendance/today'], ['post', '/me/punches'],
       ['get', `/employees/${bobP._id}/attendance`], ['get', `/employees/${bobP._id}/face`], ['get', '/sites']]) {
-      const r = await request(app)[m](`${API}${path}`);
-      expect([401, 403]).toContain(r.status); // 403 = CSRF on a cookie-less POST; never 200
+      const r = await request(server)[m](`${API}${path}`);
+      if (![401, 403].includes(r.status)) throw new Error(`${m} ${path} → ${r.status} ${JSON.stringify(r.body).slice(0, 300)} ${JSON.stringify(r.headers)}`);
       expect(r.status).not.toBe(200);
     }
-    const r = await request(app).get(`${API}/me/attendance`);
+    const r = await request(server).get(`${API}/me/attendance`);
     expect(r.status).toBe(401);
   });
 
@@ -335,6 +341,23 @@ describe('punch', () => {
     expect(await AttendancePunch.countDocuments({ employee: aliceP._id })).toBe(1);
   });
 
+  test('a punch costs a bounded number of DB round trips (optimisation guard)', async () => {
+    await punchReq(alice.agent); // binds the phone, creates the day row
+    const ch = await challenge(alice.agent);
+    const ops = [];
+    mongoose.set('debug', (coll, method) => ops.push(`${coll}.${method}`));
+    try {
+      const r = await punchReq(alice.agent, { type: 'out', ch });
+      expect(r.res.status).toBe(201);
+    } finally {
+      mongoose.set('debug', false);
+    }
+    const hr = ops.filter((o) => !o.startsWith('users.') && o !== 'employeeprofiles.findOne');
+    // Measured 15 before the optimisation pass, 12 after; the day's punches are read once.
+    expect(hr.length).toBeLessThanOrEqual(12);
+    expect(hr.filter((o) => o === 'attendancepunches.find')).toHaveLength(2); // pre-check + in-transaction re-check
+  });
+
   test('double tap (same request twice at once) → exactly one punch', async () => {
     const ch = await challenge(alice.agent);
     const clientPunchId = uid();
@@ -358,7 +381,7 @@ describe('punch', () => {
     const fuzzy = await punchReq(alice.agent, { accuracyM: 500 });
     expect(fuzzy.res.body.code).toBe('low_accuracy');
     const fake = await punchReq(alice.agent, { mocked: true });
-    expect(fake.res.body.code).toBe('mocked_location');
+    if (fake.res.body.code !== 'mocked_location') throw new Error(`mocked → ${fake.res.status} ${JSON.stringify(fake.res.body)}`);
     expect(await HrAuditLog.countDocuments({ action: 'punch.mocked_location', subject: aliceP._id })).toBe(1);
     const seq = await punchReq(alice.agent, { type: 'break_start' });
     expect(seq.res.body).toMatchObject({ code: 'sequence', allowedTypes: ['in'] });
