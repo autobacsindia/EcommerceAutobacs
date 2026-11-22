@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { trackPurchase } from '@/lib/analytics';
 
 // Mock dependencies
+jest.mock('@/hooks/queries/useDeliveryFeesPublic', () => require('@/test-utils/cartPageMocks').deliveryFeesPublicOffMock);
 jest.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
