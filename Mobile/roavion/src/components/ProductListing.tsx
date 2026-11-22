@@ -328,7 +328,7 @@ export default function ProductListing({
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: colors.screen },
 
   pageHead: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: 4 },
   column: { gap: GAP, paddingHorizontal: spacing.lg },
@@ -356,9 +356,10 @@ const s = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.card,
   },
-  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  // WhatsApp-style selected chip: soft green tint, green bold label.
+  chipOn: { backgroundColor: colors.greenSoft, borderColor: colors.greenSoft },
   chipText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
-  chipTextOn: { fontFamily: font.bold, color: colors.white },
+  chipTextOn: { fontFamily: font.bold, color: colors.green },
 
   footer: { paddingVertical: spacing.xl },
   dim: { opacity: 0.55 },

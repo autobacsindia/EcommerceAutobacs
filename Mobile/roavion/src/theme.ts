@@ -23,6 +23,8 @@ export const palette = {
   greenOnDark: '#228a57',
   greenSoft: '#e7f3ec',
   greenFaint: '#f2f8f4',
+  /** Website hero "mint" slide (store.css `.sh-slide-mint`). */
+  greenMint: '#d9efe2',
 
   // Ink & carbon (wordmark, header, launch)
   ink: '#0f1111',
@@ -33,6 +35,8 @@ export const palette = {
   // Neutrals
   white: '#ffffff',
   page: '#f6f7f6',
+  /** Website page grey (store.css --bg); WhatsApp-style search pill fill. */
+  mist: '#eef1f0',
   line: '#dfe3e2',
   steel: '#707070',
   muted: '#5f6363',
@@ -121,7 +125,29 @@ export const colors = {
   pressedOnLight: alpha(palette.green, 0.12),
   skeleton: palette.line,
   skeletonSheen: alpha(palette.white, 0.65),
+
+  /**
+   * WhatsApp-style surfaces (owner, 2026-11-22): white screens, a grey rounded
+   * search pill, green-tint selected chips / active tab (= `greenSoft`).
+   */
+  screen: palette.white,
+  searchFill: palette.mist,
+  /** Product photo well — the website's `.st-tile-media` grey. */
+  well: palette.page,
+  /** WhatsApp Status-style segmented ring around reel avatars. */
+  storyRing: palette.green,
 } as const;
+
+/**
+ * Website hero slide tones (store.css `.sh-slide-green` / `-mint`); the third
+ * website tone (sand) is off-palette, so the app uses a white/page wash.
+ */
+export const slideTones = {
+  green: { from: palette.green, to: palette.greenDeep, ink: palette.white, muted: alpha(palette.white, 0.8) },
+  mint: { from: palette.greenMint, to: palette.greenFaint, ink: palette.ink, muted: palette.muted },
+  light: { from: palette.white, to: palette.page, ink: palette.ink, muted: palette.muted },
+} as const;
+export type SlideTone = keyof typeof slideTones;
 
 /** The logo's three slanted stripes, in order. */
 export const stripes = [palette.green, palette.white, palette.steel] as const;

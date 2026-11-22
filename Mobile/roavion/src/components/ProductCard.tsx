@@ -2,9 +2,10 @@
  * The product card used by every list in the app. One component, two shapes,
  * so a price or a discount can never look different in two places.
  *
- * Premium look (2026-11-22): white card, photo on a soft page-grey well, red
- * savings badge on the photo, brand as a letter-spaced overline, two-line
- * name, compact rating, price with struck M.R.P., and a round ink quick-add.
+ * Website tile look (store.css `.st-tile`, 2026-11-22): white card, square
+ * photo contained on the grey well, green "#1 Best seller" badge on the
+ * photo, a deal line (red "N% off" chip + "Deal"), two-line name, stars with
+ * the review count, price with struck M.R.P., and a round green quick-add.
  * The whole card springs on press.
  *
  * Everything shown is a value the server sent. The card never computes a
@@ -102,9 +103,8 @@ function ProductCard({
         accessibilityLabel={product.name}
       >
         <View style={s.well}>
-          <Photo uri={product.image} style={[s.tileImage, { height: Math.round(width * 0.92) }]} />
-          {onSale && <Badge text={`-${product.discountPercent}%`} tone="solidRed" style={s.badge} />}
-          {rank ? <Badge text={`#${rank} Best seller`} tone="ink" style={[s.badge, onSale && s.badgeLow]} /> : null}
+          <Photo uri={product.image} style={[s.tileImage, { height: width - 12 }]} />
+          {rank ? <Badge text={`#${rank} Best seller`} tone="solidGreen" style={s.badge} /> : null}
           {soldOut && (
             <View style={s.soldOverlay}>
               <Text style={s.soldOverlayText}>Out of stock</Text>
@@ -113,8 +113,19 @@ function ProductCard({
         </View>
 
         <View style={s.tileBody}>
-          {/* Always present (blank when unbranded) so prices line up across a rail. */}
-          <Text style={s.brand} numberOfLines={1}>{product.brand || ' '}</Text>
+          {/* Always present (blank when not on sale) so names line up across a rail. */}
+          <View style={s.dealLine}>
+            {onSale ? (
+              <>
+                <View style={s.offChip}>
+                  <Text style={s.offChipText}>{product.discountPercent}% off</Text>
+                </View>
+                <Text style={s.dealLabel}>Deal</Text>
+              </>
+            ) : (
+              <Text style={s.brand} numberOfLines={1}>{product.brand || ' '}</Text>
+            )}
+          </View>
           <Text style={s.name} numberOfLines={2}>{product.name}</Text>
           <Rating rating={product.rating} count={product.reviews} compact />
         </View>
@@ -145,10 +156,13 @@ const s = StyleSheet.create({
   tile: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
     overflow: 'hidden',
     ...elevation.e1,
   },
-  well: { backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  // The website's `.st-tile-media`: grey well, photo contained.
+  well: { backgroundColor: colors.well, margin: 6, marginBottom: 0, borderRadius: radius.md, overflow: 'hidden' },
   tileImage: { width: '100%' },
   tileBody: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: 4 },
   tileFoot: {
@@ -163,7 +177,11 @@ const s = StyleSheet.create({
   tilePrices: { flex: 1 },
 
   badge: { position: 'absolute', top: spacing.sm, left: spacing.sm },
-  badgeLow: { top: spacing.sm + 26 },
+
+  dealLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20 },
+  offChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: colors.red },
+  offChipText: { fontFamily: font.bold, fontSize: 11, color: colors.white },
+  dealLabel: { fontFamily: font.bold, fontSize: 11.5, color: colors.red },
 
   soldOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -177,7 +195,7 @@ const s = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radius.pill,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -190,7 +208,7 @@ const s = StyleSheet.create({
     padding: spacing.md,
     ...elevation.e1,
   },
-  rowImageWrap: { borderRadius: radius.md, overflow: 'hidden' },
+  rowImageWrap: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.well },
   rowImage: { width: 92, height: 92 },
   rowBody: { flex: 1, gap: 4, justifyContent: 'center' },
 

@@ -260,7 +260,7 @@ export default function SearchScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: colors.screen },
   header: {
     backgroundColor: colors.card,
     paddingLeft: spacing.sm,

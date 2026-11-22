@@ -107,7 +107,7 @@ export default function CategoryScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: colors.screen },
   head: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: 4 },
   count: { ...type.small },
   column: { gap: spacing.md, paddingHorizontal: spacing.lg },
