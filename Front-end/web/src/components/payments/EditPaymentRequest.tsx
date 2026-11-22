@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import apiClient from '@/lib/api-client';
 import {
-  categoryName, errorMessage, getExpenseOptions, money, paymentKeys, type PaymentRequest,
+  categoryName, errorMessage, fileHref, getExpenseOptions, money, paymentKeys, postForm, REIMBURSEMENT, type PaymentRequest,
 } from './api';
+import ReimbursementFields, { claimPayload, claimProblem, emptyClaim, type ClaimDraft } from './ReimbursementFields';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import CardFields, { cardPayload, last4Problem, type CardDetails, type PayMethod } from './CardFields';
 import { SupplierSuggestions, payLine } from './SupplierPicker';
@@ -18,10 +18,15 @@ const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
 
 /**
- * Correct a payment request: amount, details, who is paid (for a supplier
- * payment, a saved supplier can be picked by typing its name). The server
- * decides who may edit and until when, and says when an edit sends it back to
- * accounts.
+ * Correct a payment request before accounts approves it: amount, details, who is
+ * paid (for a supplier payment, a saved supplier can be picked by typing its
+ * name) and the attached bills / QR. A reason is required — accounts sees it with
+ * the old → new values. The server decides who may edit and when; an on-hold or
+ * declined request goes back to accounts when saved.
+ *
+ * Sent with the version it was opened on (`rev`): an approval or another edit in
+ * between is refused, never overwritten. A one-time `formKey` makes a double
+ * click save once.
  *
  * An expense offers its team's options; one raised with an option the team no
  * longer has (from before per-team lists) keeps it, marked "old option", and
@@ -41,6 +46,10 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const [currency, setCurrency] = useState(r.currency || 'INR');
   const [foreignAmount, setForeignAmount] = useState(r.foreignAmount != null ? String(creditUsed && r.bill != null ? r.bill : r.foreignAmount) : '');
   const isExpense = r.kind === 'expense';
+  // A Reimbursement: edited as km (Fuel — the server recomputes km × the claim's own rate) or a typed amount.
+  const [claim, setClaim] = useState<ClaimDraft>(() => (r.reimbursement
+    ? { type: r.reimbursement.type, on: r.reimbursement.on, km: r.reimbursement.km != null ? String(r.reimbursement.km) : '', from: r.reimbursement.from, to: r.reimbursement.to }
+    : emptyClaim()));
   const optionsQ = useQuery({
     queryKey: paymentKeys.options(r.team),
     queryFn: () => getExpenseOptions(r.team),
@@ -50,12 +59,13 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const teamCategories = options?.categories ?? [];
   const isOld = !teamCategories.some((c) => c.value === r.category);
   // An option off the team's list was raised when details were required on every expense.
-  const noteRequired = isExpense && (teamCategories.find((c) => c.value === category)?.noteRequired ?? true);
+  const reimbursing = isExpense && category === REIMBURSEMENT && Boolean(options?.reimbursement);
+  const noteRequired = isExpense && (reimbursing ? claim.type === 'other' : (teamCategories.find((c) => c.value === category)?.noteRequired ?? true));
   const currencies = options?.currencies ?? [];
   const currencyChoices = currencies.some((c) => c.code === (r.currency || 'INR'))
     ? currencies
     : [{ code: r.currency || 'INR', label: '' }, ...currencies];
-  const foreign = currency !== 'INR';
+  const foreign = !reimbursing && currency !== 'INR';
   // A part of a supplier deal stays in the deal's currency.
   const currencyLocked = Boolean(r.dealId || r.credit);
   // An expense's pay details are all optional (accounts fills them in); a supplier's are not.
@@ -71,6 +81,14 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   });
   const [codeKind, setCodeKind] = useState<BankCodeKind>(kindOf(r.payee));
   const [picked, setPicked] = useState<Supplier | null>(null);
+  const [reason, setReason] = useState('');
+  // Bills and the QR the requester attached (payment screenshots are the admin's, never edited here).
+  const attached = r.files.filter((f) => f.kind !== 'proof');
+  const [removed, setRemoved] = useState<string[]>([]);
+  const [bills, setBills] = useState<File[]>([]);
+  const [qr, setQr] = useState<File | null>(null);
+  const [formKey] = useState(() => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`));
+  const qrKept = attached.some((f) => f.kind === 'qr' && !removed.includes(f.id));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k: keyof typeof payee) => (e: React.ChangeEvent<HTMLInputElement>) => setPayee({ ...payee, [k]: e.target.value });
@@ -83,10 +101,20 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     const codeProblem = !picked && method === 'bank' && !masked ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
     if (!picked && method === 'card' && last4Problem(card.cardLast4)) { setError(last4Problem(card.cardLast4)); return; }
+    if (reimbursing) {
+      // The bills it will carry after this edit: kept ones plus new ones.
+      const billCount = r.files.filter((f) => f.kind === 'bill' && !removed.includes(f.id)).length + bills.length;
+      const problem = claimProblem(claim, options!.reimbursement!, { amount: Number(amount), details: richTextToPlain(description), bills: billCount });
+      if (problem) { setError(problem); return; }
+    }
     if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
-    const body: Record<string, unknown> = { description: description.trim() };
+    if (reason.trim().length < 3) { setError('Say why you are changing it — accounts sees this.'); return; }
+    if (qr && qrKept) { setError('Remove the old QR code before attaching a new one.'); return; }
+    const body: Record<string, unknown> = { description: description.trim(), reason: reason.trim(), rev: r.rev ?? 0, formKey };
     // A foreign bill sends only what was billed: its rupees are recorded when it is paid.
-    if (foreign) Object.assign(body, currencyLocked ? { foreignAmount } : { currency, foreignAmount });
+    // A reimbursement is rupees; Fuel sends km only (never an amount).
+    if (reimbursing) Object.assign(body, { reimbursement: claimPayload(claim) }, claim.type === 'fuel' ? {} : { amount });
+    else if (foreign) Object.assign(body, currencyLocked ? { foreignAmount } : { currency, foreignAmount });
     else Object.assign(body, currencyLocked ? { amount } : { currency, amount });
     if (isExpense) body.category = category;
     if (picked) body.supplierId = picked.id;
@@ -101,7 +129,12 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     }
     setBusy(true);
     try {
-      const res = await apiClient.put<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(r.id)}`, body);
+      const form = new FormData();
+      for (const [k, v] of Object.entries(body)) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+      if (removed.length) form.append('removeFileIds', JSON.stringify(removed));
+      for (const f of bills) form.append('bill', f);
+      if (qr) form.append('qr', qr);
+      const res = await postForm<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(r.id)}`, form, 'PUT');
       onDone(res.request);
     } catch (err) {
       setError(errorMessage(err, 'Could not save the changes. Please try again.'));
@@ -113,10 +146,12 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   return (
     <form onSubmit={save} aria-label="Edit payment request" className="space-y-3">
       {r.status !== 'submitted' && (
-        <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Already approved: changing the amount or who is paid sends it back to accounts to approve again.</p>
+        <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
+          {r.status === 'declined' ? 'Declined' : 'On hold'}: saving sends it back to accounts to approve again.
+        </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        {!foreign && (
+        {!foreign && !reimbursing && (
           <div><label className={label} htmlFor="ed-amount">{creditUsed ? 'Bill amount (₹)' : 'Amount (₹)'}</label>
             <input id="ed-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} />
             {creditUsed > 0 && <p className="mt-1 text-xs text-emerald-800">{money(creditUsed, 'INR')} supplier credit comes off — transfer {money(Math.max(0, Math.round((Number(amount) - creditUsed) * 100) / 100), 'INR')}</p>}</div>
@@ -128,13 +163,18 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
               {teamCategories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select></div>
         )}
-        {!currencyLocked && currencyChoices.length > 1 && (
+        {!currencyLocked && !reimbursing && currencyChoices.length > 1 && (
           <div><label className={label} htmlFor="ed-currency">Currency</label>
             <select id="ed-currency" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
               {currencyChoices.map((c) => <option key={c.code} value={c.code}>{c.label ? `${c.code} — ${c.label}` : c.code}</option>)}
             </select></div>
         )}
       </div>
+
+      {reimbursing && options?.reimbursement && (
+        <ReimbursementFields value={claim} onChange={setClaim} options={options.reimbursement} amount={amount} onAmount={setAmount}
+          ratePerKm={r.reimbursement?.type === 'fuel' ? r.reimbursement.ratePerKm : null} />
+      )}
 
       {foreign && (
         <div className="rounded-lg bg-gray-50 p-3">
@@ -183,10 +223,45 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
 
       <div><label className={label} htmlFor="ed-desc">Details</label>
         <RichTextBox id="ed-desc" ariaLabel="Details" compact maxLength={2000} value={description} onChange={setDescription} /></div>
+      <fieldset className="space-y-2">
+        <legend className={label}>Attachments</legend>
+        {attached.length > 0 && (
+          <ul className="space-y-1 text-sm">
+            {attached.map((f) => {
+              const gone = removed.includes(f.id);
+              return (
+                <li key={f.id} className="flex items-center justify-between gap-2">
+                  <a href={fileHref(r.id, f.id)} target="_blank" rel="noopener noreferrer" className={`truncate text-blue-700 ${gone ? 'line-through opacity-60' : ''}`}>
+                    {f.kind === 'qr' ? 'Payment QR' : 'Bill'}{f.name ? ` — ${f.name}` : ''}
+                  </a>
+                  <button type="button" className="shrink-0 text-xs font-medium text-gray-700 hover:underline"
+                    onClick={() => setRemoved(gone ? removed.filter((x) => x !== f.id) : [...removed, f.id])}>
+                    {gone ? 'Keep' : 'Remove'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="text-sm text-gray-700">Add bill / invoice
+            <input type="file" multiple accept="image/*,application/pdf" aria-label="Add bill" className="mt-1 block w-full text-xs"
+              onChange={(e) => setBills(Array.from(e.target.files || []))} /></label>
+          <label className="text-sm text-gray-700">{qrKept ? 'New payment QR (remove the old one first)' : 'Add payment QR'}
+            <input type="file" accept="image/*" aria-label="Add payment QR" className="mt-1 block w-full text-xs"
+              onChange={(e) => setQr(e.target.files?.[0] || null)} /></label>
+        </div>
+      </fieldset>
+
+      <div><label className={label} htmlFor="ed-reason">Why are you changing it?</label>
+        <textarea id="ed-reason" className={input} required minLength={3} maxLength={1000} rows={2} value={reason}
+          onChange={(e) => setReason(e.target.value)} placeholder="e.g. Wrong amount — the bill says ₹1,800" />
+        <p className="mt-1 text-xs text-gray-500">Accounts sees this and what changed before approving.</p></div>
+
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save changes
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {r.status === 'submitted' ? 'Save changes' : 'Save & send to accounts'}
         </button>
         <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
       </div>

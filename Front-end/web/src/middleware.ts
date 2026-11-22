@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatible)
 import { isGonePath } from '@/lib/legacyPaths';
-import { isInternalSearch, SEARCH_ROBOTS_HEADER, stripLegacyParams } from '@/lib/legacyQuery';
+import {
+  isInternalSearch, legacyProductSearch, removeLegacyParams, SEARCH_ROBOTS_HEADER,
+} from '@/lib/legacyQuery';
+import { needsLegacyMap, resolveLegacyRoute } from '@/lib/legacyRoutes';
 import { buildPublicCsp, buildStrictCsp } from '@/lib/csp';
 import { getSlugRedirectMap, isSlugRedirectCandidate, resolveSlugRedirect } from '@/lib/slugRedirects';
 import { isStrictCspPath } from '@/lib/cspRoutes';
@@ -200,6 +203,35 @@ function captureReferral(req: NextRequest): NextResponse | null {
   return res;
 }
 
+// ── Redirect / Gone responses ─────────────────────────────────────────────────
+
+const LONG_CACHE = 'public, max-age=3600, s-maxage=86400';
+const SHORT_CACHE = 'public, max-age=300, s-maxage=300';
+/** /model/<slug>: a vehicle page, or an old WordPress tag page in the redirect table. */
+const MODEL_PAGE = /^\/model\/[^/]+\/?$/i;
+
+function permanent(url: URL, cacheControl: string): NextResponse {
+  const res = NextResponse.redirect(url, 301);
+  res.headers.set('Cache-Control', cacheControl);
+  return res;
+}
+
+/**
+ * 410 Gone with a bare text body — no React render, no Function invocation.
+ * 410 rather than 404: Google drops it from the index materially faster.
+ */
+function gone(): NextResponse {
+  return new NextResponse('Gone', {
+    status: 410,
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      // Let the edge absorb repeat crawls instead of re-running middleware.
+      'Cache-Control': LONG_CACHE,
+      'X-Robots-Tag': 'noindex',
+    },
+  });
+}
+
 // ── CSP construction ──────────────────────────────────────────────────────────
 
 export async function middleware(req: NextRequest) {
@@ -217,47 +249,47 @@ export async function middleware(req: NextRequest) {
   // ── Dead WordPress paths (see lib/legacyPaths.ts) ───────────────────────────
   // Checked AFTER the API short-circuit so live API traffic never pays for these
   // regexes. Returns a bare text body — no React render, no Function invocation.
-  if (isGonePath(pathname)) {
-    return new NextResponse('Gone', {
-      status: 410,
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        // Let the edge absorb repeat crawls instead of re-running middleware.
-        'Cache-Control': 'public, max-age=3600, s-maxage=86400',
-        'X-Robots-Tag': 'noindex',
-      },
-    });
-  }
+  if (isGonePath(pathname)) return gone();
 
-  // ── Legacy WooCommerce query parameters (see lib/legacyQuery.ts) ────────────
-  // ?add-to-cart= / ?per_page= / ?layout= … are duplicates of the clean URL; fold
-  // them into it permanently. Before the referral capture so a URL carrying both
-  // keeps its ?ref through this hop and is credited on the next.
-  const cleanUrl = stripLegacyParams(req.nextUrl);
-  if (cleanUrl) {
-    const res = NextResponse.redirect(cleanUrl, 301);
-    res.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=86400');
-    return res;
-  }
+  // ── Old URLs → their page today, in ONE hop ─────────────────────────────────
+  // Path and query are settled together so no visitor or crawler ever follows a
+  // chain (an old /collections/x?per_page=12 goes straight to /categories/x):
+  //   1. WooCommerce product search ?s=…&post_type=product → /products/search?q=…
+  //   2. legacy routes + the redirect table (lib/legacyRoutes.ts): 301, or 410
+  //   3. renamed slugs + blog posts' old root URLs (lib/slugRedirects.ts)
+  //   4. legacy WooCommerce parameters (?add-to-cart=, ?per_page=…) dropped
+  // Before the referral capture so a URL carrying ?ref keeps it through this hop
+  // and is credited on the next. GET/HEAD only: a POST must not be redirected.
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    const search = legacyProductSearch(req.nextUrl);
+    if (search) return permanent(search, LONG_CACHE);
 
-  // ── Renamed slugs + blog posts' old root URLs (see lib/slugRedirects.ts) ────
-  // An old product/category/brand/blog URL 301s to its current slug, so a rename
-  // in admin keeps the page's ranking and backlinks. A blog post's old root URL
-  // (/<slug>, until 2026-11) 301s to /blog/<current slug> in ONE hop. Query string is kept (so a
-  // ?ref on an old link is still captured on the next hop). Short edge cache: a
-  // rename can be reverted, and a long-cached 301 would then loop.
-  if ((req.method === 'GET' || req.method === 'HEAD') && isSlugRedirectCandidate(pathname)) {
-    const target = resolveSlugRedirect(pathname, await getSlugRedirectMap());
-    if (target) {
-      // A plain URL, not req.nextUrl.clone(): NextURL re-applies the request's
-      // trailing slash, which turned /old/ into /blog/new/ — a non-canonical
-      // target that then needs a second hop.
-      const url = new URL(req.url);
-      url.pathname = target;
-      const res = NextResponse.redirect(url, 301);
-      res.headers.set('Cache-Control', 'public, max-age=300, s-maxage=300');
-      return res;
+    // A plain URL, not req.nextUrl.clone(): NextURL re-applies the request's
+    // trailing slash, which turned /old/ into /blog/new/ — a non-canonical
+    // target that then needs a second hop.
+    const url = new URL(req.url);
+    let moved = false;
+    let cache = LONG_CACHE;
+
+    if (needsLegacyMap(pathname) || isSlugRedirectCandidate(pathname) || MODEL_PAGE.test(pathname)) {
+      const map = await getSlugRedirectMap();
+      const legacy = resolveLegacyRoute(pathname, map);
+      if (legacy?.kind === 'gone') return gone();
+      const target = legacy?.to ?? resolveSlugRedirect(pathname, map);
+      if (target) {
+        url.pathname = target;
+        moved = true;
+        // Short edge cache: a redirect-table row or a rename can be undone, and
+        // a long-cached 301 would then point away from a live page.
+        cache = SHORT_CACHE;
+      }
     }
+    if (removeLegacyParams(url)) {
+      moved = true;
+      // WordPress's trailing slash goes too, saving Next's own slash redirect a hop.
+      if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, '');
+    }
+    if (moved) return permanent(url, cache);
   }
 
   // ── Affiliate referral link ─────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 'use client';
 
+import { EditedTag } from './EditHistory';
 import { useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Loader2, RefreshCw, SlidersHorizontal } from 'lucide-react';
@@ -199,7 +200,7 @@ export default function PaymentRequestList({
                     ? <span className="block text-xs font-normal text-gray-500">₹ when paid</span>
                     : foreignBill(r) && <span className="block text-xs font-normal text-gray-500">{foreignBill(r)}</span>}
                 </span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
+                <span className="shrink-0"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span><EditedTag r={r} /></span>
               </button>
             </li>
           ))}

@@ -1,5 +1,15 @@
 /**
- * Autobacs design tokens — design "Premium launch" (owner approved 2026-11-22).
+ * Autobacs design tokens — look "Heritage Noir" (owner picked 2026-11-22) on top
+ * of the "Premium launch" token set.
+ *
+ * Heritage Noir = dark carbon pages, racing-green fade under photos, Playfair
+ * Display serif titles, fine gold accents, square white CTAs. Its tokens are
+ * ADDITIVE (`noir`, `scrims`, `font.serif*`, `type.serif*`, `radius.square`):
+ * the light names in `colors` (`bg`, `card`, `ink`, `white`…) keep their old
+ * meaning, because screens use `colors.ink` both as text AND as a fill —
+ * flipping them in place would leave ink-on-carbon text in every screen that
+ * has not been restyled yet. Screens move to `noir.*` as they are restyled.
+ * Shape IS shared: `radius.sm/md/lg/xl` are now square (2) everywhere.
  *
  * THE RULE: every colour comes from the Autobacs logo or the website's
  * store.css. No other hue may appear in the app. Translucent versions of these
@@ -29,6 +39,8 @@ export const palette = {
   carbon: '#121414',
   carbon2: '#1d2121',
   void: '#080808',
+  /** Hairline on carbon (Heritage Noir). */
+  carbonLine: '#2c3333',
 
   // Neutrals
   white: '#ffffff',
@@ -123,20 +135,113 @@ export const colors = {
   skeletonSheen: alpha(palette.white, 0.65),
 } as const;
 
+/**
+ * Heritage Noir semantic colours — the dark look. Use these in restyled
+ * screens instead of the light `colors.bg / card / ink` names.
+ */
+export const noir = {
+  /** Page background. */
+  page: palette.carbon,
+  /** Raised surface: cards, search bar, sheets, rows. */
+  surface: palette.carbon2,
+  /** Deepest black: reels, launch. */
+  void: palette.void,
+  /** Hairline between rows / around cards. */
+  hairline: palette.carbonLine,
+  /** Stronger hairline: tab bar, inputs. */
+  hairlineStrong: palette.ink2,
+
+  /** Text on carbon. */
+  text: palette.white,
+  textMuted: palette.chrome,
+  textFaint: palette.steel,
+  /** Caption copy under photos (white 88%). */
+  textSoft: alpha(palette.white, 0.88),
+
+  /** Racing green — the fade colour under photos, fills, Reels disc. */
+  green: palette.green,
+  greenDeep: palette.greenDeep,
+  /** Green that reads as TEXT on carbon (overlines, ticks, "% off"). */
+  greenText: palette.greenOnDark,
+  /** "Fits your car" box fill. */
+  greenWash: alpha(palette.green, 0.35),
+
+  /** Fine accent only: hairlines, crest ring, active tab, SEE ALL, liked heart. */
+  gold: palette.gold,
+  /** Gold hairline on glass (reel product card, sticky bar). */
+  goldLine: alpha(palette.gold, 0.4),
+  goldFaint: alpha(palette.gold, 0.14),
+
+  sale: palette.red,
+
+  /** Primary CTA: white fill, ink label. */
+  cta: palette.white,
+  ctaText: palette.ink,
+
+  /** Frosted carbon (tab bar, product card, sticky bar) — Android/web fallback fill. */
+  glass: alpha(palette.carbon2, 0.86),
+  glassStrong: alpha(palette.carbon, 0.92),
+  /** Glass circle over a photo (back / share / heart). */
+  glassIcon: alpha(palette.carbon, 0.6),
+  /** Light glass chip on a photo ("Add your car"). */
+  glassChip: alpha(palette.white, 0.14),
+  glassChipBorder: alpha(palette.white, 0.3),
+
+  pressed: alpha(palette.white, 0.12),
+  skeleton: palette.carbon2,
+  skeletonSheen: alpha(palette.white, 0.08),
+  /** Sheet / modal backdrop. */
+  backdrop: alpha(palette.void, 0.7),
+} as const;
+
+/**
+ * Gradient stops for `<HeroScrim>` (expo-linear-gradient `colors` + `locations`).
+ * hero: black top (header legible) → clear → racing green → carbon page.
+ */
+export const scrims = {
+  hero: {
+    colors: [alpha(palette.void, 0.75), alpha(palette.void, 0), alpha(palette.void, 0), alpha(palette.greenDeep, 0.88), palette.carbon],
+    locations: [0, 0.26, 0.45, 0.82, 1],
+  },
+  /** Full-screen reel: dark top, clear middle, green floor. */
+  reel: {
+    colors: [alpha(palette.void, 0.7), 'transparent', 'transparent', alpha(palette.void, 0.55), alpha(palette.greenDeep, 0.92)],
+    locations: [0, 0.22, 0.42, 0.62, 1],
+  },
+  /** Product gallery: light top, straight into carbon (no green). */
+  gallery: {
+    colors: [alpha(palette.void, 0.55), 'transparent', 'transparent', palette.carbon],
+    locations: [0, 0.25, 0.7, 1],
+  },
+  /** Reel tile / card poster: legible creator on top, price at the bottom. */
+  tile: {
+    colors: [alpha(palette.black, 0.35), 'transparent', 'transparent', alpha(palette.black, 0.8)],
+    locations: [0, 0.35, 0.55, 1],
+  },
+} as const;
+
+export type ScrimName = keyof typeof scrims;
+
 /** The logo's three slanted stripes, in order. */
 export const stripes = [palette.green, palette.white, palette.steel] as const;
 
 // ── shape & spacing ─────────────────────────────────────────────────────────
 
+/**
+ * Heritage Noir is square: CTAs, search, cards, tiles, sheets all use 0–2.
+ * The old names (sm/md/lg/xl) now resolve to `square` so every existing
+ * screen squares up without an edit. Round stays ONLY for avatars, the crest,
+ * icon buttons and the floating tab bar — use `pill` (or size / 2) for those.
+ */
 export const radius = {
-  /** Badges, small tags. */
-  sm: 8,
-  /** Inputs, small cards, tiles. */
-  md: 12,
-  /** Cards, sheets' inner panels. */
-  lg: 16,
-  /** Hero cards, bottom sheets. */
-  xl: 22,
+  /** Sharp edge (full-bleed photos, reel tiles). */
+  none: 0,
+  /** The Heritage Noir corner: CTAs, search, cards, sheets. */
+  square: 2,
+  sm: 2,
+  md: 2,
+  lg: 2,
+  xl: 2,
   pill: 999,
 } as const;
 
@@ -168,6 +273,9 @@ export const font = {
   semibold: 'Montserrat_600SemiBold',
   heading: 'Montserrat_700Bold',
   extrabold: 'Montserrat_800ExtraBold',
+  /** Heritage Noir display serif — screen titles, hero, section + product titles. */
+  serif: 'PlayfairDisplay_600SemiBold',
+  serifItalic: 'PlayfairDisplay_600SemiBold_Italic',
 } as const;
 
 /**
@@ -194,6 +302,31 @@ export const type = {
     color: colors.green,
   },
   price: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
+
+  // ── Heritage Noir (dark) ──
+  /** Hero headline over a photo. Playfair 600 32/34. */
+  serifHero: { fontFamily: font.serif, fontSize: 32, lineHeight: 36, color: noir.text },
+  /** Screen title ("Reels", "Your cart"). */
+  serifTitle: { fontFamily: font.serif, fontSize: 24, lineHeight: 30, color: noir.text },
+  /** Section title ("Shop the reel"). */
+  serifSection: { fontFamily: font.serif, fontSize: 20, lineHeight: 26, color: noir.text },
+  /** Product title (PDP 21, cards use serifSmall). */
+  serifProduct: { fontFamily: font.serif, fontSize: 21, lineHeight: 26, color: noir.text },
+  serifSmall: { fontFamily: font.serif, fontSize: 14, lineHeight: 18, color: noir.text },
+  /** Letter-spaced Montserrat caps — gold or green on dark. */
+  capsNoir: {
+    fontFamily: font.semibold,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 2.2,
+    textTransform: 'uppercase' as const,
+    color: noir.gold,
+  },
+  /** Square CTA label: Montserrat 700 caps, letter-spaced. */
+  ctaLabel: { fontFamily: font.heading, fontSize: 12, letterSpacing: 1.8, textTransform: 'uppercase' as const },
+  bodyNoir: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: noir.textSoft },
+  smallNoir: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: noir.textMuted },
+  priceNoir: { fontFamily: font.heading, fontSize: 18, color: noir.text },
 } as const;
 
 // ── elevation ───────────────────────────────────────────────────────────────
@@ -216,6 +349,14 @@ export const elevation = {
 
 /** Older names — same values as e1 / e2. */
 export const shadow = { card: elevation.e1, raised: elevation.e2 } as const;
+
+/** Heritage Noir card: carbon-2, square, hairline. No shadow (dark-on-dark). */
+export const noirSurface = {
+  backgroundColor: noir.surface,
+  borderRadius: radius.square,
+  borderWidth: 1,
+  borderColor: noir.hairline,
+} as const;
 
 /** Standard white card: radius lg, hairline border. Pair with elevation.e1. */
 export const cardSurface = {

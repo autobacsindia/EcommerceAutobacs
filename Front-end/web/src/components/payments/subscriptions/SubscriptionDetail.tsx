@@ -2,15 +2,15 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Loader2, Paperclip, Pencil, Receipt, Trash2, X } from 'lucide-react';
-import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
-import FilePicker from '../FilePicker';
+import { CheckCircle2, ExternalLink, Loader2, Paperclip, Pencil, Trash2, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
-import { errorMessage } from '../api';
+import { errorMessage, paymentKeys } from '../api';
+import PaymentRequestDetail from '../PaymentRequestDetail';
+import MarkPaidForm from './MarkPaidForm';
 import SubscriptionForm from './SubscriptionForm';
 import {
-  approxText, archiveSubscription, billText, dayText, dueText, estimateText, getSubscription, invoiceHref, monthText, payText, perText,
-  recordBill, rejectSubscription, STATUS_TONE, subscriptionKeys, verifySubscription, type Subscription,
+  approxText, archiveSubscription, billText, CYCLE_TONE, dayText, dueText, estimateText, getSubscription, invoiceHref, monthText, payText, perText,
+  rejectSubscription, rupeeText, STATUS_TONE, subscriptionKeys, verifySubscription, type BillCycle, type Subscription,
 } from './api';
 import RichText from '@/components/ui/RichText';
 
@@ -19,7 +19,24 @@ const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-
 
 const ACTION_LABELS: Record<string, string> = {
   added: 'Added', edited: 'Edited', 'bill recorded': 'Bill recorded', verified: 'Verified', rejected: 'Rejected', archived: 'Deleted (archived)',
+  'marked paid': 'Marked paid', approved: 'Approved by accounts', paid: 'Paid', 'payment rejected': 'Payment rejected',
 };
+
+/** "Waiting for accounts — PR-0912" etc., for the cycle due now. */
+function CurrentCycle({ c, onOpenExpense }: { c: BillCycle; onOpenExpense: (id: string) => void }) {
+  const tone = c.state === 'rejected' ? 'bg-red-50 text-red-800' : c.state === 'paid' ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-900';
+  return (
+    <div role="status" className={`rounded-lg p-3 text-sm ${tone}`}>
+      <p>
+        <strong>{c.state === 'rejected' ? 'Payment rejected' : c.stateLabel}</strong>
+        {' — '}{billText(c)}{c.alreadyPaid && c.paidViaLabel ? `, paid by ${c.paidViaLabel.toLowerCase()} on ${dayText(c.paidOn)}` : c.alreadyPaid ? '' : ', not paid yet'}
+        {' · marked by '}{c.paidByName}
+        {c.expense && <> · <button type="button" className="font-medium underline" onClick={() => onOpenExpense(c.expense!.id)}>{c.expense.number}</button></>}
+      </p>
+      {c.state === 'rejected' && c.rejectReason && <p className="mt-1">“{c.rejectReason}” — fix it and mark it paid again.</p>}
+    </div>
+  );
+}
 
 function Row({ k, v }: { k: string; v?: React.ReactNode }) {
   if (!v) return null;
@@ -38,17 +55,22 @@ function Row({ k, v }: { k: string; v?: React.ReactNode }) {
 export default function SubscriptionDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: subscriptionKeys.one(id), queryFn: () => getSubscription(id) });
-  const [mode, setMode] = useState<null | 'edit' | 'reject' | 'delete' | 'bill'>(null);
+  const [mode, setMode] = useState<null | 'edit' | 'reject' | 'delete' | 'paid'>(null);
   const [note, setNote] = useState('');
-  const [actual, setActual] = useState('');
-  const [billFiles, setBillFiles] = useState<File[]>([]);
   const [error, setError] = useState('');
+  // An expense opened from here (the cycle's PR-xxxx), over this panel.
+  const [expense, setExpense] = useState<string | null>(null);
 
   const done = (s: Subscription) => {
     qc.invalidateQueries({ queryKey: [...subscriptionKeys.all, 'list'] });
     if (s.archived) { onClose(); return; }
     qc.invalidateQueries({ queryKey: subscriptionKeys.one(id) });
-    setMode(null); setNote(''); setError(''); setActual(''); setBillFiles([]);
+    setMode(null); setNote(''); setError('');
+  };
+  const marked = (s: Subscription) => {
+    // The expense is new in Payments too.
+    qc.invalidateQueries({ queryKey: paymentKeys.all });
+    done(s);
   };
   const act = useMutation({
     mutationFn: async (a: 'verify' | 'reject' | 'delete') => {
@@ -60,27 +82,6 @@ export default function SubscriptionDetail({ id, onClose }: { id: string; onClos
     onSuccess: done,
     onError: (e) => setError(errorMessage(e, 'That did not work. Refresh and try again.')),
   });
-  // The actual bill of a usage-based item: the amount and the invoice are both required (the server checks too).
-  const bill = useMutation({
-    mutationFn: async () => {
-      const s = q.data!.item;
-      const form = new FormData();
-      form.append('rev', String(s.rev));
-      form.append('amount', actual.trim());
-      if (note.trim()) form.append('note', note.trim());
-      for (const f of billFiles) form.append('invoice', f);
-      return (await recordBill(s.id, form)).item;
-    },
-    onSuccess: done,
-    onError: (e) => setError(errorMessage(e, 'Could not record the bill. Refresh and try again.')),
-  });
-  const submitBill = () => {
-    if (!(Number(actual) > 0)) { setError('Enter the actual amount on this bill (more than 0).'); return; }
-    if (!billFiles.length) { setError('Attach the invoice for this bill.'); return; }
-    setError('');
-    bill.mutate();
-  };
-
   const s = q.data?.item;
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
@@ -112,6 +113,7 @@ export default function SubscriptionDetail({ id, onClose }: { id: string; onClos
               {approxText(s.approxInr) && <p className="text-sm text-gray-600">{approxText(s.approxInr)} (rough guide)</p>}
               <p className={`text-sm font-medium ${s.overdue ? 'text-red-700' : 'text-gray-700'}`}>{dayText(s.dueDate)} · {dueText(s)}</p>
             </div>
+            {s.current && <CurrentCycle c={s.current} onOpenExpense={setExpense} />}
             <dl>
               <Row k="What for" v={s.purpose} />
               <Row k="Paid by" v={payText(s.payment)} />
@@ -136,39 +138,44 @@ export default function SubscriptionDetail({ id, onClose }: { id: string; onClos
               </div>
             )}
 
-            {s.variableAmount && s.cycles && (
+            {s.cycles && s.cycles.length > 0 && (
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Bills paid</h3>
-                {s.cycles.length === 0 ? (
-                  <p className="text-sm text-gray-500">No bills recorded yet.</p>
-                ) : (
-                  <ul className="divide-y rounded-lg border border-gray-200" aria-label="Bills paid">
+                <ul className="divide-y rounded-lg border border-gray-200" aria-label="Bills paid">
                     {[...s.cycles].reverse().map((c) => (
                       <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
                         <span className="w-20 font-medium text-gray-900">{monthText(c.dueDate)}</span>
                         <span className="font-semibold text-gray-900">{billText(c)}</span>
-                        {c.estimate != null && <span className="text-xs text-gray-500">estimate {billText({ amount: c.estimate, currency: c.currency })}</span>}
+                        {c.currency !== 'INR' && c.rupees != null && <span className="text-xs text-gray-600">{rupeeText(c.rupees)}</span>}
+                        {s.variableAmount && c.estimate != null && <span className="text-xs text-gray-500">estimate {billText({ amount: c.estimate, currency: c.currency })}</span>}
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${CYCLE_TONE[c.state]}`}>
+                          {c.state === 'paid' && <CheckCircle2 className="mr-0.5 inline h-3 w-3" />}{c.stateLabel}
+                        </span>
+                        {c.expense && (
+                          <button type="button" onClick={() => setExpense(c.expense!.id)} className="text-xs font-medium text-blue-700 hover:underline">{c.expense.number}</button>
+                        )}
                         <span className="text-xs text-gray-500">· {c.paidByName}, {formatDateTimeIST(c.paidAt)}</span>
                         {c.invoices.map((f, i) => (
                           <a key={f.id} href={invoiceHref(s.id, f.id)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-700 hover:underline">
                             <Paperclip className="h-3.5 w-3.5" /> Invoice{c.invoices.length > 1 ? ` ${i + 1}` : ''}
                           </a>
                         ))}
+                        {c.amountReason && <span className="w-full text-xs text-gray-600">Differs from the plan: {c.amountReason}</span>}
+                        {c.state === 'rejected' && c.rejectReason && <span className="w-full text-xs text-red-700">Rejected: “{c.rejectReason}”</span>}
                         {c.note && <span className="w-full text-xs italic text-gray-600">“{c.note}”</span>}
                       </li>
                     ))}
-                  </ul>
-                )}
+                </ul>
               </div>
             )}
 
-            {(s.can.edit || s.can.delete || s.can.verify || s.can.reject || s.can.recordBill) && (
+            {(s.can.edit || s.can.delete || s.can.verify || s.can.reject || s.can.markPaid) && (
               <div className="space-y-3 rounded-xl border border-gray-200 p-4">
                 {mode === null && (
                   <div className="flex flex-wrap gap-2">
-                    {s.can.recordBill && (
-                      <button type="button" onClick={() => setMode('bill')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>
-                        <Receipt className="h-4 w-4" /> Enter this {s.kind === 'yearly' ? "year's" : "month's"} bill
+                    {s.can.markPaid && (
+                      <button type="button" onClick={() => { setMode('paid'); setError(''); }} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>
+                        <CheckCircle2 className="h-4 w-4" /> Mark paid
                       </button>
                     )}
                     {s.can.verify && (
@@ -189,26 +196,7 @@ export default function SubscriptionDetail({ id, onClose }: { id: string; onClos
                     )}
                   </div>
                 )}
-                {mode === 'bill' && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-800">
-                      Bill due <strong>{dayText(s.dueDate)}</strong> — estimate {billText(s)}. Enter the real amount from the invoice; this is what gets recorded as paid.
-                    </p>
-                    <label className="block text-sm font-medium text-gray-800" htmlFor="sd-actual">Actual amount ({s.currency})</label>
-                    <input id="sd-actual" className={`${input} max-w-[12rem]`} inputMode="decimal" value={actual}
-                      onChange={(e) => setActual(e.target.value)} placeholder={`e.g. ${s.amount}`} />
-                    <FilePicker files={billFiles} onChange={setBillFiles} max={MAX_ATTACHMENTS} accept={PHOTO_OR_PDF}
-                      label="Attach invoice (required)" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
-                    <label className="block text-sm font-medium text-gray-800" htmlFor="sd-bill-note">Note (optional)</label>
-                    <textarea id="sd-bill-note" className={input} rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
-                    <div className="flex gap-2">
-                      <button type="button" disabled={bill.isPending} onClick={submitBill} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>
-                        {bill.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Save bill
-                      </button>
-                      <button type="button" onClick={() => { setMode(null); setError(''); }} className={`${btn} text-gray-700 hover:bg-gray-100`}>Back</button>
-                    </div>
-                  </div>
-                )}
+                {mode === 'paid' && <MarkPaidForm item={s} onCancel={() => setMode(null)} onDone={marked} />}
                 {(mode === 'reject' || mode === 'delete') && (
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-800" htmlFor="sd-note">
@@ -247,6 +235,11 @@ export default function SubscriptionDetail({ id, onClose }: { id: string; onClos
           </div>
         )}
       </aside>
+      {expense && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <PaymentRequestDetail id={expense} onClose={() => { setExpense(null); qc.invalidateQueries({ queryKey: subscriptionKeys.one(id) }); }} />
+        </div>
+      )}
     </div>
   );
 }

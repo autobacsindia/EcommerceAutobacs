@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { adminKeys } from '@/hooks/queries/keys';
 import apiClient from '@/lib/api';
+import OldLinkTarget from '@/components/admin/OldLinkTarget';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage } from '@/lib/multipartResponse';
@@ -112,6 +113,9 @@ export default function EditProductPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // Where the old URL goes while the product is switched off (redirect table).
+  const [oldLinkTarget, setOldLinkTarget] = useState<string | null>(null);
+  const [oldLinkDirty, setOldLinkDirty] = useState(false);
   
   // Category Multi-select state
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -281,6 +285,11 @@ export default function EditProductPage() {
       console.log('Product categories:', productData.categories);
       console.log('Product full data:', productData);
       setProduct(productData);
+      if (productData.isActive === false) {
+        apiClient.get<{ redirectTo?: string | null }>(`/products/${productId}/redirect`)
+          .then((r) => setOldLinkTarget(r?.redirectTo ?? null))
+          .catch(() => { /* optional: the picker just starts empty */ });
+      }
       setSlug(productData.slug || generateSlug(productData.name || ''));
       // Normalise to CloudinaryImage shape (old images may have no public_id)
       const imgs: CloudinaryImage[] = (productData.images || []).map((img: any) => ({
@@ -726,6 +735,15 @@ export default function EditProductPage() {
       // Invalidate the admin product-list cache (all pages/filters) so edits are
       // reflected the moment we navigate back, instead of after staleTime.
       queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
+      // Switched off: save where its old link goes. The product itself is already
+      // saved, so a failure here is reported, not fatal.
+      if (!formData.isActive && oldLinkDirty) {
+        try {
+          await apiClient.put(`/products/${productId}/redirect`, { redirectTo: oldLinkTarget });
+        } catch (redirectErr: any) {
+          alert(`Product saved, but the old-link choice was not: ${redirectErr?.message || 'please try again'}`);
+        }
+      }
       alert('Product updated successfully');
       router.push(returnTo);
     } catch (err: any) {
@@ -1100,6 +1118,16 @@ export default function EditProductPage() {
                 />
                 <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">Active</label>
               </div>
+              {!formData.isActive && (
+                <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-3">
+                  <OldLinkTarget
+                    value={oldLinkTarget}
+                    onChange={(next) => { setOldLinkTarget(next); setOldLinkDirty(true); }}
+                    defaultLabel="Nowhere (shows “page not found” while it is off)"
+                    excludeSlug={product?.slug}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Parcel size — what the courier charges on (Shiprocket booking) */}

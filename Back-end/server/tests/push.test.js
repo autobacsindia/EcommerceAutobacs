@@ -22,11 +22,13 @@ process.env.VAPID_PRIVATE_KEY = 'priv-test-key';
 
 const sent = [];
 let nextError = null;
+const failFor = new Map(); // endpoint → error, for a device that is dead while others work
 jest.unstable_mockModule('web-push', () => {
   const api = {
     setVapidDetails: () => {},
     sendNotification: async (sub, payload) => {
       if (nextError) { const e = nextError; nextError = null; throw e; }
+      if (failFor.has(sub.endpoint)) throw failFor.get(sub.endpoint);
       sent.push({ endpoint: sub.endpoint, payload: JSON.parse(payload) });
       return { statusCode: 201 };
     },
@@ -73,6 +75,7 @@ const person = async (name, role, staff) => {
 };
 const staff = (team) => ({ team, isHead: false, active: true });
 const SUB = (i) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/device-${i}`, keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } });
+const sentAtLeast = async (k) => { for (let i = 0; i < 200 && sent.length < k; i += 1) await new Promise((r) => setTimeout(r, 25)); };
 const settle = async () => { for (let i = 0; i < 40 && !sent.length; i += 1) await new Promise((r) => setTimeout(r, 25)); await new Promise((r) => setTimeout(r, 50)); };
 
 describe('Push notifications', () => {
@@ -82,7 +85,7 @@ describe('Push notifications', () => {
     if (cronService?.shutdown) cronService.shutdown();
     if (adaptiveThrottlingService?.shutdown) adaptiveThrottlingService.shutdown();
   });
-  beforeEach(() => { sent.length = 0; nextError = null; });
+  beforeEach(() => { sent.length = 0; nextError = null; failFor.clear(); });
   afterEach(async () => { await dbHandler.clearDatabase(); });
 
   it('gives the public key, and accepts only real push services', async () => {
@@ -165,6 +168,36 @@ describe('Push notifications', () => {
     expect(toAdmin.url).toMatch(/^\/admin\/chat\?c=[a-f0-9]{24}&t=updates$/);
     expect(toAdmin.tag).toMatch(/^chat-[a-f0-9]{24}-updates$/);
     expect(sent.find((x) => x.endpoint === SUB(2).endpoint).payload.url).toMatch(/^\/team\/chat\?c=[a-f0-9]{24}&t=updates$/);
+  });
+
+  it('one person on several browsers gets the pop-up on every one; a dead one is removed, the rest keep working', async () => {
+    const a = await person('Priya', 'staff', staff('procurement'));
+    const b = await person('Pavan', 'staff', staff('procurement'));
+    const chrome = SUB('chrome');
+    const firefox = { ...SUB('ff'), endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/ff-1' };
+    const phone = { ...SUB('iphone'), endpoint: 'https://web.push.apple.com/QH-iphone-1' };
+    // Each browser signs up on its own; none replaces another.
+    for (const sub of [chrome, firefox, phone]) expect((await b.s.post('/push/subscriptions', sub)).status).toBe(201);
+    expect(await PushSubscription.countDocuments({ user: b.user._id })).toBe(3);
+
+    const team = (await a.s.get('/chat/channels')).body.channels.find((ch) => ch.key === 'team:procurement');
+    await a.s.post(`/chat/channels/${team.id}/messages`, { text: 'Hello all', clientId: '2e777eb2-3395-4f4d-9723-532ee8e65fd6' });
+    await sentAtLeast(3);
+    expect(sent.map((x) => x.endpoint).sort()).toEqual([chrome.endpoint, firefox.endpoint, phone.endpoint].sort());
+
+    // Firefox was reset (its sign-up expired): only that one goes.
+    sent.length = 0;
+    failFor.set(firefox.endpoint, Object.assign(new Error('Gone'), { statusCode: 410 }));
+    await a.s.post(`/chat/channels/${team.id}/messages`, { text: 'Second', clientId: '3e777eb2-3395-4f4d-9723-532ee8e65fd6' });
+    await sentAtLeast(2);
+    for (let i = 0; i < 40 && (await PushSubscription.countDocuments({ user: b.user._id })) > 2; i += 1) await new Promise((r) => setTimeout(r, 25));
+    const left = (await PushSubscription.find({ user: b.user._id }).lean()).map((r) => r.endpoint).sort();
+    expect(left).toEqual([chrome.endpoint, phone.endpoint].sort());
+    expect(sent.map((x) => x.endpoint).sort()).toEqual([chrome.endpoint, phone.endpoint].sort());
+
+    // Firefox signs up again on its own next visit (resyncPush) and is back in.
+    expect((await b.s.post('/push/subscriptions', firefox)).status).toBe(201);
+    expect(await PushSubscription.countDocuments({ user: b.user._id })).toBe(3);
   });
 
   it('a device the push service says is gone is removed', async () => {

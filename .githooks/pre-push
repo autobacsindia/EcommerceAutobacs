@@ -40,6 +40,11 @@ if [ "$BACKEND" = 1 ]; then
   # deploy build) run `npm ci`, which refuses an out-of-sync lock. Mirrors ci.yml.
   npm ci --dry-run >/dev/null || { echo "pre-push: ✗ backend package-lock out of sync — run 'npm install' in Back-end/server and commit the lock."; exit 1; }
   npm run lint
+  # --maxWorkers=2: each jest worker builds indexes for ~100 models on the one
+  # shared in-memory replica set in tests/setup.js beforeAll. With jest's default
+  # (cores-1 = 7 here) that build blew the 300s hook timeout on a busy Mac
+  # (5 failed pushes in a row, 2026-11-21). Measured on a calm Mac 2026-11-22:
+  # --maxWorkers=2 passed 3/3 in ~45s; --runInBand passed 1/2 in ~51s.
   NODE_ENV=test \
   JWT_SECRET=ci-test-jwt-secret-not-for-production \
   RAZORPAY_KEY_ID=rzp_test_placeholder \
@@ -50,7 +55,7 @@ if [ "$BACKEND" = 1 ]; then
   WORDPRESS_SITE_URL=http://localhost \
   WORDPRESS_API_KEY=ck_placeholder \
   WORDPRESS_API_SECRET=cs_placeholder \
-  npm run test:coverage -- --forceExit \
+  npm run test:coverage -- --forceExit --maxWorkers=2 \
     --testPathPatterns="orderStatusService|uploadMiddleware|auth\.integration|productImageController|e2e\.product-lifecycle"
 fi
 

@@ -156,8 +156,11 @@ const nextConfig: NextConfig = {
       // both produced. `:slug*` matches zero or more segments, so one rule now
       // covers the lot.
       { source: '/product', destination: '/products', permanent: true },
-      { source: '/product/:slug*', destination: '/products/:slug*', permanent: true },
-      { source: '/product-category/:slug*', destination: '/categories/:slug*', permanent: true },
+      // /product/<slug> and /product-category/<…> are NOT swapped blindly here any
+      // more: that 301'd renamed/removed products into a 404. The middleware
+      // (lib/legacyRoutes.ts) and app/product/[slug] send each to the page it
+      // became, in one hop. Config redirects run BEFORE middleware, so a rule
+      // here would pre-empt them.
       { source: '/media/blogs/:slug', destination: '/blog/:slug', permanent: true },
       // Blog (+ gallery/videos) moved out of /media into its own /blog section.
       { source: '/media/blogs', destination: '/blog', permanent: true },

@@ -27,6 +27,7 @@
  *   send-admin-order-placed-alert    { orderId }        — notify support inbox that an order was paid for
  *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer/admin cancellation
  *   send-admin-refund-failed-alert   { orderId }        — notify support inbox that a refund failed at the gateway
+ *   send-admin-duplicate-payment-alert { orderId, gatewayPaymentId } — order charged twice; accounts must refund the extra
  *   send-return-submitted            { returnId }        — acknowledge a new return request to the customer (idempotent)
  *   send-return-status-email         { returnId, event } — return lifecycle email to the customer (approved/courier_booked/received/rejected/refunded/pickup_failed), once per key
  *   post-return-update               { event, returnId } — team-chat post for a return step (chat-only; push via chat)
@@ -65,6 +66,7 @@ import {
   emailAdminTeamRefundReadyAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
+  emailAdminDuplicatePaymentAlert,
   emailAdminReturnAlert,
   emailAdminReturnRefundedAlert,
 } from '../../services/adminNotificationService.js';
@@ -220,6 +222,10 @@ const handlers = {
   'send-admin-refund-failed-alert': async (job) => {
     const { orderId } = job.data;
     await emailAdminRefundFailedAlert(orderId);
+  },
+
+  'send-admin-duplicate-payment-alert': async (job) => {
+    await emailAdminDuplicatePaymentAlert(job.data);
   },
 
   'send-return-submitted': async (job) => {

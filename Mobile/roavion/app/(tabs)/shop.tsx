@@ -1,43 +1,60 @@
 /**
- * Shop — the whole catalogue, filterable, with the departments as chips.
+ * Shop — departments, then the whole catalogue, filterable.
  *
- * ── What this screen was ────────────────────────────────────────────────────
- * A chooser: two tabs, Departments and Brands, each a list of links. Tapping
- * "Shop" in the tab bar therefore showed a customer no products at all — they
- * had to pick a department first and wait for a second screen. Nobody opens a
- * shopping app to read a table of contents.
+ * Premium look (2026-11-22): a pinned search bar (with the cart) that stays
+ * while the page scrolls, a photo grid of every top-level department (each
+ * opens its own page), then the full catalogue grid with the department chips,
+ * sort and filter sheets.
  *
- * It is now the catalogue itself. The departments are still here, as the chip
- * row above the grid — the same place the website puts them — so switching
- * aisle is one tap and never leaves the products.
- *
- * Brands keep their own route (Shop → a brand opens /search?brand=…), because
- * "which brands do you carry" is a different question from "show me products",
- * and answering both on one screen is what made this a menu instead of a shop.
+ * Brands keep their own route (Home's brand strip → /search?brand=…).
  */
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCategories } from '../../src/api/catalogue';
-import AppHeader from '../../src/components/AppHeader';
+import { SearchField } from '../../src/components/AppHeader';
 import ProductListing from '../../src/components/ProductListing';
-import { colors } from '../../src/theme';
+import { DepartmentGrid } from '../../src/home/Collections';
+import { colors, elevation, spacing } from '../../src/theme';
+import { IconButton } from '../../src/ui';
+import { useApp } from '../../src/store';
+
+/** The pinned bar: search field + cart. */
+function StickySearch() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { cart } = useApp();
+  return (
+    <View style={[s.bar, { paddingTop: insets.top + spacing.sm }]}>
+      <SearchField style={s.search} />
+      <IconButton
+        icon="bag-handle-outline"
+        label={`Cart, ${cart.totalItems} items`}
+        onPress={() => router.push('/(tabs)/cart')}
+        badge={cart.totalItems}
+        tone="light"
+        size={48}
+      />
+    </View>
+  );
+}
 
 export default function ShopScreen() {
   const [slug, setSlug] = useState<string | null>(null);
 
   const categories = useQuery({ queryKey: ['categories'], queryFn: () => fetchCategories() });
-  // Top-level departments only: the chip row switches aisle, and every
-  // sub-category would make it a wall rather than a row.
+  // Top-level departments only: every sub-category would make a wall, not a grid.
   const parents = (categories.data ?? []).filter((c) => !c.parentId);
   const current = parents.find((c) => c.slug === slug);
 
   return (
     <View style={s.screen}>
       <ProductListing
-        // Inside the scroll view, so it leaves the screen with the content —
-        // the website's behaviour, and what keeps the grid full-height.
-        topSlot={<AppHeader compact />}
+        stickyTop={<StickySearch />}
+        topSlot={<DepartmentGrid categories={parents} loading={categories.isLoading} />}
+        overline={current ? 'Department' : 'Everything'}
         title={current?.name ?? 'Shop all'}
         blurb={current?.description || undefined}
         categorySlug={slug ?? undefined}
@@ -50,4 +67,15 @@ export default function ShopScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.bg,
+    zIndex: 2,
+    ...elevation.e1,
+  },
+  search: { flex: 1 },
 });

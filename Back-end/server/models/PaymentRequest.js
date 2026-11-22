@@ -58,6 +58,34 @@ const HistorySchema = new mongoose.Schema(
   { _id: false }
 );
 
+/*
+  One edit made before approval (services/paymentRequestService.js update): why,
+  who, when, and each field's old → new value as shown to people (₹ amounts,
+  names). Accounts reads these before approving. Never rewritten.
+*/
+const EditSchema = new mongoose.Schema(
+  {
+    at: { type: Date, required: true },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    byName: { type: String, default: '' },
+    role: { type: String, default: '' },
+    reason: { type: String, required: true, maxlength: 1000 },
+    // The status it was edited from: an on-hold or declined request goes back to accounts.
+    fromStatus: { type: String, default: '' },
+    changes: {
+      type: [new mongoose.Schema({
+        field: { type: String, required: true },
+        from: { type: String, default: '', maxlength: 300 },
+        to: { type: String, default: '', maxlength: 300 },
+      }, { _id: false })],
+      default: [],
+    },
+    // The form's one-time key: a double-submitted edit is saved once.
+    formKey: { type: String, default: undefined, maxlength: 64 },
+  },
+  { _id: false }
+);
+
 const PaymentRequestSchema = new mongoose.Schema(
   {
     // PR-0001 … from the 'payment_request' counter: what people quote on the phone.
@@ -142,6 +170,52 @@ const PaymentRequestSchema = new mongoose.Schema(
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffProject', default: null },
     projectCode: { type: String, default: '' },
     projectName: { type: String, default: '' },
+    // A subscription / due's cycle marked paid (models/SubscriptionDue.js): raised by
+    // "Mark paid", never typed. Snapshotted like the project link. `alreadyPaid`: the
+    // money already left (company card, auto-debit) — accounts' approval closes it as
+    // paid with `paid` (how / when / reference) instead of asking the admin to pay.
+    subscription: {
+      type: new mongoose.Schema({
+        item: { type: mongoose.Schema.Types.ObjectId, ref: 'SubscriptionDue', required: true },
+        number: { type: String, required: true },
+        name: { type: String, default: '' },
+        cycle: { type: mongoose.Schema.Types.ObjectId, required: true },
+        cycleDueDate: { type: String, required: true },
+        alreadyPaid: { type: Boolean, default: false },
+        paid: {
+          type: new mongoose.Schema({
+            method: { type: String, enum: ['bank', 'upi', 'card', 'other'], required: true },
+            autoDebit: { type: Boolean, default: false },
+            on: { type: Date, required: true },
+            reference: { type: String, default: '', maxlength: 120 },
+          }, { _id: false }),
+          default: undefined,
+        },
+      }, { _id: false }),
+      default: undefined,
+    },
+    // Optional: the staff task this cost was for (models/StaffTask.js) — procurement
+    // claims fuel per pickup. Number and title snapshotted like the project, so the
+    // request still reads "T-42 Pick up Hilux bumper" after a rename or delete.
+    task: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffTask', default: null },
+    taskNumber: { type: Number, default: null },
+    taskTitle: { type: String, default: '' },
+    // A Reimbursement expense (category 'reimbursement', services/reimbursement.js):
+    // what kind, the day it was spent (IST 'YYYY-MM-DD'), and for Fuel the km and the
+    // per-km rate AT SUBMIT — `amount` = km × ratePerKm, worked out by the server.
+    // The rate is a snapshot: changing the admin's rate never rewrites a claim.
+    // Absent on every other request.
+    reimbursement: {
+      type: new mongoose.Schema({
+        type: { type: String, enum: ['fuel', 'food', 'transport', 'other'], required: true },
+        on: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+        km: { type: Number, default: null, min: 0 },
+        ratePerKm: { type: Number, default: null, min: 0 },
+        from: { type: String, default: '', maxlength: 120 },
+        to: { type: String, default: '', maxlength: 120 },
+      }, { _id: false }),
+      default: undefined,
+    },
     // Optional: any other ID the cost belongs to (a supplier invoice number, a
     // courier AWB, a ClickUp task) — free text, searched by the admin's lookup.
     reference: { type: String, default: '', maxlength: 60 },
@@ -214,6 +288,14 @@ const PaymentRequestSchema = new mongoose.Schema(
     decisionNote: { type: String, default: '', maxlength: 1000 },
 
     history: { type: [HistorySchema], default: [] },
+
+    // Bumped by every edit. Approve sends the rev it showed accounts, so an edit
+    // that lands first makes the approval fail ("changed — check it again")
+    // instead of approving figures nobody looked at. Old records have none (= 0).
+    rev: { type: Number, default: 0 },
+    // Set by the first edit after submitting: the lists' "Edited after submit" tag.
+    editedAt: { type: Date, default: null },
+    edits: { type: [EditSchema], default: [] },
   },
   { timestamps: true }
 );
@@ -246,6 +328,17 @@ PaymentRequestSchema.index(
   tests/linkLookupIndexUsage.test.js). One small null key per other payment is cheaper.
 */
 PaymentRequestSchema.index({ project: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_project' });
+// One task's payments, newest first (the task's Reimbursements box). Not partial, for
+// the same reason as payment_request_project.
+PaymentRequestSchema.index({ task: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_task' });
+// The monthly reimbursement report: claims by the day they were spent. Only reimbursements.
+PaymentRequestSchema.index(
+  { 'reimbursement.on': 1 },
+  { name: 'payment_request_reimbursement_on', partialFilterExpression: { 'reimbursement.on': { $type: 'string' } } }
+);
+// "My last reimbursement's UPI" — the expense form prefills it on every open (lastOwnPayee).
+// Measured: 6,000 payments read for one without it (tests/reimbursementIndexUsage.test.js).
+PaymentRequestSchema.index({ requestedBy: 1, category: 1, createdAt: -1 }, { name: 'payment_request_requester_category' });
 // "Which payments carry reference INV-2231?" — only rows that have one.
 PaymentRequestSchema.index(
   { reference: 1, createdAt: -1 },
@@ -268,6 +361,12 @@ PaymentRequestSchema.index(
 PaymentRequestSchema.index(
   { deal: 1, createdAt: 1 },
   { name: 'payment_request_deal', partialFilterExpression: { deal: { $type: 'objectId' } } }
+);
+
+// One expense per marked cycle: a retried "Mark paid" can never raise a second one.
+PaymentRequestSchema.index(
+  { 'subscription.cycle': 1 },
+  { unique: true, name: 'payment_request_subscription_cycle', partialFilterExpression: { 'subscription.cycle': { $type: 'objectId' } } }
 );
 
 export default mongoose.models.PaymentRequest || mongoose.model('PaymentRequest', PaymentRequestSchema);

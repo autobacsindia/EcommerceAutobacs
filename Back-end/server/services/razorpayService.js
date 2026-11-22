@@ -25,6 +25,9 @@ import { isOrderClosed } from '../utils/extraCharge.js';
 import { enqueuePaymentFailedEmail, enqueueRefundStartedEmail, enqueueRefundProcessedEmail } from './orderStatusEmailService.js';
 import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
 
+// Newest failed payment attempts kept per order (order.paymentAttempts).
+export const PAYMENT_ATTEMPTS_CAP = 20;
+
 /**
  * Ceiling on the optional EMI-plan lookup performed during a capture. Kept well inside
  * the webhook's latency budget — losing the plan detail is cosmetic, earning a webhook
@@ -354,9 +357,13 @@ class RazorpayService {
       // (invoice email), so duplicate webhooks never double-send.
       let createdHere = false;
 
+      // True when this capture is an EXTRA charge on an already-paid order.
+      let duplicateCapture = false;
+
       await session.withTransaction(async () => {
         // Reset per-attempt: withTransaction re-runs this callback on a WriteConflict.
         createdHere = false;
+        duplicateCapture = false;
 
         const order = await orderRepository.findById(orderId, [], session);
         if (!order) {
@@ -372,6 +379,12 @@ class RazorpayService {
         const existing = await paymentRepository.findByGatewayPaymentId(paymentData.id, session);
         if (existing) {
           paymentId = existing._id;
+          // A recorded EXTRA capture (see below) is not this order's payment — never
+          // "self-heal" order.payment onto it.
+          if ((order.duplicateCaptures || []).some((d) => d.gatewayPaymentId === paymentData.id)) {
+            duplicateCapture = true;
+            return;
+          }
           // Self-heal the order axis if a prior partial run left it unlinked/unpaid.
           if (String(order.payment) !== String(existing._id) || order.paymentStatus !== 'paid' || (gatewayOffer && !order.gatewayOffer) || !order.paymentVerification?.verifiedAt) {
             order.payment = existing._id;
@@ -380,6 +393,42 @@ class RazorpayService {
             if (gatewayOffer && !order.gatewayOffer) order.gatewayOffer = gatewayOffer;
             await orderRepository.save(order, session);
           }
+          return;
+        }
+
+        // ── ALREADY PAID → this is a second charge, not the order's payment ──────
+        // A different capture for an order that is already paid (two tabs, a stale
+        // payment link, paying again after a slow webhook). Overwriting order.payment
+        // would hide the first payment; ignoring it would hide the customer's money.
+        // Record it, keep the first payment, and alert accounts to refund by hand.
+        if (order.paymentStatus === 'paid') {
+          const amount = (Number(paymentData.amount) || 0) / 100; // paise → rupees
+          const method = resolvePaymentMethod(paymentData);
+          const extraRecord = await paymentRepository.createPayment(
+            {
+              order: orderId,
+              user: userId || order.user,
+              amount,
+              currency: paymentData.currency || 'INR',
+              paymentMethod: method,
+              methodDetails: buildMethodDetails(paymentData),
+              paymentGateway: 'razorpay',
+              gatewayOrderId: paymentData.order_id,
+              gatewayPaymentId: paymentData.id,
+              gatewaySignature: paymentData.signature,
+              status: 'completed', // the money really was captured
+              paymentDetails: { razorpay: paymentData, duplicateCapture: true }
+            },
+            session
+          );
+          order.duplicateCaptures = [
+            ...(order.duplicateCaptures || []),
+            { gatewayPaymentId: paymentData.id, payment: extraRecord._id, amount, method, capturedAt: new Date() }
+          ];
+          await orderRepository.save(order, session);
+          paymentId = extraRecord._id;
+          duplicateCapture = true;
+          createdHere = true;
           return;
         }
 
@@ -431,6 +480,19 @@ class RazorpayService {
         paymentId = paymentRecord._id;
         createdHere = true;
       });
+
+      if (duplicateCapture) {
+        // Only the delivery that recorded it alerts; a replay is a quiet no-op.
+        if (createdHere) this._alertDuplicateCapture(orderId, paymentData);
+        return {
+          success: true,
+          message: createdHere ? 'Extra payment on an already-paid order recorded for refund' : 'Extra payment already recorded',
+          orderId,
+          paymentId,
+          alreadyProcessed: !createdHere,
+          duplicateCapture: true
+        };
+      }
 
       // Post-commit side effects, only by the delivery that created the payment so
       // duplicate webhooks never double-send (see _afterOrderPaid).
@@ -698,6 +760,27 @@ class RazorpayService {
    * processPaymentPart when the LAST part is paid. Best-effort and never throws:
    * the money is already captured.
    */
+  _alertDuplicateCapture(orderId, paymentData) {
+    const gatewayPaymentId = paymentData.id;
+    const amountRupees = (Number(paymentData.amount) || 0) / 100;
+    console.error(`[Payment] EXTRA capture on an already-paid order | Order: ${orderId} | Payment: ${gatewayPaymentId} | ₹${amountRupees} — refund needed`);
+    // Without a DSN Sentry is not initialised and this is a no-op.
+    Sentry.withScope((scope) => {
+      scope.setContext('duplicate_capture', { orderId, gatewayPaymentId, amountRupees });
+      scope.setTag('payment_action', 'duplicate_capture');
+      scope.setTag('severity', 'critical');
+      Sentry.captureMessage(`Duplicate payment captured on already-paid order ${orderId}`, 'error');
+    });
+    // Accounts/support inbox. jobId keeps it to one email per extra capture.
+    if (process.env.REDIS_URL) {
+      getNotificationsQueue()
+        .add('send-admin-duplicate-payment-alert', { orderId, gatewayPaymentId }, { jobId: `duplicate-capture-${gatewayPaymentId}` })
+        .catch((err) =>
+          console.error(`[Queue] Failed to enqueue send-admin-duplicate-payment-alert for ${orderId}:`, err.message)
+        );
+    }
+  }
+
   _afterOrderPaid(orderId) {
     // ── Order confirmation + invoice email (best-effort, post-commit) ─────────
     // Enqueued only after the transaction commits so a rolled-back payment never
@@ -1046,6 +1129,13 @@ class RazorpayService {
     }
     const expected = Math.round((order.totalAmount || 0) * 100); // paise
     let gatewayOffer = null;
+    // An already-paid order: this capture can only be an extra charge, and
+    // processPaymentSuccess records it for refund whatever its amount. Rejecting a
+    // mismatch here would 500 every retry and leave the customer's money unrecorded.
+    if (order.paymentStatus === 'paid') {
+      const existingPayment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
+      return { alreadyProcessed: !!(existingPayment && existingPayment.status === 'completed'), gatewayOffer };
+    }
     if (paymentEntity.amount !== expected) {
       // The one legitimate shortfall: a Razorpay offer applied at checkout. Anything
       // else — more than the total, or less without Razorpay vouching for it — is
@@ -1258,6 +1348,11 @@ class RazorpayService {
       const orderId = paymentEntity.notes ? paymentEntity.notes.orderId : null;
 
       if (orderId) {
+        // Keep WHY it failed on the order (the Payment row above normally doesn't exist:
+        // only captures create one). Independent of the status flip below, so even a
+        // failed attempt on an order paid by another try is still on record.
+        await this._recordPaymentAttempt(orderId, paymentEntity);
+
         const order = await orderRepository.findById(orderId);
         if (order) {
           // Payment failure now lives purely on the PAYMENT axis — it does NOT
@@ -1295,6 +1390,35 @@ class RazorpayService {
           Sentry.captureException(error);
         });
       }
+    }
+  }
+
+  /**
+   * Append one failed-attempt record to order.paymentAttempts. Idempotent per Razorpay
+   * payment id (a replayed payment.failed adds nothing) and atomic — the filter and the
+   * push are one update, so two concurrent deliveries still leave exactly one entry.
+   * Capped at the newest PAYMENT_ATTEMPTS_CAP so a card-testing run can't grow the
+   * order document without bound. Best-effort: a failure is logged and not rethrown,
+   * so it never blocks the customer-facing failure handling.
+   */
+  async _recordPaymentAttempt(orderId, paymentEntity) {
+    if (!paymentEntity?.id || !mongoose.isValidObjectId(orderId)) return;
+    const str = (v) => (v == null || v === '' ? undefined : String(v).slice(0, 500));
+    const attempt = {
+      razorpayPaymentId: String(paymentEntity.id),
+      method: str(paymentEntity.method),
+      amount: Number.isFinite(Number(paymentEntity.amount)) ? Number(paymentEntity.amount) / 100 : undefined,
+      errorCode: str(paymentEntity.error_code),
+      errorReason: str(paymentEntity.error_reason),
+      errorSource: str(paymentEntity.error_source),
+      errorStep: str(paymentEntity.error_step),
+      errorDescription: str(paymentEntity.error_description),
+      at: paymentEntity.created_at ? new Date(paymentEntity.created_at * 1000) : new Date(),
+    };
+    try {
+      await orderRepository.recordPaymentAttempt(orderId, attempt, PAYMENT_ATTEMPTS_CAP);
+    } catch (err) {
+      console.error(`[Payment] Could not record failed attempt ${paymentEntity.id} on order ${orderId}:`, err.message);
     }
   }
 

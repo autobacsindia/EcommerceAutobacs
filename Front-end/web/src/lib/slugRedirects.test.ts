@@ -18,6 +18,9 @@ const MAP: SlugRedirectMap = {
     '14710-2': 'thar-roxx-accessories',
     '%f0%9f%9a%97-how-to-render': 'how-to-render',
   },
+  paths: {},
+  live: { categories: new Set(), brands: new Set() },
+  loaded: true,
 };
 
 describe('resolveSlugRedirect', () => {
@@ -100,7 +103,9 @@ describe('getSlugRedirectMap', () => {
 
   it('a failing backend means no redirects, never a throw', async () => {
     const f = jest.fn(async () => { throw new Error('ECONNREFUSED') }) as unknown as typeof fetch;
-    await expect(getSlugRedirectMap(f)).resolves.toEqual({ products: {}, categories: {}, brands: {}, articles: {} });
+    await expect(getSlugRedirectMap(f)).resolves.toMatchObject({
+      products: {}, categories: {}, brands: {}, articles: {}, paths: {}, loaded: false,
+    });
   });
 
   it('keeps the last good map when a refresh fails', async () => {
@@ -112,5 +117,36 @@ describe('getSlugRedirectMap', () => {
     expect((await getSlugRedirectMap(failing)).brands).toEqual({ x: 'y' });
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     expect((await getSlugRedirectMap(failing)).brands).toEqual({ x: 'y' });
+  });
+});
+
+describe('redirect table + live lists', () => {
+  beforeEach(() => {
+    __resetSlugRedirectsForTest();
+    process.env.NEXT_PUBLIC_API_URL = 'http://api.test';
+  });
+
+  it('keeps own-site paths and 410 rows; drops other hosts and junk', async () => {
+    const body = {
+      paths: {
+        '/products/70mai-a400-dash-cam': '/categories/dash-cams',
+        '/model/floor-mat': null,
+        '/x': 'https://evil.example/',
+        '/y': '//evil.example',
+        '/z': 42,
+      },
+      live: { categories: ['Dash-Cams', 'bad slug!'], brands: ['70mai'] },
+    };
+    const f = jest.fn(async () => ({ ok: true, status: 200, json: async () => body })) as unknown as typeof fetch;
+    const map = await getSlugRedirectMap(f);
+    expect(map.paths).toEqual({ '/products/70mai-a400-dash-cam': '/categories/dash-cams', '/model/floor-mat': null });
+    expect([...map.live.categories]).toEqual(['dash-cams']);
+    expect([...map.live.brands]).toEqual(['70mai']);
+    expect(map.loaded).toBe(true);
+  });
+
+  it('an older backend without live lists never enables the listing fallbacks', async () => {
+    const f = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ products: {} }) })) as unknown as typeof fetch;
+    expect((await getSlugRedirectMap(f)).loaded).toBe(false);
   });
 });

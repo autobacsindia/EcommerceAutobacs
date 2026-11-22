@@ -20,3 +20,8 @@ export const checkoutQuoteIdleMock = {
 export const campaignNoneMock = {
   useCampaign: () => ({ data: undefined }),
 };
+
+/** Delivery fees off / no Black Friday offer: nothing is auto-applied. */
+export const deliveryFeesPublicOffMock = {
+  useDeliveryFeesPublic: () => ({ chargeAtCheckout: false, offerLive: false, isLoading: false }),
+};

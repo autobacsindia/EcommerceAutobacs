@@ -43,8 +43,10 @@ import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import {
   BASE_CURRENCY, MAX_FX_RATE, MIN_FX_RATE, categoriesFor, categoriesNamed, categoryLabel, expenseOptionsFor,
-  filterCategories, findCategory, isCurrencyAllowed, noteRequiredFor,
+  filterCategories, findCategory, isCurrencyAllowed, noteRequiredFor, SUBSCRIPTION_CATEGORY, REIMBURSEMENT, REIMBURSEMENT_TYPES,
 } from '../config/expenseCategories.js';
+import * as claims from './reimbursement.js';
+import { taskForLink, taskFields, taskCode } from './taskLink.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 import { bankCodeLabel, cardLabelOf, cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
@@ -118,27 +120,27 @@ const mayPay = (u) => isAdmin(u);
 const mayHold = (u) => mayDecide(u) || mayPay(u);
 
 /*
-  Editing. The person who raised a request (or their team head) may correct it,
-  with no time limit, while it still waits for accounts (an approved amount is not changed under
-  accounts' feet). The admin may edit anything not yet finished; if that changes
-  the money (amount or who is paid) on an approved / held request, it goes back
-  to accounts to approve again. Paid, declined and cancelled requests are
-  financial records and are never edited.
+  Editing (owner decision 2026-11-21, "edit until accounts or admin approves"):
+  only WHOEVER RAISED IT, or the admin, and only before approval —
+    submitted  edit in place; it stays waiting for accounts.
+    on_hold    edit (e.g. answer a queried bill); it goes back to accounts as submitted.
+    declined   edit and send again: the same PR goes back to accounts as submitted.
+               Not a supplier deal part or one that used supplier credit — declining
+               gave their share / credit back, so those are raised afresh.
+  Approved, paid and cancelled are locked. Every edit needs a reason and is kept
+  in `edits` (old → new); `rev` makes an edit and an approval at the same moment
+  end with exactly one of them landing (update + approve compare-and-set on it).
 */
-const EDITABLE = Object.freeze(['submitted', 'approved', 'on_hold']);
-/*
-  Who may edit (owner decision 2026-11-06, "edit everywhere for what we created"):
-  whoever raised it, their team head, or the admin — until it is PAID. Once accounts
-  has approved it, any change to the money or to who is paid sends it back to accounts
-  to approve again (update → backToAccounts); a wording-only change stays approved.
-  A paid request is locked: a wrong amount is corrected with a new entry, and the
-  admin can still correct the payment record (editPayment).
-*/
-const mayEdit = (u, r) => EDITABLE.includes(r.status) && (
-  isAdmin(u)
-  || idOf(r.requestedBy) === idOf(u?._id)
-  || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team)
-);
+const EDITABLE = Object.freeze(['submitted', 'on_hold', 'declined']);
+const resubmittable = (r) => r.status !== 'declined' || r.kind === 'expense' || (!r.deal && !r.credit?.amount);
+// A subscription / due expense ("Mark paid") is not edited here: its money follows the
+// item's own rules, and a declined one reopens the cycle to be marked paid again —
+// resending it as well could pay that cycle twice.
+const fromSubscription = (r) => Boolean(r.subscription?.item);
+const mayEdit = (u, r) => EDITABLE.includes(r.status) && resubmittable(r) && !fromSubscription(r)
+  && (isAdmin(u) || idOf(r.requestedBy) === idOf(u?._id));
+/** The compare-and-set clause for "still the version that was read" (old records have no rev). */
+const revIs = (rev) => ({ rev: Number(rev) > 0 ? Number(rev) : { $in: [0, null] } });
 
 /** Who may link / unlink a request to an order, project or reference: who raised it, their team head, accounts, the admin. */
 const mayLinkOrder = (u, r) => seesAll(u)
@@ -232,6 +234,26 @@ function cleanMoney(team, input, current = null) {
   }
   return { amount: 0, currency, foreignAmount, fxRate: null };
 }
+
+/**
+ * The money on a Reimbursement (services/reimbursement.js): always rupees. Fuel is
+ * km × the per-km rate — any amount the browser sent is ignored. Food /
+ * Transportation / Others are the typed amount (on an edit, unchanged if not sent).
+ * `current`: the request as stored (an edit), whose claim details and rate carry over.
+ */
+async function claimMoney(input, current = null) {
+  if (filled(input.currency) && String(input.currency).trim().toUpperCase() !== BASE_CURRENCY) {
+    throw fail('A reimbursement is paid in rupees — enter the amount in ₹.', 400);
+  }
+  const was = current?.category === REIMBURSEMENT ? current.reimbursement || null : null;
+  const { reimbursement, amount: worked } = await claims.cleanClaim(input.reimbursement, { current: was });
+  const amount = worked ?? (filled(input.amount) || !current ? cleanAmount(input.amount) : current.amount);
+  if (worked != null && worked > MAX_AMOUNT) throw fail('That amount looks too large — check the km.', 400);
+  return { reimbursement, money: { amount, currency: BASE_CURRENCY, foreignAmount: null, fxRate: null } };
+}
+
+/** The parts of a claim an edit compares. */
+const claimDiffKey = (c) => [c.type, c.on, c.km ?? null, c.ratePerKm ?? null, c.from || '', c.to || ''];
 
 /**
  * The money on a supplier payment. A part of a supplier deal is always in the
@@ -438,7 +460,12 @@ async function tellChat(req, action, text, { mentionAdmins = false, mentionReque
 
 const what = (r) => (r.kind === 'supplier'
   ? `supplier payment ${r.number} — ${moneyText(r)} to ${r.payee.name}${r.orderNumber ? ` for ${r.orderNumber}` : ''}`
-  : `${categoryLabel(r.category)} expense ${r.number} — ${moneyText(r)}${r.payee?.name ? ` to ${r.payee.name}` : ''}`);
+  : `${expenseLabel(r)} expense ${r.number} — ${moneyText(r)}${r.payee?.name ? ` to ${r.payee.name}` : ''}`);
+
+/** "Reimbursement – Fuel (42 km × ₹15)" for a reimbursement; the category's name otherwise. */
+export const expenseLabel = (r) => (r?.category === REIMBURSEMENT && r.reimbursement?.type
+  ? `${categoryLabel(r.category)} – ${claims.claimLabel(r.reimbursement)}`
+  : categoryLabel(r?.category));
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -460,6 +487,38 @@ async function withHoldHistory(rows) {
   if (!held.length) return rows;
   const found = new Map((await paymentRequestRepository.findHistories(held.map((r) => r._id))).map((x) => [idOf(x._id), x.history || []]));
   return rows.map((r) => (r.status === 'on_hold' && !r.history ? { ...r, history: found.get(idOf(r._id)) || [] } : r));
+}
+
+/**
+ * A subscription expense is approved by someone other than whoever marked it paid —
+ * accounts or the admin, never their own (they recorded the payment themselves).
+ */
+const ownSubscriptionExpense = (u, r) => Boolean(r?.subscription) && idOf(r.requestedBy) === idOf(u?._id);
+
+const subscriptionOf = (r) => (r.subscription?.item ? {
+  id: idOf(r.subscription.item),
+  number: r.subscription.number,
+  name: r.subscription.name || '',
+  cycleDueDate: r.subscription.cycleDueDate,
+  alreadyPaid: Boolean(r.subscription.alreadyPaid),
+  paid: r.subscription.paid ? {
+    method: r.subscription.paid.method,
+    autoDebit: Boolean(r.subscription.paid.autoDebit),
+    on: r.subscription.paid.on,
+    reference: r.subscription.paid.reference || '',
+  } : null,
+} : null);
+
+/** After a subscription expense moves: its cycle follows (subscriptionDueService). Never throws. */
+async function followOnSubscription(r) {
+  if (!r?.subscription?.item) return;
+  try {
+    const subs = await import('./subscriptionDueService.js');
+    await subs.settleFromExpense(r);
+  } catch (err) {
+    // The expense is the source of truth; the item re-syncs when it is next opened.
+    console.error(`[PaymentRequest] ${r.number}: subscription cycle not updated:`, err.message);
+  }
 }
 
 /** What the panel shows, and what this person may do with it now. */
@@ -489,7 +548,16 @@ export function shape(r, viewer) {
     // Paid from a foreign-currency account: what was sent, from which account. No rupees.
     paidFrom: paidFromForeign(r) ? { currency: r.payment.fromAccount.currency, amount: r.payment.fromAccount.amount, label: r.payment.fromAccount.label || '' } : null,
     category: r.category,
-    categoryLabel: categoryLabel(r.category),
+    categoryLabel: r.kind === 'expense' ? expenseLabel(r) : categoryLabel(r.category),
+    // A Reimbursement's kind, date, and for Fuel the km and the rate it was claimed at.
+    reimbursement: r.reimbursement?.type ? {
+      type: r.reimbursement.type,
+      on: r.reimbursement.on,
+      km: r.reimbursement.km ?? null,
+      ratePerKm: r.reimbursement.ratePerKm ?? null,
+      from: r.reimbursement.from || '',
+      to: r.reimbursement.to || '',
+    } : null,
     description: r.description,
     payee: {
       ...r.payee,
@@ -499,7 +567,10 @@ export function shape(r, viewer) {
     order: r.order ? { id: idOf(r.order), number: r.orderNumber } : null,
     // The snapshot taken when it was linked: still reads right after a rename or delete.
     project: r.project ? { id: idOf(r.project), code: r.projectCode || '', name: r.projectName || '' } : null,
+    task: r.task ? { id: idOf(r.task), code: taskCode(r.taskNumber), title: r.taskTitle || '' } : null,
     reference: r.reference || '',
+    // Raised by "Mark paid" on a subscription / due: which one, which cycle, and how it was paid already.
+    subscription: subscriptionOf(r),
     // One part of a made-to-order deal (advance / part / balance), or ''.
     dealId: r.deal ? idOf(r.deal) : null,
     part: r.part || '',
@@ -517,15 +588,23 @@ export function shape(r, viewer) {
     decisionNote: r.decisionNote || '',
     hold: holdOf(r),
     history: (r.history || []).map((h) => ({ at: h.at, byName: h.byName, role: h.role, action: h.action, note: h.note })),
+    // Changed after it was submitted: accounts sees the tag in lists and the full
+    // old → new history on the request before approving. Lists carry no `edits`.
+    rev: r.rev || 0,
+    editedAt: r.editedAt || null,
+    edits: r.edits ? r.edits.map((e) => ({
+      at: e.at, byName: e.byName, role: e.role, reason: e.reason, fromStatus: e.fromStatus || '',
+      changes: (e.changes || []).map((c) => ({ field: c.field, from: c.from, to: c.to })),
+    })) : undefined,
     createdAt: r.createdAt,
     approver: 'accounts',
     can: {
-      approve: mayDecide(viewer) && r.status === 'submitted',
+      approve: mayDecide(viewer) && r.status === 'submitted' && !ownSubscriptionExpense(viewer, r),
       decline: mayDecide(viewer) && ['submitted', 'on_hold'].includes(r.status),
       // Only the admin pays — an approved request, or a waiting one directly
       // (the approval is recorded with the payment).
       // Never while on hold: a hold means "do not pay this yet" (release it first).
-      pay: mayPay(viewer) && PAYABLE.includes(r.status),
+      pay: mayPay(viewer) && PAYABLE.includes(r.status) && !r.subscription?.alreadyPaid,
       hold: mayHold(viewer) && r.status === 'approved',
       release: mayHold(viewer) && r.status === 'on_hold',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
@@ -555,8 +634,11 @@ export async function createExpense(actor, input, uploaded, req) {
   if (!EXPENSE_TEAMS.includes(team)) throw fail('Choose the team the expense is for.', 400);
   const category = checkCategory(team, input.category);
   const description = cleanDetails(input.description);
-  checkNote(team, category, description);
-  const money = cleanMoney(team, input);
+  // A reimbursement: its details, and for Fuel the server's own amount (km × rate).
+  const claim = category === REIMBURSEMENT ? await claimMoney(input) : null;
+  if (claim) claims.checkClaimNote(claim.reimbursement, description);
+  else checkNote(team, category, description);
+  const money = claim ? claim.money : cleanMoney(team, input);
   const { amount } = money;
   // Every pay detail is optional on an expense: accounts usually fills them in.
   const payee = cleanPayee(input.payee, { optional: true });
@@ -572,12 +654,14 @@ export async function createExpense(actor, input, uploaded, req) {
 
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds, { optional: true });
+  if (claim) claims.checkClaimBill(claim.reimbursement, amount, kinds);
   const stored = await storeFiles(files, kinds, actor);
   let doc;
   try {
     doc = await paymentRequestRepository.create({
       number: await nextNumber(),
       kind: 'expense',
+      ...(claim ? { reimbursement: claim.reimbursement } : {}),
       ...link,
       ...extra,
       status: 'submitted',
@@ -606,6 +690,69 @@ export async function createExpense(actor, input, uploaded, req) {
 }
 
 /**
+ * The expense for a subscription / due cycle marked paid (subscriptionDueService
+ * markPaid builds `spec`: the money from the item, never from the browser).
+ *
+ * One write, two documents, in one transaction: `claim(session, { id, number })`
+ * marks the cycle on the item (a compare-and-set that only one caller wins), and
+ * the expense is created beside it. Either both are saved or neither is. A caller
+ * that loses the claim gets `{ claimed: null }` and its uploaded receipts are
+ * removed. The unique index on `subscription.cycle` is the last guard: one expense
+ * per marked cycle, whatever happens.
+ */
+export async function raiseForSubscription(actor, spec, uploads, claim, req) {
+  const files = (uploads || []).filter((f) => f?.buffer?.length);
+  const stored = await storeFiles(files, files.map(() => 'bill'), actor);
+  const drop = () => Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+  const id = new mongoose.Types.ObjectId();
+  const number = await nextNumber();
+  let claimed = null;
+  let doc = null;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      claimed = null;
+      doc = null;
+      claimed = await claim(session, { id, number });
+      if (!claimed) return;
+      doc = await paymentRequestRepository.create({
+        _id: id,
+        number,
+        kind: 'expense',
+        status: 'submitted',
+        team: spec.team,
+        requestedBy: actor._id,
+        requestedByName: actor.name || '',
+        ...spec.money,
+        category: SUBSCRIPTION_CATEGORY,
+        description: spec.description,
+        payee: { name: spec.payeeName.slice(0, 120), method: '' },
+        reference: spec.reference.slice(0, REFERENCE_MAX),
+        subscription: spec.subscription,
+        files: stored,
+        history: [entry(actor, 'submitted', spec.historyNote)],
+      }, session);
+    });
+  } catch (err) {
+    await drop();
+    throw err;
+  } finally {
+    await session.endSession();
+  }
+  if (!doc) {
+    await drop();
+    return { claimed: null, expense: null };
+  }
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, {
+    kind: 'expense', amount: doc.amount, team: doc.team, currency: doc.currency, foreignAmount: doc.foreignAmount,
+    subscriptionId: idOf(spec.subscription.item), cycleDueDate: spec.subscription.cycleDueDate, alreadyPaid: spec.subscription.alreadyPaid,
+  });
+  const ask = spec.subscription.alreadyPaid ? 'Already paid — accounts: please approve (it closes as paid) or decline.' : 'Accounts: please approve or decline.';
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[doc.team] || doc.team}) for ${spec.subscription.name} (${spec.subscription.number}), due ${spec.dueText}. ${ask}`);
+  return { claimed, expense: shape(doc, actor) };
+}
+
+/**
  * An expense raised from an order's page (a courier charge, packing, a site visit
  * for that customer): linked to the order so the order shows it. Optional; the
  * order must exist. The link is shown, never summed into the customer's money.
@@ -620,9 +767,13 @@ async function expenseOrderLink(orderId) {
 
 /** The optional project (typed as "PRJ-0007") and other ID on a request: checked, then snapshotted. */
 async function otherLinks(actor, input) {
-  const p = await projectForLink(actor, input.project, { seesAll: seesAll(actor) });
+  const [p, t] = await Promise.all([
+    projectForLink(actor, input.project, { seesAll: seesAll(actor) }),
+    taskForLink(actor, input.task, { seesAll: seesAll(actor) }),
+  ]);
   return {
     ...(p ? { project: p._id, projectCode: projectCode(p.number), projectName: p.name || '' } : {}),
+    ...(t ? taskFields(t) : {}),
     reference: cleanReference(input.reference),
   };
 }
@@ -657,28 +808,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     ? deal.itemIds.map(idOf)
     : [...new Set((Array.isArray(input.itemIds) ? input.itemIds : [input.itemIds]).filter(Boolean).map(String))];
   if (!wanted.length) throw fail('Choose the item(s) this payment is for.', 400);
-  const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER
-    // A split item: one part's payment waiting does not stop paying another part.
-    || (l.split && l.stage === STAGE.PAYMENT_PENDING)).map((l) => l.itemId));
-  // An item still at its stock check can be paid for too: raising the payment IS
-  // "ordered from this supplier" (recorded below, once everything else checks out).
-  const atCheck = new Set(view.lines.filter((l) => l.stage === STAGE.STOCK_CHECK).map((l) => l.itemId));
-  const ours = new Set(view.lines.filter((l) => l.stage === STAGE.OWN_STOCK).map((l) => l.itemId));
-  if (wanted.some((id) => ours.has(id))) {
-    throw fail('This item ships from our warehouse — there is no supplier to pay. Undo "Our Warehouse" first if a supplier is sending it.', 409);
-  }
-  if (wanted.some((id) => !payable.has(id) && !atCheck.has(id))) {
-    throw fail('A supplier can only be paid for items not yet shipped (and not out of stock or being refunded).', 409);
-  }
-  const target = supplierPartTarget(view, wanted, input.partId, deal);
-  const open = await paymentRequestRepository.findOpenForOrder(order._id);
-  const busy = open.find((r) => clashes(r, wanted, target));
-  if (busy) throw fail(`${busy.number} for this ${target ? 'part' : 'item'} is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
-  if (!deal) {
-    // Paid in parts: every payment for the item goes through its deal, so the agreed total holds.
-    const [dealt] = (await deals.forOrder(actor, idOf(order._id))).filter((d) => d.itemIds.some((id) => wanted.includes(id)));
-    if (dealt) throw fail(`This item is paid in parts (agreed ${deals.moneyOf(Math.round(dealt.agreedTotal * 100), dealt.currency)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
-  }
+  const target = await checkPayableLines(actor, order, view, wanted, { partId: input.partId, deal });
 
   const bill = supplierMoney(input, deal);
   const extra = await otherLinks(actor, input);
@@ -784,6 +914,40 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
+}
+
+/**
+ * May these items of the order be paid for now? The checks every supplier payment
+ * passes when it is raised — and again when a declined one is sent back to
+ * accounts (update): the item has not shipped, is not ours, its part is still the
+ * active one, no other open payment covers it, and an item paid in parts goes
+ * through its deal. Returns the split-item part target (or null). `exceptId`: the
+ * request being resubmitted, which is not a clash with itself.
+ */
+async function checkPayableLines(actor, order, view, wanted, { partId, deal = null, exceptId = null } = {}) {
+  const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER
+    // A split item: one part's payment waiting does not stop paying another part.
+    || (l.split && l.stage === STAGE.PAYMENT_PENDING)).map((l) => l.itemId));
+  // An item still at its stock check can be paid for too: raising the payment IS
+  // "ordered from this supplier" (recorded below, once everything else checks out).
+  const atCheck = new Set(view.lines.filter((l) => l.stage === STAGE.STOCK_CHECK).map((l) => l.itemId));
+  const ours = new Set(view.lines.filter((l) => l.stage === STAGE.OWN_STOCK).map((l) => l.itemId));
+  if (wanted.some((id) => ours.has(id))) {
+    throw fail('This item ships from our warehouse — there is no supplier to pay. Undo "Our Warehouse" first if a supplier is sending it.', 409);
+  }
+  if (wanted.some((id) => !payable.has(id) && !atCheck.has(id))) {
+    throw fail('A supplier can only be paid for items not yet shipped (and not out of stock or being refunded).', 409);
+  }
+  const target = supplierPartTarget(view, wanted, partId, deal);
+  const open = (await paymentRequestRepository.findOpenForOrder(order._id)).filter((r) => idOf(r._id) !== exceptId);
+  const busy = open.find((r) => clashes(r, wanted, target));
+  if (busy) throw fail(`${busy.number} for this ${target ? 'part' : 'item'} is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
+  if (!deal) {
+    // Paid in parts: every payment for the item goes through its deal, so the agreed total holds.
+    const [dealt] = (await deals.forOrder(actor, idOf(order._id))).filter((d) => d.itemIds.some((id) => wanted.includes(id)));
+    if (dealt) throw fail(`This item is paid in parts (agreed ${deals.moneyOf(Math.round(dealt.agreedTotal * 100), dealt.currency)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
+  }
+  return target;
 }
 
 /**
@@ -953,16 +1117,49 @@ async function assertOrderLive(r) {
   if (await orderGone(r)) throw fail(`${r.number}: this order (or the item) was cancelled — decline this supplier payment instead.`, 409);
 }
 
-export async function approve(actor, id, { note } = {}, req) {
+/** A subscription expense paid already: what approving it records as the payment, or null. */
+function alreadyPaidSet(r, now) {
+  const p = r.subscription?.alreadyPaid ? r.subscription.paid : null;
+  if (!p) return null;
+  return {
+    status: 'paid',
+    payment: {
+      method: p.method, reference: p.reference || '', paidAt: now, transactionAt: p.on,
+      paidBy: r.requestedBy, paidByName: r.requestedByName || '',
+    },
+  };
+}
+
+const EDITED_SINCE = 'This payment was edited since you opened it. Check the new details, then approve again.';
+
+/**
+ * `rev` (optional): the version accounts was shown. When sent, an edit that
+ * landed in between makes this fail with EDITED_SINCE instead of approving
+ * figures nobody looked at; the edit and the approval cannot both win.
+ */
+export async function approve(actor, id, { note, rev } = {}, req) {
   const r0 = await loadVisible(actor, id);   // 404s a request this person may not see
   if (!mayDecide(actor)) throw fail('Only accounts (or an admin) approves payments.', 403);
+  if (ownSubscriptionExpense(actor, r0)) throw fail('You marked this one paid yourself — someone else in accounts (or the admin) approves it.', 403);
+  const pinned = rev != null && rev !== '';
+  if (pinned && Number(rev) !== (r0.rev || 0)) throw fail(EDITED_SINCE, 409);
   await assertOrderLive(r0);
-  const r = await paymentRequestRepository.transition(id, ['submitted'],
-    { status: 'approved', approvedBy: actor._id, approvedAt: new Date(), decisionNote: String(note || '').slice(0, 1000) },
-    entry(actor, 'approved', note));
-  if (!r) throw fail(MOVED, 409);
-  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'approved' });
-  await tellChat(r, 'approved', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)}. Admin: please pay and record the payment.`, { mentionAdmins: true });
+  const now = new Date();
+  // Paid already (company card, auto-debit): approving it closes it as paid — the
+  // admin is not asked to pay money that has already left.
+  const settled = alreadyPaidSet(r0, now);
+  const r = await paymentRequestRepository.transitionInSession(id, ['submitted'], pinned ? revIs(rev) : {},
+    { status: 'approved', approvedBy: actor._id, approvedAt: now, decisionNote: String(note || '').slice(0, 1000), ...settled },
+    entry(actor, settled ? 'approved — already paid' : 'approved', note), {}, undefined);
+  if (!r) {
+    const cur = pinned ? await paymentRequestRepository.findById(id) : null;
+    throw fail(cur && cur.status === 'submitted' && (cur.rev || 0) !== Number(rev) ? EDITED_SINCE : MOVED, 409);
+  }
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: settled ? 'approved (already paid)' : 'approved' });
+  await followOnSubscription(r);
+  await tellChat(r, 'approved', settled
+    ? `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)} — already paid, closed as paid.`
+    : `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)}. Admin: please pay and record the payment.`, settled ? { mentionRequester: true } : { mentionAdmins: true });
   return shape(r, actor);
 }
 
@@ -979,6 +1176,7 @@ export async function decline(actor, id, { note } = {}, req) {
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'declined' });
   await followOnOrder(r, actor, 'declined');
+  await followOnSubscription(r);
   await tellChat(r, 'declined', `⛔ ${isAdmin(actor) ? 'Admin' : 'Accounts'} declined ${what(r)}: “${reason.slice(0, 200)}”.`, { mentionRequester: true });
   return shape(r, actor);
 }
@@ -1045,6 +1243,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   // compare-and-set below pins the same facts either way.)
   if (filled(payVersion) && String(payVersion) !== payVersionOf(r0)) throw fail(PAY_CHANGED, 409);
   if (r0.status === 'on_hold') throw fail(heldMessage(await paymentRequestRepository.findById(id) || r0), 409);
+  if (r0.subscription?.alreadyPaid) throw fail(`${r0.number} was paid already (${r0.requestedByName} marked it paid) — accounts approves it, which closes it as paid.`, 409);
   await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   const fromForeign = paidFrom === 'foreign';
@@ -1098,6 +1297,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
     ...(fromAccount ? { fromAccount } : {}),
   });
   await followOnOrder(r, actor, 'paid');
+  await followOnSubscription(r);
   const next = r.kind === 'supplier' ? ' Procurement: get the shipping details from the supplier and upload them.' : '';
   await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''}.${next}`, { mentionRequester: true });
   return shape(r, actor);
@@ -1114,6 +1314,7 @@ export async function cancel(actor, id, { note } = {}, req) {
   if (!r) throw fail('Only a request still waiting for approval can be cancelled.', 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'cancelled' });
   await followOnOrder(r, actor, 'cancelled');
+  await followOnSubscription(r);
   await tellChat(r, 'cancelled', `↩️ ${r.requestedByName} cancelled ${what(r)}.`);
   return shape(r, actor);
 }
@@ -1137,18 +1338,50 @@ export async function cancelForSupplierChange(actor, id, note, req) {
   return r;
 }
 
+/** Rich-text details as one short line for the edit history. */
+const plainLine = (html) => String(html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+/** How the payee is paid, for the edit history (the account number masked). */
+const payText = (p = {}) => {
+  if (p.method === 'upi') return `UPI ${p.upiId || '(their QR)'}`;
+  if (p.method === 'bank') return `Bank ${maskAccount(p.accountNumber || '') || '—'} ${p.ifsc || p.swift || ''}`.trim();
+  if (p.method === 'card') return `Card ${p.cardLast4 ? `••${p.cardLast4}` : ''}`.trim();
+  return 'not given';
+};
+const FILE_NOUN = Object.freeze({ bill: 'Bill', qr: 'QR code', proof: 'Payment screenshot' });
+
 /**
- * Correct a request: amount, details, who is paid (a saved supplier or typed
- * details) and, for an expense, what it was for. Items and files stay as they
- * are. Compare-and-set on the version read, so two edits at once cannot both land.
+ * Correct a request before it is approved (who and when: mayEdit): the amount,
+ * what it is for, the details, who is paid (a saved supplier or typed details)
+ * and the attached bills / QR (`uploaded` new ones, `removeFileIds` old ones).
+ * The linked order / project / other ID are changed with linkOrder / setLinks.
+ *
+ * A reason is required. Each edit is kept in `edits` (old → new) and the history;
+ * an on-hold or declined request goes back to accounts as submitted. The write is
+ * a compare-and-set on status + rev, so an edit and an approval at the same
+ * moment cannot both land (approve pins rev too). The order's and the project's
+ * money are read from the requests themselves, so they follow at once; a deal
+ * part moves its lock on the agreed total by the difference.
  */
-export async function update(actor, id, input = {}, req) {
+export async function update(actor, id, input = {}, uploaded = {}, req) {
   const r0 = await loadVisible(actor, id);
   if (!mayEdit(actor, r0)) {
-    throw fail(!EDITABLE.includes(r0.status)
-      ? 'A paid, declined or cancelled request cannot be edited.'
-      : 'Only whoever raised it, their team head or the admin can edit it.', 403);
+    if (!EDITABLE.includes(r0.status)) {
+      throw fail(r0.status === 'approved'
+        ? 'Accounts has approved this payment, so it can no longer be edited. Ask accounts to put it on hold if something is wrong.'
+        : 'A paid or cancelled payment cannot be edited.', 403);
+    }
+    if (fromSubscription(r0)) throw fail('A subscription payment is not edited here — ask accounts to decline it, then mark it paid again with the right details.', 409);
+    if (!resubmittable(r0)) throw fail('A declined deal part or a payment that used supplier credit cannot be sent again — raise a new payment instead.', 409);
+    throw fail('Only whoever raised it, or the admin, can edit it.', 403);
   }
+  // A double-submitted edit (same form key): the answer the first one got.
+  const formKey = input.formKey ? String(input.formKey).slice(0, 64) : '';
+  if (formKey && (r0.edits || []).some((e) => e.formKey === formKey)) return shape(r0, actor);
+  // The version the editor's form was opened on: someone else's edit in between is refused.
+  if (input.rev != null && input.rev !== '' && Number(input.rev) !== (r0.rev || 0)) throw fail(MOVED, 409);
+  const reason = String(input.reason || '').trim();
+  if (reason.length < 3) throw fail('Say why you are changing it — accounts sees this.', 400);
+
   const isExpense = r0.kind === 'expense';
   const before = { currency: r0.currency || BASE_CURRENCY, foreignAmount: r0.foreignAmount ?? null, fxRate: r0.fxRate ?? null };
   // Either kind may be a foreign bill (worked out in cleanMoney). A deal part stays
@@ -1158,7 +1391,11 @@ export async function update(actor, id, input = {}, req) {
   const billBefore = !creditPaise ? before
     : before.currency === BASE_CURRENCY ? before : { ...before, foreignAmount: fromPaise(toPaise(r0.foreignAmount) + creditPaise) };
   const billAmount = creditPaise && before.currency === BASE_CURRENCY ? fromPaise(toPaise(r0.amount) + creditPaise) : r0.amount;
-  const billMoney = isExpense
+  // A reimbursement (now, or after this edit) is priced by claimMoney: a Fuel claim's
+  // amount is ALWAYS km × its rate, recomputed here, never a typed figure.
+  const nextCategory = isExpense && input.category != null ? String(input.category) : r0.category;
+  const claim = isExpense && nextCategory === REIMBURSEMENT ? await claimMoney(input, r0) : null;
+  const billMoney = claim ? claim.money : isExpense
     ? cleanMoney(r0.team, input, { amount: r0.amount, ...before })
     : supplierMoney(input, r0.deal || creditPaise ? { currency: before.currency } : null, { amount: billAmount, ...billBefore });
   const money = creditPaise ? { ...netOfCredit(billMoney, creditPaise), credit: r0.credit } : billMoney;
@@ -1174,9 +1411,14 @@ export async function update(actor, id, input = {}, req) {
   if (isExpense && input.category != null && String(input.category) !== r0.category) {
     category = checkCategory(r0.team, input.category);
   }
-  if (isExpense && (category !== r0.category || description !== (r0.description || ''))) {
+  if (claim) {
+    claims.checkClaimNote(claim.reimbursement, description);
+  } else if (isExpense && (category !== r0.category || description !== (r0.description || ''))) {
     checkNote(r0.team, category, description);
   }
+  const claimWas = r0.category === REIMBURSEMENT && r0.reimbursement?.type ? r0.reimbursement : null;
+  const claimNow = claim?.reimbursement || null;
+  const claimChanged = JSON.stringify(claimWas && claimDiffKey(claimWas)) !== JSON.stringify(claimNow && claimDiffKey(claimNow));
   const fxChanged = money.currency !== before.currency || money.foreignAmount !== before.foreignAmount || money.fxRate !== before.fxRate;
 
   let payee = r0.payee;
@@ -1190,53 +1432,139 @@ export async function update(actor, id, input = {}, req) {
     payee = cleanPayee(input.payee, { optional: isExpense });
     if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) { supplier = null; bankNotice = null; }
   }
-  requireUpiOrQr(payee, (r0.files || []).map((f) => f.kind), { optional: isExpense });
   if (creditPaise && idOf(supplier) !== idOf(r0.supplier)) {
     throw fail(`${r0.number} uses ${deals.moneyOf(creditPaise, before.currency)} of ${r0.payee?.name || 'this supplier'}'s credit, so the supplier cannot change. Cancel it and raise a new payment instead.`, 409);
   }
 
-  const changes = [];
-  // A foreign bill without rupees yet has no rupee amount to compare: its bill line says it.
-  if (amount !== r0.amount && !rupeesPending(money) && !rupeesPending(r0)) changes.push(`amount ${inr(r0.amount)} → ${inr(amount)}`);
-  if (fxChanged) changes.push(`bill ${foreignLine(before) || 'in rupees'} → ${foreignLine(money) || 'in rupees'}`);
-  if (payee.name !== r0.payee.name) changes.push(`payee ${r0.payee.name || '(none)'} → ${payee.name || '(none)'}`);
-  if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) changes.push('payment details');
-  if (description !== (r0.description || '')) changes.push('details');
-  if (category !== r0.category) changes.push(`for ${categoryLabel(r0.category)} → ${categoryLabel(category)}`);
-  if (!changes.length) return shape(r0, actor);
+  // Attachments: remove bills / QR (never payment screenshots), add new ones.
+  let removeIds = input.removeFileIds;
+  if (typeof removeIds === 'string') { try { removeIds = JSON.parse(removeIds); } catch { removeIds = [removeIds]; } }
+  removeIds = new Set((Array.isArray(removeIds) ? removeIds : []).map(String));
+  const removing = (r0.files || []).filter((f) => f.kind !== 'proof' && removeIds.has(idOf(f._id)));
+  const { files: newFiles, kinds: newKinds } = filesFrom(uploaded);
+  const kept = (r0.files || []).filter((f) => !removing.includes(f));
+  if (newKinds.includes('qr') && kept.some((f) => f.kind === 'qr')) throw fail('Remove the old QR code before attaching a new one.', 400);
+  requireUpiOrQr(payee, [...kept.map((f) => f.kind), ...newKinds], { optional: isExpense });
+  // The bill rule is checked on what the request will carry after this edit.
+  if (claim) claims.checkClaimBill(claim.reimbursement, amount, [...kept.map((f) => f.kind), ...newKinds]);
 
-  const moneyChanged = amount !== r0.amount || fxChanged || payee.name !== r0.payee.name || payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x');
-  const backToAccounts = r0.status !== 'submitted' && moneyChanged;
-  const note = changes.join(', ') + (backToAccounts ? ' — back to accounts to approve again' : '');
+  const changes = [];
+  const change = (field, from, to) => changes.push({ field, from: String(from ?? '').slice(0, 300), to: String(to ?? '').slice(0, 300) });
+  // A foreign bill without rupees yet has no rupee amount to compare: its bill line says it.
+  if (amount !== r0.amount && !rupeesPending(money) && !rupeesPending(r0)) change('Amount', inr(r0.amount), inr(amount));
+  if (fxChanged) change('Bill', foreignLine(before) || 'in rupees', foreignLine(money) || 'in rupees');
+  if (payee.name !== r0.payee.name) change('Pay to', r0.payee.name || '(none)', payee.name || '(none)');
+  if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) change('Payment details', payText(r0.payee), payText(payee));
+  if (category !== r0.category) change('What for', categoryLabel(r0.category), categoryLabel(category));
+  if (description !== (r0.description || '')) change('Details', plainLine(r0.description), plainLine(description));
+  if (claimChanged && claimNow) change('Reimbursement', claimWas ? `${claims.claimLabel(claimWas)} (${claimWas.on})` : '', `${claims.claimLabel(claimNow)} (${claimNow.on})`);
+  for (const f of removing) change('Attachment removed', `${FILE_NOUN[f.kind]}${f.name ? ` (${f.name})` : ''}`, '');
+  newFiles.forEach((f, i) => { if (f?.buffer?.length) change('Attachment added', '', `${FILE_NOUN[newKinds[i]]}${f.originalname ? ` (${String(f.originalname).slice(0, 120)})` : ''}`); });
+  const backToAccounts = r0.status !== 'submitted';
+  // Nothing changed on a waiting request: nothing to save. A held / declined one may
+  // be sent back with only the reason (e.g. the answer to accounts' query).
+  if (!changes.length && !backToAccounts) return shape(r0, actor);
+
+  // A declined supplier payment gave its items back (followOnOrder): before it goes
+  // back to accounts, they must still be payable — the same checks as raising it.
+  const resubmitSupplier = r0.status === 'declined' && r0.kind === 'supplier' && r0.order;
+  let order = null;
+  let target = null;
+  if (resubmitSupplier) {
+    order = await orderRepository.findForWorkflow(idOf(r0.order));
+    const view = order && workflowView(order);
+    if (!view) throw fail('Its order is no longer in the team workflow — raise a new payment instead.', 409);
+    target = await checkPayableLines(actor, order, view, (r0.itemIds || []).map(idOf), { partId: r0.partId ? idOf(r0.partId) : undefined, exceptId: idOf(r0._id) });
+  }
+
+  const note = [reason, changes.length ? changes.map((c) => `${c.field}${c.from || c.to ? `: ${c.from || '—'} → ${c.to || '—'}` : ''}`).join('; ') : '']
+    .filter(Boolean).join(' — ') + (backToAccounts ? ' — sent back to accounts' : '');
   // A deal part's new amount must still fit the agreed total: move the lock by the difference first.
-  // In hundredths of the deal's currency.
+  // In hundredths of the deal's currency. (A declined deal part is never edited: resubmittable.)
   const wasUnits = toPaise(deals.unitsOf(r0));
   const nowUnits = toPaise(deals.unitsOf(money));
   const delta = r0.deal ? nowUnits - wasUnits : 0;
   let part = r0.part || '';
   if (delta > 0) {
-    const before = await deals.reserve(r0.deal, delta);
-    part = deals.partFor({ ...before, reservedPaise: before.reservedPaise - wasUnits }, nowUnits);
+    const was = await deals.reserve(r0.deal, delta);
+    part = deals.partFor({ ...was, reservedPaise: was.reservedPaise - wasUnits }, nowUnits);
   } else if (delta < 0) {
     // Named against the other parts: what is asked for besides this one.
     const now = await deals.dealForPayment(r0.deal, r0.order);
     part = deals.partFor({ ...now, reservedPaise: now.reservedPaise - wasUnits }, nowUnits);
   }
-  const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, {
+  const undoLock = async () => { if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`); };
+
+  let stored = [];
+  try {
+    stored = newFiles.length ? await storeFiles(newFiles, newKinds, actor, { existing: kept.length }) : [];
+  } catch (err) {
+    await undoLock();
+    throw err;
+  }
+  const at = new Date();
+  const editRow = {
+    at, by: actor._id, byName: actor.name || '', role: roleOf(actor), reason: reason.slice(0, 1000),
+    fromStatus: r0.status, changes, ...(formKey ? { formKey } : {}),
+  };
+  const set = {
     amount, currency: money.currency, foreignAmount: money.foreignAmount, fxRate: money.fxRate,
     description, category, payee, supplier, bankNotice,
+    files: [...kept, ...stored],
+    rev: (r0.rev || 0) + 1,
+    editedAt: at,
+    ...(claimChanged ? { reimbursement: claimNow } : {}),
     ...(r0.deal ? { part } : {}),
     ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
-  }, entry(actor, 'edited', note), {}, undefined);
+  };
+  let r;
+  try {
+    const write = (session) => paymentRequestRepository.transitionInSession(id, [r0.status], revIs(r0.rev),
+      set, entry(actor, backToAccounts ? 'resubmitted' : 'edited', note), { edits: editRow }, session);
+    r = resubmitSupplier
+      // The same guard as raising one: two payments for the item at the same moment cannot both be live.
+      ? await paymentRequestRepository.inTransaction(async (session) => {
+        await orderRepository.bumpSupplierPayGuard(order._id, session);
+        const live = await paymentRequestRepository.findOpenForOrder(order._id, session);
+        const clash = live.find((x) => idOf(x._id) !== idOf(r0._id) && clashes(x, (r0.itemIds || []).map(idOf), target));
+        if (clash) throw fail(`${clash.number} for this item is already ${STATUS_LABELS[clash.status].toLowerCase()}.`, 409);
+        return write(session);
+      })
+      : await write(undefined);
+  } catch (err) {
+    r = null;
+    await undoLock();
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    throw err;
+  }
   if (!r) {
-    // Lost the race: put the lock back where it was.
-    if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit lost a race`);
-    throw fail(MOVED, 409);
+    // Lost the race (approved, held or edited by someone else first): put everything back.
+    await undoLock();
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    const now = await paymentRequestRepository.findById(id);
+    throw fail(now?.status === 'approved' ? 'Accounts approved this payment just now, so your changes were not saved.' : MOVED, 409);
   }
   // A smaller amount gives its share back only once the edit has landed.
   if (delta < 0) await deals.release(r0.deal, -delta, `${r0.number} edited`);
-  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'edited', fields: changes, backToAccounts });
-  await tellChat(r, 'edited', `✏️ ${actor.name || 'Someone'} edited ${what(r)}: ${note}.`, { mentionAdmins: false, mentionRequester: idOf(r.requestedBy) !== idOf(actor._id) });
+  // Only now, with no request pointing at them any more, delete the removed files.
+  await Promise.all(removing.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+  if (resubmitSupplier) {
+    // Its items read "Payment Pending" again, as when it was first raised. Logged on failure; the shipping guard still holds.
+    const wf = await import('./teamWorkflowService.js');
+    for (const itemId of (r.itemIds || []).map(idOf)) {
+      try {
+        await wf.markPaymentPending(actor, idOf(r.order), itemId, { supplierName: r.payee?.name, ref: r.number, partId: r.partId }, req);
+      } catch (err) {
+        console.error(`[PaymentRequest] ${r.number}: could not mark ${itemId} payment pending on resubmit:`, err.message);
+      }
+    }
+  }
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: backToAccounts ? 'resubmitted' : 'edited', fields: changes.map((c) => c.field), fromStatus: r0.status });
+  const said = changes.length ? changes.map((c) => c.field.toLowerCase()).join(', ') : 'no changes';
+  await tellChat(r, backToAccounts ? 'resubmitted' : 'edited', backToAccounts
+    ? `🔁 ${actor.name || 'Someone'} edited ${what(r)} (${said}) and sent it back — it was ${STATUS_LABELS[r0.status].toLowerCase()}. Reason: “${reason.slice(0, 200)}”. Accounts: please approve or decline.`
+    : `✏️ ${actor.name || 'Someone'} edited ${what(r)} (${said}). Reason: “${reason.slice(0, 200)}”.`,
+  { mentionRequester: idOf(r.requestedBy) !== idOf(actor._id) });
   return shape(r, actor);
 }
 
@@ -1359,6 +1687,7 @@ const SEARCH_FIELDS = Object.freeze([
   'projectCode', 'projectName', 'reference',
 ]);
 const SUMMARY_CAP = 1000;
+const REIMBURSEMENT_SUB = new Set(REIMBURSEMENT_TYPES.map((t) => `${REIMBURSEMENT}:${t.value}`));
 
 /** The Mongo query for a viewer and a set of list filters (exported for tests). */
 export function listQuery(actor, f = {}) {
@@ -1375,6 +1704,8 @@ export function listQuery(actor, f = {}) {
     ['supplier', 'expense'].includes(f.kind) ? { kind: f.kind } : null,
     // An equality match on a stored value, so any well-formed one is safe — old values included.
     /^[a-z][a-z0-9_]{1,39}$/.test(f.category || '') ? { category: f.category } : null,
+    // "Reimbursement – Fuel": the sub-type the filter offers (filterCategories).
+    REIMBURSEMENT_SUB.has(f.category) ? { category: REIMBURSEMENT, 'reimbursement.type': f.category.slice(REIMBURSEMENT.length + 1) } : null,
     isObjectId(f.by) ? { requestedBy: new mongoose.Types.ObjectId(f.by) } : null,
     PAID_METHODS.includes(f.method) ? { 'payment.method': f.method } : null,
     // A foreign bill not yet priced (amount 0) has no rupee figure to filter on.
@@ -1421,11 +1752,61 @@ export async function list(actor, params = {}) {
  * What the expense form offers this person: their team's options and currencies.
  * An admin asks for a team (`team`), as when raising on its behalf.
  */
-export function expenseOptions(actor, { team } = {}) {
+export async function expenseOptions(actor, { team } = {}) {
   const which = isAdmin(actor) ? String(team || '') : (isActiveStaff(actor) ? actor.staff.team : '');
   if (!isAdmin(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
   if (!EXPENSE_TEAMS.includes(which)) throw fail('Choose the team the expense is for.', 400);
-  return expenseOptionsFor(which);
+  const [reimbursement, last] = await Promise.all([
+    claims.claimOptions(),
+    paymentRequestRepository.lastOwnPayee(actor._id, REIMBURSEMENT),
+  ]);
+  return {
+    ...expenseOptionsFor(which),
+    reimbursement: {
+      ...reimbursement,
+      // Pre-fills "paid to" with the UPI / bank of this person's last reimbursement (they can change it).
+      lastPayee: last?.payee?.method ? cleanPayee(last.payee, { optional: true }) : null,
+    },
+  };
+}
+
+/** The per-km fuel rate and who last changed it — for anyone who may raise a reimbursement. */
+export async function reimbursementSettings(actor) {
+  if (!isAdmin(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  return claims.readSettings();
+}
+
+/** People / tasks on one month's report: far above our staff, and a bound on the read. */
+export const REPORT_ROWS_MAX = 200;
+const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+/**
+ * One month's reimbursements, by the day they were spent (IST): what each person
+ * claimed and was paid (by kind, and fuel km), and what each linked task cost.
+ * Declined and cancelled claims are left out. Admin and accounts only.
+ */
+export async function reimbursementReport(actor, { month } = {}) {
+  if (!seesAll(actor)) throw fail('Only accounts and the admin see the reimbursement report.', 403);
+  const m = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!m || +m[2] < 1 || +m[2] > 12) throw fail('Pick a month (YYYY-MM).', 400);
+  const from = `${m[1]}-${m[2]}-01`;
+  const next = new Date(Date.UTC(+m[1], +m[2], 1)).toISOString().slice(0, 7);
+  const [out] = await paymentRequestRepository.reimbursementReport(from, `${next}-01`, REPORT_ROWS_MAX);
+  const t = out?.total?.[0] || {};
+  return {
+    month: `${m[1]}-${m[2]}`,
+    total: { count: t.count || 0, amount: r2(t.amount), paid: r2(t.paid), waiting: r2((t.amount || 0) - (t.paid || 0)), km: r2(t.km) },
+    people: (out?.people || []).map((p) => ({
+      id: idOf(p._id), name: p.name || '', team: p.team || '', teamLabel: STAFF_TEAM_LABELS[p.team] || p.team || '',
+      count: p.count, amount: r2(p.amount), paid: r2(p.paid), waiting: r2(p.amount - p.paid), km: r2(p.km),
+      byType: { fuel: r2(p.fuel), food: r2(p.food), transport: r2(p.transport), other: r2(p.other) },
+    })),
+    tasks: (out?.tasks || []).map((x) => ({
+      id: idOf(x._id), code: taskCode(x.number), title: x.title || '',
+      count: x.count, amount: r2(x.amount), paid: r2(x.paid), waiting: r2(x.amount - x.paid), km: r2(x.km),
+    })),
+    capped: (out?.people || []).length >= REPORT_ROWS_MAX || (out?.tasks || []).length >= REPORT_ROWS_MAX,
+  };
 }
 
 /**
@@ -1555,6 +1936,15 @@ export async function setLinks(actor, id, input = {}, req) {
       const now = p ? projectCode(p.number) : '';
       Object.assign(set, p ? { project: p._id, projectCode: now, projectName: p.name || '' } : { project: null, projectCode: '', projectName: '' });
       notes.push(!now ? `project ${was} removed` : was ? `project ${was} → ${now}` : `linked to project ${now}`);
+    }
+  }
+  if ('task' in input) {
+    const t = await taskForLink(actor, input.task, { seesAll: seesAll(actor) });
+    if (String(r0.task || '') !== String(t?._id || '')) {
+      const was = taskCode(r0.taskNumber);
+      const now = t ? taskCode(t.number) : '';
+      Object.assign(set, taskFields(t));
+      notes.push(!now ? `task ${was} removed` : was ? `task ${was} → ${now}` : `linked to task ${now}`);
     }
   }
   if ('reference' in input) {

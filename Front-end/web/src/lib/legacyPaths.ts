@@ -30,7 +30,11 @@ export const GONE_PATHS: RegExp[] = [
   /^\/(shop\/)?page\/\d+\/?$/,
   /\.php$/,
   /^\/xmlrpc/,
-  /^\/feed\/?$/,
+  // RSS feeds anywhere (/feed, /blog/feed, /comments/feed, /<post>/feed/atom),
+  // except under the storefront sections, where "feed" could be a real slug.
+  /^\/(?!(?:products|categories|brands|model)\/)(?:[^/]+\/)*feed(?:\/(?:rss2?|atom|rdf))?\/?$/,
+  // WordPress date archives: /2024/, /2024/05/, /2024/05/17/ (+ /page/N).
+  /^\/(?:19|20)\d{2}(?:\/\d{1,2}){0,2}(?:\/page\/\d+)?\/?$/,
 ];
 
 /** True when `pathname` is a permanently-removed legacy WordPress URL. */

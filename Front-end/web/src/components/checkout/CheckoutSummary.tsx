@@ -42,8 +42,9 @@ export default function CheckoutSummary({ items, isAuthenticated, deliveryPin, o
   const { cart } = useCart();
   const appliedCode = cart?.couponCode || '';
 
-  // The customer's "Apply Black Friday offer" intent; the server decides if it applies.
-  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer();
+  // Black Friday waiver intent — auto-applied for the shipping address's PIN while the
+  // offer is live, unless removed. The server decides if it applies.
+  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer(deliveryPin);
   const { quote, loading } = useCheckoutQuote(items, appliedCode || undefined, redeemPoints, {
     deliveryPin,
     applyDeliveryFeeOffer: offerRequested,

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, PartyPopper, Tag, X } from 'lucide-react';
 import { formatRupees } from '@/lib/formatRupees';
 import type { DeliveryFeesQuote } from '@/hooks/useCheckoutQuote';
+import { hasCelebratedOffer, markOfferCelebrated } from '@/hooks/useDeliveryFeeOffer';
 
 /**
  * Itemised delivery fees + the Black Friday "Apply offer" button.
@@ -191,8 +192,8 @@ export default function DeliveryFeeBreakdown({
 }
 
 /**
- * "Congratulations! You saved ₹X" — once per transition into applied (a re-quote that
- * still has it applied says nothing). Dismissible, never blocks checkout, and all
+ * "Congratulations! You saved ₹X" — on the first transition into applied this browser
+ * session (a re-quote, PIN change or later page says nothing). Dismissible, never blocks checkout, and all
  * motion sits behind prefers-reduced-motion.
  */
 type SavingsRow = { label: string; amount: number; total: boolean };
@@ -208,7 +209,10 @@ function FeeOfferCelebration({
   const wasWorth = useRef(worth);
 
   useEffect(() => {
-    if (worth && !wasWorth.current) {
+    // Once per session: the offer now applies itself, so every PIN change would
+    // otherwise pop it again. The inline "You saved" lines still show every time.
+    if (worth && !wasWorth.current && !hasCelebratedOffer()) {
+      markOfferCelebrated();
       setFrozenRows(rows);
       setShown(true);
     }

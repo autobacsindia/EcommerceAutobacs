@@ -19,6 +19,7 @@ import '@testing-library/jest-dom';
 import CheckoutPage from './page';
 import apiClient from '@/lib/api';
 
+jest.mock('@/hooks/queries/useDeliveryFeesPublic', () => require('@/test-utils/cartPageMocks').deliveryFeesPublicOffMock);
 jest.mock('@/lib/api', () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn() },

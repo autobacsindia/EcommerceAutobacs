@@ -17,6 +17,7 @@ import CartPage from './page';
 import { useCart } from '@/context/CartContext';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
 
+jest.mock('@/hooks/queries/useDeliveryFeesPublic', () => require('@/test-utils/cartPageMocks').deliveryFeesPublicOffMock);
 jest.mock('@/context/CartContext', () => ({ useCart: jest.fn() }));
 jest.mock('@/hooks/useCheckoutQuote', () => ({ useCheckoutQuote: jest.fn() }));
 jest.mock('@/hooks/queries/useCampaign', () => ({ useCampaign: () => ({ data: undefined }) }));

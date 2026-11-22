@@ -45,6 +45,11 @@ router.post('/', concurrentUploadGuard, attachmentSizeGuard, uploadSubscriptionI
   res.status(201).json({ success: true, item });
 }));
 
+// GET /subscription-dues/monthly?months=12&team= — paid bills per month, in rupees
+router.get('/monthly', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await subs.monthly(req.user, req.query)) });
+}));
+
 router.get('/:id', asyncHandler(async (req, res) => {
   res.json({ success: true, item: await subs.getOne(req.user, req.params.id) });
 }));
@@ -70,10 +75,11 @@ router.post('/:id/archive', asyncHandler(async (req, res) => {
   res.json({ success: true, item: await subs.archive(req.user, req.params.id, req.body || {}, req) });
 }));
 
-// POST /subscription-dues/:id/bills — multipart: rev, amount (this cycle's ACTUAL bill), note?, invoice (required).
-//   Usage-based items only: records the cycle as paid and moves the due date on.
-router.post('/:id/bills', concurrentUploadGuard, attachmentSizeGuard, uploadSubscriptionInvoices, handleAttachmentError, asyncHandler(async (req, res) => {
-  res.status(201).json({ success: true, item: await subs.recordBill(req.user, req.params.id, req.body || {}, req.files || [], req) });
+// POST /subscription-dues/:id/mark-paid — multipart: rev, alreadyPaid, paidVia, paidOn, reference,
+//   amount?, amountReason?, rupees?, note?, invoice (the receipt; required for a usage-based bill).
+//   Records this cycle and raises ONE expense for accounts to approve.
+router.post('/:id/mark-paid', concurrentUploadGuard, attachmentSizeGuard, uploadSubscriptionInvoices, handleAttachmentError, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, item: await subs.markPaid(req.user, req.params.id, req.body || {}, req.files || [], req) });
 }));
 
 router.post('/:id/verify', asyncHandler(async (req, res) => {

@@ -10,6 +10,7 @@ import apiClient from '@/lib/api';
 import orderService from '@/lib/services/orderService';
 
 // Mock dependencies
+jest.mock('@/hooks/queries/useDeliveryFeesPublic', () => require('@/test-utils/cartPageMocks').deliveryFeesPublicOffMock);
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
