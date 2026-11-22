@@ -29,6 +29,19 @@ const LeaveRequestSchema = new mongoose.Schema({
   firstHalfOnly: { type: Boolean, default: false }, // `from` is a half day
   secondHalfOnly: { type: Boolean, default: false }, // `to` is a half day
   halfDays: { type: Number, required: true, min: 1 },
+  // Calendar year the request is charged to (from/to never cross a year).
+  year: { type: Number, required: true, min: 2020, max: 2100 },
+  // SNAPSHOT of the charged days at apply time (≤ 62 rows): a holiday or shift
+  // edited later never changes what an approved request cost. Payroll and
+  // attendance read these through services/hr/leave leaveDaysInRange().
+  days: {
+    type: [new mongoose.Schema({
+      date: { type: String, required: true, match: DATE_RE },
+      halves: { type: Number, required: true, enum: [1, 2] },
+    }, { _id: false })],
+    default: [],
+  },
+  paid: { type: Boolean, required: true }, // snapshot of LeaveType.paid
   reason: { type: String, default: '', maxlength: 1000 },
   documentKey: { type: String, default: '', maxlength: 400 }, // private bucket
   clientRequestId: { type: String, required: true, maxlength: 64 },
