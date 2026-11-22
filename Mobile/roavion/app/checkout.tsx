@@ -18,8 +18,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../src/api/client';
-import { Button, Card, Screenful, T } from '../src/components/ui';
-import { colors, font, inr, radius, spacing } from '../src/theme';
+import { Photo } from '../src/components/ui';
+import { colors, elevation, font, inr, radius, spacing, type } from '../src/theme';
+import { Card, EmptyState, Overline, PremiumButton } from '../src/ui';
 import { useApp } from '../src/store';
 
 interface Address {
@@ -83,6 +84,8 @@ export default function CheckoutScreen() {
   const [error, setError] = useState('');
   const [pay, setPay] = useState<{ html: string; orderId: string } | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  /** Purely visual: which address field has focus (green outline). */
+  const [focused, setFocused] = useState<keyof Address | null>(null);
 
   const set = (key: keyof Address) => (value: string) => setAddress((a) => ({ ...a, [key]: value }));
 
@@ -184,12 +187,14 @@ export default function CheckoutScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'Order placed', headerBackVisible: false }} />
-        <Screenful
-          emptyIcon="checkmark-circle-outline"
-          emptyTitle="Thank you — your order is placed"
-          emptyBody="We have emailed your confirmation. You can follow it in My orders."
-          action={{ label: 'View my orders', onPress: () => router.replace('/orders') }}
-        />
+        <View style={s.screen}>
+          <EmptyState
+            icon="checkmark-circle-outline"
+            title="Thank you — your order is placed"
+            body="We have emailed your confirmation. You can follow it in My orders."
+            action={{ label: 'View my orders', onPress: () => router.replace('/orders') }}
+          />
+        </View>
       </>
     );
   }
@@ -198,11 +203,13 @@ export default function CheckoutScreen() {
     return (
       <>
         <Stack.Screen options={{ title: 'Checkout' }} />
-        <Screenful
-          emptyIcon="cart-outline"
-          emptyTitle="Your cart is empty"
-          action={{ label: 'Start shopping', onPress: () => router.replace('/(tabs)/shop') }}
-        />
+        <View style={s.screen}>
+          <EmptyState
+            icon="bag-handle-outline"
+            title="Your cart is empty"
+            action={{ label: 'Start shopping', onPress: () => router.replace('/(tabs)/shop') }}
+          />
+        </View>
       </>
     );
   }
@@ -212,9 +219,34 @@ export default function CheckoutScreen() {
       <Stack.Screen options={{ title: 'Checkout' }} />
       <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 200 }} keyboardShouldPersistTaps="handled">
+          {/* Where they are in the journey — purely visual. */}
+          <View style={s.steps} accessibilityLabel="Step 2 of 3: delivery and payment">
+            {['Cart', 'Delivery', 'Payment'].map((label, i) => (
+              <View key={label} style={s.step}>
+                <View style={[s.stepDot, i <= 1 && s.stepDotOn]}>
+                  {i === 0 ? (
+                    <Ionicons name="checkmark" size={12} color={colors.white} />
+                  ) : (
+                    <Text style={[s.stepNum, i <= 1 && { color: colors.white }]}>{i + 1}</Text>
+                  )}
+                </View>
+                <Text style={[s.stepLabel, i <= 1 && { color: colors.ink }]}>{label}</Text>
+                {i < 2 && <View style={[s.stepLine, i === 0 && { backgroundColor: colors.green }]} />}
+              </View>
+            ))}
+          </View>
+
           <Card>
-            <T kind="h3">Delivery address</T>
-            <View style={{ marginTop: spacing.md }}>
+            <View style={s.cardHead}>
+              <View style={s.cardIcon}>
+                <Ionicons name="location-outline" size={18} color={colors.green} />
+              </View>
+              <View>
+                <Overline>Step 2</Overline>
+                <Text style={type.h3}>Delivery address</Text>
+              </View>
+            </View>
+            <View style={{ marginTop: spacing.lg }}>
               {([
                 ['fullName', 'Full name', 'e.g. Rahul Sharma'],
                 ['phone', 'Mobile number', '10-digit mobile number'],
@@ -229,9 +261,12 @@ export default function CheckoutScreen() {
                   <TextInput
                     value={address[key]}
                     onChangeText={set(key)}
-                    style={s.input}
+                    onFocus={() => setFocused(key)}
+                    onBlur={() => setFocused((f) => (f === key ? null : f))}
+                    style={[s.input, focused === key && s.inputFocus]}
                     placeholder={placeholder}
-                    placeholderTextColor={colors.muted}
+                    placeholderTextColor={colors.steel}
+                    selectionColor={colors.green}
                     keyboardType={key === 'phone' || key === 'postalCode' ? 'number-pad' : 'default'}
                     maxLength={key === 'postalCode' ? 6 : key === 'phone' ? 16 : 120}
                     accessibilityLabel={label}
@@ -242,10 +277,22 @@ export default function CheckoutScreen() {
           </Card>
 
           <Card style={{ marginTop: spacing.lg }}>
-            <T kind="h3">Order summary</T>
+            <View style={s.cardHead}>
+              <View style={s.cardIcon}>
+                <Ionicons name="receipt-outline" size={18} color={colors.green} />
+              </View>
+              <View>
+                <Overline>Review</Overline>
+                <Text style={type.h3}>Order summary</Text>
+              </View>
+            </View>
             {cart.items.map((i) => (
               <View key={`${i.productId}-${i.variantId ?? 'base'}`} style={s.sumRow}>
-                <Text style={s.sumName} numberOfLines={1}>{i.quantity} × {i.name}</Text>
+                <Photo uri={i.image} style={s.sumImage} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.sumName} numberOfLines={2}>{i.name}</Text>
+                  <Text style={s.sumQty}>Qty {i.quantity}</Text>
+                </View>
                 <Text style={s.sumValue}>{inr(i.price * i.quantity)}</Text>
               </View>
             ))}
@@ -255,24 +302,38 @@ export default function CheckoutScreen() {
             </View>
             <View style={s.secure}>
               <Ionicons name="lock-closed" size={13} color={colors.green} />
-              <T kind="tiny">
+              <Text style={s.secureText}>
                 Delivery and taxes are added by our server on the payment screen. You always pay the amount Razorpay shows.
-              </T>
+              </Text>
             </View>
           </Card>
 
-          {!!error && <Text style={s.error}>{error}</Text>}
+          {!!error && (
+            <View style={s.errorBox} accessibilityLiveRegion="polite">
+              <Ionicons name="alert-circle" size={18} color={colors.red} />
+              <Text style={s.error}>{error}</Text>
+            </View>
+          )}
         </ScrollView>
 
         <View style={[s.bar, { paddingBottom: insets.bottom + spacing.md }]}>
-          <Button
+          <View style={s.barRow}>
+            <Text style={s.barLabel}>Subtotal</Text>
+            <Text style={s.barTotal}>{inr(cart.totalPrice)}</Text>
+          </View>
+          <PremiumButton
             label={busy ? 'Please wait…' : 'Place order and pay'}
             onPress={placeOrder}
             loading={busy}
             disabled={missing.length > 0}
             icon="lock-closed"
+            variant="green"
             full
           />
+          <View style={s.barTrust}>
+            <Ionicons name="shield-checkmark-outline" size={12} color={colors.muted} />
+            <Text style={s.barTrustText}>Secured by Razorpay · UPI, cards, netbanking</Text>
+          </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -297,25 +358,63 @@ export default function CheckoutScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  label: { fontFamily: font.semibold, fontSize: 12.5, color: colors.ink2, marginBottom: 5 },
+
+  steps: { flexDirection: 'row', marginBottom: spacing.lg, paddingHorizontal: spacing.xs },
+  step: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepDot: {
+    width: 22, height: 22, borderRadius: 11, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.chrome,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepDotOn: { backgroundColor: colors.green, borderColor: colors.green },
+  stepNum: { fontFamily: font.bold, fontSize: 11, color: colors.muted },
+  stepLabel: { fontFamily: font.semibold, fontSize: 12, color: colors.muted },
+  stepLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: colors.line, marginHorizontal: 4 },
+
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cardIcon: {
+    width: 38, height: 38, borderRadius: radius.md, backgroundColor: colors.greenSoft,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  label: { fontFamily: font.semibold, fontSize: 12.5, color: colors.ink2, marginBottom: 6 },
   input: {
-    backgroundColor: colors.subtle, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
-    paddingHorizontal: spacing.md, height: 46, fontFamily: font.regular, fontSize: 14.5,
+    backgroundColor: colors.page, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
+    paddingHorizontal: spacing.md, height: 50, fontFamily: font.regular, fontSize: 15,
     color: colors.ink, marginBottom: spacing.md,
   },
-  sumRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.sm },
-  sumName: { flex: 1, fontFamily: font.regular, fontSize: 13.5, color: colors.ink2 },
-  sumValue: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
+  inputFocus: { backgroundColor: colors.white, borderColor: colors.green, borderWidth: 1.5 },
+
+  sumRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  sumImage: { width: 48, height: 48, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.line },
+  sumName: { fontFamily: font.medium, fontSize: 13.5, lineHeight: 18, color: colors.ink },
+  sumQty: { ...type.caption, color: colors.muted },
+  sumValue: { fontFamily: font.semibold, fontSize: 14, color: colors.ink },
   sumTotal: {
-    flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.lg,
     paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.line,
   },
   sumTotalLabel: { fontFamily: font.semibold, fontSize: 15, color: colors.ink },
-  sumTotalValue: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
-  secure: { flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: spacing.md },
-  error: { fontFamily: font.medium, fontSize: 13, color: colors.red, marginTop: spacing.lg, lineHeight: 19 },
-  bar: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card,
-    borderTopWidth: 1, borderTopColor: colors.line, padding: spacing.lg,
+  sumTotalValue: { fontFamily: font.heading, fontSize: 18, color: colors.ink },
+  secure: {
+    flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginTop: spacing.md,
+    padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.greenFaint,
   },
+  secureText: { ...type.caption, color: colors.ink2, flex: 1 },
+
+  errorBox: {
+    flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginTop: spacing.lg,
+    padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.redSoft,
+  },
+  error: { fontFamily: font.medium, fontSize: 13, color: colors.red, lineHeight: 19, flex: 1 },
+
+  bar: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white,
+    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md, ...elevation.e3,
+  },
+  barRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  barLabel: { fontFamily: font.semibold, fontSize: 14, color: colors.ink2 },
+  barTotal: { fontFamily: font.extrabold, fontSize: 20, color: colors.ink },
+  barTrust: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  barTrustText: { ...type.tiny, color: colors.muted },
 });
