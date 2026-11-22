@@ -2,7 +2,7 @@
  * The small set of building blocks every screen uses. Keeping them here is what
  * stops the app drifting into ten slightly different buttons.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image, type ImageStyle } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -196,11 +196,14 @@ export function MiniTile({
   image,
   onPress,
   width,
+  tint,
 }: {
   label: string;
   image?: string;
   onPress: () => void;
   width: number;
+  /** Soft tile colour (showroom tiles): the photo sits inset on it. */
+  tint?: string;
 }) {
   return (
     <Pressable
@@ -209,7 +212,13 @@ export function MiniTile({
       accessibilityLabel={label}
       style={({ pressed }) => [{ width }, pressed && { opacity: 0.75 }]}
     >
-      <Photo uri={image} style={{ width, height: width, borderRadius: radius.sm, backgroundColor: '#f6f7f7' }} />
+      {tint ? (
+        <View style={{ width, height: width, borderRadius: radius.md, backgroundColor: tint, padding: 10 }}>
+          <Photo uri={image} style={{ flex: 1, backgroundColor: 'transparent' }} contentFit="contain" />
+        </View>
+      ) : (
+        <Photo uri={image} style={{ width, height: width, borderRadius: radius.md, backgroundColor: colors.subtle }} />
+      )}
       <Text style={s.miniLabel} numberOfLines={2}>{label}</Text>
     </Pressable>
   );
@@ -313,7 +322,7 @@ export function Screenful({
  * what stops a slow connection feeling broken. Animated so it never looks frozen.
  */
 export function Skeleton({ width, height, radius: r = radius.sm, style }: { width?: number | string; height: number; radius?: number; style?: ViewStyle }) {
-  const pulse = useRef(new Animated.Value(0.4)).current;
+  const [pulse] = useState(() => new Animated.Value(0.4));
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -360,6 +369,8 @@ const s = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
     padding: spacing.lg,
     ...shadow.card,
   },
@@ -373,13 +384,10 @@ const s = StyleSheet.create({
   },
   seeAll: { fontFamily: font.semibold, fontSize: 13, color: colors.green },
 
+  // On the white page a section is defined by whitespace, not a box.
   panel: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    overflow: 'hidden',
-    ...shadow.card,
+    // Open section on the page colour (showroom): no white band.
+    marginTop: spacing.lg,
   },
   panelHead: {
     flexDirection: 'row',
@@ -388,7 +396,7 @@ const s = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.md,
   },
-  panelTitle: { fontFamily: font.bold, fontSize: 19, lineHeight: 25, color: colors.ink },
+  panelTitle: { fontFamily: font.heading, fontSize: 18, lineHeight: 24, letterSpacing: -0.2, color: colors.ink },
   panelSub: { fontFamily: font.regular, fontSize: 12.5, lineHeight: 17, color: colors.muted, marginTop: 2 },
   textLink: { fontFamily: font.semibold, fontSize: 13.5, color: colors.green },
 
@@ -397,7 +405,7 @@ const s = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.lineStrong,
     backgroundColor: colors.white,
   },
   chipOn: { borderColor: colors.green, backgroundColor: colors.greenSoft },

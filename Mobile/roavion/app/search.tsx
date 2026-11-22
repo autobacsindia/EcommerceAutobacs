@@ -6,7 +6,7 @@
  * answers them all through /products.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -36,7 +36,7 @@ export default function SearchScreen() {
   // or from a department must not present two different filter menus.
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sheet, setSheet] = useState<'none' | 'sort' | 'filter'>('none');
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
 
   // A filtered listing (brand/vehicle) opens straight to results; a bare search
   // opens with the keyboard up, because that is what the person came to do.
@@ -108,7 +108,7 @@ export default function SearchScreen() {
         <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
           <View style={s.searchRow}>
             <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
-              <Ionicons name="arrow-back" size={22} color={colors.white} />
+              <Ionicons name="arrow-back" size={22} color={colors.ink} />
             </Pressable>
             {filtered ? (
               <View style={s.filterTitle}>
@@ -227,15 +227,15 @@ export default function SearchScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.header, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  header: { backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.line },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   inputWrap: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.white, borderRadius: radius.pill, paddingHorizontal: spacing.lg, height: 44,
+    backgroundColor: colors.subtle, borderRadius: radius.md + 2, paddingHorizontal: spacing.lg, height: 44,
   },
   input: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.ink, padding: 0 },
   filterTitle: { flex: 1 },
-  filterTitleText: { fontFamily: font.bold, fontSize: 19, color: colors.white },
+  filterTitleText: { fontFamily: font.heading, fontSize: 19, color: colors.ink },
 
   toolbar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

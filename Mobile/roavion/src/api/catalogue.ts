@@ -52,6 +52,8 @@ export interface RawProduct {
   returnPolicy?: { returnable?: boolean; cancellable?: boolean } | null;
   categories?: ({ _id?: string; name?: string; slug?: string } | string)[];
   complementaryProducts?: RawProduct[];
+  /** Populated on the detail endpoint ({ make, model }), bare ids on listings. */
+  compatibleVehicles?: ({ make?: string; model?: string } | string)[];
 }
 
 /** What every product card and detail screen in the app uses. */
@@ -106,6 +108,8 @@ export interface Product {
   /** The website's "Technical Specifications" table, in the order admin set. */
   specs: { key: string; value: string }[];
   returnable: boolean;
+  /** Cars this part is listed as compatible with (detail endpoint only; empty on listings). */
+  fits: { make: string; model: string }[];
   /** Primary category — the breadcrumb and the "more in this category" link. */
   category: { name: string; slug: string } | null;
 }
@@ -193,6 +197,10 @@ export function toProduct(p: RawProduct): Product {
       .map((s) => ({ key: s.key as string, value: s.value as string })),
     // Absent means the default policy applies, which is returnable.
     returnable: p.returnPolicy?.returnable !== false,
+    // Only populated entries count; a bare id tells us nothing about the car.
+    fits: (p.compatibleVehicles ?? [])
+      .filter((v): v is { make?: string; model?: string } => typeof v === 'object' && !!v?.make)
+      .map((v) => ({ make: v.make as string, model: v.model ?? '' })),
     category: firstCategory(p.categories),
   };
 }
@@ -271,6 +279,20 @@ export async function fetchProduct(slug: string, signal?: AbortSignal): Promise<
 export async function fetchOffers(limit = 20, signal?: AbortSignal): Promise<Product[]> {
   const res = await api.get<{ products?: RawProduct[] }>(`/products/offers?limit=${limit}`, signal);
   return (res.products ?? []).map(toProduct).filter(listable);
+}
+
+/** The one promo banner admins have switched on (or null). Display only. */
+export interface PromoBanner {
+  imageUrl: string;
+  mobileImageUrl?: string | null;
+  title?: string | null;
+  linkPath?: string | null;
+}
+
+export async function fetchActiveBanner(signal?: AbortSignal): Promise<PromoBanner | null> {
+  const res = await api.get<{ banner?: PromoBanner | null }>('/promo-banners/active', signal);
+  const b = res.banner;
+  return b && (b.mobileImageUrl || b.imageUrl) ? b : null;
 }
 
 export async function fetchCategories(signal?: AbortSignal): Promise<Category[]> {

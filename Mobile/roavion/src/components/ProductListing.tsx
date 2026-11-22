@@ -20,7 +20,7 @@
  * price, a discount or a count of its own.
  */
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
@@ -74,7 +74,7 @@ export default function ProductListing({
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [sheet, setSheet] = useState<'none' | 'sort' | 'filter'>('none');
 
-  const grid = useRef<Animated.FlatList<Product>>(null);
+  const grid = useRef<FlatList<Product>>(null);
   const { onScroll, showTop } = useHeaderScroll(0);
   const scrollToTop = useScrollToTop(grid);
 
@@ -252,7 +252,7 @@ export default function ProductListing({
             <View style={s.footer}><ActivityIndicator color={colors.green} /></View>
           ) : products.length >= total && total > PAGE_SIZE ? (
             <Text style={s.end}>That&apos;s all {total} products</Text>
-          ) : null
+          ) : undefined
         }
         renderItem={({ item }: { item: Product }) => (
           <View style={{ flex: 1 }}>

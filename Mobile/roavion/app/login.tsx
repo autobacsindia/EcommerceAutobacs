@@ -102,7 +102,7 @@ export default function LoginScreen() {
         </Pressable>
 
         <View style={s.footer}>
-          <T kind="small">New to Roavion?</T>
+          <T kind="small">New to Autobacs?</T>
           <Pressable onPress={() => router.replace('/register')} accessibilityRole="button">
             <Text style={s.linkText}>Create an account</Text>
           </Pressable>

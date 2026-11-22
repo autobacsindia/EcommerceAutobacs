@@ -63,14 +63,16 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AppProvider>
-          <StatusBar style="light" />
+          <StatusBar style="dark" />
           <Stack
             screenOptions={{
-              headerStyle: { backgroundColor: colors.header },
-              headerTintColor: colors.white,
+              // Design "A clean light": white bars, ink text, hairline-free.
+              headerStyle: { backgroundColor: colors.card },
+              headerTintColor: colors.ink,
               headerTitleStyle: { fontFamily: font.semibold, fontSize: 17 },
               headerShadowVisible: false,
               contentStyle: { backgroundColor: colors.bg },
+              animation: 'slide_from_right',
             }}
           >
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -81,6 +83,9 @@ export default function RootLayout() {
             <Stack.Screen name="register" options={{ title: 'Create account' }} />
             <Stack.Screen name="checkout" options={{ title: 'Checkout' }} />
             <Stack.Screen name="orders" options={{ title: 'My orders' }} />
+            <Stack.Screen name="garage" options={{ headerShown: false }} />
+            <Stack.Screen name="reels/new" options={{ title: 'Post a reel', presentation: 'modal' }} />
+            <Stack.Screen name="reels/mine" options={{ title: 'My reels' }} />
           </Stack>
         </AppProvider>
       </QueryClientProvider>

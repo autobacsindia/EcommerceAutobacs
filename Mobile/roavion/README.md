@@ -1,4 +1,4 @@
-# Roavion — customer mobile app
+# Autobacs (formerly Roavion) — customer mobile app
 
 React Native + TypeScript + Expo. Android first, iOS from the same code later.
 
@@ -70,6 +70,6 @@ src/
 
 - A Google Play developer account ($25). A company account also needs a D-U-N-S
   number, which is free but takes 1–2 weeks.
-- Replace `assets/icon.png` and the adaptive icon with the real Roavion logo.
+- Icons and splash use the Autobacs AB badge (2026-11-18). Package id `com.roavion.shop`, slug, scheme and SecureStore keys still say roavion on purpose.
 - Push notifications for order updates (not built yet).
 - Apple requires in-app account deletion; the Account screen already has it.

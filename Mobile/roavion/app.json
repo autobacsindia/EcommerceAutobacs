@@ -1,18 +1,12 @@
 {
   "expo": {
-    "name": "Roavion",
+    "name": "Autobacs",
     "slug": "roavion",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "roavion",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0a5c33"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -23,15 +17,34 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundColor": "#0a5c33"
+        "backgroundColor": "#000000"
       },
-      "package": "com.roavion.shop",
-      "edgeToEdgeEnabled": true
+      "package": "com.roavion.shop"
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Autobacs needs your videos so you can post a reel.",
+          "cameraPermission": "Autobacs uses the camera so you can record a reel.",
+          "microphonePermission": "Autobacs records sound with your reel."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
