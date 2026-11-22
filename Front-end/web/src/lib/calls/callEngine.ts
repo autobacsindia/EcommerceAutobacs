@@ -48,6 +48,8 @@ export const CANDIDATE_BATCH_MS = 150;
 export const RESTART_AFTER_MS = 3_000;
 export const FAIL_AFTER_MS = 20_000;
 export const CONNECT_TIMEOUT_MS = 30_000;
+/** A setup message whose request failed is tried again after these waits. */
+export const SEND_RETRY_MS = [500, 1500];
 
 /**
  * An SDP must end with CRLF; anything on the way that trims strings (our own API
@@ -72,6 +74,8 @@ export class CallEngine {
   private failTimer: ReturnType<typeof setTimeout> | null = null;
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
   private remote: MediaStream | null = null;
+  // Signals are applied one at a time, in arrival order (see handleSignal).
+  private chain: Promise<void> = Promise.resolve();
   private state: EngineState = 'connecting';
   private reportedConnected = false;
 
@@ -104,6 +108,10 @@ export class CallEngine {
     }, CONNECT_TIMEOUT_MS);
   }
 
+  private isClosed(): boolean {
+    return this.state === 'closed';
+  }
+
   /** Did this connection ever come up? (Lets the UI tell "lost" from "never connected".) */
   get everConnected(): boolean {
     return this.reportedConnected;
@@ -127,7 +135,7 @@ export class CallEngine {
     try {
       this.makingOffer = true;
       await this.pc.setLocalDescription();
-      if (this.pc.localDescription) await this.opts.sendSignal('offer', this.pc.localDescription.toJSON());
+      if (this.pc.localDescription) await this.send('offer', this.pc.localDescription.toJSON());
     } catch (err) {
       console.warn('[call] offer failed', err);
     } finally {
@@ -135,8 +143,39 @@ export class CallEngine {
     }
   }
 
-  /** A signal from the other browser. */
-  async handleSignal(kind: SignalKind, data: unknown): Promise<void> {
+  /**
+   * Send a setup message, trying again if the request fails. A lost offer or
+   * answer would leave both sides on "Connecting…" until the give-up timer, so
+   * a brief network blip or a backend restart must not lose one.
+   */
+  private async send(kind: SignalKind, data: unknown): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.opts.sendSignal(kind, data);
+        return;
+      } catch (err) {
+        const status = (err as { status?: number } | null)?.status;
+        // 4xx (other than "slow down") is final: the call ended or moved tabs.
+        const final = typeof status === 'number' && status >= 400 && status < 500 && status !== 429;
+        if (final || attempt >= SEND_RETRY_MS.length || this.isClosed()) throw err;
+        await new Promise((r) => setTimeout(r, SEND_RETRY_MS[attempt]));
+        if (this.isClosed()) throw err; // hung up while waiting
+      }
+    }
+  }
+
+  /**
+   * A signal from the other browser. Applied strictly one after another: the
+   * page hands them over without waiting, and an offer still being applied must
+   * not race the candidates (or a second offer) that arrive right behind it.
+   */
+  handleSignal(kind: SignalKind, data: unknown): Promise<void> {
+    const run = this.chain.then(() => this.applySignal(kind, data));
+    this.chain = run.catch(() => {}); // one bad signal must not block the ones after it
+    return run;
+  }
+
+  private async applySignal(kind: SignalKind, data: unknown): Promise<void> {
     if (this.state === 'closed') return;
     if (kind === 'candidates') {
       const list = Array.isArray(data) ? (data as RTCIceCandidateInit[]) : [];
@@ -159,15 +198,17 @@ export class CallEngine {
     if (this.ignoreOffer) return;
 
     await this.pc.setRemoteDescription(description);
-    if (description.type === 'offer') {
-      this.addLocalTracks();
-      await this.pc.setLocalDescription();
-      if (this.pc.localDescription) await this.opts.sendSignal('answer', this.pc.localDescription.toJSON());
-    }
+    // Candidates that came early belong to this description: apply them now,
+    // before anything below can fail and strand them.
     const waiting = this.pendingCandidates;
     this.pendingCandidates = [];
     for (const c of waiting) {
       try { await this.pc.addIceCandidate(c); } catch { /* stale candidate */ }
+    }
+    if (description.type === 'offer') {
+      this.addLocalTracks();
+      await this.pc.setLocalDescription();
+      if (this.pc.localDescription) await this.send('answer', this.pc.localDescription.toJSON());
     }
   }
 
@@ -180,7 +221,7 @@ export class CallEngine {
       const batch = this.outbox;
       this.outbox = [];
       if (batch.length && this.state !== 'closed') {
-        void this.opts.sendSignal('candidates', batch).catch((err) => console.warn('[call] candidates not sent', err));
+        void this.send('candidates', batch).catch((err) => console.warn('[call] candidates not sent', err));
       }
     }, CANDIDATE_BATCH_MS);
   }
@@ -204,8 +245,13 @@ export class CallEngine {
     }
   }
 
-  private restartIce() {
-    if (this.state === 'closed') return;
+  /**
+   * Start the connection setup over (an ICE restart). Also used when the live
+   * stream that carries signals dropped while connecting: whatever was sent in
+   * the gap is lost, so both sides exchange fresh details.
+   */
+  restartIce() {
+    if (this.state === 'closed' || this.state === 'connected') return;
     try {
       // Fires negotiationneeded with an ICE-restart offer. Either side may call it;
       // perfect negotiation settles a clash.

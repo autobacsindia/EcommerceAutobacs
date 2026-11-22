@@ -98,6 +98,7 @@
     "create-atlas-search-index": "node scripts/create-atlas-search-index.js",
     "audit-atlas-search-index": "node scripts/audit-atlas-search-index.js",
     "verify-atlas-search": "node scripts/verify-atlas-search.js",
+    "verify-call-relay": "node scripts/verify-call-relay.js",
     "verify-shiprocket": "node scripts/verify-shiprocket.js",
     "verify-search-relevance": "node scripts/verify-search-relevance.js",
     "backfill-stock-rank": "node scripts/backfill-stock-rank.js",
