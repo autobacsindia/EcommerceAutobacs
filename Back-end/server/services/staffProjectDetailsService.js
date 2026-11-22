@@ -26,6 +26,7 @@ import Order from '../models/Order.js';
 import { orderNumber } from './invoiceService.js';
 import { loadVisibleProject, canManageProject } from './staffProjectService.js';
 import { STAFF_TEAMS } from '../config/staff.js';
+import { STAFF_LONG_TEXT_MAX, longTextTooLong } from '../config/staffTextLimits.js';
 import {
   PROJECT_TEMPLATES, TEMPLATE_KEYS, FIELD_MAX,
   CUSTOM_FIELDS_MAX, CUSTOM_LABEL_MAX, CUSTOM_VALUE_MAX,
@@ -58,8 +59,13 @@ function cleanText(raw, field, { multiline }) {
   if (typeof raw !== 'string' && typeof raw !== 'number') throw fail(`${field.label}: enter text.`, 400);
   let text = String(raw).normalize('NFKC').replace(CONTROL, '').replace(/\r\n?/g, '\n');
   text = multiline ? text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() : text.replace(/\s+/g, ' ').trim();
-  const max = field.max || FIELD_MAX[field.type] || FIELD_MAX.text;
-  if (text.length > max) throw fail(`${field.label}: keep it under ${max} characters.`, 400);
+  // Several-lines boxes always take the staff safety cap, whatever an older template said.
+  if (field.type === 'textarea') {
+    if (text.length > STAFF_LONG_TEXT_MAX) throw fail(longTextTooLong(field.label), 400);
+  } else {
+    const max = field.max || FIELD_MAX[field.type] || FIELD_MAX.text;
+    if (text.length > max) throw fail(`${field.label}: keep it under ${max} characters.`, 400);
+  }
   return field.upper ? text.toUpperCase() : text;
 }
 

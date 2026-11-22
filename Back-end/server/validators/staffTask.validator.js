@@ -252,7 +252,7 @@ export const validateProjectList = [
 ];
 export const validateProjectId = [param('projectId').custom(isObjectId).withMessage('Invalid project')];
 const projectFields = [
-  body('description').optional().isString().isLength({ max: 4000 }),
+  body('description').optional().isString().isLength({ max: 20000 }).withMessage('The description is too long — please split it into two.'),
   body('colour').optional().isString().isLength({ max: 20 }),
   body('startOn').optional({ values: 'null' }).isString().isLength({ max: 10 }),
   body('dueOn').optional({ values: 'null' }).isString().isLength({ max: 10 }),
@@ -301,4 +301,23 @@ export const validateTaskRules = [
   body('approvalAfterDays').optional().isInt({ min: 0, max: 365 }).withMessage('Days must be 0 to 365'),
   body('maxDays').optional().isObject().withMessage('Pick the limits for each priority'),
   ...TASK_PRIORITIES.map((p) => body(`maxDays.${p}`).optional().isInt({ min: 0, max: 365 }).withMessage('Days must be 0 to 365')),
+];
+
+// Project updates (services/staffProjectUpdateService.js cleans text and checks files itself).
+export const validateProjectUpdateList = [
+  ...validateProjectId,
+  query('before').optional().custom(isObjectId).withMessage('Invalid page cursor'),
+];
+export const validateProjectUpdateCreate = [
+  ...validateProjectId,
+  body('text').optional().isString().withMessage('Write an update first'),
+  body('clientId').optional().isString().isLength({ max: 64 }),
+];
+export const validateProjectUpdateId = [
+  ...validateProjectId,
+  param('updateId').custom(isObjectId).withMessage('Invalid update'),
+];
+export const validateProjectFileName = [
+  ...validateProjectId,
+  param('name').isString().isLength({ min: 1, max: 140 }).withMessage('Invalid file'),
 ];

@@ -246,8 +246,14 @@ describe('Team chat — videos', () => {
   describe('task files (same uploader)', () => {
     const file = (over) => ({ originalname: 'x', size: 100, buffer: MP4, mimetype: 'video/mp4', ...over });
 
-    it('refuse a video', async () => {
-      await expect(storeTaskFiles([file({ originalname: 'clip.mp4' })], 'task1')).rejects.toMatchObject({ statusCode: 400 });
+    it('take a video (tasks show it with a player), under the task’s private folder', async () => {
+      const [ref] = await storeTaskFiles([file({ originalname: 'clip.mp4' })], 'task1');
+      expect(ref).toMatchObject({ kind: 'video', mime: 'video/mp4', provider: 'r2' });
+      expect(ref.publicId).toMatch(/^tasks\/task1\/\d{13}-[a-f0-9]{8}-clip\.mp4$/);
+    });
+
+    it('keep the 40 MB video cap', async () => {
+      await expect(storeTaskFiles([file({ originalname: 'long.mp4', size: 40 * MB + 1 })], 'task1')).rejects.toThrow(/too big/);
       expect(stored.size).toBe(0);
     });
 

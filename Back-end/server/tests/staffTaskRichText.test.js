@@ -134,16 +134,16 @@ describe('Formatted task notes and comments', () => {
       expect(list.body.tasks[0].summary).toBe('Price < 500 <b>not bold</b> & keep line 3');
     });
 
-    it('the limit counts words, not formatting', async () => {
-      const words = 'a'.repeat(4000);
+    it('the safety cap (20,000) counts words, not formatting', async () => {
+      const words = 'a'.repeat(20000);
       const fits = await create(`<p><strong><em><u>${words}</u></em></strong></p>`);
       expect(fits.body.message).toBeUndefined();
       expect(fits.status).toBe(201);
       const over = await create(`<p>${words}b</p>`);
       expect(over.status).toBe(400);
-      expect(over.body.message).toMatch(/under 4000/);
+      expect(over.body.message).toMatch(/too long \(over 20,000 characters\) — please split it into two/);
       // A huge payload is refused before it is parsed.
-      expect((await create(`<p>${'<b></b>'.repeat(5000)}x</p>`)).status).toBe(400);
+      expect((await create(`<p>${'<b></b>'.repeat(20000)}x</p>`)).status).toBe(400);
     });
 
     it('empty formatting saves as no notes', async () => {
@@ -193,10 +193,11 @@ describe('Formatted task notes and comments', () => {
     });
 
     it('a comment over the limit in words is refused even though plain words would fit the old check', async () => {
-      const ok = await head.session.post(`/staff/tasks/${taskId}/comments`, { text: `<p><strong>${'a'.repeat(2000)}</strong></p>` });
+      const ok = await head.session.post(`/staff/tasks/${taskId}/comments`, { text: `<p><strong>${'a'.repeat(20000)}</strong></p>` });
       expect(ok.status).toBe(201);
-      const over = await head.session.post(`/staff/tasks/${taskId}/comments`, { text: `<p>${'a'.repeat(2001)}</p>` });
+      const over = await head.session.post(`/staff/tasks/${taskId}/comments`, { text: `<p>${'a'.repeat(20001)}</p>` });
       expect(over.status).toBe(400);
+      expect(over.body.message).toMatch(/too long/);
     });
 
     it('editing a comment cleans it; saving the same cleaned words is not a new edit', async () => {

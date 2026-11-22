@@ -38,6 +38,7 @@ import {
   validateListItemUpdate,
   validateProjectList,
   validateProjectId,
+  validateProjectUpdateList, validateProjectUpdateCreate, validateProjectUpdateId, validateProjectFileName,
   validateProjectCreate,
   validateProjectUpdate,
   validateJobTemplateId,
@@ -57,6 +58,7 @@ import { getReminder, dismissReminder } from '../services/projectReminderService
 import {
   listJobTemplates, saveJobTemplate, deleteJobTemplate, createProjectFromTemplate,
 } from '../services/staffJobTemplateService.js';
+import { listProjectUpdates, addProjectUpdate, deleteProjectUpdate, readProjectFile } from '../services/staffProjectUpdateService.js';
 import { listLinks, linkOptions, addLink, removeLink } from '../services/staffTaskLinkService.js';
 import { getSpace, createListItem, updateListItem, deleteListItem } from '../services/staffTaskListService.js';
 import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
@@ -252,6 +254,41 @@ router.get('/projects/:projectId/payments', validateProjectId, validateRequest, 
 router.put('/projects/:projectId/details', validateProjectId, validateRequest, asyncHandler(async (req, res) => {
   const next = await updateDetails(req.user, req.params.projectId, req.body, req);
   res.json({ success: true, project: await getProject(req.user, next._id) });
+}));
+
+// ── Project updates (services/staffProjectUpdateService.js) ──
+// @route  GET /staff/tasks/projects/:projectId/updates?before= — newest first, 20 a page
+router.get('/projects/:projectId/updates', validateProjectUpdateList, validateRequest, asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ success: true, ...(await listProjectUpdates(req.user, req.params.projectId, { before: req.query.before })) });
+}));
+
+// @route  POST /staff/tasks/projects/:projectId/updates (multipart: text, clientId, files[])
+router.post('/projects/:projectId/updates', ...withFiles, validateProjectUpdateCreate, validateRequest, asyncHandler(async (req, res) => {
+  const { update, duplicate } = await addProjectUpdate(req.user, req.params.projectId, {
+    text: req.body.text, clientId: req.body.clientId, files: req.files || [],
+  });
+  res.status(duplicate ? 200 : 201).json({ success: true, update, duplicate });
+}));
+
+// @route  DELETE /staff/tasks/projects/:projectId/updates/:updateId — the poster, the owner or the admin
+router.delete('/projects/:projectId/updates/:updateId', validateProjectUpdateId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, update: await deleteProjectUpdate(req.user, req.params.projectId, req.params.updateId, req) });
+}));
+
+// @route  GET /staff/tasks/projects/:projectId/files/:name — a file on a live update, for people who see the project
+router.get('/projects/:projectId/files/:name', validateProjectFileName, validateRequest, asyncHandler(async (req, res) => {
+  const download = req.query.download === '1';
+  const { buffer, mime, inline, name, redirect } = await readProjectFile(req.user, req.params.projectId, req.params.name, { download });
+  if (redirect) return sendVideoRedirect(res, redirect);
+  res.set({
+    'Content-Type': mime,
+    'Content-Length': buffer.length,
+    'Content-Disposition': contentDisposition(inline && !download ? 'inline' : 'attachment', req.params.name, name),
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'private, max-age=86400',
+  });
+  res.send(buffer);
 }));
 
 // @route  GET /staff/tasks/projects/:projectId/details/from-order?q= — what an order fills in (nothing saved)
@@ -466,11 +503,22 @@ function contentDisposition(type, storedName, originalName) {
   return `${header}; filename*=UTF-8''${encoded}`;
 }
 
+/**
+ * A video goes to its short-lived private link (services/taskFileService.js
+ * privateVideoLink): the access check above already ran. Never cached — the
+ * link expires, and the next view must check access again.
+ */
+function sendVideoRedirect(res, url) {
+  res.set({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
+  return res.redirect(302, url);
+}
+
 // @route  GET /staff/tasks/:id/files/:name — a file's bytes (task or comment), for people who see the task.
 // ?download=1 asks for a download (saved under the name it was uploaded with) instead of viewing it.
 router.get('/:id/files/:name', validateTaskFileName, validateRequest, asyncHandler(async (req, res) => {
-  const { buffer, mime, inline, name } = await readFileOf(req.user, req.params.id, req.params.name);
   const download = req.query.download === '1';
+  const { buffer, mime, inline, name, redirect } = await readFileOf(req.user, req.params.id, req.params.name, { download });
+  if (redirect) return sendVideoRedirect(res, redirect);
   res.set({
     'Content-Type': mime,
     'Content-Length': buffer.length,

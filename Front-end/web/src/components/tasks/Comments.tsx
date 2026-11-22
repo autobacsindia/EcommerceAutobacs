@@ -4,10 +4,8 @@ import { useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { AssignCommentButton, CommentAssignment } from './CommentAssign';
-import { Download, MessageSquare, Paperclip, Pencil, Send, SmilePlus, Trash2, X } from 'lucide-react';
+import { MessageSquare, Paperclip, Pencil, Send, SmilePlus, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
-import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
-import { acceptsFile, MAX_ATTACHMENT_BYTES, mb } from '@/lib/attachments';
 import { usePasteFiles } from '@/hooks/usePasteFiles';
 import RichText from '@/components/ui/RichText';
 import RichTextBox, { type RichTextBoxHandle } from '@/components/ui/RichTextBox';
@@ -17,10 +15,10 @@ import { taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
 import EmojiPicker from '@/components/chat/EmojiPicker';
-import { FileKindIcon, fileSize } from '@/components/chat/chatUi';
+import { FileChip, MediaFiles, kindOf, pickFiles, sendForm } from './media';
 import { Avatar } from './ui';
 import {
-  COMMENT_FILES_MAX, TASK_FILES_MAX, TASK_FILE_ACCEPT, newClientId,
+  COMMENT_FILES_MAX, LONG_TEXT_MAX, TASK_FILES_MAX, TASK_FILE_ACCEPT, newClientId,
   type CommentPage, type Task, type TaskComment, type TaskFile,
 } from './types';
 import { Linkified } from './links';
@@ -37,67 +35,7 @@ export function timeAgo(iso: string, now = Date.now()): string {
   return formatDateTimeIST(iso);
 }
 
-/** Send a form with files (apiClient only speaks JSON); same cookies and CSRF header. */
-async function sendForm<T>(path: string, form: FormData): Promise<T> {
-  const res = await submitMultipart(`/api/v1${path}`, 'POST', form);
-  const body = await parseApiResponse(res);
-  if (!res.ok) throw new Error((body as { message?: string }).message || 'Could not upload the files.');
-  return body as unknown as T;
-}
-
-/** Keep files the server would take; say why the rest were left out. */
-function pickFiles(incoming: FileList | File[] | null, room: number, onError: (msg: string) => void): File[] {
-  const all = Array.from(incoming ?? []);
-  const wrong = all.find((f) => !acceptsFile(f, TASK_FILE_ACCEPT));
-  if (wrong) onError(`"${wrong.name}" can't be attached — photos, PDFs, spreadsheets, Word or text files only.`);
-  const list = all.filter((f) => acceptsFile(f, TASK_FILE_ACCEPT));
-  const tooBig = list.filter((f) => f.size > MAX_ATTACHMENT_BYTES);
-  if (tooBig.length) onError(`"${tooBig[0].name}" is over ${mb(MAX_ATTACHMENT_BYTES)} and was not added.`);
-  const fitting = list.filter((f) => f.size <= MAX_ATTACHMENT_BYTES);
-  if (fitting.length > room) onError(room > 0 ? `Only ${room} more file${room === 1 ? '' : 's'} fit here.` : 'No more files fit here.');
-  return fitting.slice(0, Math.max(room, 0));
-}
-
-/** The address that saves a file instead of opening it (the server answers it as an attachment). */
-export const downloadUrl = (url: string) => `${url}${url.includes('?') ? '&' : '?'}download=1`;
-
-/**
- * One file: its picture or kind, its name (opens it to view), its size, and a
- * download button. A file still waiting to be sent (`url` "#") has no address yet,
- * so it only shows and can be taken off.
- */
-function FileChip({ file, onRemove }: { file: TaskFile; onRemove?: () => void }) {
-  const saved = file.url !== '#';
-  const iconButton = 'grid h-7 w-7 shrink-0 place-items-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-800 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600';
-  return (
-    <span className="group/file inline-flex max-w-full items-center gap-2 rounded-xl border border-gray-200 bg-white py-1 pl-1 pr-1 text-xs shadow-xs transition-colors hover:border-gray-300">
-      {file.kind === 'image' ? (
-        // eslint-disable-next-line @next/next/no-img-element -- private, cookie-authenticated bytes; next/image cannot fetch them
-        <img src={file.url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
-      ) : (
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gray-50"><FileKindIcon mime={file.mime} className="h-5 w-5 text-gray-500" /></span>
-      )}
-      <span className="flex min-w-0 flex-col">
-        {saved ? (
-          <a href={file.url} target="_blank" rel="noopener noreferrer" title={`Open ${file.name}`} className="min-w-0 truncate font-medium text-gray-800 hover:underline">{file.name}</a>
-        ) : (
-          <span className="min-w-0 truncate font-medium text-gray-800">{file.name}</span>
-        )}
-        <span className="text-[11px] text-gray-400">{fileSize(file.size)}</span>
-      </span>
-      {saved && (
-        <a href={downloadUrl(file.url)} download={file.name} aria-label={`Download ${file.name}`} title="Download" className={iconButton}>
-          <Download aria-hidden className="h-4 w-4" />
-        </a>
-      )}
-      {onRemove && (
-        <button type="button" onClick={onRemove} aria-label={`Remove ${file.name}`} title="Remove" className={iconButton}>
-          <X className="h-4 w-4" />
-        </button>
-      )}
-    </span>
-  );
-}
+export { downloadUrl } from './media';
 
 // ── The task's own files ─────────────────────────────────────────────────────
 
@@ -308,7 +246,7 @@ function CommentItem({ task, c }: { task: Task; c: TaskComment }) {
                 }}
                 onSubmit={() => { if (!isRichTextEmpty(draft)) edit.mutate(); }}
                 autoFocus
-                maxLength={2000}
+                maxLength={LONG_TEXT_MAX}
                 minHeightClass="min-h-[3rem]"
                 ariaLabel="Edit comment"
               />
@@ -328,7 +266,7 @@ function CommentItem({ task, c }: { task: Task; c: TaskComment }) {
                 />
               )}
               {c.files.length > 0 && (
-                <ul className="mt-1.5 flex flex-wrap gap-1.5">{c.files.map((f) => <li key={f.url} className="max-w-full"><FileChip file={f} /></li>)}</ul>
+                <MediaFiles files={c.files} />
               )}
             </>
           )}
@@ -396,7 +334,7 @@ function CommentBox({ task }: { task: Task }) {
   const ready = (!isRichTextEmpty(text) || files.length > 0) && !send.isPending;
 
   const attach = (incoming: File[]) => {
-    const picked = pickFiles(incoming, COMMENT_FILES_MAX - files.length, setError);
+    const picked = pickFiles(incoming, COMMENT_FILES_MAX - files.length, setError, files.reduce((n, f) => n + f.size, 0));
     if (picked.length) setFiles((all) => [...all, ...picked]);
   };
   usePasteFiles(zone, { accept: TASK_FILE_ACCEPT, hasRoom: files.length < COMMENT_FILES_MAX, take: attach });
@@ -450,7 +388,7 @@ function CommentBox({ task }: { task: Task }) {
             return false;
           }}
           onSubmit={() => { if (ready) send.mutate(); }}
-          maxLength={2000}
+          maxLength={LONG_TEXT_MAX}
           minHeightClass="min-h-[2.75rem]"
           placeholder={task.personal ? 'Write a note to yourself…' : 'Write an update or a question… type @ to mention someone'}
           ariaLabel="Comment"
@@ -460,7 +398,7 @@ function CommentBox({ task }: { task: Task }) {
             {files.map((f, i) => (
               <li key={`${f.name}-${i}`} className="max-w-full">
                 <FileChip
-                  file={{ url: '#', name: f.name, mime: f.type, size: f.size, kind: 'file' }}
+                  file={{ url: '#', name: f.name, mime: f.type, size: f.size, kind: kindOf(f) }}
                   onRemove={() => setFiles((all) => all.filter((_, j) => j !== i))}
                 />
               </li>

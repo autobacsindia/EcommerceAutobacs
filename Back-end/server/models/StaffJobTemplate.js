@@ -14,7 +14,7 @@ import mongoose from 'mongoose';
 const TemplateTaskSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, maxlength: 200 },
-    description: { type: String, default: '', maxlength: 24000 },
+    description: { type: String, default: '', maxlength: 120000 }, // a task's notes (formatted)
     priority: { type: String, enum: ['urgent', 'high', 'normal', 'low'], default: 'normal' },
     /** Days after the project's start the task is due (0 = the start day). */
     dueAfterDays: { type: Number, min: 0, max: 365, default: 0 },
@@ -33,7 +33,7 @@ const StaffJobTemplateSchema = new mongoose.Schema(
     /** Lower-cased name: one template per name. */
     nameKey: { type: String, required: true, maxlength: 80 },
     colour: { type: String, default: 'blue' },
-    description: { type: String, default: '', maxlength: 4000 },
+    description: { type: String, default: '', maxlength: 20000 }, // the project's description
     lists: { type: [new mongoose.Schema({ name: { type: String, required: true } }, { _id: false })], default: [] },
     statuses: {
       type: [new mongoose.Schema({ name: { type: String, required: true }, colour: { type: String, default: 'gray' }, type: { type: String, required: true } }, { _id: false })],
