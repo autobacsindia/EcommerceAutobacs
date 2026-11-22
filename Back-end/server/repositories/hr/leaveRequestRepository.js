@@ -12,7 +12,7 @@ const leaveRequestRepository = {
     const [row] = await LeaveRequest.create([doc], session ? { session } : {});
     return row.toObject();
   },
-  /** Live requests of one employee whose range touches [from, to]. Rides hr_leave_employee_range. */
+  /** Live requests of one employee whose range touches [from, to]. Rides hr_leave_employee_to_from. */
   findOverlapping: (employeeId, from, to, { statuses = LIVE_STATUSES, excludeId = null } = {}, session = null) => LeaveRequest
     .find({
       employee: employeeId, from: { $lte: to }, to: { $gte: from }, status: { $in: statuses },
@@ -26,6 +26,9 @@ const leaveRequestRepository = {
     }).select('halfDays').limit(200).session(session).lean();
     return rows.reduce((s, r) => s + r.halfDays, 0);
   },
+  /** Pending requests of one employee/year (balance page). Rides hr_leave_employee_year_status; no sort needed. */
+  pendingForYear: (employeeId, year) => LeaveRequest.find({ employee: employeeId, year, status: { $in: PENDING_STATUSES } })
+    .select('leaveType halfDays').limit(200).lean(),
   /** Approved requests of employees touching [from, to] (with the day snapshot). */
   findApprovedInRange: (employeeIds, from, to) => LeaveRequest.find({
     employee: { $in: employeeIds }, status: 'approved', from: { $lte: to }, to: { $gte: from },

@@ -13,7 +13,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import leaveLedgerRepository from '../../../repositories/hr/leaveLedgerRepository.js';
 import leaveTypeRepository from '../../../repositories/hr/leaveTypeRepository.js';
-import leaveRequestRepository, { PENDING_STATUSES } from '../../../repositories/hr/leaveRequestRepository.js';
+import leaveRequestRepository from '../../../repositories/hr/leaveRequestRepository.js';
 import employeeRepository from '../../../repositories/hr/employeeRepository.js';
 import { MONTH_RE } from '../../../config/hr.js';
 import { recordHrAudit } from '../audit.js';
@@ -42,10 +42,7 @@ export async function getBalances(employeeId, year) {
   const [sums, types, pendingRows] = await Promise.all([
     leaveLedgerRepository.sumsForEmployeeYear(employeeId, y),
     leaveTypeRepository.list(),
-    leaveRequestRepository.page(
-      { employee: employeeId, year: y, status: { $in: PENDING_STATUSES } },
-      { sort: { _id: 1 }, limit: 200, select: 'leaveType halfDays' },
-    ),
+    leaveRequestRepository.pendingForYear(employeeId, y),
   ]);
   const byType = new Map();
   const bucket = (id) => {
