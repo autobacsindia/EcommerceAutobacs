@@ -306,13 +306,13 @@ describe('Payment requests', () => {
 
     it('the details can be filled in later; a bad IFSC is still refused when given', async () => {
       const id = (await expense(ops.session, { payee: {} }, [])).body.request.id;
-      const badEdit = await admin.session.put(`/payment-requests/${id}`, { payee: { name: 'ARB', method: 'bank', ifsc: 'HDFC123' } });
+      const badEdit = await admin.session.put(`/payment-requests/${id}`, { reason: "Correction", payee: { name: 'ARB', method: 'bank', ifsc: 'HDFC123' } });
       expect(badEdit.status).toBe(400);
       expect(badEdit.body.message).toMatch(/IFSC/);
-      const filled = await admin.session.put(`/payment-requests/${id}`, { payee: CARD });
+      const filled = await admin.session.put(`/payment-requests/${id}`, { reason: "Correction", payee: CARD });
       expect(filled.status).toBe(200);
       expect(filled.body.request.payee).toMatchObject({ method: 'card', cardLast4: '4821' });
-      expect((await admin.session.put(`/payment-requests/${id}`, { payee: { ...CARD, cardLast4: '4111111111111111' } })).status).toBe(400);
+      expect((await admin.session.put(`/payment-requests/${id}`, { reason: "Correction", payee: { ...CARD, cardLast4: '4111111111111111' } })).status).toBe(400);
       expect((await PaymentRequest.findById(id).lean()).payee.cardLast4).toBe('4821');
       const raised = await expense(ops.session, { payee: { method: 'bank', ifsc: 'HDFC123' } }, []);
       expect(raised.status).toBe(400);

@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import apiClient from '@/lib/api-client';
 import {
-  categoryName, errorMessage, getExpenseOptions, money, paymentKeys, type PaymentRequest,
+  categoryName, errorMessage, fileHref, getExpenseOptions, money, paymentKeys, postForm, type PaymentRequest,
 } from './api';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import CardFields, { cardPayload, last4Problem, type CardDetails, type PayMethod } from './CardFields';
@@ -18,10 +17,15 @@ const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
 
 /**
- * Correct a payment request: amount, details, who is paid (for a supplier
- * payment, a saved supplier can be picked by typing its name). The server
- * decides who may edit and until when, and says when an edit sends it back to
- * accounts.
+ * Correct a payment request before accounts approves it: amount, details, who is
+ * paid (for a supplier payment, a saved supplier can be picked by typing its
+ * name) and the attached bills / QR. A reason is required — accounts sees it with
+ * the old → new values. The server decides who may edit and when; an on-hold or
+ * declined request goes back to accounts when saved.
+ *
+ * Sent with the version it was opened on (`rev`): an approval or another edit in
+ * between is refused, never overwritten. A one-time `formKey` makes a double
+ * click save once.
  *
  * An expense offers its team's options; one raised with an option the team no
  * longer has (from before per-team lists) keeps it, marked "old option", and
@@ -71,6 +75,14 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   });
   const [codeKind, setCodeKind] = useState<BankCodeKind>(kindOf(r.payee));
   const [picked, setPicked] = useState<Supplier | null>(null);
+  const [reason, setReason] = useState('');
+  // Bills and the QR the requester attached (payment screenshots are the admin's, never edited here).
+  const attached = r.files.filter((f) => f.kind !== 'proof');
+  const [removed, setRemoved] = useState<string[]>([]);
+  const [bills, setBills] = useState<File[]>([]);
+  const [qr, setQr] = useState<File | null>(null);
+  const [formKey] = useState(() => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`));
+  const qrKept = attached.some((f) => f.kind === 'qr' && !removed.includes(f.id));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k: keyof typeof payee) => (e: React.ChangeEvent<HTMLInputElement>) => setPayee({ ...payee, [k]: e.target.value });
@@ -84,7 +96,9 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     if (codeProblem) { setError(codeProblem); return; }
     if (!picked && method === 'card' && last4Problem(card.cardLast4)) { setError(last4Problem(card.cardLast4)); return; }
     if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
-    const body: Record<string, unknown> = { description: description.trim() };
+    if (reason.trim().length < 3) { setError('Say why you are changing it — accounts sees this.'); return; }
+    if (qr && qrKept) { setError('Remove the old QR code before attaching a new one.'); return; }
+    const body: Record<string, unknown> = { description: description.trim(), reason: reason.trim(), rev: r.rev ?? 0, formKey };
     // A foreign bill sends only what was billed: its rupees are recorded when it is paid.
     if (foreign) Object.assign(body, currencyLocked ? { foreignAmount } : { currency, foreignAmount });
     else Object.assign(body, currencyLocked ? { amount } : { currency, amount });
@@ -101,7 +115,12 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     }
     setBusy(true);
     try {
-      const res = await apiClient.put<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(r.id)}`, body);
+      const form = new FormData();
+      for (const [k, v] of Object.entries(body)) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+      if (removed.length) form.append('removeFileIds', JSON.stringify(removed));
+      for (const f of bills) form.append('bill', f);
+      if (qr) form.append('qr', qr);
+      const res = await postForm<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(r.id)}`, form, 'PUT');
       onDone(res.request);
     } catch (err) {
       setError(errorMessage(err, 'Could not save the changes. Please try again.'));
@@ -113,7 +132,9 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   return (
     <form onSubmit={save} aria-label="Edit payment request" className="space-y-3">
       {r.status !== 'submitted' && (
-        <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Already approved: changing the amount or who is paid sends it back to accounts to approve again.</p>
+        <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
+          {r.status === 'declined' ? 'Declined' : 'On hold'}: saving sends it back to accounts to approve again.
+        </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         {!foreign && (
@@ -183,10 +204,45 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
 
       <div><label className={label} htmlFor="ed-desc">Details</label>
         <RichTextBox id="ed-desc" ariaLabel="Details" compact maxLength={2000} value={description} onChange={setDescription} /></div>
+      <fieldset className="space-y-2">
+        <legend className={label}>Attachments</legend>
+        {attached.length > 0 && (
+          <ul className="space-y-1 text-sm">
+            {attached.map((f) => {
+              const gone = removed.includes(f.id);
+              return (
+                <li key={f.id} className="flex items-center justify-between gap-2">
+                  <a href={fileHref(r.id, f.id)} target="_blank" rel="noopener noreferrer" className={`truncate text-blue-700 ${gone ? 'line-through opacity-60' : ''}`}>
+                    {f.kind === 'qr' ? 'Payment QR' : 'Bill'}{f.name ? ` — ${f.name}` : ''}
+                  </a>
+                  <button type="button" className="shrink-0 text-xs font-medium text-gray-700 hover:underline"
+                    onClick={() => setRemoved(gone ? removed.filter((x) => x !== f.id) : [...removed, f.id])}>
+                    {gone ? 'Keep' : 'Remove'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="text-sm text-gray-700">Add bill / invoice
+            <input type="file" multiple accept="image/*,application/pdf" aria-label="Add bill" className="mt-1 block w-full text-xs"
+              onChange={(e) => setBills(Array.from(e.target.files || []))} /></label>
+          <label className="text-sm text-gray-700">{qrKept ? 'New payment QR (remove the old one first)' : 'Add payment QR'}
+            <input type="file" accept="image/*" aria-label="Add payment QR" className="mt-1 block w-full text-xs"
+              onChange={(e) => setQr(e.target.files?.[0] || null)} /></label>
+        </div>
+      </fieldset>
+
+      <div><label className={label} htmlFor="ed-reason">Why are you changing it?</label>
+        <textarea id="ed-reason" className={input} required minLength={3} maxLength={1000} rows={2} value={reason}
+          onChange={(e) => setReason(e.target.value)} placeholder="e.g. Wrong amount — the bill says ₹1,800" />
+        <p className="mt-1 text-xs text-gray-500">Accounts sees this and what changed before approving.</p></div>
+
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save changes
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {r.status === 'submitted' ? 'Save changes' : 'Save & send to accounts'}
         </button>
         <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
       </div>

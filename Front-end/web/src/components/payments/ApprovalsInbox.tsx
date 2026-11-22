@@ -9,6 +9,7 @@ import CopyId from '@/components/ui/CopyId';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import { EntryRow } from './SupplierCredit';
 import { creditKeys, getPendingCredit } from './credit';
+import { EditedTag } from './EditHistory';
 import { actOn, billAmount, categoryName, errorMessage, listRequests, money, paymentKeys, type PaymentRequest } from './api';
 
 /**
@@ -88,7 +89,7 @@ function PaymentRow({ r, onOpen }: { r: PaymentRequest; onOpen: () => void }) {
     setBusy(true);
     setError('');
     try {
-      await actOn(r.id, action, note);
+      await actOn(r.id, action, note, r.rev);
       await qc.invalidateQueries({ queryKey: paymentKeys.all });
     } catch (e) {
       setError(errorMessage(e, 'Could not save that. Please try again.'));
@@ -103,6 +104,7 @@ function PaymentRow({ r, onOpen }: { r: PaymentRequest; onOpen: () => void }) {
         <div className="min-w-0 text-sm">
           <p className="font-semibold text-gray-900">
             {r.number} · {r.kind === 'supplier' ? 'Supplier payment' : categoryName(r)} · {amount}{r.payee?.name ? ` to ${r.payee.name}` : ''}
+            <EditedTag r={r} />
           </p>
           <p className="text-xs text-gray-600">
             Raised by {r.requestedBy} ({r.teamLabel}) on {formatDateIST(r.createdAt)}

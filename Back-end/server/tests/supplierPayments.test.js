@@ -409,51 +409,49 @@ describe('Supplier directory and one-transfer payments', () => {
       return res;
     }
 
-    it('the requester (or their team head) corrects it while it waits for accounts; a teammate cannot; history says what changed', async () => {
+    it('the requester corrects it while it waits for accounts; a teammate or their team head cannot; history says what changed', async () => {
       const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
       expect(r.can.edit).toBe(true);
       expect(r.editableUntil).toBeNull(); // no time limit
-      const res = await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1200, description: 'Invoice 77' });
+      const res = await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 1200, description: 'Invoice 77' });
       expect(res.status).toBe(200);
       expect(res.body.request).toMatchObject({ amount: 1200, description: 'Invoice 77', status: 'submitted' });
       expect(res.body.request.history.at(-1)).toMatchObject({ action: 'edited', note: expect.stringContaining('₹1,000 → ₹1,200') });
       const mate = await makeUser('Pavan', 'staff', staff('procurement'));
-      expect((await mate.session.put(`/payment-requests/${r.id}`, { amount: 5 })).status).toBe(403);
+      expect((await mate.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 5 })).status).toBe(403);
+      // Owner 2026-11-21: only whoever raised it, or the admin.
       const head = await makeUser('Hema', 'staff', staff('procurement', true));
-      expect((await head.session.put(`/payment-requests/${r.id}`, { description: 'Invoice 77 (head)' })).status).toBe(200);
+      expect((await head.session.put(`/payment-requests/${r.id}`, { reason: "Correction", description: 'Invoice 77 (head)' })).status).toBe(403);
     });
 
-    it('no time limit — still editable days later — and after approval too, going back to accounts (owner 2026-11-06)', async () => {
+    it('no time limit while it waits — but locked once accounts approves (owner 2026-11-21)', async () => {
       const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
       await PaymentRequest.collection.updateOne({ _id: new mongoose.Types.ObjectId(r.id) }, { $set: { createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000) } });
-      expect((await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1100 })).status).toBe(200);
+      expect((await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 1100 })).status).toBe(200);
       const r2 = (await raised({ amount: 500, payee: OTHER_BANK })).body.request;
-      await accounts.session.post(`/payment-requests/${r2.id}/approve`);
-      const again = await procurement.session.put(`/payment-requests/${r2.id}`, { amount: 600 });
-      expect(again.status).toBe(200);
-      expect(again.body.request.status).toBe('submitted');
+      const approved = await accounts.session.post(`/payment-requests/${r2.id}/approve`);
+      expect(approved.body.request.can.edit).toBe(false);
+      const again = await procurement.session.put(`/payment-requests/${r2.id}`, { reason: "Correction", amount: 600 });
+      expect(again.status).toBe(403);
+      expect((await PaymentRequest.findById(r2.id).lean()).amount).toBe(500);
     });
 
-    it('the admin edits any unpaid one; changing the money sends it back to accounts; paid is never edited', async () => {
+    it('the admin cannot edit an approved one either; paid is never edited', async () => {
       const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
       await accounts.session.post(`/payment-requests/${r.id}/approve`);
-      const words = await admin.session.put(`/payment-requests/${r.id}`, { description: 'typo fixed' });
-      expect(words.body.request.status).toBe('approved');
-      const money = await admin.session.put(`/payment-requests/${r.id}`, { amount: 900 });
-      expect(money.body.request).toMatchObject({ status: 'submitted', amount: 900 });
-      await accounts.session.post(`/payment-requests/${r.id}/approve`);
+      expect((await admin.session.put(`/payment-requests/${r.id}`, { reason: "Correction", description: 'typo fixed' })).status).toBe(403);
       await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'bank' });
-      expect((await admin.session.put(`/payment-requests/${r.id}`, { amount: 1 })).status).toBe(403);
+      expect((await admin.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 1 })).status).toBe(403);
     });
 
     it('switching to a saved supplier copies its details; two edits at once land once', async () => {
       const s = await addSupplier();
       const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
-      const res = await procurement.session.put(`/payment-requests/${r.id}`, { supplierId: s.id });
+      const res = await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", supplierId: s.id });
       expect(res.body.request.payee).toMatchObject({ name: 'ARB Supplies', accountNumber: '123456789012' });
       const both = await Promise.all([
-        procurement.session.put(`/payment-requests/${r.id}`, { amount: 1500 }),
-        procurement.session.put(`/payment-requests/${r.id}`, { amount: 1600 }),
+        procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 1500 }),
+        procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 1600 }),
       ]);
       expect(both.map((x) => x.status).sort()).toEqual([200, 409]);
     });

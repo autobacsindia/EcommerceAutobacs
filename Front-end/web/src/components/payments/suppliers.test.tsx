@@ -56,6 +56,15 @@ beforeEach(() => {
   window.confirm = jest.fn(() => true);
 });
 
+/** The edit form posts multipart: what it sent, as an object (payee parsed). */
+const sentEdit = () => {
+  const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+  const body: Record<string, unknown> = {};
+  (init.body as FormData).forEach((v, k) => { body[k] = k === 'payee' ? JSON.parse(String(v)) : v; });
+  return { url, method: init.method, body };
+};
+const giveReason = () => fireEvent.change(screen.getByLabelText('Why are you changing it?'), { target: { value: 'Wrong amount' } });
+
 describe('raising a supplier payment', () => {
   it('a picked supplier is sent by id — no bank details leave the browser', async () => {
     get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
@@ -218,27 +227,56 @@ describe('the admin pays by supplier', () => {
 });
 
 describe('editing a payment request', () => {
-  it('sends only what the API needs: amount, details and the typed payee', async () => {
-    put.mockResolvedValue({ request: request('r1', 1200) });
+  it('sends only what the API needs: amount, details, the typed payee, the reason and the version', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: request('r1', 1200) }) });
     const onDone = jest.fn();
-    wrap(<EditPaymentRequest r={{ ...request('r1', 1000), status: 'submitted', payee: { name: 'Kumar', method: 'upi', upiId: '' } }} onDone={onDone} onCancel={jest.fn()} />);
+    wrap(<EditPaymentRequest r={{ ...request('r1', 1000), status: 'submitted', rev: 2, payee: { name: 'Kumar', method: 'upi', upiId: '' } }} onDone={onDone} onCancel={jest.fn()} />);
     fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '1200' } });
     fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Invoice 77' } });
+    giveReason();
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/payment-requests/r1', {
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    const { body } = sentEdit();
+    expect(body).toEqual({
       amount: '1200', currency: 'INR', description: 'Invoice 77', payee: { name: 'Kumar', method: 'upi', upiId: '', phone: '' },
-    }));
-    expect(onDone).toHaveBeenCalled();
+      reason: 'Wrong amount', rev: '2', formKey: expect.any(String),
+    });
   });
 
-  it('picking a saved supplier sends its id, not typed details', async () => {
+  it('no reason, nothing sent', async () => {
+    wrap(<EditPaymentRequest r={{ ...request('r1', 1000), status: 'submitted', payee: { name: 'Kumar', method: 'upi', upiId: 'k@ok' } }} onDone={jest.fn()} onCancel={jest.fn()} />);
+    fireEvent.submit(screen.getByRole('form', { name: 'Edit payment request' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Say why you are changing it/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('on hold: saving sends it back to accounts; picking a saved supplier sends its id, not typed details', async () => {
     get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
-    put.mockResolvedValue({ request: request('r1', 1000) });
-    wrap(<EditPaymentRequest r={{ ...request('r1', 1000), status: 'approved', payee: { name: 'ar', method: 'upi', upiId: 'x@okaxis' } }} onDone={jest.fn()} onCancel={jest.fn()} />);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: request('r1', 1000) }) });
+    wrap(<EditPaymentRequest r={{ ...request('r1', 1000), status: 'on_hold', payee: { name: 'ar', method: 'upi', upiId: 'x@okaxis' } }} onDone={jest.fn()} onCancel={jest.fn()} />);
     expect(screen.getByText(/sends it back to accounts/)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
+    giveReason();
+    fireEvent.click(screen.getByRole('button', { name: /Save & send to accounts/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(sentEdit().body).toMatchObject({ amount: '1000', currency: 'INR', description: '', supplierId: 's1' });
+    expect(sentEdit().body).not.toHaveProperty('payee');
+  });
+
+  it('a bill can be removed and a new one attached', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: request('r1', 1000) }) });
+    const withBill = { ...request('r1', 1000), status: 'submitted' as const, payee: { name: 'Kumar', method: 'upi' as const, upiId: 'k@ok' },
+      files: [{ id: 'f1', kind: 'bill' as const, name: 'old.jpg', contentType: 'image/jpeg', bytes: 10 }] };
+    wrap(<EditPaymentRequest r={withBill} onDone={jest.fn()} onCancel={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    const pdf = new File(['%PDF'], 'invoice.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByLabelText('Add bill'), { target: { files: [pdf] } });
+    giveReason();
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/payment-requests/r1', { amount: '1000', currency: 'INR', description: '', supplierId: 's1' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const { body } = sentEdit();
+    expect(body.removeFileIds).toBe('["f1"]');
+    expect((body.bill as File).name).toBe('invoice.pdf');
   });
 });
 

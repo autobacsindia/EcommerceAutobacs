@@ -132,9 +132,11 @@ router.get('/:id/files/:fileId', asyncHandler(async (req, res) => {
   res.send(buffer);
 }));
 
-// PUT /payment-requests/:id { amount?, description?, category?, payee? | supplierId? } — correct it
-router.put('/:id', asyncHandler(async (req, res) => {
-  res.json({ success: true, request: await pr.update(req.user, req.params.id, req.body, req) });
+// PUT /payment-requests/:id — JSON or multipart: reason, rev?, formKey?, amount?, description?, category?,
+//   payee(JSON)? | supplierId?, removeFileIds(JSON)?, bill, qr — correct it before accounts approves
+router.put('/:id', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
+  const body = { ...req.body, ...(req.body.payee != null ? { payee: json(req.body.payee, undefined) } : {}) };
+  res.json({ success: true, request: await pr.update(req.user, req.params.id, body, req.files || {}, req) });
 }));
 
 router.post('/:id/approve', asyncHandler(async (req, res) => {

@@ -252,26 +252,26 @@ describe('Expense options per team, and foreign-currency bills', () => {
 
     it('can be corrected without changing the category; changing it applies the team’s list', async () => {
       const id = await oldRecord(procurement);
-      const fixed = await procurement.session.put(`/payment-requests/${id}`, { amount: 850, description: 'Diesel for the van, 2 trips', category: 'fuel' });
+      const fixed = await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", amount: 850, description: 'Diesel for the van, 2 trips', category: 'fuel' });
       expect(fixed.status).toBe(200);
       expect(fixed.body.request).toMatchObject({ category: 'fuel', amount: 850, currency: 'INR' });
 
-      expect((await procurement.session.put(`/payment-requests/${id}`, { category: 'travel' })).status).toBe(400);
-      const moved = await procurement.session.put(`/payment-requests/${id}`, { category: 'import_purchase' });
+      expect((await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", category: 'travel' })).status).toBe(400);
+      const moved = await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", category: 'import_purchase' });
       expect(moved.status).toBe(200);
       expect(moved.body.request.category).toBe('import_purchase');
-      expect(moved.body.request.history.at(-1).note).toMatch(/for Fuel → Import purchase/);
+      expect(moved.body.request.history.at(-1).note).toMatch(/What for: Fuel → Import purchase/);
       // Once moved off the old value, it cannot be moved back onto it.
-      expect((await procurement.session.put(`/payment-requests/${id}`, { category: 'fuel' })).status).toBe(400);
+      expect((await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", category: 'fuel' })).status).toBe(400);
     });
 
     it('an edit cannot blank the details where they are required', async () => {
       const raised = (await expense(marketing.session, { category: 'tools', description: 'Figma seats' })).body.request;
-      expect((await marketing.session.put(`/payment-requests/${raised.id}`, { description: '' })).status).toBe(400);
-      expect((await marketing.session.put(`/payment-requests/${raised.id}`, { category: 'claude', description: '' })).status).toBe(200);
+      expect((await marketing.session.put(`/payment-requests/${raised.id}`, { reason: "Correction", description: '' })).status).toBe(400);
+      expect((await marketing.session.put(`/payment-requests/${raised.id}`, { reason: "Correction", category: 'claude', description: '' })).status).toBe(200);
       const plain = (await expense(ops.session, { category: 'fuel' })).body.request;
-      expect((await ops.session.put(`/payment-requests/${plain.id}`, { category: 'other' })).status).toBe(400);
-      expect((await ops.session.put(`/payment-requests/${plain.id}`, { category: 'other', description: 'Parking fee' })).status).toBe(200);
+      expect((await ops.session.put(`/payment-requests/${plain.id}`, { reason: "Correction", category: 'other' })).status).toBe(400);
+      expect((await ops.session.put(`/payment-requests/${plain.id}`, { reason: "Correction", category: 'other', description: 'Parking fee' })).status).toBe(200);
     });
   });
 
@@ -421,31 +421,32 @@ describe('Expense options per team, and foreign-currency bills', () => {
       expect((await admin.session.get('/payment-requests?q=22950')).body.requests.map((r) => r.id)).toEqual([thbId]);
     });
 
-    it('editing the bill amount keeps it in baht, and sends an approved one back to accounts', async () => {
+    it('editing the bill amount keeps it in baht; an approved one is locked', async () => {
       const id = (await thb()).body.request.id;
-      await accounts.session.post(`/payment-requests/${id}/approve`);
-      const res = await admin.session.put(`/payment-requests/${id}`, { foreignAmount: 23000 });
+      const res = await admin.session.put(`/payment-requests/${id}`, { reason: "Correction", foreignAmount: 23000 });
       expect(res.status).toBe(200);
       expect(res.body.request).toMatchObject({ amount: 0, foreignAmount: 23000, status: 'submitted' });
-      expect(res.body.request.history.at(-1).note).toMatch(/bill THB 22,950 → THB 23,000.*back to accounts/);
+      expect(res.body.request.history.at(-1).note).toMatch(/Bill: THB 22,950 → THB 23,000/);
       expect(res.body.request.history.at(-1).note).not.toMatch(/amount ₹/);
 
       // A rupee figure alone cannot override a foreign bill...
-      expect((await procurement.session.put(`/payment-requests/${id}`, { amount: 100 })).status).toBe(400);
+      expect((await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", amount: 100 })).status).toBe(400);
       // ...but the bill can be switched to rupees, with the rupees given.
-      const inr = await procurement.session.put(`/payment-requests/${id}`, { currency: 'INR', amount: 24800 });
+      const inr = await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", currency: 'INR', amount: 24800 });
       expect(inr.body.request).toMatchObject({ amount: 24800, currency: 'INR', foreignAmount: null, fxRate: null, rupeesPending: false });
+      await accounts.session.post(`/payment-requests/${id}/approve`);
+      expect((await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", currency: 'INR', amount: 1 })).status).toBe(403);
     });
 
     it('an older rated request keeps its rate through an edit that leaves the bill alone', async () => {
       const id = await rated();
-      const same = await procurement.session.put(`/payment-requests/${id}`, { currency: 'THB', foreignAmount: 10000, fxRate: 9, description: 'Bumpers, invoice 77' });
+      const same = await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", currency: 'THB', foreignAmount: 10000, fxRate: 9, description: 'Bumpers, invoice 77' });
       expect(same.status).toBe(200);
       expect(same.body.request).toMatchObject({ amount: 24500, fxRate: 2.45, description: 'Bumpers, invoice 77' });
       // Changing the bill drops the quote: the rupees now come from the bank at payment.
-      const changed = await procurement.session.put(`/payment-requests/${id}`, { foreignAmount: 12000 });
+      const changed = await procurement.session.put(`/payment-requests/${id}`, { reason: "Correction", foreignAmount: 12000 });
       expect(changed.body.request).toMatchObject({ amount: 0, fxRate: null, foreignAmount: 12000, rupeesPending: true });
-      expect(changed.body.request.history.at(-1).note).toMatch(/bill THB 10,000 @ ₹2\.45 → THB 12,000/);
+      expect(changed.body.request.history.at(-1).note).toMatch(/Bill: THB 10,000 @ ₹2\.45 → THB 12,000/);
     });
 
     describe('paid from a foreign-currency account (e.g. HR\'s Thai bank account)', () => {

@@ -329,39 +329,54 @@ describe('Supplier deals — advance and balance', () => {
 
   it('editing a part\'s amount keeps the total honest', async () => {
     const { deal, adv } = await withDeal();
-    expect((await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 30000 })).status).toBe(409);
-    const ok = await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 29000 });
+    expect((await procurement.session.put(`/payment-requests/${adv.id}`, { reason: "Correction", amount: 30000 })).status).toBe(409);
+    const ok = await procurement.session.put(`/payment-requests/${adv.id}`, { reason: "Correction", amount: 29000 });
     expect(ok.status).toBe(200);
     // The whole agreed total in one payment: "Full payment", not a "Balance".
     expect(ok.body.request.part).toBe('full');
     expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(2900000);
-    const down = await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 8000 });
+    const down = await procurement.session.put(`/payment-requests/${adv.id}`, { reason: "Correction", amount: 8000 });
     expect(down.body.request.part).toBe('advance');
     expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(800000);
     // A deal part stays in the deal's currency.
-    expect((await procurement.session.put(`/payment-requests/${adv.id}`, { currency: 'THB', amount: 8000 })).status).toBe(400);
+    expect((await procurement.session.put(`/payment-requests/${adv.id}`, { reason: "Correction", currency: 'THB', amount: 8000 })).status).toBe(400);
   });
 
-  it('whoever raised it can edit until it is paid; a money change after approval goes back to accounts', async () => {
-    const { adv } = await withDeal();
-    expect((await accounts.session.post(`/payment-requests/${adv.id}/approve`)).status).toBe(200);
-    // Wording only: stays approved.
-    const words = await procurement.session.put(`/payment-requests/${adv.id}`, { description: 'Advance — powder coating included' });
-    expect(words.status).toBe(200);
-    expect(words.body.request.status).toBe('approved');
-    // Money: back to accounts, kept in the history (old → new).
-    const money = await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 12000 });
+  it('whoever raised it can edit while it waits; an on-hold part goes back to accounts; approved and paid are locked', async () => {
+    const { deal, adv } = await withDeal();
+    // Waiting: a money change stays waiting, kept in the history (old → new).
+    const money = await procurement.session.put(`/payment-requests/${adv.id}`, { reason: 'Supplier revised the quote', amount: 12000 });
     expect(money.status).toBe(200);
     expect(money.body.request.status).toBe('submitted');
-    expect(money.body.request.history.at(-1).note).toMatch(/amount ₹10,000 → ₹12,000 — back to accounts to approve again/);
+    expect(money.body.request.history.at(-1).note).toMatch(/Amount: ₹10,000 → ₹12,000/);
+    expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(1200000);
     // Someone else on another team cannot.
-    expect((await ops.session.put(`/payment-requests/${adv.id}`, { amount: 9000 })).status).toBe(404);
+    expect((await ops.session.put(`/payment-requests/${adv.id}`, { reason: "Correction", amount: 9000 })).status).toBe(404);
+    // Approved: locked.
+    expect((await accounts.session.post(`/payment-requests/${adv.id}/approve`)).status).toBe(200);
+    const approved = await procurement.session.put(`/payment-requests/${adv.id}`, { reason: "Correction", description: 'Advance — powder coating included' });
+    expect(approved.status).toBe(403);
+    expect(approved.body.message).toMatch(/approved this payment/);
+    // On hold: editable, and back to accounts.
+    await accounts.session.post(`/payment-requests/${adv.id}/hold`, { note: 'Which invoice is this?' });
+    const held = await procurement.session.put(`/payment-requests/${adv.id}`, { reason: 'Invoice 88 attached', amount: 11000 });
+    expect(held.status).toBe(200);
+    expect(held.body.request.status).toBe('submitted');
+    expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(1100000);
     // Paid: locked.
     await accounts.session.post(`/payment-requests/${adv.id}/approve`);
     await admin.session.form(`/payment-requests/${adv.id}/pay`, { method: 'bank', reference: 'UTR9' });
-    const locked = await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 5000 });
+    const locked = await procurement.session.put(`/payment-requests/${adv.id}`, { reason: "Correction", amount: 5000 });
     expect(locked.status).toBe(403);
-    expect(locked.body.message).toMatch(/paid, declined or cancelled request cannot be edited/);
+    expect(locked.body.message).toMatch(/paid or cancelled payment cannot be edited/);
+  });
+
+  it('a declined deal part cannot be sent again — its share of the total was given back', async () => {
+    const { adv } = await withDeal();
+    await accounts.session.post(`/payment-requests/${adv.id}/decline`, { note: 'Wrong amount' });
+    const got = await procurement.session.get(`/payment-requests/${adv.id}`);
+    expect(got.body.request.can.edit).toBe(false);
+    expect((await procurement.session.put(`/payment-requests/${adv.id}`, { reason: 'Fixed', amount: 9000 })).status).toBe(409);
   });
 
   it('who sets it up, and what it refuses', async () => {

@@ -140,12 +140,12 @@ describe('Payment race guards', () => {
 
     // Regression: an edit after the admin opened the request was recorded as paid with the new figures.
     it('the amount changed after opening: Pay is refused, nothing is paid; with the new version it pays', async () => {
+      // Still waiting for accounts (the admin may pay a waiting one; an approved one is locked to edits).
       const r = (await expense(ops.session)).body.request;
-      await accounts.session.post(`/payment-requests/${r.id}/approve`, {});
       const seen = (await admin.session.get(`/payment-requests/${r.id}`)).body.request;
       expect(seen.payVersion).toMatch(/^[a-f0-9]{20}$/);
-      // The requester raises the amount meanwhile (it goes back to accounts — the admin may still pay a waiting one).
-      const edited = await ops.session.put(`/payment-requests/${r.id}`, { amount: 9999 });
+      // The requester raises the amount meanwhile.
+      const edited = await ops.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 9999 });
       expect(edited.status).toBe(200);
 
       const stale = await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'upi', reference: 'UTR1', payVersion: seen.payVersion }, proof);
@@ -166,7 +166,7 @@ describe('Payment race guards', () => {
       const seen = (await admin.session.get(`/payment-requests/${r.id}`)).body.request;
       await ops.session.post(`/payment-requests/${r.id}/links`, { reference: 'INV-1' });
       expect((await admin.session.get(`/payment-requests/${r.id}`)).body.request.payVersion).toBe(seen.payVersion);
-      await ops.session.put(`/payment-requests/${r.id}`, { payee: { ...BANK, accountNumber: '999988887777' } });
+      await ops.session.put(`/payment-requests/${r.id}`, { reason: "Correction", payee: { ...BANK, accountNumber: '999988887777' } });
       const stale = await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'bank', reference: 'UTR2', payVersion: seen.payVersion }, proof);
       expect(stale.status).toBe(409);
     });
