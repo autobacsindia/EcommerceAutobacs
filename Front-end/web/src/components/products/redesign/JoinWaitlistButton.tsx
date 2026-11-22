@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { isValidIndianMobile } from '@/lib/utils';
 
 interface MineResponse {
   success: boolean;
@@ -21,7 +22,8 @@ interface MineResponse {
  *
  * Joining seeds a warm CRM lead (source `backorder_waitlist`) and surfaces the
  * shopper under the admin Stock Requests → "On backorder" list. Unlike restock,
- * there is NO automatic email — sales follow up manually. `variantId` scopes the
+ * there is NO automatic email — sales follow up by PHONE, so joining asks for an
+ * Indian mobile number (required; the server validates it again). `variantId` scopes the
  * signup to the exact model on a variable product (null for a simple one).
  */
 export default function JoinWaitlistButton({
@@ -40,6 +42,10 @@ export default function JoinWaitlistButton({
   const [loading, setLoading] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const joined = requestId !== null;
+  // The phone step: the first press opens it, the second submits.
+  const [asking, setAsking] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
 
   // Resolve the caller's pending waitlist request id for THIS exact target
   // (variant-aware), or null if none. Scoped to the backorder list via `kind`.
@@ -76,21 +82,32 @@ export default function JoinWaitlistButton({
       router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
       return;
     }
+    if (!asking) {
+      setAsking(true);
+      return;
+    }
+    if (!isValidIndianMobile(phone)) {
+      setPhoneError('Enter a valid 10-digit mobile number');
+      return;
+    }
+    setPhoneError('');
     setLoading(true);
     try {
+      // The number goes in the POST body only — never a URL, never logged.
       const res = await apiClient.post<{ success: boolean; request?: { _id: string } }>(
         API_ENDPOINTS.JOIN_WAITLIST(productId),
-        { variantId: variantId ?? undefined }
+        { variantId: variantId ?? undefined, phone: `+91${phone.replace(/\D/g, '').slice(-10)}` }
       );
       const id = res.request?._id ?? (await findMyRequestId());
       setRequestId(id);
-      toast.success("You're on the waiting list — our team will reach out about availability.");
+      setAsking(false);
+      toast.success("You're on the waiting list — our team will call you about availability.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not add you to the list. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, productId, variantId, router, pathname, findMyRequestId]);
+  }, [isAuthenticated, asking, phone, productId, variantId, router, pathname, findMyRequestId]);
 
   const leave = useCallback(async () => {
     setLoading(true);
@@ -121,6 +138,46 @@ export default function JoinWaitlistButton({
           {loading ? 'Updating…' : 'Leave the list'}
         </button>
       </div>
+    );
+  }
+
+  if (asking) {
+    return (
+      <form
+        className={`flex flex-col gap-2 ${className}`}
+        onSubmit={(e) => { e.preventDefault(); void join(); }}
+        noValidate
+      >
+        <label htmlFor="waitlist-phone" className="text-[13px] font-semibold text-ink">
+          Your mobile number — our team will call you when it&apos;s available
+        </label>
+        <div className={`flex items-center overflow-hidden rounded-full border bg-white ${phoneError ? 'border-red-500' : 'border-ink/20 focus-within:border-gold'}`}>
+          <span className="pl-5 pr-2 text-[15px] text-ink-muted" aria-hidden>+91</span>
+          <input
+            id="waitlist-phone"
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel-national"
+            required
+            maxLength={14}
+            placeholder="98765 43210"
+            value={phone}
+            onChange={(e) => { setPhone(e.target.value); if (phoneError) setPhoneError(''); }}
+            aria-invalid={phoneError ? true : undefined}
+            aria-describedby={phoneError ? 'waitlist-phone-error' : undefined}
+            className="min-w-0 flex-1 bg-transparent py-3.5 pr-5 text-[15px] text-ink outline-none"
+          />
+        </div>
+        {phoneError && <p id="waitlist-phone-error" role="alert" className="text-[12px] text-red-600">{phoneError}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex items-center justify-center gap-3 rounded-full bg-gold py-4 font-display text-[15px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
+          {loading ? 'One moment…' : 'Join the waiting list'}
+        </button>
+      </form>
     );
   }
 

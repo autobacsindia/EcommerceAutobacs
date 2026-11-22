@@ -4,6 +4,7 @@ import stockNotificationRequestRepository from "../repositories/stockNotificatio
 import leadRepository from "../repositories/leadRepository.js";
 import leadSyncService from "../services/leadSyncService.js";
 import { STOCK_STATUS } from "../utils/stockStatus.js";
+import { toE164India } from "../utils/identity.js";
 
 /**
  * Controllers for the back-in-stock ("Notify me") feature.
@@ -38,7 +39,7 @@ function resolveTarget(product, rawVariantId) {
  * hook (used by the waitlist path to seed a CRM lead). Returns nothing — it owns
  * the HTTP response.
  */
-async function createInterestRequest(req, res, { kind, requiredStatus, notEligible, afterUpsert }) {
+async function createInterestRequest(req, res, { kind, requiredStatus, notEligible, afterUpsert, phone = null }) {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ success: false, message: 'Invalid product id' });
@@ -65,9 +66,12 @@ async function createInterestRequest(req, res, { kind, requiredStatus, notEligib
   const filter = { product: id, variantId: target.variantId, user: req.user._id, kind, status: 'pending' };
   let request, created;
   try {
+    // A number the shopper typed (waitlist form) wins over the account's, and is
+    // written even onto an existing pending row that has none or an old one.
     ({ request, created } = await stockNotificationRequestRepository.upsertPending(filter, {
       email: req.user.email,
-      phone: req.user.phone,
+      phone: phone || req.user.phone,
+      phoneTyped: Boolean(phone),
     }));
   } catch (err) {
     if (err.code === 11000) {
@@ -110,7 +114,19 @@ export async function createNotifyRequest(req, res) {
 //          (idempotent) and surface them in the Sales CRM as a warm lead.
 // @access  Private
 export async function createWaitlistRequest(req, res) {
+  // Sales phones every waitlister, so a number is required: the one typed on the
+  // PDP form (Indian mobile, stored +91…), or — for an older client that sends
+  // none — the account's own. Never logged, never echoed back in a URL.
+  const typed = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+  const phone = typed ? toE164India(typed) : null;
+  if (typed && !phone) {
+    return res.status(400).json({ success: false, code: 'INVALID_PHONE', message: 'Enter a valid 10-digit Indian mobile number.' });
+  }
+  if (!phone && !req.user.phone) {
+    return res.status(400).json({ success: false, code: 'PHONE_REQUIRED', message: 'Add your mobile number so our team can call you.' });
+  }
   return createInterestRequest(req, res, {
+    phone,
     kind: 'backorder',
     requiredStatus: STOCK_STATUS.BACKORDER,
     notEligible: { code: 'NOT_ON_BACKORDER', message: 'This item is not on backorder.' },
@@ -120,7 +136,7 @@ export async function createWaitlistRequest(req, res) {
         : null;
       // Best-effort CRM seed — a sync failure must not break the signup.
       await leadSyncService.safeSync(() =>
-        leadSyncService.upsertFromWaitlist({ request, user: req.user, product, variantLabel })
+        leadSyncService.upsertFromWaitlist({ request, user: req.user, product, variantLabel, phone })
       );
     },
   });

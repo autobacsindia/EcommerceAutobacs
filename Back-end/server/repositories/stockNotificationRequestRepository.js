@@ -57,13 +57,19 @@ class StockNotificationRequestRepository extends BaseRepository {
    * a fresh insert from an existing match.
    *
    * `contact` ({ email, phone }) is snapshotted on INSERT only, via $setOnInsert
-   * — a repeat signup must not rewrite the original row.
+   * — a repeat signup must not rewrite the original row. The one exception is a
+   * number the shopper typed (`phoneTyped`), which is always written.
    */
   async upsertPending(filter, contact = {}) {
-    const { email, phone } = contact;
+    const { email, phone, phoneTyped = false } = contact;
+    // A typed number is the shopper's own answer to "how do we reach you", so it
+    // updates an existing pending row; the account's number only seeds a new one.
+    const update = phoneTyped
+      ? { $setOnInsert: { ...filter, email, source: 'pdp' }, $set: { phone } }
+      : { $setOnInsert: { ...filter, email, phone, source: 'pdp' } };
     const res = await this.model.findOneAndUpdate(
       filter,
-      { $setOnInsert: { ...filter, email, phone, source: 'pdp' } },
+      update,
       { new: true, upsert: true, setDefaultsOnInsert: true, includeResultMetadata: true }
     );
     return { request: res.value, created: !res.lastErrorObject?.updatedExisting };

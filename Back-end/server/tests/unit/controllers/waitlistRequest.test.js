@@ -245,3 +245,62 @@ describe('admin list — kind filter + contacted join', () => {
     expect(requester.leadStatus).toBe('new');
   });
 });
+
+describe('createWaitlistRequest — phone number (sales calls every waitlister)', () => {
+  const join = async (p, u, body) => {
+    const res = mockRes();
+    await controller.createWaitlistRequest({ params: { id: p._id.toString() }, body, user: u }, res);
+    return res;
+  };
+
+  test('a typed Indian mobile is stored as +91…, on the request and the lead', async () => {
+    const p = await simple('backorder');
+    const u = { ...user(), phone: undefined }; // e.g. a Google sign-up with no number
+    const res = await join(p, u, { phone: '098765 43211' });
+    expect(res.statusCode).toBe(201);
+
+    const row = await StockNotificationRequest.findOne({ product: p._id, kind: 'backorder' });
+    expect(row.phone).toBe('+919876543211');
+    const lead = await Lead.findOne({ email: u.email });
+    expect(lead.phone).toBe('9876543211');
+  });
+
+  test('no number typed and none on the account → 400, nothing saved', async () => {
+    const p = await simple('backorder');
+    const u = { ...user(), phone: undefined };
+    const res = await join(p, u, {});
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe('PHONE_REQUIRED');
+    expect(await StockNotificationRequest.countDocuments({ product: p._id })).toBe(0);
+    expect(await Lead.countDocuments({ email: u.email })).toBe(0);
+  });
+
+  test.each(['12345', '5876543210', '+1 415 555 0100', '98765432101'])('rejects %s with 400', async (bad) => {
+    const p = await simple('backorder');
+    const res = await join(p, user(), { phone: bad });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe('INVALID_PHONE');
+    expect(res.body.message).not.toContain(bad); // never echo the number back
+    expect(await StockNotificationRequest.countDocuments({ product: p._id })).toBe(0);
+  });
+
+  test('an older client that sends no phone still works with the account number', async () => {
+    const p = await simple('backorder');
+    const u = user();
+    const res = await join(p, u, {});
+    expect(res.statusCode).toBe(201);
+    expect((await StockNotificationRequest.findOne({ product: p._id })).phone).toBe(u.phone);
+  });
+
+  test('typing a number on an existing entry with none adds it (still one row)', async () => {
+    const p = await simple('backorder');
+    const u = user();
+    // A legacy pending row with no phone.
+    await StockNotificationRequest.create({ product: p._id, variantId: null, user: u._id, email: u.email, kind: 'backorder' });
+    const res = await join(p, u, { phone: '+91 91234 56789' });
+    expect(res.statusCode).toBe(200);
+    const rows = await StockNotificationRequest.find({ product: p._id, kind: 'backorder' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].phone).toBe('+919123456789');
+  });
+});
