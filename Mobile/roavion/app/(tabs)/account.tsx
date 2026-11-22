@@ -5,13 +5,13 @@
  * Signed out, it is a short invitation to sign in rather than a wall of
  * disabled rows.
  */
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Card, T } from '../../src/components/ui';
-import { colors, font, radius, shadow, spacing } from '../../src/theme';
+import { colors, elevation, font, radius, spacing, type } from '../../src/theme';
+import { GlassChip, Overline, PremiumButton, PressScale, Shimmer, Stripes } from '../../src/ui';
 import { useApp } from '../../src/store';
 
 const SITE = (Constants.expoConfig?.extra as { siteUrl?: string } | undefined)?.siteUrl ?? 'https://www.autobacsindia.com';
@@ -31,17 +31,20 @@ function RowList({ title, rows }: { title: string; rows: Row[] }) {
       <Text style={s.groupTitle}>{title}</Text>
       <View style={s.group}>
         {rows.map((r, i) => (
-          <Pressable
+          <PressScale
             key={r.label}
             onPress={r.onPress}
+            haptic="selection"
+            scaleTo={0.985}
             style={[s.row, i < rows.length - 1 && s.rowBorder]}
-            accessibilityRole="button"
             accessibilityLabel={r.label}
           >
-            <Ionicons name={r.icon} size={19} color={r.danger ? colors.red : colors.ink2} />
-            <Text style={[s.rowLabel, r.danger && { color: colors.red }]}>{r.label}</Text>
-            <Ionicons name="chevron-forward" size={17} color={colors.line} />
-          </Pressable>
+            <View style={[s.rowIcon, r.danger && { backgroundColor: colors.redSoft }]}>
+              <Ionicons name={r.icon} size={18} color={r.danger ? colors.red : colors.green} />
+            </View>
+            <Text style={[s.rowLabel, r.danger && { color: colors.red }]} numberOfLines={1}>{r.label}</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.chrome} />
+          </PressScale>
         ))}
       </View>
     </View>
@@ -83,42 +86,58 @@ export default function AccountScreen() {
       ],
     );
 
+  const initial = customer?.name?.trim().slice(0, 1).toUpperCase() || 'A';
+
   return (
     <View style={s.screen}>
-      <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Text style={s.title}>Account</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
-        {customer ? (
-          <Card>
-            <View style={s.identity}>
+      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
+        {/* Avatar header — carbon band with the brand stripes. */}
+        <View style={[s.hero, { paddingTop: insets.top + spacing.lg }]}>
+          <View style={s.heroStripes} pointerEvents="none">
+            <Stripes width={44} height={120} gap={10} onDark />
+          </View>
+          <Overline onDark>{customer ? 'My account' : 'Welcome'}</Overline>
+          {customer === undefined ? (
+            <View style={[s.identity, { marginTop: spacing.lg }]}>
+              <Shimmer width={64} height={64} radius={32} dark />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Shimmer width="60%" height={16} dark />
+                <Shimmer width="80%" height={12} dark />
+              </View>
+            </View>
+          ) : customer ? (
+            <View style={[s.identity, { marginTop: spacing.lg }]}>
               <View style={s.avatar}>
-                <Text style={s.avatarText}>{customer.name.slice(0, 1).toUpperCase() || 'R'}</Text>
+                <Text style={s.avatarText}>{initial}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <T kind="h3">{customer.name || 'Autobacs customer'}</T>
-                <T kind="small">{customer.email}</T>
-                {garage && <T kind="small">Garage: {garage.make}{garage.model ? ` ${garage.model}` : ''}</T>}
+                <Text style={s.name} numberOfLines={1}>{customer.name || 'Autobacs customer'}</Text>
+                <Text style={s.email} numberOfLines={1}>{customer.email}</Text>
               </View>
             </View>
-          </Card>
-        ) : (
-          <Card>
-            <T kind="h3">Sign in to Autobacs</T>
-            <T kind="small" style={{ marginTop: 4 }}>
-              Track orders, save your car and check out faster.
-            </T>
-            <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
-              <Button label="Sign in" onPress={() => router.push('/login')} style={{ flex: 1 }} />
-              <Button label="Register" onPress={() => router.push('/register')} variant="outline" style={{ flex: 1 }} />
+          ) : (
+            <View style={{ marginTop: spacing.sm }}>
+              <Text style={s.name}>Sign in to Autobacs</Text>
+              <Text style={[s.email, { marginTop: 4 }]}>Track orders, save your car and check out faster.</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
+                <PremiumButton label="Sign in" variant="light" onPress={() => router.push('/login')} style={{ flex: 1 }} />
+                <PremiumButton label="Register" variant="outlineLight" onPress={() => router.push('/register')} style={{ flex: 1 }} />
+              </View>
             </View>
-          </Card>
-        )}
+          )}
+          <GlassChip
+            icon="car-sport-outline"
+            label={garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : 'Add your car'}
+            action={garage ? 'Change' : undefined}
+            onPress={() => router.push('/garage')}
+            style={{ marginTop: spacing.lg, alignSelf: 'flex-start' }}
+          />
+        </View>
 
+        <View style={{ paddingHorizontal: spacing.lg }}>
         {customer && (
           <RowList
-            title="ORDERS"
+            title="Orders"
             rows={[
               { icon: 'receipt-outline', label: 'My orders', onPress: () => router.push('/orders') },
               { icon: 'repeat-outline', label: 'Returns', onPress: () => open(`${SITE}/returns`) },
@@ -127,7 +146,7 @@ export default function AccountScreen() {
         )}
 
         <RowList
-          title="MY STUFF"
+          title="My stuff"
           rows={[
             { icon: 'film-outline', label: 'My reels', onPress: () => router.push(customer ? '/reels/mine' : '/login?next=/reels/mine') },
             {
@@ -139,7 +158,7 @@ export default function AccountScreen() {
         />
 
         <RowList
-          title="HELP"
+          title="Help"
           rows={[
             { icon: 'call-outline', label: 'Call us', onPress: () => open(`tel:${SUPPORT_PHONE}`) },
             { icon: 'logo-whatsapp', label: 'WhatsApp a specialist', onPress: () => open(`https://wa.me/${SUPPORT_PHONE.replace('+', '')}`) },
@@ -149,7 +168,7 @@ export default function AccountScreen() {
         />
 
         <RowList
-          title="ABOUT"
+          title="About"
           rows={[
             { icon: 'shield-outline', label: 'Privacy policy', onPress: () => open(`${SITE}/privacy`) },
             { icon: 'document-text-outline', label: 'Terms and conditions', onPress: () => open(`${SITE}/terms`) },
@@ -160,7 +179,7 @@ export default function AccountScreen() {
 
         {customer && (
           <RowList
-            title="ACCOUNT"
+            title="Account"
             rows={[
               { icon: 'log-out-outline', label: 'Sign out', onPress: confirmSignOut },
               { icon: 'trash-outline', label: 'Delete my account', onPress: requestDeletion, danger: true },
@@ -168,7 +187,8 @@ export default function AccountScreen() {
           />
         )}
 
-        <Text style={s.version}>Autobacs v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+          <Text style={s.version}>Autobacs v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -176,18 +196,27 @@ export default function AccountScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.line },
-  title: { fontFamily: font.heading, fontSize: 22, letterSpacing: -0.2, color: colors.ink },
 
-  identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  avatar: { width: 50, height: 50, borderRadius: radius.pill, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontFamily: font.bold, fontSize: 20, color: colors.green },
+  hero: {
+    backgroundColor: colors.carbon, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl,
+    borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, overflow: 'hidden',
+  },
+  heroStripes: { position: 'absolute', right: spacing.lg, top: 28, opacity: 0.18 },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  avatar: {
+    width: 64, height: 64, borderRadius: 32, backgroundColor: colors.green,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.onDarkFaint,
+  },
+  avatarText: { fontFamily: font.extrabold, fontSize: 26, color: colors.white },
+  name: { ...type.h1, color: colors.white },
+  email: { ...type.small, color: colors.onDarkMuted },
 
-  groupTitle: { fontFamily: font.semibold, fontSize: 11, color: colors.muted, letterSpacing: 1, marginBottom: spacing.sm, marginLeft: 4 },
-  group: { backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden', ...shadow.card },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
-  rowLabel: { flex: 1, fontFamily: font.medium, fontSize: 14.5, color: colors.ink },
+  groupTitle: { ...type.overline, color: colors.muted, marginBottom: spacing.sm, marginLeft: 4 },
+  group: { backgroundColor: colors.white, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', ...elevation.e1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 56 },
+  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  rowIcon: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.greenFaint, alignItems: 'center', justifyContent: 'center' },
+  rowLabel: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink },
 
-  version: { fontFamily: font.regular, fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: spacing.xl },
+  version: { ...type.caption, color: colors.muted, textAlign: 'center', marginTop: spacing.xl },
 });

@@ -3,10 +3,11 @@
  * password, and a phone number for delivery updates.
  */
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, T } from '../src/components/ui';
-import { colors, font, radius, spacing } from '../src/theme';
+import { colors, font, spacing, type } from '../src/theme';
+import { PremiumButton, PressScale } from '../src/ui';
+import { AuthShell, Field, FormMessage } from '../src/account/AuthShell';
 import { useApp } from '../src/store';
 
 export default function RegisterScreen() {
@@ -38,68 +39,39 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
-        <T kind="h1">Create your account</T>
-        <T kind="small" style={{ marginTop: 4, marginBottom: spacing.xl }}>
-          It takes a minute, and your cart comes with you.
-        </T>
+    <AuthShell title="Create your account" subtitle="It takes a minute, and your cart comes with you.">
+      <Field label="Full name" icon="person-outline" value={name} onChangeText={setName} placeholder="e.g. Rahul Sharma"
+        autoCapitalize="words" autoComplete="name" accessibilityLabel="Full name" />
 
-        <Text style={s.label}>Full name</Text>
-        <TextInput value={name} onChangeText={setName} style={s.input} placeholder="e.g. Rahul Sharma"
-          placeholderTextColor={colors.muted} autoCapitalize="words" autoComplete="name" accessibilityLabel="Full name" />
+      <Field label="Email" icon="mail-outline" value={email} onChangeText={setEmail} placeholder="you@example.com"
+        keyboardType="email-address" autoCapitalize="none" autoComplete="email" accessibilityLabel="Email" />
 
-        <Text style={s.label}>Email</Text>
-        <TextInput value={email} onChangeText={setEmail} style={s.input} placeholder="you@example.com"
-          placeholderTextColor={colors.muted} keyboardType="email-address" autoCapitalize="none"
-          autoComplete="email" accessibilityLabel="Email" />
+      <Field label="Mobile number (optional)" icon="call-outline" value={phone} onChangeText={setPhone} placeholder="10-digit mobile number"
+        keyboardType="phone-pad" maxLength={16} accessibilityLabel="Mobile number" />
 
-        <Text style={s.label}>Mobile number (optional)</Text>
-        <TextInput value={phone} onChangeText={setPhone} style={s.input} placeholder="10-digit mobile number"
-          placeholderTextColor={colors.muted} keyboardType="phone-pad" maxLength={16} accessibilityLabel="Mobile number" />
+      <Field label="Password" icon="lock-closed-outline" value={password} onChangeText={setPassword}
+        placeholder="At least 8 characters" secureTextEntry={!show} secureToggle={{ shown: show, onToggle: () => setShow((v) => !v) }}
+        autoCapitalize="none" autoComplete="new-password" accessibilityLabel="Password" />
 
-        <Text style={s.label}>Password</Text>
-        <View style={s.passwordRow}>
-          <TextInput value={password} onChangeText={setPassword} style={[s.input, { flex: 1, marginBottom: 0 }]}
-            placeholder="At least 8 characters" placeholderTextColor={colors.muted} secureTextEntry={!show}
-            autoCapitalize="none" autoComplete="new-password" accessibilityLabel="Password" />
-          <Pressable onPress={() => setShow((v) => !v)} style={s.showBtn} accessibilityRole="button">
-            <Text style={s.showText}>{show ? 'Hide' : 'Show'}</Text>
-          </Pressable>
-        </View>
+      <FormMessage text={error} tone="error" />
 
-        {!!error && <Text style={s.error}>{error}</Text>}
+      <PremiumButton label="Create account" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
 
-        <Button label="Create account" onPress={submit} loading={busy} full style={{ marginTop: spacing.lg }} />
+      <Text style={s.legal}>By continuing you agree to our Terms and Privacy Policy.</Text>
 
-        <T kind="tiny" style={{ textAlign: 'center', marginTop: spacing.md }}>
-          By continuing you agree to our Terms and Privacy Policy.
-        </T>
-
-        <View style={s.footer}>
-          <T kind="small">Already have an account?</T>
-          <Pressable onPress={() => router.replace('/login')} accessibilityRole="button">
-            <Text style={s.linkText}>Sign in</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={s.footer}>
+        <Text style={s.footText}>Already have an account?</Text>
+        <PressScale onPress={() => router.replace('/login')} accessibilityLabel="Sign in">
+          <Text style={s.linkText}>Sign in</Text>
+        </PressScale>
+      </View>
+    </AuthShell>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  body: { padding: spacing.xl, paddingTop: spacing.xl },
-  label: { fontFamily: font.semibold, fontSize: 13, color: colors.ink2, marginBottom: 6 },
-  input: {
-    backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
-    paddingHorizontal: spacing.lg, height: 50, fontFamily: font.regular, fontSize: 15,
-    color: colors.ink, marginBottom: spacing.lg,
-  },
-  passwordRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
-  showBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.md },
-  showText: { fontFamily: font.semibold, fontSize: 13, color: colors.green },
-  error: { fontFamily: font.medium, fontSize: 13, color: colors.red, marginBottom: spacing.sm },
+  legal: { ...type.tiny, color: colors.muted, textAlign: 'center', marginTop: spacing.md },
   linkText: { fontFamily: font.semibold, fontSize: 14, color: colors.green },
   footer: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: spacing.xxl },
+  footText: { ...type.small, color: colors.muted },
 });
