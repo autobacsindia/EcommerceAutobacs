@@ -83,11 +83,11 @@ export function ListingToolbar({
       </Text>
       <View style={s.toolbarBtns}>
         <PressScale onPress={onToggleSort} haptic="selection" style={[s.pill, !!filters.sort && s.pillOn]} accessibilityLabel={`Sort: ${sortLabel ?? 'Relevance'}`}>
-          <Ionicons name="swap-vertical" size={15} color={filters.sort ? colors.white : colors.green} />
+          <Ionicons name="swap-vertical" size={15} color={colors.green} />
           <Text style={[s.pillText, !!filters.sort && s.pillTextOn]} numberOfLines={1}>{filters.sort ? sortLabel : 'Sort'}</Text>
         </PressScale>
         <PressScale onPress={onToggleFilter} haptic="selection" style={[s.pill, count > 0 && s.pillOn]} accessibilityLabel={count ? `Filter, ${count} on` : 'Filter'}>
-          <Ionicons name="options-outline" size={15} color={count > 0 ? colors.white : colors.green} />
+          <Ionicons name="options-outline" size={15} color={colors.green} />
           <Text style={[s.pillText, count > 0 && s.pillTextOn]}>Filter</Text>
           {count > 0 && (
             <View style={s.badge}>
@@ -328,19 +328,19 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
   },
-  pillOn: { borderColor: colors.green, backgroundColor: colors.green },
+  pillOn: { borderColor: colors.greenSoft, backgroundColor: colors.greenSoft },
   pillText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13, color: colors.ink },
-  pillTextOn: { fontFamily: font.bold, color: colors.white },
+  pillTextOn: { fontFamily: font.bold, color: colors.green },
   badge: {
     minWidth: 18,
     height: 18,
     paddingHorizontal: 4,
     borderRadius: 9,
-    backgroundColor: colors.white,
+    backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { fontFamily: font.bold, fontSize: 10, color: colors.green },
+  badgeText: { fontFamily: font.bold, fontSize: 10, color: colors.white },
 
   loading: { paddingVertical: spacing.xl, alignItems: 'center' },
   group: {
@@ -387,11 +387,11 @@ const s = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.card,
   },
-  choiceOn: { backgroundColor: colors.green, borderColor: colors.green },
+  choiceOn: { backgroundColor: colors.greenSoft, borderColor: colors.greenSoft },
   choiceText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
-  choiceTextOn: { fontFamily: font.bold, color: colors.white },
+  choiceTextOn: { fontFamily: font.bold, color: colors.green },
   choiceCount: { fontFamily: font.regular, fontSize: 12, color: colors.muted },
-  choiceCountOn: { color: colors.onDarkMuted },
+  choiceCountOn: { color: colors.greenMid },
 
   range: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   inputWrap: {

@@ -1,10 +1,11 @@
 /**
- * Reels on Home, Instagram-style:
+ * Reels on Home, WhatsApp "Status"-style (owner, 2026-11-22):
  *
- *   - `ReelStories`: a row of round creator avatars with a green ring, led by
- *     "Post" (your reel). Tap a creator → Reels opens at their latest reel.
- *     Team uploads (no named creator) show the round Autobacs badge as
- *     "Autobacs India".
+ *   - `ReelStories`: round creator avatars inside a green ring split into one
+ *     segment per reel (like WhatsApp's status ring), name below. Led by
+ *     "Post a reel" (the Autobacs badge with a green +, like "Add status").
+ *     Tap a creator → Reels opens at their latest reel. Team uploads (no
+ *     named creator) show the round Autobacs badge as "Autobacs India".
  *   - `ShopTheReel` (default): tall 9:16 reel cards; each opens Reels there.
  *
  * With no reels (the live server has none approved yet) or a feed error, the
@@ -14,7 +15,7 @@
  * Data is the live reels feed (or the mock when EXPO_PUBLIC_REELS_MOCK=1).
  * The price chip shows what the server sent — never computed here.
  */
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, type ReactNode } from 'react';
 import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -41,6 +42,8 @@ interface Story {
   avatarUrl: string | null;
   team: boolean;
   firstReelId: string | null;
+  /** Reels by this creator in the feed — one ring segment each. */
+  count: number;
 }
 
 function storiesFrom(reels: Reel[]): Story[] {
@@ -48,17 +51,22 @@ function storiesFrom(reels: Reel[]): Story[] {
   for (const r of reels) {
     const team = !r.creator.id;
     const key = team ? 'team' : (r.creator.id as string);
-    if (seen.has(key)) continue;
+    const prev = seen.get(key);
+    if (prev) {
+      prev.count += 1;
+      continue;
+    }
     seen.set(key, {
       key,
       name: team ? TEAM_NAME : r.creator.name,
       avatarUrl: team ? null : r.creator.avatarUrl,
       team,
       firstReelId: r.id,
+      count: 1,
     });
   }
   // Autobacs India always has a place in the row, even before it has a reel.
-  if (!seen.has('team')) seen.set('team', { key: 'team', name: TEAM_NAME, avatarUrl: null, team: true, firstReelId: null });
+  if (!seen.has('team')) seen.set('team', { key: 'team', name: TEAM_NAME, avatarUrl: null, team: true, firstReelId: null, count: 0 });
   const list = [...seen.values()];
   // Team first, then creators in feed order.
   return [...list.filter((x) => x.team), ...list.filter((x) => !x.team)].slice(0, 12);
@@ -70,6 +78,29 @@ function Avatar({ story }: { story: Story }) {
   return (
     <View style={[s.storyImg, s.storyInitial]}>
       <Text style={s.storyInitialText}>{story.name.slice(0, 1).toUpperCase()}</Text>
+    </View>
+  );
+}
+
+const RING = STORY + 8;
+const RING_W = 2.5;
+
+/**
+ * WhatsApp's status ring: a green circle cut into `segments` arcs by small
+ * gaps. No SVG in the app, so the gaps are page-coloured notches rotated
+ * around the centre. 0 segments = a grey ring (nothing posted yet).
+ */
+function SegmentedRing({ segments, children }: { segments: number; children: ReactNode }) {
+  const n = Math.min(segments, 12);
+  return (
+    <View style={[s.ring, { borderColor: n ? colors.storyRing : colors.line }]}>
+      {n > 1 &&
+        Array.from({ length: n }, (_, i) => (
+          <View key={i} pointerEvents="none" style={[s.notchTrack, { transform: [{ rotate: `${(360 / n) * i}deg` }] }]}>
+            <View style={s.notch} />
+          </View>
+        ))}
+      {children}
     </View>
   );
 }
@@ -86,12 +117,13 @@ function ReelStories({ reels, onOpen }: { reels: Reel[]; onOpen: (id: string | n
       contentContainerStyle={s.stories}
       ListHeaderComponent={
         <PressScale onPress={() => router.push('/reels/new')} haptic="light" style={s.story} accessibilityLabel="Post a reel">
-          <View style={[s.ring, s.ringDashed]}>
-            <View style={[s.storyImg, s.postInner]}>
-              <Ionicons name="add" size={26} color={colors.green} />
+          <View style={s.postWrap}>
+            <Image source={BADGE} style={s.storyImg} contentFit="cover" />
+            <View style={s.postPlus}>
+              <Ionicons name="add" size={16} color={colors.white} />
             </View>
           </View>
-          <Text style={s.storyName} numberOfLines={1}>Post</Text>
+          <Text style={s.storyName} numberOfLines={1}>Post a reel</Text>
         </PressScale>
       }
       renderItem={({ item }) => (
@@ -101,11 +133,9 @@ function ReelStories({ reels, onOpen }: { reels: Reel[]; onOpen: (id: string | n
           style={s.story}
           accessibilityLabel={item.firstReelId ? `Reels by ${item.name}` : `${item.name} reels, coming soon`}
         >
-          <LinearGradient colors={[colors.greenOnDark, colors.green, colors.greenDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.ring}>
-            <View style={s.ringGap}>
-              <Avatar story={item} />
-            </View>
-          </LinearGradient>
+          <SegmentedRing segments={item.count}>
+            <Avatar story={item} />
+          </SegmentedRing>
           <Text style={s.storyName} numberOfLines={1}>{item.team ? 'Autobacs' : item.name}</Text>
         </PressScale>
       )}
@@ -202,8 +232,7 @@ export default function ShopTheReel() {
     <View style={s.section}>
       <SectionHeader
         overline="Watch & shop"
-        title="Shop the reel"
-        stripes
+        title="Reels"
         actionLabel={empty ? undefined : 'See all'}
         onAction={empty ? undefined : () => router.push('/(tabs)/reels')}
       />
@@ -250,15 +279,36 @@ const s = StyleSheet.create({
   section: { marginTop: spacing.xxl },
 
   stories: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
-  story: { width: STORY + 6, alignItems: 'center', gap: 6 },
-  ring: { width: STORY + 6, height: STORY + 6, borderRadius: (STORY + 6) / 2, alignItems: 'center', justifyContent: 'center' },
-  ringDashed: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.green, backgroundColor: colors.card },
-  ringGap: { padding: 2.5, borderRadius: STORY / 2 + 3, backgroundColor: colors.bg },
-  storyImg: { width: STORY - 4, height: STORY - 4, borderRadius: (STORY - 4) / 2, overflow: 'hidden' },
+  story: { width: RING + 4, alignItems: 'center', gap: 6 },
+  ring: {
+    width: RING,
+    height: RING,
+    borderRadius: RING / 2,
+    borderWidth: RING_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // A full-size layer rotated about the centre; its notch sits on the ring at 12 o'clock.
+  notchTrack: { position: 'absolute', top: -RING_W, left: -RING_W, width: RING, height: RING, alignItems: 'center' },
+  notch: { width: 4, height: RING_W + 2, marginTop: -1, backgroundColor: colors.screen },
+  storyImg: { width: STORY - 2, height: STORY - 2, borderRadius: (STORY - 2) / 2, overflow: 'hidden' },
+  postWrap: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
+  postPlus: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.green,
+    borderWidth: 2,
+    borderColor: colors.screen,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   storyInitial: { backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
   storyInitialText: { fontFamily: font.heading, fontSize: 22, color: colors.green },
-  postInner: { backgroundColor: colors.greenFaint, alignItems: 'center', justifyContent: 'center' },
-  storyName: { fontFamily: font.medium, fontSize: 11.5, color: colors.ink2, maxWidth: STORY + 6 },
+  storyName: { fontFamily: font.medium, fontSize: 11.5, color: colors.ink2, maxWidth: RING + 4 },
 
   row: { flexDirection: 'row', gap: GAP, paddingHorizontal: spacing.lg },
   card: { width: REEL_W, height: REEL_H, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.carbon },

@@ -1,10 +1,10 @@
 /**
  * Shop — departments, then the whole catalogue, filterable.
  *
- * Website look (2026-11-22): the store's dark header (logo, search with a
- * green Go, cart) stays pinned like the website's sticky header; under it a
- * photo grid of every top-level department (each opens its own page), then
- * the full catalogue grid with green department chips, sort and filter sheets.
+ * WhatsApp-style (owner, 2026-11-22): the pinned white app bar, then a large
+ * bold "Shop" title and grey search pill (like WhatsApp's "Chats"), a photo
+ * grid of every top-level department (each opens its own page), then the full
+ * catalogue grid with tinted department chips, sort and filter sheets.
  *
  * Brands keep their own route (Home's brand strip → /search?brand=…).
  */
@@ -12,10 +12,10 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCategories } from '../../src/api/catalogue';
-import AppHeader from '../../src/components/AppHeader';
+import AppHeader, { ScreenTitle, SearchField } from '../../src/components/AppHeader';
 import ProductListing from '../../src/components/ProductListing';
 import { DepartmentGrid } from '../../src/home/Collections';
-import { colors } from '../../src/theme';
+import { colors, spacing } from '../../src/theme';
 
 export default function ShopScreen() {
   const [slug, setSlug] = useState<string | null>(null);
@@ -28,10 +28,16 @@ export default function ShopScreen() {
   return (
     <View style={s.screen}>
       <ProductListing
-        stickyTop={<AppHeader compact />}
-        topSlot={<DepartmentGrid categories={parents} loading={categories.isLoading} />}
-        overline={current ? 'Department' : 'Everything'}
-        title={current?.name ?? 'Shop all'}
+        stickyTop={<AppHeader />}
+        topSlot={
+          <>
+            <ScreenTitle title="Shop" />
+            <SearchField style={{ marginHorizontal: spacing.lg, marginBottom: spacing.sm }} />
+            <DepartmentGrid categories={parents} loading={categories.isLoading} />
+          </>
+        }
+        overline={current ? 'Department' : undefined}
+        title={current?.name ?? 'All products'}
         blurb={current?.description || undefined}
         categorySlug={slug ?? undefined}
         chips={parents}
@@ -42,5 +48,5 @@ export default function ShopScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: colors.screen },
 });

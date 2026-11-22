@@ -35,6 +35,8 @@ export const palette = {
   // Neutrals
   white: '#ffffff',
   page: '#f6f7f6',
+  /** Website page grey (store.css --bg); WhatsApp-style search pill fill. */
+  mist: '#eef1f0',
   line: '#dfe3e2',
   steel: '#707070',
   muted: '#5f6363',
@@ -125,18 +127,14 @@ export const colors = {
   skeletonSheen: alpha(palette.white, 0.65),
 
   /**
-   * Website store header (store.css `.sh-top` / `.sh-vehicle-btn` / `.sh-go`):
-   * carbon bar, white wordmark, a dashed green "Parts for <car>" pill, a white
-   * search pill with a green Go, and the cart. Added 2026-11-22 (light-home).
+   * WhatsApp-style surfaces (owner, 2026-11-22): white screens, a grey rounded
+   * search pill, green-tint selected chips / active tab (= `greenSoft`).
    */
-  headerText: palette.white,
-  headerMuted: alpha(palette.white, 0.72),
-  headerHairline: alpha(palette.white, 0.14),
-  vehicleFill: alpha(palette.green, 0.32),
-  vehicleBorder: alpha(palette.greenOnDark, 0.75),
+  screen: palette.white,
+  searchFill: palette.mist,
   /** Product photo well — the website's `.st-tile-media` grey. */
   well: palette.page,
-  /** Instagram-style story ring around reel avatars. */
+  /** WhatsApp Status-style segmented ring around reel avatars. */
   storyRing: palette.green,
 } as const;
 

@@ -1,14 +1,15 @@
 /**
- * Home — matches autobacsindia.com's DEFAULT light store theme (owner,
- * 2026-11-22): dark header with the logo, "Parts for <car>" and search; the
- * website's hero banners; Instagram-style reels; the website's category cards;
- * product rails in the website card style; a light page throughout.
+ * Home — WhatsApp-style visuals over our own store (owner, 2026-11-22): a
+ * pinned white app bar (logo, search, cart), a grey search pill, filter chips
+ * ("All / Fits my car / Offers / departments"), then the website's hero
+ * banners, a Status-style reels row, the website's category cards and the
+ * product rails — all on a clean white page.
  *
- * Top to bottom: header, hero carousel (admin promo banner + the website's
- * Today's Deals / Shop by vehicle / New arrivals slides, or category photos
- * when there are none), reels stories + "Shop the reel", category cards,
- * "Fits your car" (or Popular with an add-your-car prompt), today's deals,
- * brands, best sellers, new arrivals.
+ * Top to bottom: hero carousel (admin promo banner + the website's Today's
+ * Deals / Shop by vehicle / New arrivals slides, or category photos when there
+ * are none), reels Status row + "Shop the reel", category cards, "Fits your
+ * car" (or Best sellers with an add-your-car prompt), today's deals, brands,
+ * best sellers, new arrivals.
  *
  * Every row is live catalogue data. A row with nothing in it is not rendered,
  * and while data loads each row shows a skeleton in the shape of what is
@@ -18,11 +19,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Animated, RefreshControl, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueries } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchActiveBanner, fetchCategories, fetchOffers, fetchProducts, type Category, type Product } from '../../src/api/catalogue';
-import AppHeader from '../../src/components/AppHeader';
+import AppHeader, { QuickChips, SearchField, type QuickChip } from '../../src/components/AppHeader';
 import ScrollTopButton from '../../src/components/ScrollTopButton';
 import { useHeaderScroll, useScrollToTop } from '../../src/components/useHeaderScroll';
 import HeroCarousel, { HeroSkeleton, type HeroPhoto, type HeroSlide } from '../../src/home/HeroCarousel';
@@ -146,7 +146,6 @@ function AddCarPrompt() {
 export default function HomeScreen() {
   const router = useRouter();
   const { garage } = useApp();
-  const insets = useSafeAreaInsets();
   const scroller = useRef<ScrollViewInstance>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -197,8 +196,26 @@ export default function HomeScreen() {
     });
   }, [banner.data, deals.data, popular.data, newest.data, topCategories, carName, carQuery]);
 
+  // WhatsApp's "All / Unread / Favourites" row, as shop shortcuts. "All" is
+  // where you are; the rest open the matching listing.
+  const chips: QuickChip[] = useMemo(
+    () => [
+      { key: 'all', label: 'All', selected: true, onPress: () => scrollToTop() },
+      {
+        key: 'car',
+        label: carName ? `Fits my ${carName}` : 'Add my car',
+        icon: 'car-sport-outline',
+        onPress: () => router.push((carQuery ?? '/garage') as never),
+      },
+      { key: 'offers', label: 'Offers', icon: 'pricetag-outline', onPress: () => router.push('/category/offers') },
+      ...topCategories.slice(0, 8).map((c) => ({ key: c.id, label: c.name, onPress: () => router.push(`/category/${c.slug}`) })),
+    ],
+    [carName, carQuery, router, scrollToTop, topCategories],
+  );
+
   return (
     <View style={s.screen}>
+      <AppHeader />
       <Animated.ScrollView
         ref={scroller}
         onScroll={onScroll}
@@ -207,9 +224,8 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.green} colors={[colors.green]} />}
       >
-        {/* iOS pull-down bounce shows the bar colour above the header, not the page. */}
-        <View pointerEvents="none" style={s.overscroll} />
-        <AppHeader />
+        <SearchField style={{ marginHorizontal: spacing.lg, marginTop: spacing.md }} />
+        <QuickChips chips={chips} style={{ paddingTop: spacing.md }} />
 
         <View style={{ marginTop: spacing.lg }}>
           {deals.isLoading || banner.isLoading || (popular.isLoading && newest.isLoading) ? (
@@ -267,18 +283,13 @@ export default function HomeScreen() {
         </View>
       </Animated.ScrollView>
 
-      {/* The header scrolls away; this keeps the (light) status bar on the dark bar colour. */}
-      <View pointerEvents="none" style={[s.statusPlate, { height: insets.top }]} />
-
       <ScrollTopButton visible={showTop} onPress={scrollToTop} />
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  overscroll: { position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: colors.header },
-  statusPlate: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.header },
+  screen: { flex: 1, backgroundColor: colors.screen },
 
   addCar: {
     flexDirection: 'row',
