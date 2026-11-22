@@ -721,6 +721,45 @@ const OrderSchema = new mongoose.Schema({
     index: true
   },
 
+  /*
+    Money Razorpay captured for an order that was ALREADY paid (two tabs, a stale
+    payment link, a second attempt after a slow webhook). The first payment stays
+    `order.payment`; each extra capture is recorded here and accounts is alerted to
+    refund it by hand — nothing is auto-refunded. Written only by
+    razorpayService.processPaymentSuccess, one entry per gateway payment id.
+  */
+  duplicateCaptures: {
+    type: [new mongoose.Schema({
+      gatewayPaymentId: { type: String, required: true },
+      payment: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" },
+      amount: Number,          // rupees captured
+      method: String,
+      capturedAt: { type: Date, default: Date.now },
+    }, { _id: false })],
+    default: undefined,
+  },
+
+  /*
+    Why online payment attempts failed — one entry per Razorpay payment id, newest
+    last, capped (see PAYMENT_ATTEMPTS_CAP in razorpayService). Filled from the
+    `payment.failed` webhook so sales/support can see "card declined by bank" instead
+    of just "failed". Display/diagnostics only; not queried, so not indexed.
+  */
+  paymentAttempts: {
+    type: [new mongoose.Schema({
+      razorpayPaymentId: { type: String, required: true },
+      method: String,
+      amount: Number,          // rupees
+      errorCode: String,
+      errorReason: String,
+      errorSource: String,
+      errorStep: String,
+      errorDescription: String,
+      at: { type: Date, default: Date.now },
+    }, { _id: false })],
+    default: undefined,
+  },
+
   // Contact email for guest orders — allows confirmation emails, support, and admin visibility
   // Not required for authenticated orders (user.email is the source of truth)
   guestEmail: {

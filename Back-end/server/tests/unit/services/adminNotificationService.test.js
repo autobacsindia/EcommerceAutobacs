@@ -48,6 +48,7 @@ const {
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
+  emailAdminDuplicatePaymentAlert,
   emailAdminCareersAlert,
 } = await import('../../../services/adminNotificationService.js');
 
@@ -496,3 +497,39 @@ describe('the careers mailbox: employment email only', () => {
   });
 });
 
+
+describe('emailAdminDuplicatePaymentAlert', () => {
+  const charged = (over = {}) =>
+    makeOrder({
+      duplicateCaptures: [{ gatewayPaymentId: 'pay_extra', amount: 12499.5, method: 'upi' }],
+      ...over,
+    });
+
+  test('tells admins which extra payment to refund and how much', async () => {
+    mockOrderFindById.mockResolvedValue(charged());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    const result = await emailAdminDuplicatePaymentAlert({ orderId: 'o1', gatewayPaymentId: 'pay_extra' });
+
+    expect(result).toEqual({ status: 'sent' });
+    const msg = mockSendEmail.mock.calls[0][0];
+    expect(msg.to).toBe('support@autobacsindia.com');
+    expect(msg.subject).toMatch(/PAID TWICE/);
+    expect(msg.text).toContain('pay_extra');
+    expect(msg.text).toMatch(/NOT refunded automatically/);
+  });
+
+  test('does nothing for a payment the order has not recorded as extra (stale job)', async () => {
+    mockOrderFindById.mockResolvedValue(charged());
+    const result = await emailAdminDuplicatePaymentAlert({ orderId: 'o1', gatewayPaymentId: 'pay_other' });
+    expect(result).toEqual({ status: 'skipped-not-recorded' });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  test('throws when the admin email fails, so the queue retries', async () => {
+    mockOrderFindById.mockResolvedValue(charged());
+    mockSendEmail.mockResolvedValue({ success: false, error: 'provider down' });
+    await expect(emailAdminDuplicatePaymentAlert({ orderId: 'o1', gatewayPaymentId: 'pay_extra' }))
+      .rejects.toThrow(/duplicate-capture o1/);
+  });
+});

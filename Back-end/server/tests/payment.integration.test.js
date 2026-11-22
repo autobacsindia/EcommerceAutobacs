@@ -133,6 +133,24 @@ describe('Payment — create-order', () => {
     expect(res.body.data.amount).toBe(100000); // ₹1000 from DB → paise, NOT 999999
   });
 
+  it('refuses (409) to open a second Razorpay order for an order that is already paid', async () => {
+    testOrder = await createTestOrder({ status: 'processing', paymentStatus: 'paid' });
+
+    const res = await authed('post', `${BASE}/create-order`).send({
+      orderId: testOrder._id.toString(),
+      currency: 'INR',
+      receipt: testOrder.orderNumber,
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.success).toBe(false);
+    expect(res.body.code).toBe('ORDER_ALREADY_PAID');
+    expect(res.body.message).toMatch(/already paid/i);
+    // No gateway order was opened or stored for it.
+    const fresh = await Order.findById(testOrder._id).lean();
+    expect(fresh.razorpayOrderId ?? null).toBeNull();
+  });
+
   it('rejects create-order for a non-existent order', async () => {
     const res = await authed('post', `${BASE}/create-order`).send({
       orderId: new mongoose.Types.ObjectId().toString(),

@@ -668,6 +668,20 @@ class OrderRepository extends BaseRepository {
   }
 
   /**
+   * Append a failed payment attempt, once per Razorpay payment id, keeping only the
+   * newest `cap` entries. The id check lives in the filter, so the check-and-push is a
+   * single atomic update: a replayed or concurrent `payment.failed` adds nothing.
+   * Matches on _id, so no new index. Returns true when an entry was added.
+   */
+  async recordPaymentAttempt(orderId, attempt, cap) {
+    const res = await Order.updateOne(
+      { _id: orderId, 'paymentAttempts.razorpayPaymentId': { $ne: attempt.razorpayPaymentId } },
+      { $push: { paymentAttempts: { $each: [attempt], $slice: -cap } } }
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
    * The admin refunds queue: orders with a refund recorded, due, or in flight.
    *
    * ⚠️ BOUNDED AND CURSOR-PAGINATED (2026-09 optimisation pass). It previously returned
