@@ -11,8 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, elevation, font, radius, spacing, type } from '../../src/theme';
-import { GlassChip, Overline, PremiumButton, PressScale, Shimmer, Stripes } from '../../src/ui';
+import { Image } from 'expo-image';
+import { PremiumButton, PressScale, Shimmer } from '../../src/ui';
 import { useApp } from '../../src/store';
+
+const BADGE = require('../../assets/icon.png');
 
 const SITE = (Constants.expoConfig?.extra as { siteUrl?: string } | undefined)?.siteUrl ?? 'https://www.autobacsindia.com';
 const SUPPORT_EMAIL = 'support@autobacsindia.com';
@@ -91,22 +94,22 @@ export default function AccountScreen() {
   return (
     <View style={s.screen}>
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
-        {/* Avatar header — carbon band with the brand stripes. */}
-        <View style={[s.hero, { paddingTop: insets.top + spacing.lg }]}>
-          <View style={s.heroStripes} pointerEvents="none">
-            <Stripes width={44} height={120} gap={10} onDark />
-          </View>
-          <Overline onDark>{customer ? 'My account' : 'Welcome'}</Overline>
+        {/* WhatsApp-style: large bold title, then the profile as a chat row. */}
+        <View style={[s.header, { paddingTop: insets.top + spacing.md }]}>
+          <Text style={s.title} accessibilityRole="header">Account</Text>
+        </View>
+
+        <View style={{ paddingHorizontal: spacing.lg }}>
           {customer === undefined ? (
-            <View style={[s.identity, { marginTop: spacing.lg }]}>
-              <Shimmer width={64} height={64} radius={32} dark />
+            <View style={[s.group, s.profile]}>
+              <Shimmer width={56} height={56} radius={28} />
               <View style={{ flex: 1, gap: 8 }}>
-                <Shimmer width="60%" height={16} dark />
-                <Shimmer width="80%" height={12} dark />
+                <Shimmer width="60%" height={16} />
+                <Shimmer width="80%" height={12} />
               </View>
             </View>
           ) : customer ? (
-            <View style={[s.identity, { marginTop: spacing.lg }]}>
+            <View style={[s.group, s.profile]}>
               <View style={s.avatar}>
                 <Text style={s.avatarText}>{initial}</Text>
               </View>
@@ -116,22 +119,20 @@ export default function AccountScreen() {
               </View>
             </View>
           ) : (
-            <View style={{ marginTop: spacing.sm }}>
-              <Text style={s.name}>Sign in to Autobacs</Text>
-              <Text style={[s.email, { marginTop: 4 }]}>Track orders, save your car and check out faster.</Text>
+            <View style={[s.group, s.signedOut]}>
+              <View style={s.profileRow}>
+                <Image source={BADGE} style={s.avatar} contentFit="cover" />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.name}>Sign in to Autobacs</Text>
+                  <Text style={s.email}>Track orders, save your car and check out faster.</Text>
+                </View>
+              </View>
               <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
-                <PremiumButton label="Sign in" variant="light" onPress={() => router.push('/login')} style={{ flex: 1 }} />
-                <PremiumButton label="Register" variant="outlineLight" onPress={() => router.push('/register')} style={{ flex: 1 }} />
+                <PremiumButton label="Sign in" variant="green" onPress={() => router.push('/login')} style={{ flex: 1 }} />
+                <PremiumButton label="Register" variant="outline" onPress={() => router.push('/register')} style={{ flex: 1 }} />
               </View>
             </View>
           )}
-          <GlassChip
-            icon="car-sport-outline"
-            label={garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : 'Add your car'}
-            action={garage ? 'Change' : undefined}
-            onPress={() => router.push('/garage')}
-            style={{ marginTop: spacing.lg, alignSelf: 'flex-start' }}
-          />
         </View>
 
         <View style={{ paddingHorizontal: spacing.lg }}>
@@ -148,12 +149,12 @@ export default function AccountScreen() {
         <RowList
           title="My stuff"
           rows={[
-            { icon: 'film-outline', label: 'My reels', onPress: () => router.push(customer ? '/reels/mine' : '/login?next=/reels/mine') },
             {
               icon: 'car-sport-outline',
-              label: garage ? `My garage · ${garage.make}${garage.model ? ` ${garage.model}` : ''}` : 'My garage',
+              label: garage ? `My garage · ${garage.make}${garage.model ? ` ${garage.model}` : ''}` : 'Add your car',
               onPress: () => router.push('/garage'),
             },
+            { icon: 'film-outline', label: 'My reels', onPress: () => router.push(customer ? '/reels/mine' : '/login?next=/reels/mine') },
           ]}
         />
 
@@ -196,26 +197,26 @@ export default function AccountScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.bg },
+  title: { fontFamily: font.extrabold, fontSize: 30, color: colors.ink, letterSpacing: -0.5 },
+  profile: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  signedOut: { padding: spacing.lg },
 
-  hero: {
-    backgroundColor: colors.carbon, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl,
-    borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, overflow: 'hidden',
-  },
-  heroStripes: { position: 'absolute', right: spacing.lg, top: 28, opacity: 0.18 },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   avatar: {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: colors.green,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.onDarkFaint,
+    width: 56, height: 56, borderRadius: 28, backgroundColor: colors.green, overflow: 'hidden',
+    alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontFamily: font.extrabold, fontSize: 26, color: colors.white },
-  name: { ...type.h1, color: colors.white },
-  email: { ...type.small, color: colors.onDarkMuted },
+  avatarText: { fontFamily: font.extrabold, fontSize: 22, color: colors.white },
+  name: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
+  email: { ...type.small, color: colors.muted, marginTop: 2 },
 
   groupTitle: { ...type.overline, color: colors.muted, marginBottom: spacing.sm, marginLeft: 4 },
-  group: { backgroundColor: colors.white, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, overflow: 'hidden', ...elevation.e1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 56 },
+  group: { backgroundColor: colors.white, borderRadius: radius.lg, overflow: 'hidden', ...elevation.e1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg, paddingRight: spacing.md, minHeight: 60 },
+  // Chat-row divider: inset to start after the round icon.
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  rowIcon: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.greenFaint, alignItems: 'center', justifyContent: 'center' },
+  rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
   rowLabel: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink },
 
   version: { ...type.caption, color: colors.muted, textAlign: 'center', marginTop: spacing.xl },

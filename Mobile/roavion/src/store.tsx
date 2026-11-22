@@ -33,6 +33,8 @@ interface AppState {
 
   cart: Cart;
   cartBusy: boolean;
+  /** The last cart load failed (offline / server error). Display only — the cart itself is unchanged. */
+  cartError: boolean;
   refreshCart: () => Promise<void>;
   addItem: (productId: string, quantity?: number, variantId?: string | null) => Promise<void>;
   setQuantity: (productId: string, quantity: number, variantId?: string | null) => Promise<void>;
@@ -50,13 +52,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [customer, setCustomer] = useState<Customer | null | undefined>(undefined);
   const [cart, setCart] = useState<Cart>(EMPTY_CART);
   const [cartBusy, setCartBusy] = useState(false);
+  const [cartError, setCartError] = useState(false);
   const [garage, setGarage] = useState<Garage | null>(null);
 
   const refreshCart = useCallback(async () => {
     try {
       setCart(await fetchCart());
+      setCartError(false);
     } catch {
-      // Offline or a blip: keep showing the last known cart rather than emptying it.
+      // Offline or a blip: keep showing the last known cart rather than emptying it,
+      // and let the cart screen say so (with a retry) instead of looking empty.
+      setCartError(true);
     }
   }, []);
 
@@ -139,10 +145,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AppState>(
     () => ({
       customer, signIn, signUp, signOut,
-      cart, cartBusy, refreshCart, addItem, setQuantity, removeItem,
+      cart, cartBusy, cartError, refreshCart, addItem, setQuantity, removeItem,
       garage, saveGarage,
     }),
-    [customer, signIn, signUp, signOut, cart, cartBusy, refreshCart, addItem, setQuantity, removeItem, garage, saveGarage],
+    [customer, signIn, signUp, signOut, cart, cartBusy, cartError, refreshCart, addItem, setQuantity, removeItem, garage, saveGarage],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

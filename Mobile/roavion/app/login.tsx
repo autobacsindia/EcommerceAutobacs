@@ -81,18 +81,23 @@ export default function LoginScreen() {
         returnKeyType="go"
       />
 
-      <PressScale onPress={forgot} style={s.forgot} accessibilityLabel="Forgot password?">
+      <PressScale onPress={forgot} style={s.forgot} hitSlop={10} accessibilityLabel="Forgot password?">
         <Text style={s.linkText}>Forgot password?</Text>
       </PressScale>
 
       <FormMessage text={error} tone="error" />
       <FormMessage text={notice} tone="notice" />
 
-      <PremiumButton label="Sign in" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
+      <PremiumButton label="Sign in" variant="green" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
 
       <View style={s.footer}>
         <Text style={s.footText}>New to Autobacs?</Text>
-        <PressScale onPress={() => router.replace('/register')} accessibilityLabel="Create an account">
+        <PressScale
+          // Keep where they were going (e.g. checkout) through sign-up too.
+          onPress={() => router.replace(next ? { pathname: '/register', params: { next } } : '/register')}
+          hitSlop={10}
+          accessibilityLabel="Create an account"
+        >
           <Text style={s.linkText}>Create an account</Text>
         </PressScale>
       </View>

@@ -1,6 +1,7 @@
 /**
- * Shared look for Sign in / Create account: a carbon band with the logo's
- * three slanted stripes, then a white sheet holding the form. Look only — the
+ * Shared look for Sign in / Create account: a light band with the Autobacs
+ * logo (black wordmark, so it needs a light ground) and faint brand stripes,
+ * then a soft sheet holding the form. Look only — the
  * screens own every field, check and server call.
  */
 import { useState, type ReactNode } from 'react';
@@ -8,8 +9,11 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { colors, font, radius, spacing, type } from '../theme';
 import { IconButton, PressScale, Stripes } from '../ui';
+
+const LOGO = require('../../assets/autobacs-logo.png');
 
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   const router = useRouter();
@@ -21,17 +25,17 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
           <View style={[s.band, { paddingTop: insets.top + spacing.sm }]}>
             <View style={s.bigStripes} pointerEvents="none">
-              <Stripes width={56} height={190} gap={14} onDark />
+              <Stripes width={56} height={190} gap={14} />
             </View>
             <IconButton
               icon="chevron-back"
               label="Go back"
-              tone="glass"
+              tone="plain"
               onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
             />
             <View style={s.brandRow}>
-              <Stripes width={12} height={4} gap={3} onDark />
-              <Text style={s.wordmark}>AUTOBACS</Text>
+              {/* The real logo, as in the website header — never plain text. */}
+              <Image source={LOGO} style={s.logo} contentFit="contain" accessibilityLabel="Autobacs India" />
             </View>
             <Text style={s.title} accessibilityRole="header">{title}</Text>
             <Text style={s.subtitle}>{subtitle}</Text>
@@ -96,13 +100,13 @@ export function FormMessage({ text, tone }: { text: string; tone: 'error' | 'not
 
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.carbon },
-  band: { backgroundColor: colors.carbon, paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl + spacing.lg, overflow: 'hidden' },
-  bigStripes: { position: 'absolute', right: -10, top: 30, opacity: 0.16 },
+  screen: { flex: 1, backgroundColor: colors.white },
+  band: { backgroundColor: colors.white, paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl + spacing.lg, overflow: 'hidden' },
+  bigStripes: { position: 'absolute', right: -10, top: 30, opacity: 0.1 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xl },
-  wordmark: { fontFamily: font.extrabold, fontSize: 12, letterSpacing: 4, color: colors.white },
-  title: { ...type.display, color: colors.white, marginTop: spacing.md },
-  subtitle: { ...type.body, color: colors.onDarkMuted, marginTop: spacing.xs },
+  logo: { width: 150, height: 35 },
+  title: { ...type.display, color: colors.ink, marginTop: spacing.lg },
+  subtitle: { ...type.body, color: colors.muted, marginTop: spacing.xs },
   sheet: {
     flex: 1, backgroundColor: colors.bg, marginTop: -spacing.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing.xl, paddingTop: spacing.xl,

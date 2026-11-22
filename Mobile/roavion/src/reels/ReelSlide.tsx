@@ -3,7 +3,7 @@
  *
  * Layers, back to front: carbon base → poster (fades in, blurred until the
  * video is ready on iOS) → video (cross-fades in over the poster) → tap layer
- * → scrims → top progress bar, product pin, state glyphs (play / mute /
+ * → scrims → state glyphs (play / mute /
  * buffering / failed), heart burst → creator, caption, action rail and the
  * frosted product card.
  *
@@ -23,7 +23,7 @@ import type { SlotState } from './usePlayerPool';
 import { ReelProductCard } from './ReelProductCard';
 import { useFollowing, useSaved } from './localPrefs';
 import { alpha, colors, font, palette, radius, spacing } from '../theme';
-import { GlassChip, PressScale, StripeLoader, haptic, useReduceMotion } from '../ui';
+import { PressScale, StripeLoader, haptic, useReduceMotion } from '../ui';
 
 const DOUBLE_TAP_MS = 260;
 const BURST = 6;
@@ -140,11 +140,17 @@ function HeartBurst({ x, y, onDone }: { x: number; y: number; onDone: () => void
   );
 }
 
+/** Team uploads (no named creator) wear the round Autobacs badge. */
+const TEAM_BADGE = require('../../assets/icon.png');
+
 function Avatar({ reel }: { reel: Reel }) {
+  const team = reel.creator.id == null;
   return (
     <View style={s.avatarRing}>
       <View style={s.avatar}>
-        {reel.creator.avatarUrl ? (
+        {team && !reel.creator.avatarUrl ? (
+          <Image source={TEAM_BADGE} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="Autobacs India" />
+        ) : reel.creator.avatarUrl ? (
           <Image source={{ uri: reel.creator.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         ) : (
           <Text style={s.avatarText}>{reel.creator.name.slice(0, 1).toUpperCase() || 'A'}</Text>
@@ -163,7 +169,7 @@ export interface ReelSlideProps {
   slot: SlotState | null;
   paused: boolean;
   muted: boolean;
-  /** Safe-area top: the progress bar sits just under the status bar. */
+  /** Safe-area top (kept for callers; the header sits there). */
   topInset: number;
   bottomInset: number;
   busy: 'add' | 'buy' | null;
@@ -181,7 +187,7 @@ export interface ReelSlideProps {
 }
 
 function ReelSlideImpl(props: ReelSlideProps) {
-  const { reel, height, active, player, slot, paused, muted, topInset, bottomInset, busy } = props;
+  const { reel, height, active, player, slot, paused, muted, bottomInset, busy } = props;
   const { width } = useWindowDimensions();
   const reduce = useReduceMotion();
   const saved = useSaved(reel.id);
@@ -191,7 +197,6 @@ function ReelSlideImpl(props: ReelSlideProps) {
   const [pauseIcon] = useState(() => new Animated.Value(0));
   const [muteFlash] = useState(() => new Animated.Value(0));
   const [videoIn] = useState(() => new Animated.Value(0));
-  const [pin] = useState(() => new Animated.Value(0));
   const lastTap = useRef(0);
   const singleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const burstId = useRef(0);
@@ -228,12 +233,6 @@ function ReelSlideImpl(props: ReelSlideProps) {
     Animated.timing(muteFlash, { toValue: 0, duration: 700, delay: 350, useNativeDriver: true }).start();
   }, [muted, active, muteFlash]);
 
-  // Product pin slides in a moment after the reel becomes active.
-  useEffect(() => {
-    if (active) Animated.timing(pin, { toValue: 1, duration: reduce ? 0 : 380, delay: reduce ? 0 : 900, easing: Easing.out(Easing.back(1.4)), useNativeDriver: true }).start();
-    else pin.setValue(0);
-  }, [active, pin, reduce]);
-
   const onTap = (e: GestureResponderEvent) => {
     const now = Date.now();
     // The reel page fills the window from its top-left while it is on screen,
@@ -261,6 +260,7 @@ function ReelSlideImpl(props: ReelSlideProps) {
   };
 
   const team = reel.creator.id == null;
+  const longCaption = reel.caption.length > 70 || reel.caption.includes('\n');
 
   return (
     <View style={[s.page, { height }]}>
@@ -304,30 +304,6 @@ function ReelSlideImpl(props: ReelSlideProps) {
         style={s.scrimBottom}
       />
 
-      {active && showVideo && player && (
-        <View style={[s.progressWrap, { top: topInset + 2 }]} pointerEvents="none">
-          <Progress player={player} width={width - spacing.lg * 2} />
-        </View>
-      )}
-
-      {/* Product pin on the video. */}
-      {reel.product && (
-        <Animated.View
-          style={[
-            s.pin,
-            { top: Math.round(height * 0.36), opacity: pin, transform: [{ translateX: pin.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }] },
-          ]}
-          pointerEvents={active ? 'box-none' : 'none'}
-        >
-          <View style={s.pinDot} />
-          <GlassChip
-            icon="pricetag"
-            label={reel.product.title.length > 26 ? `${reel.product.title.slice(0, 25).trim()}…` : reel.product.title}
-            action="Shop"
-            onPress={() => props.onOpenProduct(reel)}
-          />
-        </Animated.View>
-      )}
 
       {buffering && (
         <View pointerEvents="none" style={s.center}>
@@ -367,7 +343,14 @@ function ReelSlideImpl(props: ReelSlideProps) {
         <HeartBurst key={b.id} x={b.x} y={b.y} onDone={() => setBursts((all) => all.filter((x) => x.id !== b.id))} />
       ))}
 
-      {/* Creator, caption, rail and product card. */}
+      {/* Thin Instagram-style progress line along the bottom edge. */}
+      {active && showVideo && player && (
+        <View style={[s.progressWrap, { bottom: bottomInset }]} pointerEvents="none">
+          <Progress player={player} width={width} />
+        </View>
+      )}
+
+      {/* Creator, caption, rail and product strip. */}
       <View style={[s.bottom, { paddingBottom: bottomInset + spacing.md }]} pointerEvents="box-none">
         <View style={s.infoRow} pointerEvents="box-none">
           <View style={s.info} pointerEvents="box-none">
@@ -384,13 +367,14 @@ function ReelSlideImpl(props: ReelSlideProps) {
                   accessibilityLabel={following ? `Following ${reel.creator.name}` : `Follow ${reel.creator.name}`}
                   accessibilityState={{ selected: following }}
                 >
-                  <Text style={[s.followText, following && { color: colors.white }]}>{following ? 'Following' : 'Follow'}</Text>
+                  <Text style={[s.followText, following && s.followingText]}>{following ? 'Following' : 'Follow'}</Text>
                 </PressScale>
               )}
             </View>
             {!!reel.caption && (
               <Pressable onPress={() => setExpanded((e) => !e)} accessibilityRole="button" accessibilityLabel={expanded ? 'Show less' : 'Show full caption'}>
                 <Text style={s.caption} numberOfLines={expanded ? 6 : 2}>{reel.caption}</Text>
+                {longCaption && <Text style={s.more}>{expanded ? 'less' : 'more'}</Text>}
               </Pressable>
             )}
           </View>
@@ -403,6 +387,7 @@ function ReelSlideImpl(props: ReelSlideProps) {
               onPress={() => props.onLike(reel)}
               a11y={reel.viewerLiked ? 'Unlike' : 'Like'}
             />
+            <RailButton icon="paper-plane-outline" label="Share" onPress={() => props.onShare(reel)} a11y="Share" />
             <RailButton
               icon={saved ? 'bookmark' : 'bookmark-outline'}
               color={saved ? colors.gold : colors.white}
@@ -410,8 +395,12 @@ function ReelSlideImpl(props: ReelSlideProps) {
               onPress={() => props.onSave(reel)}
               a11y={saved ? 'Remove from saved' : 'Save'}
             />
-            <RailButton icon="paper-plane-outline" label="Share" onPress={() => props.onShare(reel)} a11y="Share" />
-            <RailButton icon={muted ? 'volume-mute-outline' : 'volume-high-outline'} onPress={props.onToggleMute} a11y={muted ? 'Unmute' : 'Mute'} />
+            <RailButton
+              icon={muted ? 'volume-mute' : 'volume-high-outline'}
+              label={muted ? 'Muted' : 'Sound'}
+              onPress={props.onToggleMute}
+              a11y={muted ? 'Unmute' : 'Mute'}
+            />
             <RailButton icon="ellipsis-horizontal" onPress={() => props.onReport(reel)} a11y="More: report this reel" />
           </View>
         </View>
@@ -459,15 +448,9 @@ const s = StyleSheet.create({
   retryText: { fontFamily: font.bold, fontSize: 13.5, color: colors.ink },
   iconShadow: textShadow,
 
-  progressWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg },
-  progressTrack: { height: 2.5, borderRadius: 2, backgroundColor: colors.onDarkFaint, overflow: 'hidden' },
-  progressFill: { height: 2.5, borderRadius: 2, backgroundColor: colors.white },
-
-  pin: { position: 'absolute', left: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, maxWidth: '78%' },
-  pinDot: {
-    width: 12, height: 12, borderRadius: 6, backgroundColor: colors.white,
-    borderWidth: 3, borderColor: alpha(palette.white, 0.35),
-  },
+  progressWrap: { position: 'absolute', left: 0, right: 0 },
+  progressTrack: { height: 2, backgroundColor: colors.onDarkFaint, overflow: 'hidden' },
+  progressFill: { height: 2, backgroundColor: colors.white },
 
   burst: { position: 'absolute', width: 120, height: 120 },
   burstCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
@@ -487,11 +470,14 @@ const s = StyleSheet.create({
   },
   avatarText: { fontFamily: font.heading, fontSize: 15, color: colors.white },
   creator: { fontFamily: font.bold, fontSize: 15, color: colors.white, flexShrink: 1, ...textShadow },
+  // Instagram's outline Follow.
   follow: {
-    height: 28, paddingHorizontal: spacing.md, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: colors.white, backgroundColor: colors.white,
+    height: 28, paddingHorizontal: spacing.md, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: alpha(palette.white, 0.85), backgroundColor: 'transparent',
   },
-  following: { backgroundColor: 'transparent', borderColor: colors.onDarkMuted },
-  followText: { fontFamily: font.bold, fontSize: 12.5, color: colors.ink },
+  following: { borderColor: colors.onDarkFaint },
+  followText: { fontFamily: font.bold, fontSize: 12.5, color: colors.white },
+  followingText: { color: colors.onDarkMuted },
+  more: { fontFamily: font.semibold, fontSize: 13.5, color: alpha(palette.white, 0.75), marginTop: 1 },
   caption: { fontFamily: font.regular, fontSize: 14, lineHeight: 19, color: alpha(palette.white, 0.94), ...textShadow },
 });
