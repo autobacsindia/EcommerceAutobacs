@@ -37,8 +37,8 @@ import { toggleFollow, toggleSave } from '../../src/reels/localPrefs';
 import { ReelFeedSkeleton } from '../../src/reels/ReelFeedSkeleton';
 import { ApiError } from '../../src/api/client';
 import { useApp } from '../../src/store';
-import { alpha, colors, font, palette, radius, spacing } from '../../src/theme';
-import { EmptyState, ErrorState, IconButton, PressScale, StateLayout, StripeLoader, Stripes, haptic, useToast } from '../../src/ui';
+import { alpha, colors, font, noir, palette, spacing, type } from '../../src/theme';
+import { EmptyState, ErrorState, IconButton, PressScale, StateLayout, StripeLoader, haptic, useToast } from '../../src/ui';
 
 type Row = { kind: 'reel'; reel: Reel } | { kind: 'end' };
 
@@ -286,6 +286,14 @@ export default function ReelsScreen() {
   }, []);
   const onToggleMute = useCallback(() => setMuted((m) => !m), []);
 
+  // The reels API has one feed ("For you"). "Following" is shown because the
+  // approved design has it, but there's no server feed behind it yet — say so
+  // instead of showing a filtered or fake list.
+  const onFollowingTab = () => {
+    haptic.selection();
+    toast.show({ message: 'Reels from people you follow are coming soon.', icon: 'people-outline' });
+  };
+
   const onPost = () => {
     haptic.light();
     router.push(customer ? '/reels/new' : '/login?next=/reels/new');
@@ -324,6 +332,8 @@ export default function ReelsScreen() {
         reel={item.reel}
         height={height}
         active={index === active}
+        position={index}
+        count={reels.length}
         player={mine ? players[slot] : null}
         slot={mine ? slotState : null}
         paused={paused}
@@ -406,23 +416,33 @@ export default function ReelsScreen() {
       <StatusBar style={focused ? "light" : "dark"} />
       {body}
 
-      {/* Floating header over the video */}
-      <View style={[s.header, { paddingTop: insets.top + spacing.md }]} pointerEvents="box-none">
+      {/* Floating header over the video: serif title, feed tabs, sound, my reels, post. */}
+      <View style={[s.header, { paddingTop: insets.top + spacing.md + 2 }]} pointerEvents="box-none">
         <View style={s.titleRow}>
           <Text style={s.headerTitle} accessibilityRole="header">Reels</Text>
-          <Stripes width={12} height={5} gap={3} onDark />
-          {REELS_MOCK && (
-            <View style={s.demo}>
-              <Text style={s.demoText}>DEMO</Text>
-            </View>
-          )}
+          {REELS_MOCK && <Text style={s.demoText}>Demo</Text>}
+        </View>
+        <View style={s.tabs} accessibilityRole="tablist">
+          <Pressable onPress={onFollowingTab} hitSlop={8} accessibilityRole="tab" accessibilityState={{ selected: false }}>
+            <Text style={[s.tab, s.tabIdle]}>Following</Text>
+          </Pressable>
+          <View accessibilityRole="tab" accessibilityState={{ selected: true }} style={s.tabOn}>
+            <Text style={s.tab}>For you</Text>
+          </View>
         </View>
         <View style={s.headerActions}>
+          <IconButton
+            icon={muted ? 'volume-mute-outline' : 'volume-high-outline'}
+            label={muted ? 'Unmute' : 'Mute'}
+            tone="plain"
+            color={noir.text}
+            size={32}
+            onPress={onToggleMute}
+          />
           {customer && (
-            <IconButton icon="albums-outline" label="My reels" tone="glass" size={38} onPress={() => router.push('/reels/mine')} />
+            <IconButton icon="albums-outline" label="My reels" tone="plain" color={noir.text} size={32} onPress={() => router.push('/reels/mine')} />
           )}
-          <PressScale onPress={onPost} style={s.post} accessibilityLabel="Post a reel" scaleTo={0.94}>
-            <Text style={s.postText}>Post</Text>
+          <PressScale onPress={onPost} style={s.post} accessibilityRole="button" accessibilityLabel="Post a reel" scaleTo={0.9}>
             <Text style={s.postPlus}>+</Text>
           </PressScale>
         </View>
@@ -438,28 +458,31 @@ export default function ReelsScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.void },
+  screen: { flex: 1, backgroundColor: noir.void },
   header: {
     position: 'absolute', top: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.lg - 2, gap: spacing.sm,
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   headerTitle: {
-    fontFamily: font.extrabold, fontSize: 24, color: colors.white, letterSpacing: -0.4,
+    ...type.serifSection, fontSize: 21, color: noir.text,
     textShadowColor: alpha(palette.black, 0.4), textShadowRadius: 6,
   },
-  demo: { backgroundColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
-  demoText: { fontFamily: font.bold, fontSize: 10, color: colors.ink, letterSpacing: 0.8 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  demoText: { ...type.capsNoir, fontSize: 8, letterSpacing: 1.6, color: noir.gold },
+  tabs: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  tab: { ...type.capsNoir, fontSize: 9.5, color: noir.text, paddingBottom: 3 },
+  tabIdle: { opacity: 0.55 },
+  tabOn: { borderBottomWidth: 1.5, borderBottomColor: noir.gold },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  // Green disc + gold hairline: the same mark as the Reels tab.
   post: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, height: 38, paddingHorizontal: spacing.md + 2,
-    borderRadius: radius.pill, backgroundColor: colors.green,
+    width: 30, height: 30, borderRadius: 15, marginLeft: 4, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: noir.green, borderWidth: 1, borderColor: noir.gold,
   },
-  postText: { fontFamily: font.bold, fontSize: 13.5, color: colors.white },
-  postPlus: { fontFamily: font.bold, fontSize: 18, lineHeight: 20, color: colors.white },
+  postPlus: { fontFamily: font.heading, fontSize: 18, lineHeight: 20, color: noir.text, marginTop: -1 },
 
-  endPage: { backgroundColor: colors.carbon },
-  footerRetry: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.carbon },
+  endPage: { backgroundColor: noir.page },
+  footerRetry: { alignItems: 'center', justifyContent: 'center', backgroundColor: noir.page },
   moreSpinner: { position: 'absolute', bottom: 24, alignSelf: 'center' },
 });
