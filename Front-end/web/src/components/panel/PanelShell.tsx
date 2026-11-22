@@ -186,7 +186,7 @@ export default function PanelShell({
         <div className={`pn-brand flex items-center gap-2 px-5 py-5 ${rail ? 'md:justify-center md:px-2' : ''}`}>
           <Link href={homeHref} className={`min-w-0 flex-1 ${rail ? 'md:hidden' : ''}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/autobacs-logo-white.png" alt="Autobacs India" width={960} height={226} className="pn-logo h-7 w-auto" />
+            <img src="/images/autobacs-logo-v2-white.png" alt="Autobacs India" width={960} height={226} className="pn-logo h-7 w-auto" />
             <span className="pn-brand-sub mt-2 block truncate">{subtitle}</span>
           </Link>
           {hoverRail ? (

@@ -45,7 +45,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, max: number): string[
 type Draw = (ctx: CanvasRenderingContext2D) => number; // returns the height used
 
 export async function renderEnquiryImage(e: Pick<Enquiry, 'ref' | 'createdAt' | 'neededBy' | 'deliverTo' | 'notes' | 'showTargetPrice' | 'contactName' | 'items'>): Promise<Blob> {
-  const logo = await loadImage('/images/autobacs-logo.png');
+  const logo = await loadImage('/images/autobacs-logo-v2.png');
   // Lay out once on a scratch canvas to learn the height, then draw for real.
   const plan: Draw[] = [];
   const text = (s: string, size: number, { color = INK, weight = 400, gap = 10, indent = 0 } = {}): Draw => (ctx) => {

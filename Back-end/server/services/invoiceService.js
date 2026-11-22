@@ -269,10 +269,10 @@ const fmtDate = (d) => formatLongDateIST(d);
 // Read from disk like the fonts above: no network fetch per process, nothing to
 // time out, and no stale URL in an environment variable can resurrect an old
 // logo (the Onam-season artwork lingered on invoices that way). When the brand
-// logo changes, replace assets/brand/autobacs-logo-white.png with the navbar's file
-// (Front-end/web/public/images/autobacs-logo-white.png). It is white-on-transparent,
+// logo changes, replace assets/brand/autobacs-logo-v2-white.png with the navbar's file
+// (Front-end/web/public/images/autobacs-logo-v2-white.png). It is white-on-transparent,
 // which is why the header draws it on a dark chip.
-const LOGO_PATH = join(__dirname, '..', 'assets', 'brand', 'autobacs-logo-white.png');
+const LOGO_PATH = join(__dirname, '..', 'assets', 'brand', 'autobacs-logo-v2-white.png');
 let cachedLogo;
 
 /** "Roavion Automotive Private Limited · GSTIN: 32…" — the seller's legal line. */

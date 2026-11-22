@@ -19,9 +19,9 @@ describe('Autobacs brand wiring', () => {
   });
 
   it('shows the Autobacs logo and name, not Roavion', () => {
-    expect(brand.logo).toBe('/images/autobacs-logo-white.png');
-    expect(brand.logoOnLight).toBe('/images/autobacs-logo.png');
-    expect(ORGANISATION.logo).toMatch(/\/images\/autobacs-logo\.png$/);
+    expect(brand.logo).toBe('/images/autobacs-logo-v2-white.png');
+    expect(brand.logoOnLight).toBe('/images/autobacs-logo-v2.png');
+    expect(ORGANISATION.logo).toMatch(/\/images\/autobacs-logo-v2\.png$/);
     expect(footer.copyright).toContain(BRAND_NAME);
     const { ownership, ...rest } = footer;
     expect(JSON.stringify({ brand, footer: rest, sameAs: ORGANISATION.sameAs })).not.toMatch(/roavion/i);

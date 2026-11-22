@@ -30,7 +30,7 @@ describe('welcomeEmail', () => {
     expect(html).toContain('href="https://www.autobacsindia.com/account/garage"');
     expect(html).toContain('href="https://www.autobacsindia.com/products"');
     expect(html).toContain('href="https://www.autobacsindia.com/consultation"');
-    expect(html).toContain('src="https://www.autobacsindia.com/images/autobacs-logo-white.png"');
+    expect(html).toContain('src="https://www.autobacsindia.com/images/autobacs-logo-v2-white.png"');
     expect(text).toContain('https://www.autobacsindia.com/account/garage');
     expect(html).not.toMatch(/localhost|railway\.app/);
   });

@@ -130,7 +130,7 @@ const MARKUP_TEMPLATE = `
 
 
 <header class="rv-topbar">
-  <a href="/" class="rv-topbar-logo" aria-label="Autobacs India home"><img src="/images/autobacs-logo-white.png" alt="Autobacs India" width="960" height="226" /></a>
+  <a href="/" class="rv-topbar-logo" aria-label="Autobacs India home"><img src="/images/autobacs-logo-v2-white.png" alt="Autobacs India" width="960" height="226" /></a>
   <a href="/" class="rv-topbar-home"><span aria-hidden="true">&larr;</span> Home</a>
 </header>
 
