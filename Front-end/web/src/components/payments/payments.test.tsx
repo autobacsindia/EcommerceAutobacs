@@ -436,7 +436,15 @@ describe('each team’s own options', () => {
   });
 
   it('if the options cannot load, says so and offers to try again — it does not guess a list', async () => {
-    get.mockRejectedValueOnce(Object.assign(new Error('down'), { rawData: { message: 'Server unavailable' } }));
+    // The options fail once (the form's task picker reads its own list: left alone).
+    let failed = false;
+    get.mockImplementation(async (url: string) => {
+      if (url.startsWith('/payment-requests/expense-options')) {
+        if (!failed) { failed = true; throw Object.assign(new Error('down'), { rawData: { message: 'Server unavailable' } }); }
+        return { options: OPS };
+      }
+      throw new Error(`unexpected GET ${url}`);
+    });
     wrap(<PaymentRequestForm onDone={() => {}} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Server unavailable');
     expect(screen.queryByRole('combobox', { name: 'What for' })).toBeNull();

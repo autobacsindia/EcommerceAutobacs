@@ -342,6 +342,8 @@ export const taskKeys = {
   projectMoney: (id: string) => [...taskKeys.projects(), 'money', id] as const,
   /** One project's Updates feed (words, photos, videos), newest first. */
   projectUpdates: (id: string) => [...taskKeys.projects(), 'updates', id] as const,
+  /** One task's Reimbursements box (its linked payments and the server's totals). */
+  taskMoney: (id: string) => [...taskKeys.all, 'money', id] as const,
   /** The Details forms (static per deploy) and the owner's daily reminder. */
   projectTemplates: () => [...taskKeys.all, 'projectTemplates'] as const,
   projectReminder: () => [...taskKeys.all, 'projectReminder'] as const,

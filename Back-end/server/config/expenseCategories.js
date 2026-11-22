@@ -29,9 +29,20 @@ export const OTHER = 'other';
 const c = (value, label, noteRequired = false) => Object.freeze({ value, label, noteRequired });
 const others = c(OTHER, 'Others', true);
 
+/*
+  Reimbursement (owner, 2026-11-21): a staff member claiming back what they spent
+  themself — Fuel (km × the admin's per-km rate, worked out by the server), Food,
+  Transportation or Others. Every team has it, first on the list. Its sub-type,
+  km and rate live on the request's `reimbursement` (services/reimbursement.js);
+  "Others" needs details, checked there rather than by `noteRequired`.
+*/
+export const REIMBURSEMENT = 'reimbursement';
+const reimbursement = c(REIMBURSEMENT, 'Reimbursement');
+
 /** Team (config/staff.js STAFF_TEAMS value) → the options it may choose, in order. */
 export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
   procurement: Object.freeze([
+    reimbursement,
     // Buying stock for an order outside a supplier payment (owner, 2026-11-20).
     c('product_purchase', 'Product purchase'),
     c('import_purchase', 'Import purchase'),
@@ -41,18 +52,20 @@ export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
     others,
   ]),
   accounts: Object.freeze([
+    reimbursement,
     c('gst', 'GST', true),
     c('salary', 'Salary', true),
     c('epf', 'EPF', true),
     others,
   ]),
+  // Fuel / Food / Travel were typed amounts until 2026-11-21; they are now
+  // Reimbursement sub-types (old records keep their names via LEGACY_LABELS).
   operations: Object.freeze([
-    c('fuel', 'Fuel'),
-    c('food', 'Food'),
-    c('travel', 'Travel'),
+    reimbursement,
     others,
   ]),
   marketing: Object.freeze([
+    reimbursement,
     c('meta_ads', 'Meta ads'),
     c('google_ads', 'Google ads'),
     c('claude', 'Claude'),
@@ -60,6 +73,7 @@ export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
     others,
   ]),
   developer: Object.freeze([
+    reimbursement,
     c('hosting', 'Servers & hosting'),
     c('domains', 'Domains'),
     c('software', 'Software subscriptions'),
@@ -68,6 +82,7 @@ export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
   ]),
   // GTM (stored as 'sales').
   sales: Object.freeze([
+    reimbursement,
     c('customer_travel', 'Travel to customers (fuel, cab, train)'),
     c('customer_food', 'Food with customers'),
     c('samples', 'Samples / demo items'),
@@ -77,7 +92,7 @@ export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
 });
 
 /** A team added to config/staff.js before it has a list here can still claim — as "Others", with details. */
-const FALLBACK = Object.freeze([others]);
+const FALLBACK = Object.freeze([reimbursement, others]);
 
 /**
  * A subscription / due marked paid (services/subscriptionDueService.js "Mark
@@ -93,6 +108,15 @@ export const LEGACY_LABELS = Object.freeze({
   purchase: 'Purchase for the company',
   other: 'Others',
 });
+
+/** A reimbursement's sub-types, in the order shown. */
+export const REIMBURSEMENT_TYPES = Object.freeze([
+  Object.freeze({ value: 'fuel', label: 'Fuel' }),
+  Object.freeze({ value: 'food', label: 'Food' }),
+  Object.freeze({ value: 'transport', label: 'Transportation' }),
+  Object.freeze({ value: 'other', label: 'Others' }),
+]);
+export const reimbursementTypeLabel = (t) => REIMBURSEMENT_TYPES.find((x) => x.value === t)?.label || '';
 
 /** Codes the requester may pick, in the order shown. INR first: it is the default. */
 export const EXPENSE_CURRENCIES = Object.freeze([
@@ -168,7 +192,14 @@ export const expenseOptionsFor = (team) => ({
 export function filterCategories(team = null) {
   const lists = team ? [categoriesFor(team)] : Object.values(TEAM_EXPENSE_CATEGORIES);
   const seen = new Map();
-  for (const list of lists) for (const x of list) if (!seen.has(x.value)) seen.set(x.value, x.label);
+  for (const list of lists) {
+    for (const x of list) {
+      if (seen.has(x.value)) continue;
+      seen.set(x.value, x.label);
+      // "Reimbursement – Fuel" etc. (listQuery reads `reimbursement:<type>`).
+      if (x.value === REIMBURSEMENT) for (const t of REIMBURSEMENT_TYPES) seen.set(`${REIMBURSEMENT}:${t.value}`, `${x.label} – ${t.label}`);
+    }
+  }
   for (const [value, label] of Object.entries(LEGACY_LABELS)) if (!seen.has(value)) seen.set(value, label);
   return [...seen].map(([value, label]) => ({ value, label }));
 }

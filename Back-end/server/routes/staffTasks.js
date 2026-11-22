@@ -52,6 +52,7 @@ import {
 } from '../services/staffProjectService.js';
 import { templatesForPanel, updateDetails, previewFromOrder } from '../services/staffProjectDetailsService.js';
 import { projectMoney } from '../services/projectMoneyService.js';
+import { taskMoney } from '../services/taskMoneyService.js';
 import { loadSlip, saveSlipValues } from '../services/slipTemplateService.js';
 import { renderProjectSlip } from '../services/projectSlipService.js';
 import { getReminder, dismissReminder } from '../services/projectReminderService.js';
@@ -401,6 +402,13 @@ router.delete('/:id/links/:linkId', validateTaskLinkRemove, validateRequest, asy
 }));
 
 // @route  GET /staff/tasks/:id/subtasks — the sub-tasks under a task (at most 50, not archived)
+// @route  GET /staff/tasks/:id/payments?cursor= — the Reimbursements box: admin, Accounts, the creator and assignees
+router.get('/:id/payments', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+  res.json({ success: true, ...(await taskMoney(req.user, req.params.id, { cursor })) });
+}));
+
 router.get('/:id/subtasks', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listSubtasks(req.user, req.params.id)) });
 }));

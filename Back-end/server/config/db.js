@@ -744,6 +744,14 @@ export async function ensureCriticalIndexes() {
     // double-submit guard (one request per requester + clientId) — same names as the schema.
     // Not partial: see models/PaymentRequest.js for why.
     await db.collection('paymentrequests').createIndex({ project: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_project', background: true });
+    // A task's linked payments, and the monthly reimbursement report (services/reimbursement.js).
+    await db.collection('paymentrequests').createIndex({ task: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_task', background: true });
+    await db.collection('paymentrequests').createIndex(
+      { 'reimbursement.on': 1 },
+      { partialFilterExpression: { 'reimbursement.on': { $type: 'string' } }, name: 'payment_request_reimbursement_on', background: true }
+    );
+    // The expense form's last-UPI prefill (lastOwnPayee): without it, a full scan per form open.
+    await db.collection('paymentrequests').createIndex({ requestedBy: 1, category: 1, createdAt: -1 }, { name: 'payment_request_requester_category', background: true });
     await db.collection('paymentrequests').createIndex(
       { reference: 1, createdAt: -1 },
       { partialFilterExpression: { reference: { $gt: '' } }, name: 'payment_request_reference', background: true }

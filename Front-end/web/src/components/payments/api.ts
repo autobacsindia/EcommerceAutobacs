@@ -56,6 +56,10 @@ export type PaymentRequest = {
   order: { id: string; number: string } | null;
   /** The project it is for, as it was when linked ("PRJ-0007 Diwali launch"). */
   project?: { id: string; code: string; name: string } | null;
+  /** The staff task it is for, as it was when linked ("T-42 Pick up Hilux bumper"). */
+  task?: { id: string; code: string; title: string } | null;
+  /** A Reimbursement: its kind, the day spent, and for Fuel the km and the rate it was claimed at (amount = km × rate, server-worked). */
+  reimbursement?: ReimbursementClaim | null;
   /** Any other ID it belongs to (a supplier invoice number, a courier AWB), or ''. */
   reference?: string;
   itemNames: string[];
@@ -220,7 +224,53 @@ export type ExpenseOptions = {
   categories: { value: string; label: string; noteRequired: boolean }[];
   currencies: { code: string; label: string }[];
   baseCurrency: string;
+  /** The Reimbursement form: sub-types, today's per-km fuel rate, the limits, and this person's last UPI/bank. */
+  reimbursement?: ReimbursementOptions;
 };
+
+export const REIMBURSEMENT = 'reimbursement';
+export type ReimbursementType = 'fuel' | 'food' | 'transport' | 'other';
+export type ReimbursementClaim = {
+  type: ReimbursementType; on: string; km: number | null; ratePerKm: number | null; from: string; to: string;
+};
+export type ReimbursementOptions = {
+  types: { value: ReimbursementType; label: string }[];
+  fuelRatePerKm: number;
+  maxKm: number;
+  billRequiredAbove: number;
+  maxAgeDays: number;
+  lastPayee: PaymentRequest['payee'] | null;
+};
+
+/**
+ * What a fuel claim comes to, for the PREVIEW only — the server works out the
+ * real amount itself and ignores anything the browser sends. In paise, as the
+ * server does, so the preview never disagrees by a paisa.
+ */
+export const fuelPreview = (km: number, ratePerKm: number) =>
+  (Number.isFinite(km) && km > 0 ? Math.round(km * Math.round(ratePerKm * 100)) / 100 : 0);
+
+/** "42 km × ₹15" */
+export const kmText = (km: number | null | undefined) => Number(km || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+export type ReimbursementSettings = { fuelRatePerKm: number; updatedAt: string | null; updatedByName: string };
+export const getReimbursementSettings = () =>
+  apiClient.get<{ settings: ReimbursementSettings }>('/payment-requests/reimbursements/settings');
+export const setFuelRate = (fuelRatePerKm: number) =>
+  apiClient.put<{ settings: ReimbursementSettings }>('/payment-requests/reimbursements/settings', { fuelRatePerKm });
+
+export type ReimbursementReport = {
+  month: string;
+  total: { count: number; amount: number; paid: number; waiting: number; km: number };
+  people: {
+    id: string; name: string; team: string; teamLabel: string; count: number; amount: number; paid: number; waiting: number; km: number;
+    byType: Record<ReimbursementType, number>;
+  }[];
+  tasks: { id: string; code: string; title: string; count: number; amount: number; paid: number; waiting: number; km: number }[];
+  capped: boolean;
+};
+export const getReimbursementReport = (month: string) =>
+  apiClient.get<{ report: ReimbursementReport }>(`/payment-requests/reimbursements/report?month=${encodeURIComponent(month)}`);
 
 export const getExpenseOptions = (team?: string) =>
   apiClient.get<{ options: ExpenseOptions }>(`/payment-requests/expense-options${team ? `?team=${encodeURIComponent(team)}` : ''}`);
@@ -273,6 +323,8 @@ export const paymentKeys = {
   options: (team: string) => [...paymentKeys.all, 'options', team] as const,
   filterOptions: () => [...paymentKeys.all, 'filter-options'] as const,
   orderLookup: (q: string) => [...paymentKeys.all, 'order-lookup', q] as const,
+  reimbursementSettings: () => [...paymentKeys.all, 'reimbursement-settings'] as const,
+  reimbursementReport: (month: string) => [...paymentKeys.all, 'reimbursement-report', month] as const,
 };
 
 export const slipHref = (id: string) => `/api/v1/payment-requests/${encodeURIComponent(id)}/slip`;
@@ -314,7 +366,7 @@ export const linkOrder = (id: string, orderId: string | null) =>
   apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(id)}/order`, { orderId });
 
 /** Set, change or clear a request's project ("PRJ-0007" / '') and other ID (text / ''). Only the keys sent change. */
-export const setLinks = (id: string, links: { project?: string; reference?: string }) =>
+export const setLinks = (id: string, links: { project?: string; reference?: string; task?: string }) =>
   apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(id)}/links`, links);
 
 /** Multipart POST (the JSON client can't send files), with the same CSRF header it uses. */

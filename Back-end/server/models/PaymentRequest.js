@@ -194,6 +194,28 @@ const PaymentRequestSchema = new mongoose.Schema(
       }, { _id: false }),
       default: undefined,
     },
+    // Optional: the staff task this cost was for (models/StaffTask.js) — procurement
+    // claims fuel per pickup. Number and title snapshotted like the project, so the
+    // request still reads "T-42 Pick up Hilux bumper" after a rename or delete.
+    task: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffTask', default: null },
+    taskNumber: { type: Number, default: null },
+    taskTitle: { type: String, default: '' },
+    // A Reimbursement expense (category 'reimbursement', services/reimbursement.js):
+    // what kind, the day it was spent (IST 'YYYY-MM-DD'), and for Fuel the km and the
+    // per-km rate AT SUBMIT — `amount` = km × ratePerKm, worked out by the server.
+    // The rate is a snapshot: changing the admin's rate never rewrites a claim.
+    // Absent on every other request.
+    reimbursement: {
+      type: new mongoose.Schema({
+        type: { type: String, enum: ['fuel', 'food', 'transport', 'other'], required: true },
+        on: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+        km: { type: Number, default: null, min: 0 },
+        ratePerKm: { type: Number, default: null, min: 0 },
+        from: { type: String, default: '', maxlength: 120 },
+        to: { type: String, default: '', maxlength: 120 },
+      }, { _id: false }),
+      default: undefined,
+    },
     // Optional: any other ID the cost belongs to (a supplier invoice number, a
     // courier AWB, a ClickUp task) — free text, searched by the admin's lookup.
     reference: { type: String, default: '', maxlength: 60 },
@@ -306,6 +328,17 @@ PaymentRequestSchema.index(
   tests/linkLookupIndexUsage.test.js). One small null key per other payment is cheaper.
 */
 PaymentRequestSchema.index({ project: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_project' });
+// One task's payments, newest first (the task's Reimbursements box). Not partial, for
+// the same reason as payment_request_project.
+PaymentRequestSchema.index({ task: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_task' });
+// The monthly reimbursement report: claims by the day they were spent. Only reimbursements.
+PaymentRequestSchema.index(
+  { 'reimbursement.on': 1 },
+  { name: 'payment_request_reimbursement_on', partialFilterExpression: { 'reimbursement.on': { $type: 'string' } } }
+);
+// "My last reimbursement's UPI" — the expense form prefills it on every open (lastOwnPayee).
+// Measured: 6,000 payments read for one without it (tests/reimbursementIndexUsage.test.js).
+PaymentRequestSchema.index({ requestedBy: 1, category: 1, createdAt: -1 }, { name: 'payment_request_requester_category' });
 // "Which payments carry reference INV-2231?" — only rows that have one.
 PaymentRequestSchema.index(
   { reference: 1, createdAt: -1 },

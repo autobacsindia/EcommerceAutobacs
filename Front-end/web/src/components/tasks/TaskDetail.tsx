@@ -22,6 +22,7 @@ import InlineRichText from './InlineRichText';
 import TaskMenu from './TaskMenu';
 import Subtasks from './Subtasks';
 import Links, { WaitingWarning } from './TaskLinks';
+import { TaskMoney } from './TaskMoney';
 import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import { DueApprovalPanel } from './dueRules';
@@ -852,6 +853,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       <Subtasks task={task} base={base} onOpen={onOpen} />
       <Links task={task} base={base} onOpen={onOpen} />
       <Checklist task={task} />
+      {!task.personal && <TaskMoney task={task} />}
 
       {task.group && (
         <section>

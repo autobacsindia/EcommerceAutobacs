@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import {
-  categoryName, errorMessage, fileHref, getExpenseOptions, money, paymentKeys, postForm, type PaymentRequest,
+  categoryName, errorMessage, fileHref, getExpenseOptions, money, paymentKeys, postForm, REIMBURSEMENT, type PaymentRequest,
 } from './api';
+import ReimbursementFields, { claimPayload, claimProblem, emptyClaim, type ClaimDraft } from './ReimbursementFields';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import CardFields, { cardPayload, last4Problem, type CardDetails, type PayMethod } from './CardFields';
 import { SupplierSuggestions, payLine } from './SupplierPicker';
@@ -45,6 +46,10 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const [currency, setCurrency] = useState(r.currency || 'INR');
   const [foreignAmount, setForeignAmount] = useState(r.foreignAmount != null ? String(creditUsed && r.bill != null ? r.bill : r.foreignAmount) : '');
   const isExpense = r.kind === 'expense';
+  // A Reimbursement: edited as km (Fuel — the server recomputes km × the claim's own rate) or a typed amount.
+  const [claim, setClaim] = useState<ClaimDraft>(() => (r.reimbursement
+    ? { type: r.reimbursement.type, on: r.reimbursement.on, km: r.reimbursement.km != null ? String(r.reimbursement.km) : '', from: r.reimbursement.from, to: r.reimbursement.to }
+    : emptyClaim()));
   const optionsQ = useQuery({
     queryKey: paymentKeys.options(r.team),
     queryFn: () => getExpenseOptions(r.team),
@@ -54,12 +59,13 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const teamCategories = options?.categories ?? [];
   const isOld = !teamCategories.some((c) => c.value === r.category);
   // An option off the team's list was raised when details were required on every expense.
-  const noteRequired = isExpense && (teamCategories.find((c) => c.value === category)?.noteRequired ?? true);
+  const reimbursing = isExpense && category === REIMBURSEMENT && Boolean(options?.reimbursement);
+  const noteRequired = isExpense && (reimbursing ? claim.type === 'other' : (teamCategories.find((c) => c.value === category)?.noteRequired ?? true));
   const currencies = options?.currencies ?? [];
   const currencyChoices = currencies.some((c) => c.code === (r.currency || 'INR'))
     ? currencies
     : [{ code: r.currency || 'INR', label: '' }, ...currencies];
-  const foreign = currency !== 'INR';
+  const foreign = !reimbursing && currency !== 'INR';
   // A part of a supplier deal stays in the deal's currency.
   const currencyLocked = Boolean(r.dealId || r.credit);
   // An expense's pay details are all optional (accounts fills them in); a supplier's are not.
@@ -95,12 +101,20 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     const codeProblem = !picked && method === 'bank' && !masked ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
     if (!picked && method === 'card' && last4Problem(card.cardLast4)) { setError(last4Problem(card.cardLast4)); return; }
+    if (reimbursing) {
+      // The bills it will carry after this edit: kept ones plus new ones.
+      const billCount = r.files.filter((f) => f.kind === 'bill' && !removed.includes(f.id)).length + bills.length;
+      const problem = claimProblem(claim, options!.reimbursement!, { amount: Number(amount), details: richTextToPlain(description), bills: billCount });
+      if (problem) { setError(problem); return; }
+    }
     if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
     if (reason.trim().length < 3) { setError('Say why you are changing it — accounts sees this.'); return; }
     if (qr && qrKept) { setError('Remove the old QR code before attaching a new one.'); return; }
     const body: Record<string, unknown> = { description: description.trim(), reason: reason.trim(), rev: r.rev ?? 0, formKey };
     // A foreign bill sends only what was billed: its rupees are recorded when it is paid.
-    if (foreign) Object.assign(body, currencyLocked ? { foreignAmount } : { currency, foreignAmount });
+    // A reimbursement is rupees; Fuel sends km only (never an amount).
+    if (reimbursing) Object.assign(body, { reimbursement: claimPayload(claim) }, claim.type === 'fuel' ? {} : { amount });
+    else if (foreign) Object.assign(body, currencyLocked ? { foreignAmount } : { currency, foreignAmount });
     else Object.assign(body, currencyLocked ? { amount } : { currency, amount });
     if (isExpense) body.category = category;
     if (picked) body.supplierId = picked.id;
@@ -137,7 +151,7 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        {!foreign && (
+        {!foreign && !reimbursing && (
           <div><label className={label} htmlFor="ed-amount">{creditUsed ? 'Bill amount (₹)' : 'Amount (₹)'}</label>
             <input id="ed-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} />
             {creditUsed > 0 && <p className="mt-1 text-xs text-emerald-800">{money(creditUsed, 'INR')} supplier credit comes off — transfer {money(Math.max(0, Math.round((Number(amount) - creditUsed) * 100) / 100), 'INR')}</p>}</div>
@@ -149,13 +163,18 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
               {teamCategories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select></div>
         )}
-        {!currencyLocked && currencyChoices.length > 1 && (
+        {!currencyLocked && !reimbursing && currencyChoices.length > 1 && (
           <div><label className={label} htmlFor="ed-currency">Currency</label>
             <select id="ed-currency" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
               {currencyChoices.map((c) => <option key={c.code} value={c.code}>{c.label ? `${c.code} — ${c.label}` : c.code}</option>)}
             </select></div>
         )}
       </div>
+
+      {reimbursing && options?.reimbursement && (
+        <ReimbursementFields value={claim} onChange={setClaim} options={options.reimbursement} amount={amount} onAmount={setAmount}
+          ratePerKm={r.reimbursement?.type === 'fuel' ? r.reimbursement.ratePerKm : null} />
+      )}
 
       {foreign && (
         <div className="rounded-lg bg-gray-50 p-3">
