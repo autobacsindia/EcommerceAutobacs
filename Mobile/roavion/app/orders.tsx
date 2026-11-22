@@ -92,7 +92,10 @@ function OrderCard({ order }: { order: Order }) {
       {order.items.length > 3 && <Text style={s.more}>+{order.items.length - 3} more</Text>}
 
       <View style={s.foot}>
-        <Text style={s.footLabel}>Total paid</Text>
+        {/* Only say "paid" when the server says it was — an unpaid or failed order shows its total, not a payment. */}
+        <Text style={s.footLabel}>
+          {order.paymentStatus === 'paid' ? 'Total paid' : order.paymentStatus === 'refunded' ? 'Total (refunded)' : 'Order total'}
+        </Text>
         <Text style={s.total}>{inr(order.total)}</Text>
       </View>
     </View>

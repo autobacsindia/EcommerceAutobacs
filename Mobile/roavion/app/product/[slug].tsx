@@ -13,8 +13,8 @@
  * product's own compatibility list, and there is NO delivery-date chip because
  * the product API does not return one (never invent a promise).
  */
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,11 +23,11 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { ApiError } from '../../src/api/client';
-import { fetchProduct, fetchProducts, type Product } from '../../src/api/catalogue';
+import { fetchProduct, fetchProducts, type Product, type Variant } from '../../src/api/catalogue';
 import ProductCard from '../../src/components/ProductCard';
 import { Photo } from '../../src/components/ui';
 import { useReelFeed } from '../../src/reels/useReels';
-import { alpha, colors, elevation, font, palette, radius, spacing, type } from '../../src/theme';
+import { alpha, colors, elevation, font, inr, palette, radius, spacing, type } from '../../src/theme';
 import { useApp, type Garage } from '../../src/store';
 import {
   Badge,
@@ -90,6 +90,10 @@ export default function ProductScreen() {
   const [zoomOpen, setZoomOpen] = useState(false);
   const [added, setAdded] = useState(false);
   const [buying, setBuying] = useState(false);
+  /** Chosen option of a `variable` product. Never pre-picked: the customer chooses. */
+  const [variantId, setVariantId] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const [pickerY, setPickerY] = useState(0);
 
   const product = useQuery({
     queryKey: ['product', slug],
@@ -135,9 +139,26 @@ export default function ProductScreen() {
     );
   }
 
-  const soldOut = p.stock === 'out';
+  // Options: a variable product cannot be added until one is chosen (the cart
+  // API rejects it). Price/stock shown are the server's figures for the option.
+  const needsOption = p.productType === 'variable' && p.variants.length > 0;
+  const variant: Variant | null = needsOption ? p.variants.find((v) => v.id === variantId) ?? null : null;
+  const allOptionsOut = needsOption && p.variants.every((v) => v.stock === 'out');
+  const stock = variant ? variant.stock : needsOption ? (allOptionsOut ? 'out' : 'in') : p.stock;
+  const soldOut = stock === 'out';
   const fits = fitsCar(p, garage);
   const carName = garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : '';
+  // A listed compatibility that does NOT include the saved car — say so, never guess "fits".
+  const notListed = !!garage && !fits && p.fits.length > 0;
+  const optionName = p.variants[0]?.attribute && p.variants[0].attribute.toLowerCase() !== 'option' ? p.variants[0].attribute.toLowerCase() : 'option';
+
+  /** Tapped Add/Buy without an option: take them to the picker instead of an error. */
+  const askForOption = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    // pickerY is measured inside the body block, which starts under the gallery.
+    scrollRef.current?.scrollTo({ y: Math.max(0, galleryH + insets.top + pickerY - spacing.xl), animated: true });
+    toast.show({ message: `Choose a ${optionName} first`, icon: 'options-outline', duration: 2000 });
+  };
 
   const showAdded = () => {
     setAdded(true);
@@ -156,9 +177,10 @@ export default function ProductScreen() {
   };
 
   const onAdd = async () => {
+    if (needsOption && !variant) return askForOption();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
-      await addItem(p.id, 1);
+      await addItem(p.id, 1, variant?.id ?? null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       showAdded();
     } catch (err) {
@@ -167,10 +189,11 @@ export default function ProductScreen() {
   };
 
   const onBuy = async () => {
+    if (needsOption && !variant) return askForOption();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setBuying(true);
     try {
-      await addItem(p.id, 1);
+      await addItem(p.id, 1, variant?.id ?? null);
       router.push(customer ? '/checkout' : '/login?next=/checkout');
     } catch (err) {
       fail(err);
@@ -192,7 +215,7 @@ export default function ProductScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={s.screen}>
-        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 110 }} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: insets.bottom + 110 }} showsVerticalScrollIndicator={false}>
           {/* Immersive gallery — tap any photo for full-screen pinch-zoom. */}
           <View style={[s.gallery, { height: galleryH + insets.top }]}>
             <ScrollView
@@ -247,12 +270,60 @@ export default function ProductScreen() {
 
             <View style={s.metaRow}>
               <Rating rating={p.rating} count={p.reviews} />
-              {p.stock === 'low' && <Badge text="Only a few left" tone="red" icon="flame-outline" />}
-              {soldOut && <Badge text="Out of stock" tone="grey" />}
+              {stock === 'low' && <Badge text="Only a few left" tone="red" icon="flame-outline" />}
+              {soldOut && <Badge text={variant ? 'This option is out of stock' : 'Out of stock'} tone="grey" />}
             </View>
 
-            <Price price={p.price} mrp={p.mrp} offPercent={p.discountPercent} size="lg" style={{ marginTop: spacing.lg }} />
-            <Text style={s.taxNote}>Inclusive of all taxes · Delivery calculated at checkout</Text>
+            {needsOption && !variant ? (
+              <View style={s.fromRow}>
+                <Text style={s.fromText}>From</Text>
+                <Price price={p.priceFrom} size="lg" />
+              </View>
+            ) : (
+              <Price
+                price={variant ? variant.price : p.price}
+                mrp={variant ? variant.mrp : p.mrp}
+                offPercent={variant ? variant.discountPercent : p.discountPercent}
+                size="lg"
+                style={{ marginTop: spacing.lg }}
+              />
+            )}
+            <Text style={s.taxNote}>
+              {needsOption && !variant ? `Price depends on the ${optionName} you choose · ` : ''}Inclusive of all taxes · Delivery calculated at checkout
+            </Text>
+            {!!p.summary && <Text style={[type.body, s.summary]}>{p.summary.replace(/<[^>]*>/g, '').trim()}</Text>}
+
+            {needsOption && (
+              <View style={s.picker} onLayout={(e) => setPickerY(e.nativeEvent.layout.y)}>
+                <Text style={s.pickerTitle}>
+                  Choose {optionName}
+                  {variant ? <Text style={s.pickerChosen}>{`  ·  ${variant.label}`}</Text> : null}
+                </Text>
+                <View style={s.optionWrap}>
+                  {p.variants.map((v) => {
+                    const on = v.id === variantId;
+                    const out = v.stock === 'out';
+                    return (
+                      <PressScale
+                        key={v.id}
+                        onPress={() => setVariantId(v.id)}
+                        haptic="selection"
+                        scaleTo={0.96}
+                        style={[s.option, on && s.optionOn, out && s.optionOut]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: on }}
+                        accessibilityLabel={`${v.label}${out ? ', out of stock' : ''}`}
+                      >
+                        <Text style={[s.optionLabel, on && s.optionLabelOn, out && s.optionLabelOut]} numberOfLines={2}>
+                          {v.label}
+                        </Text>
+                        <Text style={[s.optionPrice, on && { color: colors.green }]}>{out ? 'Out of stock' : inr(v.price)}</Text>
+                      </PressScale>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             {/* Trust chips — each one is backed by real data. */}
             <View style={s.trustRow}>
@@ -260,7 +331,10 @@ export default function ProductScreen() {
               {!garage && p.fits.length > 0 && (
                 <TrustChip icon="car-sport-outline" label="Check it fits your car" tone="green" onPress={() => router.push('/garage')} />
               )}
-              {p.stock === 'in' && <TrustChip icon="cube-outline" label="In stock" />}
+              {notListed && (
+                <TrustChip icon="help-circle-outline" label={`Not listed for your ${carName}`} onPress={() => router.push('/garage')} />
+              )}
+              {stock === 'in' && (!needsOption || !!variant) && <TrustChip icon="cube-outline" label="In stock" />}
               {p.returnable && <TrustChip icon="repeat-outline" label="Easy returns" />}
               <TrustChip icon="shield-checkmark-outline" label="Genuine part" />
             </View>
@@ -319,10 +393,41 @@ export default function ProductScreen() {
               </View>
             )}
 
+            {p.specs.length > 0 && (
+              <View style={s.block}>
+                <Overline>Details</Overline>
+                <Text style={[type.h2, { marginTop: 4 }]}>Specifications</Text>
+                <View style={s.featureCard}>
+                  {p.specs.map((sp, i) => (
+                    <View key={`${sp.key}-${i}`} style={[s.specRow, i < p.specs.length - 1 && s.bulletLine]}>
+                      <Text style={s.specKey}>{sp.key}</Text>
+                      <Text style={s.specVal}>{sp.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {p.packageContents.length > 0 && (
+              <View style={s.block}>
+                <Overline>In the box</Overline>
+                <Text style={[type.h2, { marginTop: 4 }]}>What you get</Text>
+                <View style={s.featureCard}>
+                  {p.packageContents.map((c, i) => (
+                    <View key={i} style={[s.bullet, i < p.packageContents.length - 1 && s.bulletLine]}>
+                      <Ionicons name="cube-outline" size={16} color={colors.green} style={{ marginTop: 2 }} />
+                      <Text style={[type.body, { flex: 1 }]}>{c}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <View style={s.assure}>
               {[
                 { icon: 'shield-checkmark-outline' as const, title: 'Genuine', text: 'From the brand' },
-                { icon: 'repeat-outline' as const, title: 'Returns', text: 'Hassle-free' },
+                // Only promise returns when this product's own policy allows them.
+                ...(p.returnable ? [{ icon: 'repeat-outline' as const, title: 'Returns', text: 'Hassle-free' }] : []),
                 { icon: 'headset-outline' as const, title: 'Fitment', text: 'Expert help' },
               ].map((a) => (
                 <View key={a.title} style={s.assureItem}>
@@ -363,25 +468,39 @@ export default function ProductScreen() {
 
         {/* Sticky buy bar */}
         <View style={[s.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-          <PremiumButton
-            label={soldOut ? 'Out of stock' : added ? 'Added' : 'Add to cart'}
-            icon={added ? 'checkmark' : 'bag-add-outline'}
-            variant="outline"
-            onPress={onAdd}
-            disabled={soldOut || buying}
-            loading={cartBusy && !buying}
-            haptic={false}
-            style={{ flex: 1 }}
-          />
-          <PremiumButton
-            label="Buy now"
-            icon="flash"
-            onPress={onBuy}
-            disabled={soldOut || cartBusy}
-            loading={buying}
-            haptic={false}
-            style={{ flex: 1 }}
-          />
+          {soldOut ? (
+            <View style={s.soldOut} accessibilityLiveRegion="polite">
+              <View style={{ flex: 1 }}>
+                <Text style={s.soldOutTitle}>{variant ? 'This option is sold out' : 'Currently out of stock'}</Text>
+                <Text style={s.soldOutText}>
+                  {needsOption && !allOptionsOut ? `Try another ${optionName} above.` : 'Our specialists can suggest an alternative.'}
+                </Text>
+              </View>
+              <PremiumButton label="Shop similar" variant="outline" size="sm" onPress={() => router.push('/(tabs)/shop')} haptic={false} />
+            </View>
+          ) : (
+            <>
+              <PremiumButton
+                label={added ? 'Added' : needsOption && !variant ? `Choose ${optionName}` : 'Add to cart'}
+                icon={added ? 'checkmark' : needsOption && !variant ? 'options-outline' : 'bag-add-outline'}
+                variant="outline"
+                onPress={onAdd}
+                disabled={buying}
+                loading={cartBusy && !buying}
+                haptic={false}
+                style={{ flex: 1 }}
+              />
+              <PremiumButton
+                label="Buy now"
+                icon="flash"
+                onPress={onBuy}
+                disabled={cartBusy}
+                loading={buying}
+                haptic={false}
+                style={{ flex: 1 }}
+              />
+            </>
+          )}
         </View>
 
         {zoomOpen && <ZoomViewer photos={photos.filter(Boolean)} index={photo} visible onClose={() => setZoomOpen(false)} />}
@@ -410,6 +529,32 @@ const s = StyleSheet.create({
   title: { ...type.h1, marginTop: spacing.xs },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, flexWrap: 'wrap' },
   taxNote: { ...type.caption, color: colors.muted, marginTop: spacing.xs },
+  fromRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginTop: spacing.lg },
+  fromText: { fontFamily: font.medium, fontSize: 14, color: colors.muted, marginBottom: 4 },
+  summary: { marginTop: spacing.md, color: colors.ink2 },
+
+  picker: { marginTop: spacing.lg },
+  pickerTitle: { fontFamily: font.semibold, fontSize: 14, color: colors.ink },
+  pickerChosen: { fontFamily: font.regular, color: colors.muted },
+  optionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  option: {
+    minWidth: 96, maxWidth: '100%', minHeight: 56, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, justifyContent: 'center',
+  },
+  optionOn: { borderColor: colors.green, borderWidth: 2, backgroundColor: colors.greenFaint },
+  optionOut: { backgroundColor: colors.page },
+  optionLabel: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
+  optionLabelOn: { fontFamily: font.semibold, color: colors.green },
+  optionLabelOut: { color: colors.muted, textDecorationLine: 'line-through' },
+  optionPrice: { fontFamily: font.semibold, fontSize: 12.5, color: colors.ink2, marginTop: 2 },
+
+  specRow: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.md },
+  specKey: { width: '40%', fontFamily: font.medium, fontSize: 13.5, color: colors.muted },
+  specVal: { flex: 1, fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
+
+  soldOut: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  soldOutTitle: { fontFamily: font.semibold, fontSize: 14, color: colors.ink },
+  soldOutText: { ...type.caption, color: colors.muted },
 
   trustRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
   trust: {

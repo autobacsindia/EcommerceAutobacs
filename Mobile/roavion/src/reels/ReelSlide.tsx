@@ -140,11 +140,17 @@ function HeartBurst({ x, y, onDone }: { x: number; y: number; onDone: () => void
   );
 }
 
+/** Team uploads (no named creator) wear the round Autobacs badge. */
+const TEAM_BADGE = require('../../assets/icon.png');
+
 function Avatar({ reel }: { reel: Reel }) {
+  const team = reel.creator.id == null;
   return (
     <View style={s.avatarRing}>
       <View style={s.avatar}>
-        {reel.creator.avatarUrl ? (
+        {team && !reel.creator.avatarUrl ? (
+          <Image source={TEAM_BADGE} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="Autobacs India" />
+        ) : reel.creator.avatarUrl ? (
           <Image source={{ uri: reel.creator.avatarUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         ) : (
           <Text style={s.avatarText}>{reel.creator.name.slice(0, 1).toUpperCase() || 'A'}</Text>
@@ -311,7 +317,7 @@ function ReelSlideImpl(props: ReelSlideProps) {
       )}
 
       {/* Product pin on the video. */}
-      {reel.product && (
+      {reel.product && !expanded && (
         <Animated.View
           style={[
             s.pin,
@@ -411,7 +417,12 @@ function ReelSlideImpl(props: ReelSlideProps) {
               a11y={saved ? 'Remove from saved' : 'Save'}
             />
             <RailButton icon="paper-plane-outline" label="Share" onPress={() => props.onShare(reel)} a11y="Share" />
-            <RailButton icon={muted ? 'volume-mute-outline' : 'volume-high-outline'} onPress={props.onToggleMute} a11y={muted ? 'Unmute' : 'Mute'} />
+            <RailButton
+              icon={muted ? 'volume-mute' : 'volume-high-outline'}
+              label={muted ? 'Muted' : 'Sound'}
+              onPress={props.onToggleMute}
+              a11y={muted ? 'Unmute' : 'Mute'}
+            />
             <RailButton icon="ellipsis-horizontal" onPress={() => props.onReport(reel)} a11y="More: report this reel" />
           </View>
         </View>

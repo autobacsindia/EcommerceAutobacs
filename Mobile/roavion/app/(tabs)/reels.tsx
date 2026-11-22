@@ -38,12 +38,13 @@ import { ReelFeedSkeleton } from '../../src/reels/ReelFeedSkeleton';
 import { ApiError } from '../../src/api/client';
 import { useApp } from '../../src/store';
 import { alpha, colors, font, palette, radius, spacing } from '../../src/theme';
-import { EmptyState, ErrorState, IconButton, PressScale, StateLayout, StripeLoader, Stripes, haptic, useToast } from '../../src/ui';
+import { ErrorState, IconButton, PressScale, StateLayout, StripeLoader, Stripes, haptic, useToast } from '../../src/ui';
 
 type Row = { kind: 'reel'; reel: Reel } | { kind: 'end' };
 
 const SITE = (Constants.expoConfig?.extra as { siteUrl?: string } | undefined)?.siteUrl ?? 'https://www.autobacsindia.com';
 const VIEW_AFTER_MS = 2000;
+const TEAM_BADGE = require('../../assets/icon.png');
 const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
 
 const REPORT_REASONS = ['Spam or misleading', 'Wrong product tagged', 'Inappropriate content', 'Something else'];
@@ -359,14 +360,23 @@ export default function ReelsScreen() {
       />
     );
   } else if (!reels.length) {
+    // 0 approved reels (true at launch): an invitation, never a blank screen,
+    // and a way on to the shop so it is not a dead end.
     body = (
-      <EmptyState
-        icon="film-outline"
-        title="No reels yet"
-        body="Be the first — film the gear on your car and tag the product."
+      <StateLayout
+        title="Be the first to post a reel"
+        body="Film the gear on your car, tag the product, and help other drivers shop it. Our team checks every reel before it goes live."
         action={{ label: 'Post a reel', onPress: onPost }}
+        secondary={{ label: 'Browse the shop', onPress: () => router.push('/(tabs)/shop') }}
         onDark
-      />
+      >
+        <View style={s.emptyBadges} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Image source={TEAM_BADGE} style={s.emptyBadge} contentFit="cover" />
+          <View style={s.emptyPlus}>
+            <Text style={s.postPlus}>+</Text>
+          </View>
+        </View>
+      </StateLayout>
     );
   } else if (height > 0) {
     body = (
@@ -461,5 +471,11 @@ const s = StyleSheet.create({
 
   endPage: { backgroundColor: colors.carbon },
   footerRetry: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.carbon },
+  emptyBadges: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl },
+  emptyBadge: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: colors.greenOnDark },
+  emptyPlus: {
+    width: 30, height: 30, borderRadius: 15, marginLeft: -14, marginTop: 34, backgroundColor: colors.green,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.carbon,
+  },
   moreSpinner: { position: 'absolute', bottom: 24, alignSelf: 'center' },
 });

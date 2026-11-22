@@ -12,14 +12,31 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Photo } from '../../src/components/ui';
 import { colors, elevation, font, inr, radius, spacing, type } from '../../src/theme';
-import { Badge, EmptyState, ListSkeleton, Overline, PremiumButton, PressScale, Stripes } from '../../src/ui';
+import { ApiError } from '../../src/api/client';
+import { Badge, EmptyState, ErrorState, ListSkeleton, Overline, PremiumButton, PressScale, Stripes } from '../../src/ui';
 import { useApp } from '../../src/store';
 
 export default function CartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { cart, cartBusy, refreshCart, setQuantity, removeItem, customer } = useApp();
+  const { cart, cartBusy, cartError, refreshCart, setQuantity, removeItem, customer } = useApp();
   const [refreshing, setRefreshing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+
+  const retry = async () => {
+    setRetrying(true);
+    await refreshCart();
+    setRetrying(false);
+  };
+
+  /**
+   * Quantity / remove go through the server; if one fails (offline, item gone)
+   * say so instead of letting the tap silently do nothing.
+   */
+  const write = (action: () => Promise<void>) =>
+    action().catch((err: unknown) =>
+      Alert.alert('Cart not updated', err instanceof ApiError ? err.message : 'Please check your connection and try again.'),
+    );
 
   // Someone may have changed the cart on the website since this tab last loaded.
   useFocusEffect(
@@ -37,7 +54,7 @@ export default function CartScreen() {
   const confirmRemove = (productId: string, name: string, variantId: string | null) =>
     Alert.alert('Remove item', `Remove "${name}" from your cart?`, [
       { text: 'Keep', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeItem(productId, variantId) },
+      { text: 'Remove', style: 'destructive', onPress: () => write(() => removeItem(productId, variantId)) },
     ]);
 
   const soldOut = cart.items.some((i) => i.stock === 'out');
@@ -66,6 +83,12 @@ export default function CartScreen() {
         {customer === undefined ? (
           // Still restoring the session and cart on launch.
           <ListSkeleton rows={3} thumb={84} />
+        ) : cartError ? (
+          // Could not reach the server: don't claim the cart is empty.
+          <ErrorState
+            message="We couldn't load your cart. Check your connection and try again."
+            onRetry={retry}
+          />
         ) : (
           <EmptyState
             icon="bag-handle-outline"
@@ -81,6 +104,14 @@ export default function CartScreen() {
   return (
     <View style={s.screen}>
       {header}
+
+      {cartError && (
+        <PressScale onPress={retry} style={s.stale} accessibilityLabel="Couldn't refresh your cart. Tap to try again.">
+          <Ionicons name="cloud-offline-outline" size={16} color={colors.ink2} />
+          <Text style={s.staleText}>Showing your last saved cart. Prices are confirmed again at checkout.</Text>
+          <Text style={s.staleAction}>{retrying ? '…' : 'Retry'}</Text>
+        </PressScale>
+      )}
 
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: 220 }}
@@ -103,19 +134,23 @@ export default function CartScreen() {
               <View style={s.lineFoot}>
                 <View style={s.stepper}>
                   <PressScale
-                    onPress={() => setQuantity(item.productId, item.quantity - 1, item.variantId)}
+                    onPress={() =>
+                      item.quantity <= 1
+                        ? confirmRemove(item.productId, item.name, item.variantId)
+                        : write(() => setQuantity(item.productId, item.quantity - 1, item.variantId))
+                    }
                     disabled={cartBusy}
                     hitSlop={6}
                     haptic="selection"
                     scaleTo={0.9}
                     style={s.stepBtn}
-                    accessibilityLabel="Decrease quantity"
+                    accessibilityLabel={item.quantity <= 1 ? `Remove ${item.name}` : 'Decrease quantity'}
                   >
                     <Ionicons name={item.quantity <= 1 ? 'trash-outline' : 'remove'} size={16} color={colors.ink} />
                   </PressScale>
                   <Text style={s.qty}>{item.quantity}</Text>
                   <PressScale
-                    onPress={() => setQuantity(item.productId, item.quantity + 1, item.variantId)}
+                    onPress={() => write(() => setQuantity(item.productId, item.quantity + 1, item.variantId))}
                     disabled={cartBusy || item.stock === 'out'}
                     hitSlop={6}
                     haptic="selection"
@@ -144,7 +179,9 @@ export default function CartScreen() {
 
         <View style={s.note}>
           <Ionicons name="information-circle-outline" size={16} color={colors.green} />
-          <Text style={s.noteText}>Delivery and taxes are calculated at checkout.</Text>
+          <Text style={s.noteText}>
+            Prices and the subtotal come from our server, and are checked again at checkout. Delivery is added there.
+          </Text>
         </View>
 
         <View style={s.trustRow}>
@@ -166,7 +203,10 @@ export default function CartScreen() {
         <View style={s.barRow}>
           <View>
             <Text style={s.barLabel}>Subtotal</Text>
-            <Text style={s.barHint}>Before delivery and taxes</Text>
+            <View style={s.barHintRow}>
+              <Ionicons name="shield-checkmark-outline" size={12} color={colors.green} />
+              <Text style={s.barHint}>Calculated by Autobacs · delivery at checkout</Text>
+            </View>
           </View>
           <Text style={s.barTotal}>{inr(cart.totalPrice)}</Text>
         </View>
@@ -240,6 +280,13 @@ const s = StyleSheet.create({
   barRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   barLabel: { fontFamily: font.semibold, fontSize: 15, color: colors.ink },
   barHint: { ...type.caption, color: colors.muted },
+  barHintRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  stale: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: colors.goldSoft,
+  },
+  staleText: { ...type.caption, color: colors.ink2, flex: 1 },
+  staleAction: { fontFamily: font.bold, fontSize: 13, color: colors.green },
   barTotal: { fontFamily: font.extrabold, fontSize: 22, color: colors.ink },
   warnRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   warn: { fontFamily: font.medium, fontSize: 12, color: colors.red },

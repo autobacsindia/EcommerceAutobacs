@@ -74,20 +74,22 @@ export function ReelProductCard({
       </PressScale>
 
       <View style={s.actions}>
+        {/* Sold out: the first button still goes somewhere useful (details,
+            similar parts) instead of sitting there greyed out. */}
         <PremiumButton
-          label={choose ? 'Choose option' : 'Add to cart'}
-          icon={choose ? 'options-outline' : 'bag-add-outline'}
+          label={out ? 'View details' : choose ? 'Choose option' : 'Add to cart'}
+          icon={out ? 'eye-outline' : choose ? 'options-outline' : 'bag-add-outline'}
           variant="outline"
           size="sm"
-          onPress={onAdd}
-          disabled={out || (!!busy && busy !== 'add')}
+          onPress={out ? onOpen : onAdd}
+          disabled={!!busy && busy !== 'add'}
           loading={busy === 'add'}
           haptic={false}
           style={s.btn}
         />
         <PremiumButton
-          label={out ? 'Out of stock' : 'Buy now'}
-          icon={out ? undefined : 'flash'}
+          label={out ? 'Sold out' : 'Buy now'}
+          icon={out ? 'close-circle-outline' : 'flash'}
           size="sm"
           onPress={onBuy}
           disabled={out || (!!busy && busy !== 'buy')}
