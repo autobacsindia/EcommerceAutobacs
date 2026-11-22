@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "Autobacs Partner",
+    "slug": "autobacs-partner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "autobacspartner",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "in.autobacs.partner",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Autobacs Partner uses the camera to photograph your products and documents.",
+        "NSPhotoLibraryUsageDescription": "Autobacs Partner lets you pick product and document photos from your gallery."
+      }
+    },
+    "android": {
+      "package": "in.autobacs.partner",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f1111"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#f6f7f6"
+        }
+      ],
+      "expo-image",
+      "expo-status-bar",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Autobacs Partner lets you pick product and document photos from your gallery.",
+          "cameraPermission": "Autobacs Partner uses the camera to photograph your products and documents.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "https://api.autobacsindia.com/api/v1",
+      "supportEmail": "support@autobacsindia.com"
+    }
+  }
+}
