@@ -1,32 +1,34 @@
 /**
- * The Autobacs app header — design "Premium showroom" (owner picked
- * 2026-11-18, on top of "A clean light + C car line").
+ * The Autobacs app header — the website's store header, at phone width
+ * (store.css `.sh-top`, `.sh-vehicle-btn`, `.sh-search`, `.sh-go`, `.sh-cart`).
+ * Owner asked 2026-11-22: match autobacsindia.com's DEFAULT theme, logo visible.
  *
- *   - Off-white bar: the Autobacs logo on the left, a bell and the cart (with
- *     its count) on the right, in small white rounds.
- *   - `SearchField`: a white rounded-12 field that names the saved car. Home
- *     places it under its hero card; `compact` screens (Shop) get it right
- *     under the logo row.
+ *   - Carbon #121414 bar with the white Autobacs wordmark and the cart (badge).
+ *   - "Parts for <car>" — the dashed green vehicle pill; opens Garage.
+ *   - A white rounded search pill with a green "Go"; opens the search screen.
  *
- * The car itself lives on Home's hero card ("Your Toyota Fortuner" pill).
- * It sits inside the scroll view as its first child, so it scrolls away with
- * the content.
+ * While the screen showing it is focused the status bar is light, so the clock
+ * and battery read on the dark bar; it reverts when the screen blurs.
  *
- * Premium pass (2026-11-22): shared IconButtons, press-scale search field
- * with a soft lift and a green search glyph.
+ * `SearchField` is still exported (old call sites) and now renders the same
+ * website search pill.
  *
- * Presentation only — every tap routes, nothing here fetches or decides.
+ * Presentation only — every tap routes, nothing here fetches or decides. The
+ * cart badge shows the count the cart store already holds.
  */
-import { memo } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Image as RNImage, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, elevation, font, radius, spacing } from '../theme';
 import { useApp } from '../store';
-import { IconButton, PressScale } from '../ui';
+import { PressScale } from '../ui';
 
-/** White rounded search field; opens the search screen. */
+const LOGO = require('../../assets/autobacs-logo-white.png');
+
+/** The website search pill: green glyph, hint, green "Go". Opens search. */
 export function SearchField({ style }: { style?: StyleProp<ViewStyle> }) {
   const router = useRouter();
   const { garage } = useApp();
@@ -42,47 +44,88 @@ export function SearchField({ style }: { style?: StyleProp<ViewStyle> }) {
     >
       <Ionicons name="search" size={18} color={colors.green} />
       <Text style={s.searchText} numberOfLines={1}>{hint}</Text>
+      <View style={s.go}>
+        <Text style={s.goText}>Go</Text>
+      </View>
     </PressScale>
   );
+}
+
+/** "Parts for <car>" — the website's dashed green vehicle pill. */
+function VehiclePill() {
+  const router = useRouter();
+  const { garage } = useApp();
+  const car = garage ? [garage.make, garage.model].filter(Boolean).join(' ') : null;
+  return (
+    <PressScale
+      onPress={() => router.push('/garage')}
+      haptic="selection"
+      scaleTo={0.98}
+      style={s.vehicle}
+      accessibilityRole="button"
+      accessibilityLabel={car ? `Parts for ${car}. Change car` : 'Add your car to see parts that fit'}
+    >
+      <View style={s.vehicleIco}>
+        <Ionicons name="car-sport" size={18} color={colors.white} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={s.vehicleSmall}>{car ? 'Parts for' : 'Shop by vehicle'}</Text>
+        <Text style={s.vehicleBig} numberOfLines={1}>{car ?? 'Add your car'}</Text>
+      </View>
+      <Text style={s.vehicleAction}>{car ? 'Change' : 'Add'}</Text>
+      <Ionicons name="chevron-down" size={16} color={colors.headerMuted} />
+    </PressScale>
+  );
+}
+
+/** Light status bar only while this header's screen is on top. */
+function LightStatusBar() {
+  const [focused, setFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  return focused ? <StatusBar style="light" /> : null;
 }
 
 function AppHeader({
   compact,
 }: {
-  /** Logo row + search — for a screen that has its own controls below. */
+  /** Leave out the vehicle pill (a screen that offers its own filters). */
   compact?: boolean;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { customer, cart } = useApp();
+  const { cart } = useApp();
 
   return (
     <View style={[s.wrap, { paddingTop: insets.top + spacing.sm }]}>
+      <LightStatusBar />
       <View style={s.topRow}>
-        <RNImage
-          source={require('../../assets/autobacs-logo.png')}
-          style={s.logo}
-          resizeMode="contain"
-          accessibilityLabel="Autobacs"
-        />
+        <RNImage source={LOGO} style={s.logo} resizeMode="contain" accessibilityRole="image" accessibilityLabel="Autobacs India" />
         <View style={{ flex: 1 }} />
-        <IconButton
-          icon="notifications-outline"
-          label="Order updates"
-          // No notification centre exists yet; order updates are the closest thing.
-          onPress={() => router.push(customer ? '/orders' : '/login')}
-          tone="light"
-        />
-        <IconButton
-          icon="bag-handle-outline"
-          label={`Cart, ${cart.totalItems} items`}
+        <PressScale
           onPress={() => router.push('/(tabs)/cart')}
-          badge={cart.totalItems}
-          tone="light"
-        />
+          haptic="selection"
+          scaleTo={0.92}
+          hitSlop={4}
+          style={s.cart}
+          accessibilityRole="button"
+          accessibilityLabel={`Cart, ${cart.totalItems} items`}
+        >
+          <Ionicons name="cart-outline" size={22} color={colors.white} />
+          {cart.totalItems > 0 && (
+            <View style={s.cartCount}>
+              <Text style={s.cartCountText}>{cart.totalItems > 99 ? '99+' : cart.totalItems}</Text>
+            </View>
+          )}
+        </PressScale>
       </View>
 
-      {compact && <SearchField style={{ marginHorizontal: spacing.lg, marginTop: spacing.xs }} />}
+      {!compact && <VehiclePill />}
+      <SearchField style={{ marginTop: spacing.md }} />
     </View>
   );
 }
@@ -90,23 +133,68 @@ function AppHeader({
 export default memo(AppHeader);
 
 const s = StyleSheet.create({
-  wrap: { backgroundColor: colors.bg, paddingBottom: spacing.sm },
+  wrap: {
+    backgroundColor: colors.header,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+  },
 
-  topRow: {
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingBottom: spacing.md },
+  // The wordmark is 960×226; 34pt tall keeps "Powered By Autobacs India" legible.
+  logo: { width: 144, height: 34 },
+
+  cart: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // The website's `.sh-cart-count`: white pill, ink number, ringed in the bar colour.
+  cartCount: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 5,
+    borderRadius: 11,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.header,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartCountText: { fontFamily: font.bold, fontSize: 11, lineHeight: 14, color: colors.ink },
+
+  vehicle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xs,
+    gap: spacing.md,
+    paddingVertical: 6,
+    paddingLeft: 6,
+    paddingRight: spacing.md,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.vehicleBorder,
+    backgroundColor: colors.vehicleFill,
   },
-  logo: { width: 128, height: 30 },
+  vehicleIco: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.greenMid, alignItems: 'center', justifyContent: 'center' },
+  vehicleSmall: { fontFamily: font.regular, fontSize: 11.5, lineHeight: 14, color: colors.headerMuted },
+  vehicleBig: { fontFamily: font.bold, fontSize: 15, lineHeight: 19, color: colors.headerText },
+  vehicleAction: { fontFamily: font.bold, fontSize: 12.5, color: colors.headerText },
 
   search: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm + 2,
     height: 48,
-    paddingHorizontal: spacing.lg,
+    paddingLeft: spacing.lg,
+    paddingRight: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -114,4 +202,6 @@ const s = StyleSheet.create({
     ...elevation.e1,
   },
   searchText: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.muted },
+  go: { height: 40, paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
+  goText: { fontFamily: font.bold, fontSize: 14.5, color: colors.white },
 });

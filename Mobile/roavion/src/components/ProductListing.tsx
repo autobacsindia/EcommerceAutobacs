@@ -356,7 +356,8 @@ const s = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.card,
   },
-  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  // Website: a chosen department is green (store.css department bar / chip hover).
+  chipOn: { backgroundColor: colors.green, borderColor: colors.green },
   chipText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
   chipTextOn: { fontFamily: font.bold, color: colors.white },
 
