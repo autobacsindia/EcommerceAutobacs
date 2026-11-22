@@ -1,6 +1,7 @@
 /**
  * A titled horizontal rail of product cards, with its own skeleton.
  * Hidden entirely when it has nothing to show — no empty rows on Home.
+ * Heritage Noir: serif title (italic last word), gold SEE ALL, dark skeletons.
  */
 import { memo, useCallback } from 'react';
 import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native';
@@ -40,11 +41,11 @@ function ProductRail({
 
   return (
     <View style={s.section}>
-      <SectionHeader overline={overline} title={title} subtitle={subtitle} actionLabel={onSeeAll ? 'See all' : undefined} onAction={onSeeAll} />
+      <SectionHeader noir overline={overline} title={title} subtitle={subtitle} italicLast actionLabel={onSeeAll ? 'See all' : undefined} onAction={onSeeAll} />
       {loading ? (
         <View style={s.row}>
           {[0, 1, 2].map((i) => (
-            <ProductCardSkeleton key={i} width={RAIL_CARD_W} />
+            <ProductCardSkeleton key={i} width={RAIL_CARD_W} dark />
           ))}
         </View>
       ) : (

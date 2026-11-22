@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, elevation, radius } from '../theme';
+import { elevation, noir, radius } from '../theme';
 import { PressScale } from '../ui';
 
 export default function ScrollTopButton({ visible, onPress }: { visible: boolean; onPress: () => void }) {
@@ -44,7 +44,7 @@ export default function ScrollTopButton({ visible, onPress }: { visible: boolean
       ]}
     >
       <PressScale onPress={onPress} haptic="selection" scaleTo={0.9} hitSlop={8} style={s.btn} accessibilityLabel="Back to top">
-        <Ionicons name="arrow-up" size={20} color={colors.white} />
+        <Ionicons name="arrow-up" size={20} color={noir.text} />
       </PressScale>
     </Animated.View>
   );
@@ -56,9 +56,9 @@ const s = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radius.pill,
-    backgroundColor: colors.ink,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.onDarkFaint,
+    backgroundColor: noir.surface,
+    borderWidth: 1,
+    borderColor: noir.goldLine,
     alignItems: 'center',
     justifyContent: 'center',
     ...elevation.e2,

@@ -10,7 +10,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useQuery } from '@tanstack/react-query';
 import { fetchBrands, type Brand } from '../api/catalogue';
-import { colors, elevation, font, radius, spacing } from '../theme';
+import { colors, font, radius, spacing } from '../theme';
 import { PressScale, SectionHeader, Shimmer, useReduceMotion } from '../ui';
 
 const ITEM_W = 116;
@@ -62,11 +62,11 @@ export default function BrandStrip() {
 
   return (
     <View style={s.section}>
-      <SectionHeader overline="Trusted names" title="Brands we carry" />
+      <SectionHeader noir overline="Trusted names" title="Brands we carry" italicLast />
       {brands.isPending ? (
         <View style={s.row}>
           {[0, 1, 2, 3].map((i) => (
-            <Shimmer key={i} width={ITEM_W} height={64} radius={radius.md} />
+            <Shimmer key={i} width={ITEM_W} height={64} radius={radius.square} dark />
           ))}
         </View>
       ) : marquee ? (
@@ -96,14 +96,12 @@ const s = StyleSheet.create({
   tile: {
     width: ITEM_W,
     height: 64,
-    borderRadius: radius.md,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
+    // Logos are drawn for white, so each sits on a square white plate.
+    borderRadius: radius.square,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
-    ...elevation.e1,
   },
   logo: { width: '100%', height: 46 },
   name: { fontFamily: font.heading, fontSize: 12.5, color: colors.ink2, textAlign: 'center' },

@@ -16,6 +16,10 @@
  * controls. The app used to open straight onto a toolbar on grey, which told
  * the customer nothing about where they had landed.
  *
+ * ── Heritage Noir (2026-11-22) ───────────────────────────────────────────────
+ * Carbon page, serif title with an italic last word, square chips (white when
+ * selected), dark skeletons and empty/error states.
+ *
  * ── Premium look (2026-11-22) ────────────────────────────────────────────────
  * Optional pinned `stickyTop` (Shop's search bar stays put while the grid
  * scrolls), skeleton grid on first load instead of a spinner, sort/filter as
@@ -46,8 +50,8 @@ import {
 } from './ListingControls';
 import { useHeaderScroll, useScrollToTop } from './useHeaderScroll';
 import { useApp } from '../store';
-import { colors, font, spacing, type } from '../theme';
-import { EmptyState, ErrorState, Overline, PressScale, ProductCardSkeleton, Shimmer, StripeLoader } from '../ui';
+import { font, noir, radius, spacing, type } from '../theme';
+import { EmptyState, ErrorState, Overline, PressScale, ProductCardSkeleton, SerifTitle, Shimmer, StripeLoader } from '../ui';
 
 const PAGE_SIZE = 20;
 
@@ -65,7 +69,7 @@ export function GridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <View style={s.skelGrid}>
       {Array.from({ length: count }, (_, i) => (
-        <ProductCardSkeleton key={i} width={col} />
+        <ProductCardSkeleton key={i} width={col} dark />
       ))}
     </View>
   );
@@ -169,8 +173,8 @@ export default function ProductListing({
     <View>
       {topSlot}
       <View style={s.pageHead}>
-        {!!overline && <Overline>{overline}</Overline>}
-        <Text style={s.pageTitle}>{title}</Text>
+        {!!overline && <Overline noir>{overline}</Overline>}
+        <SerifTitle size="title" italicLast>{title}</SerifTitle>
         {!!blurb && <Text style={s.pageBlurb} numberOfLines={2}>{blurb}</Text>}
       </View>
 
@@ -207,7 +211,7 @@ export default function ProductListing({
 
       {refreshing && (
         <View style={s.updating}>
-          <StripeLoader size="sm" label="Updating results" />
+          <StripeLoader size="sm" label="Updating results" onDark />
         </View>
       )}
       <ListingToolbar
@@ -251,19 +255,19 @@ export default function ProductListing({
         <Animated.ScrollView showsVerticalScrollIndicator={false} scrollEnabled={!listing.isPending}>
           {topSlot}
           <View style={s.pageHead}>
-            {!!overline && <Overline>{overline}</Overline>}
-            <Text style={s.pageTitle}>{title}</Text>
+            {!!overline && <Overline noir>{overline}</Overline>}
+            <SerifTitle size="title" italicLast>{title}</SerifTitle>
           </View>
           {listing.isPending ? (
             <>
               <View style={s.skelBar}>
-                <Shimmer width={90} height={12} />
-                <Shimmer width={150} height={36} radius={18} />
+                <Shimmer width={90} height={12} dark />
+                <Shimmer width={150} height={36} radius={radius.square} dark />
               </View>
               <GridSkeleton />
             </>
           ) : (
-            <ErrorState error={listing.error} onRetry={() => listing.refetch()} />
+            <ErrorState error={listing.error} onRetry={() => listing.refetch()} onDark />
           )}
         </Animated.ScrollView>
       </View>
@@ -291,6 +295,7 @@ export default function ProductListing({
         ListHeaderComponent={header}
         ListEmptyComponent={
           <EmptyState
+            onDark
             icon="cube-outline"
             title={filtered ? 'Nothing matches those filters' : 'Nothing here yet'}
             body={
@@ -312,7 +317,7 @@ export default function ProductListing({
         }}
         ListFooterComponent={
           listing.isFetchingNextPage ? (
-            <View style={s.footer}><StripeLoader /></View>
+            <View style={s.footer}><StripeLoader onDark /></View>
           ) : products.length >= total && total > PAGE_SIZE ? (
             <Text style={s.end}>That&apos;s all {total} products</Text>
           ) : undefined
@@ -328,7 +333,7 @@ export default function ProductListing({
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: noir.page },
 
   pageHead: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, gap: 4 },
   column: { gap: GAP, paddingHorizontal: spacing.lg },
@@ -342,23 +347,22 @@ const s = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
   },
-  // Montserrat 700 at 23/28 with -0.23 tracking — the site's own page h1.
-  pageTitle: { ...type.h1 },
-  pageBlurb: { ...type.body, fontSize: 14, lineHeight: 20 },
+  pageBlurb: { ...type.smallNoir, fontSize: 14, lineHeight: 20, marginTop: 2 },
 
   chipRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
   chip: {
     height: 38,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
-    borderRadius: 999,
+    borderRadius: radius.square,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.card,
+    borderColor: noir.hairlineStrong,
+    backgroundColor: noir.surface,
   },
-  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  chipText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
-  chipTextOn: { fontFamily: font.bold, color: colors.white },
+  // Selected = the Heritage Noir primary: white fill, ink label.
+  chipOn: { backgroundColor: noir.cta, borderColor: noir.cta },
+  chipText: { fontFamily: font.medium, fontSize: 13.5, color: noir.textMuted },
+  chipTextOn: { fontFamily: font.bold, color: noir.ctaText },
 
   footer: { paddingVertical: spacing.xl },
   dim: { opacity: 0.55 },
@@ -368,6 +372,6 @@ const s = StyleSheet.create({
     paddingVertical: spacing.xl,
     fontFamily: font.regular,
     fontSize: 13,
-    color: colors.muted,
+    color: noir.textFaint,
   },
 });

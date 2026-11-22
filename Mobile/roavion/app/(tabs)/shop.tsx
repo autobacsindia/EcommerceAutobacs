@@ -1,6 +1,8 @@
 /**
  * Shop — departments, then the whole catalogue, filterable.
  *
+ * Heritage Noir (2026-11-22): carbon page, square search bar.
+ *
  * Premium look (2026-11-22): a pinned search bar (with the cart) that stays
  * while the page scrolls, a photo grid of every top-level department (each
  * opens its own page), then the full catalogue grid with the department chips,
@@ -17,7 +19,7 @@ import { fetchCategories } from '../../src/api/catalogue';
 import { SearchField } from '../../src/components/AppHeader';
 import ProductListing from '../../src/components/ProductListing';
 import { DepartmentGrid } from '../../src/home/Collections';
-import { colors, elevation, spacing } from '../../src/theme';
+import { noir, spacing } from '../../src/theme';
 import { IconButton } from '../../src/ui';
 import { useApp } from '../../src/store';
 
@@ -34,8 +36,10 @@ function StickySearch() {
         label={`Cart, ${cart.totalItems} items`}
         onPress={() => router.push('/(tabs)/cart')}
         badge={cart.totalItems}
-        tone="light"
-        size={48}
+        tone="plain"
+        color={noir.text}
+        size={46}
+        style={s.cart}
       />
     </View>
   );
@@ -66,16 +70,18 @@ export default function ShopScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: noir.page },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
-    backgroundColor: colors.bg,
+    backgroundColor: noir.page,
+    borderBottomWidth: 1,
+    borderBottomColor: noir.hairline,
     zIndex: 2,
-    ...elevation.e1,
   },
   search: { flex: 1 },
+  cart: { borderWidth: 1, borderColor: noir.hairlineStrong, backgroundColor: noir.surface },
 });

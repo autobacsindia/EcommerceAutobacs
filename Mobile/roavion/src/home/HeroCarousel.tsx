@@ -1,12 +1,14 @@
 /**
- * Home hero — the cinematic carousel at the top of the app.
+ * Home hero — the full-bleed Heritage Noir carousel at the top of the app.
  *
- * Slides come from live data only: a brand slide (always first, so the hero is
- * never empty), the promo banner admins switched on, and the top deals that
- * have a photo. Each slide: dark scrim, overline, Montserrat display title,
- * white pill button, animated dots. The photo drifts slower than the swipe
- * (parallax) and the carousel auto-advances every few seconds while Home is on
- * screen — both off when the phone asks for reduced motion.
+ * Slides come from live data only: the promo banner admins switched on (first,
+ * when it has a photo), a brand slide (so the hero is never empty), and the
+ * top deals that have a photo. The hero runs edge to edge under the status
+ * bar; Home lays its crest header over the top. Each slide: the hero scrim
+ * (black top → clear → racing green → carbon), glass car chip, gold overline,
+ * Playfair title, square white CTA and line dots. The photo drifts slower than
+ * the swipe (parallax) and the carousel auto-advances while Home is on screen
+ * — both off when the phone asks for reduced motion.
  *
  * Display only: a deal's "% off" is the number the server sent.
  */
@@ -28,8 +30,8 @@ import Animated, {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { alpha, colors, elevation, radius, spacing, stripes, type } from '../theme';
-import { GlassChip, Overline, PremiumButton, Shimmer, useReduceMotion } from '../ui';
+import { colors, noir, radius, spacing, stripes, type } from '../theme';
+import { GlassChip, HeroScrim, LineDots, Overline, PremiumButton, SerifTitle, Shimmer, useReduceMotion } from '../ui';
 import { useApp } from '../store';
 
 export interface HeroSlide {
@@ -43,17 +45,16 @@ export interface HeroSlide {
   product?: string;
   cta: string;
   route: string;
+  /** Set the last word in italic ("Make it *yours.*"). Off for product names. */
+  italicLast?: boolean;
 }
 
 const AUTO_ADVANCE_MS = 5500;
-const GUTTER = spacing.lg;
-
-/** Hero size from the window: near-square, capped so small phones still see the next section. */
+/** Full-bleed hero: the window's width, ~58% of its height (capped so the search bar still shows). */
 export function useHeroSize() {
   const { width, height } = useWindowDimensions();
-  const w = width - GUTTER * 2;
-  const h = Math.round(Math.min(w * 1.02, height * 0.52, 440));
-  return { w, h };
+  const h = Math.round(Math.min(height * 0.58, width * 1.3, 560));
+  return { w: width, h };
 }
 
 /** The car pill on the hero: "Creta · Change" or "Add your car". */
@@ -110,7 +111,7 @@ const Slide = memo(function Slide({
         {!slide.cover && !slide.product && <BrandStripes h={h} />}
       </Animated.View>
       {slide.product && (
-        <View style={[s.plate, { width: w * 0.4, height: w * 0.4, top: h * 0.1 }]}>
+        <View style={[s.plate, { width: w * 0.42, height: w * 0.42, top: h * 0.2 }]}>
           <Image source={{ uri: slide.product }} style={s.plateImg} contentFit="contain" cachePolicy="memory-disk" transition={250} />
         </View>
       )}
@@ -129,17 +130,9 @@ function BrandStripes({ h }: { h: number }) {
   );
 }
 
-function Dot({ i, w, scrollX }: { i: number; w: number; scrollX: SharedValue<number> }) {
-  const st = useAnimatedStyle(() => {
-    const t = interpolate(scrollX.value, [(i - 1) * w, i * w, (i + 1) * w], [0, 1, 0], Extrapolation.CLAMP);
-    return { width: 6 + 14 * t, opacity: 0.45 + 0.55 * t };
-  });
-  return <Animated.View style={[s.dot, st]} />;
-}
-
 export function HeroSkeleton() {
   const { w, h } = useHeroSize();
-  return <Shimmer width={w} height={h} radius={radius.xl} style={{ marginHorizontal: GUTTER }} />;
+  return <Shimmer width={w} height={h} radius={radius.none} dark />;
 }
 
 export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
@@ -220,36 +213,21 @@ export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
         accessibilityLabel={`Featured, ${index + 1} of ${slides.length}`}
       />
 
-      {/* Scrim: clear at the top, deep at the bottom where the words sit. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[alpha(colors.void, 0.35), alpha(colors.void, 0), alpha(colors.void, 0.35), alpha(colors.void, 0.88)]}
-        locations={[0, 0.25, 0.55, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* Black at the top (header legible) → clear → racing green → carbon page. */}
+      <HeroScrim variant="hero" />
 
       <View style={s.body} pointerEvents="box-none">
         <CarChip />
-        <View style={{ flex: 1 }} pointerEvents="none" />
         <View pointerEvents="none">
-          <Overline onDark>{current.overline}</Overline>
-          <Text style={s.title} numberOfLines={2}>{current.title}</Text>
+          <Overline tone="gold" style={s.overline}>{current.overline}</Overline>
+          <SerifTitle size="hero" italicLast={current.italicLast} numberOfLines={2} style={s.title}>
+            {current.title}
+          </SerifTitle>
           {!!current.subtitle && <Text style={s.sub} numberOfLines={2}>{current.subtitle}</Text>}
         </View>
         <View style={s.foot} pointerEvents="box-none">
-          <PremiumButton
-            label={current.cta}
-            variant="light"
-            iconRight="arrow-forward"
-            onPress={() => router.push(current.route as never)}
-          />
-          {slides.length > 1 && (
-            <View style={s.dots} pointerEvents="none">
-              {slides.map((sl, i) => (
-                <Dot key={sl.key} i={i} w={w} scrollX={scrollX} />
-              ))}
-            </View>
-          )}
+          <PremiumButton label={current.cta} variant="noir" size="sm" onPress={() => router.push(current.route as never)} />
+          <LineDots count={slides.length} index={Math.max(0, Math.min(index, slides.length - 1))} />
         </View>
       </View>
     </View>
@@ -257,32 +235,25 @@ export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
 }
 
 const s = StyleSheet.create({
-  hero: {
-    marginHorizontal: GUTTER,
-    borderRadius: radius.xl,
-    overflow: 'hidden',
-    backgroundColor: colors.void,
-    ...elevation.e2,
-  },
+  hero: { overflow: 'hidden', backgroundColor: noir.void },
   backdrop: { position: 'absolute', top: 0, bottom: 0 },
+  // A deal's product shot (shot on white) on a square white plate.
   plate: {
     position: 'absolute',
     right: spacing.lg,
-    borderRadius: radius.lg,
+    borderRadius: radius.square,
     backgroundColor: colors.white,
     padding: spacing.md,
-    transform: [{ rotate: '-4deg' }],
-    ...elevation.e3,
+    transform: [{ rotate: '-3deg' }],
   },
   plateImg: { width: '100%', height: '100%' },
   bigStripes: { position: 'absolute', right: '8%', flexDirection: 'row', gap: 14, transform: [{ skewX: '-25deg' }] },
   bigStripe: { width: 34, height: '100%' },
 
-  body: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: spacing.lg + 2 },
+  body: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.xl },
   chip: { alignSelf: 'flex-start', maxWidth: '86%' },
-  title: { ...type.display, color: colors.white, marginTop: spacing.xs },
-  sub: { ...type.small, color: colors.onDarkMuted, marginTop: spacing.xs, maxWidth: '92%' },
-  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
-  dots: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dot: { height: 6, borderRadius: 3, backgroundColor: colors.white },
+  overline: { marginTop: spacing.md },
+  title: { marginTop: spacing.xs },
+  sub: { ...type.smallNoir, color: noir.textSoft, marginTop: spacing.xs, maxWidth: '92%' },
+  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
 });

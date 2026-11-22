@@ -1,88 +1,67 @@
 /**
- * The Autobacs app header — design "Premium showroom" (owner picked
- * 2026-11-18, on top of "A clean light + C car line").
+ * The Autobacs app header — Heritage Noir (owner picked 2026-11-22).
  *
- *   - Off-white bar: the Autobacs logo on the left, a bell and the cart (with
- *     its count) on the right, in small white rounds.
- *   - `SearchField`: a white rounded-12 field that names the saved car. Home
- *     places it under its hero card; `compact` screens (Shop) get it right
- *     under the logo row.
- *
- * The car itself lives on Home's hero card ("Your Toyota Fortuner" pill).
- * It sits inside the scroll view as its first child, so it scrolls away with
- * the content.
- *
- * Premium pass (2026-11-22): shared IconButtons, press-scale search field
- * with a soft lift and a green search glyph.
+ *   - `AppHeader`: transparent row laid over Home's hero photo — the round AB
+ *     crest on the left, a letter-spaced serif AUTOBACS in the middle, the bell
+ *     and the cart (with its count) on the right, in white. The hero's scrim is
+ *     black at the top, so the row stays legible on any banner.
+ *   - `SearchField`: the square carbon search bar that names the saved car.
+ *     It opens the search screen.
  *
  * Presentation only — every tap routes, nothing here fetches or decides.
  */
 import { memo } from 'react';
-import { Image as RNImage, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, elevation, font, radius, spacing } from '../theme';
+import { font, noir, spacing } from '../theme';
 import { useApp } from '../store';
-import { IconButton, PressScale } from '../ui';
+import { Crest, IconButton, SearchBar } from '../ui';
 
-/** White rounded search field; opens the search screen. */
+/** Square carbon search bar; opens the search screen. */
 export function SearchField({ style }: { style?: StyleProp<ViewStyle> }) {
   const router = useRouter();
   const { garage } = useApp();
   const hint = garage ? `Search parts for your ${garage.model || garage.make}` : 'Search parts, brands or your car';
-  return (
-    <PressScale
-      onPress={() => router.push('/search')}
-      haptic="selection"
-      scaleTo={0.985}
-      style={[s.search, style]}
-      accessibilityRole="search"
-      accessibilityLabel={hint}
-    >
-      <Ionicons name="search" size={18} color={colors.green} />
-      <Text style={s.searchText} numberOfLines={1}>{hint}</Text>
-    </PressScale>
-  );
+  return <SearchBar placeholder={hint} onPress={() => router.push('/search')} style={style} />;
 }
 
-function AppHeader({
-  compact,
-}: {
-  /** Logo row + search — for a screen that has its own controls below. */
-  compact?: boolean;
-}) {
+function AppHeader({ style }: { style?: StyleProp<ViewStyle> }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { customer, cart } = useApp();
 
   return (
-    <View style={[s.wrap, { paddingTop: insets.top + spacing.sm }]}>
-      <View style={s.topRow}>
-        <RNImage
-          source={require('../../assets/autobacs-logo.png')}
-          style={s.logo}
-          resizeMode="contain"
-          accessibilityLabel="Autobacs"
-        />
-        <View style={{ flex: 1 }} />
+    <View style={[s.row, { paddingTop: insets.top + spacing.sm }, style]} pointerEvents="box-none">
+      <Crest />
+      {/* Centred on the row regardless of the icons' widths; never takes a tap. */}
+      <View style={s.wordWrap} pointerEvents="none">
+        <Text style={s.word} accessibilityRole="header" numberOfLines={1}>
+          AUTOBACS
+        </Text>
+      </View>
+      <View style={s.icons}>
         <IconButton
           icon="notifications-outline"
           label="Order updates"
           // No notification centre exists yet; order updates are the closest thing.
           onPress={() => router.push(customer ? '/orders' : '/login')}
-          tone="light"
+          tone="plain"
+          color={noir.text}
+          size={36}
+          iconSize={21}
         />
         <IconButton
           icon="bag-handle-outline"
           label={`Cart, ${cart.totalItems} items`}
           onPress={() => router.push('/(tabs)/cart')}
           badge={cart.totalItems}
-          tone="light"
+          tone="plain"
+          color={noir.text}
+          size={36}
+          iconSize={21}
         />
       </View>
-
-      {compact && <SearchField style={{ marginHorizontal: spacing.lg, marginTop: spacing.xs }} />}
     </View>
   );
 }
@@ -90,28 +69,18 @@ function AppHeader({
 export default memo(AppHeader);
 
 const s = StyleSheet.create({
-  wrap: { backgroundColor: colors.bg, paddingBottom: spacing.sm },
-
-  topRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xs,
   },
-  logo: { width: 128, height: 30 },
-
-  search: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm + 2,
-    height: 48,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...elevation.e1,
+  wordWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 36, alignItems: 'center', justifyContent: 'center' },
+  word: {
+    fontFamily: font.serif,
+    fontSize: 18,
+    letterSpacing: 4.5,
+    color: noir.text,
   },
-  searchText: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.muted },
+  icons: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
 });

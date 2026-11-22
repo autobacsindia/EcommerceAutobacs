@@ -1,6 +1,9 @@
 /**
  * "Shop the reel" — tall 9:16 reel cards; each opens Reels at that reel.
  *
+ * Heritage Noir: square tiles with a 2px gold bottom edge, tile scrim, glass
+ * play button, serif section title with gold SEE ALL.
+ *
  * Data is the live reels feed (or the mock when EXPO_PUBLIC_REELS_MOCK=1).
  * The price chip shows what the server sent — never computed here.
  */
@@ -8,12 +11,11 @@ import { memo, useCallback } from 'react';
 import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import type { Reel } from '../api/reels';
 import { useReelFeed } from '../reels/useReels';
-import { alpha, colors, font, inr, radius, spacing } from '../theme';
-import { PressScale, SectionHeader, Shimmer } from '../ui';
+import { font, inr, noir, radius, spacing } from '../theme';
+import { HeroScrim, PressScale, SectionHeader, Shimmer } from '../ui';
 
 export const REEL_W = 138;
 export const REEL_H = Math.round((REEL_W * 16) / 9);
@@ -33,12 +35,7 @@ const ReelCard = memo(function ReelCard({ reel, onOpen }: { reel: Reel; onOpen: 
       {poster ? (
         <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={200} recyclingKey={reel.id} />
       ) : null}
-      <LinearGradient
-        colors={[alpha(colors.void, 0.35), alpha(colors.void, 0), alpha(colors.void, 0.85)]}
-        locations={[0, 0.35, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+      <HeroScrim variant="tile" />
       <View style={s.top}>
         <View style={s.avatar}>
           {reel.creator.avatarUrl ? (
@@ -50,16 +47,13 @@ const ReelCard = memo(function ReelCard({ reel, onOpen }: { reel: Reel; onOpen: 
         <Text style={s.handle} numberOfLines={1}>{reel.creator.name}</Text>
       </View>
       <View style={s.play}>
-        <Ionicons name="play" size={14} color={colors.white} style={{ marginLeft: 2 }} />
+        <Ionicons name="play" size={14} color={noir.text} style={{ marginLeft: 2 }} />
       </View>
       {p && (
         <View style={s.bottom}>
           <Text style={s.title} numberOfLines={2}>{p.title}</Text>
           {price != null && (
-            <View style={s.pricePill}>
-              <Ionicons name="bag-handle" size={11} color={colors.ink} />
-              <Text style={s.priceText}>{inr(price)}</Text>
-            </View>
+            <Text style={s.priceText}>{inr(price)}</Text>
           )}
         </View>
       )}
@@ -83,11 +77,11 @@ export default function ShopTheReel() {
 
   return (
     <View style={s.section}>
-      <SectionHeader overline="Watch & shop" title="Shop the reel" stripes actionLabel="See all" onAction={() => router.push('/(tabs)/reels')} />
+      <SectionHeader noir overline="Watch & shop" title="Shop the reel" italicLast actionLabel="See all" onAction={() => router.push('/(tabs)/reels')} />
       {feed.isPending ? (
         <View style={s.row}>
           {[0, 1, 2].map((i) => (
-            <Shimmer key={i} width={REEL_W} height={REEL_H} radius={radius.lg} />
+            <Shimmer key={i} width={REEL_W} height={REEL_H} radius={radius.none} dark />
           ))}
         </View>
       ) : (
@@ -112,21 +106,29 @@ export default function ShopTheReel() {
 const s = StyleSheet.create({
   section: { marginTop: spacing.xxl },
   row: { flexDirection: 'row', gap: GAP, paddingHorizontal: spacing.lg },
-  card: { width: REEL_W, height: REEL_H, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.carbon },
+  card: {
+    width: REEL_W,
+    height: REEL_H,
+    borderRadius: radius.none,
+    overflow: 'hidden',
+    backgroundColor: noir.surface,
+    borderBottomWidth: 2,
+    borderBottomColor: noir.gold,
+  },
   top: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 6 },
   avatar: {
     width: 22,
     height: 22,
     borderRadius: 11,
     overflow: 'hidden',
-    backgroundColor: colors.green,
+    backgroundColor: noir.surface,
     borderWidth: 1.5,
-    borderColor: colors.white,
+    borderColor: noir.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontFamily: font.bold, fontSize: 10, color: colors.white },
-  handle: { flex: 1, fontFamily: font.medium, fontSize: 11, color: colors.white },
+  avatarText: { fontFamily: font.heading, fontSize: 10, color: noir.text },
+  handle: { flex: 1, fontFamily: font.medium, fontSize: 11, color: noir.text },
   play: {
     position: 'absolute',
     top: '42%',
@@ -134,23 +136,13 @@ const s = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.glassDark,
+    backgroundColor: noir.glassChip,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.onDarkFaint,
+    borderColor: noir.glassChipBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
   bottom: { position: 'absolute', left: spacing.sm, right: spacing.sm, bottom: spacing.sm, gap: 6 },
-  title: { fontFamily: font.medium, fontSize: 12, lineHeight: 16, color: colors.white },
-  pricePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingHorizontal: 8,
-    height: 24,
-    borderRadius: radius.pill,
-    backgroundColor: colors.white,
-  },
-  priceText: { fontFamily: font.bold, fontSize: 12, color: colors.ink },
+  title: { fontFamily: font.medium, fontSize: 11.5, lineHeight: 15, color: noir.textSoft },
+  priceText: { fontFamily: font.heading, fontSize: 13, color: noir.text },
 });

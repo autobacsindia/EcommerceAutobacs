@@ -13,7 +13,8 @@
  * disappears when it would return nothing — so no filter can lead to an empty
  * grid, and "Bushranger 14" means fourteen.
  *
- * ── Presentation (2026-11-22) ────────────────────────────────────────────────
+ * ── Presentation (2026-11-22, Heritage Noir) ────────────────────────────────
+ * Dark sheets, square controls (white when on), gold group caps and radio.
  * Sort and filter open as bottom sheets (the shared `Sheet`) instead of
  * panels pushed into the list, so the grid never jumps under the customer.
  *
@@ -25,7 +26,7 @@
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Facets } from '../api/catalogue';
-import { colors, font, inr, radius, spacing } from '../theme';
+import { font, inr, noir, radius, spacing, type } from '../theme';
 import { PremiumButton, PressScale, Sheet, StripeLoader } from '../ui';
 
 export const SORTS = [
@@ -83,11 +84,11 @@ export function ListingToolbar({
       </Text>
       <View style={s.toolbarBtns}>
         <PressScale onPress={onToggleSort} haptic="selection" style={[s.pill, !!filters.sort && s.pillOn]} accessibilityLabel={`Sort: ${sortLabel ?? 'Relevance'}`}>
-          <Ionicons name="swap-vertical" size={15} color={filters.sort ? colors.white : colors.ink} />
+          <Ionicons name="swap-vertical" size={15} color={filters.sort ? noir.ctaText : noir.text} />
           <Text style={[s.pillText, !!filters.sort && s.pillTextOn]} numberOfLines={1}>{filters.sort ? sortLabel : 'Sort'}</Text>
         </PressScale>
         <PressScale onPress={onToggleFilter} haptic="selection" style={[s.pill, count > 0 && s.pillOn]} accessibilityLabel={count ? `Filter, ${count} on` : 'Filter'}>
-          <Ionicons name="options-outline" size={15} color={count > 0 ? colors.white : colors.ink} />
+          <Ionicons name="options-outline" size={15} color={count > 0 ? noir.ctaText : noir.text} />
           <Text style={[s.pillText, count > 0 && s.pillTextOn]}>Filter</Text>
           {count > 0 && (
             <View style={s.badge}>
@@ -142,7 +143,7 @@ function Choice({ label, count, on, onPress }: { label: string; count: number; o
       accessibilityState={{ selected: on }}
       accessibilityLabel={`${label}, ${count} products`}
     >
-      {on && <Ionicons name="checkmark" size={14} color={colors.white} />}
+      {on && <Ionicons name="checkmark" size={14} color={noir.ctaText} />}
       <Text style={[s.choiceText, on && s.choiceTextOn]} numberOfLines={1}>{label}</Text>
       <Text style={[s.choiceCount, on && s.choiceCountOn]}>{count}</Text>
     </PressScale>
@@ -195,11 +196,12 @@ export function FilterSheet({
       footer={
         <View style={s.actions}>
           <PressScale onPress={onClear} haptic="selection" disabled={!count} style={s.clear}>
-            <Text style={[s.clearText, !count && { color: colors.chrome }]}>Clear all</Text>
+            <Text style={[s.clearText, !count && { color: noir.textFaint }]}>Clear all</Text>
           </PressScale>
           <PremiumButton
             label={facets ? `Show ${facets.total} ${facets.total === 1 ? 'result' : 'results'}` : 'Show results'}
             onPress={onClose}
+            variant="noir"
             style={{ flex: 1 }}
             full
           />
@@ -208,7 +210,7 @@ export function FilterSheet({
     >
       {!facets && (
         <View style={s.loading}>
-          <StripeLoader label="Loading filters" />
+          <StripeLoader label="Loading filters" onDark />
         </View>
       )}
 
@@ -251,7 +253,8 @@ export function FilterSheet({
             value={filters.minPrice != null ? String(filters.minPrice) : ''}
             onChangeText={(t) => setBound('minPrice', t)}
             placeholder={facets?.price ? String(facets.price.min) : 'Min'}
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={noir.textFaint}
+            selectionColor={noir.gold}
             keyboardType="number-pad"
             style={s.input}
             accessibilityLabel="Minimum price"
@@ -264,7 +267,8 @@ export function FilterSheet({
             value={filters.maxPrice != null ? String(filters.maxPrice) : ''}
             onChangeText={(t) => setBound('maxPrice', t)}
             placeholder={facets?.price ? String(facets.price.max) : 'Max'}
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={noir.textFaint}
+            selectionColor={noir.gold}
             keyboardType="number-pad"
             style={s.input}
             accessibilityLabel="Maximum price"
@@ -313,8 +317,8 @@ const s = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
   },
-  count: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
-  countNum: { fontFamily: font.bold, color: colors.ink },
+  count: { fontFamily: font.regular, fontSize: 13, color: noir.textMuted },
+  countNum: { fontFamily: font.heading, color: noir.text },
   toolbarBtns: { flexDirection: 'row', gap: spacing.sm, flexShrink: 1 },
   pill: {
     flexDirection: 'row',
@@ -322,33 +326,29 @@ const s = StyleSheet.create({
     gap: 6,
     height: 36,
     maxWidth: 190,
-    backgroundColor: colors.card,
-    borderRadius: radius.pill,
+    backgroundColor: noir.surface,
+    borderRadius: radius.square,
     paddingHorizontal: spacing.md + 2,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: noir.hairlineStrong,
   },
-  pillOn: { borderColor: colors.ink, backgroundColor: colors.ink },
-  pillText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13, color: colors.ink },
-  pillTextOn: { fontFamily: font.bold, color: colors.white },
+  pillOn: { borderColor: noir.cta, backgroundColor: noir.cta },
+  pillText: { flexShrink: 1, ...type.ctaLabel, fontSize: 11, letterSpacing: 1.4, color: noir.text },
+  pillTextOn: { color: noir.ctaText },
   badge: {
     minWidth: 18,
     height: 18,
     paddingHorizontal: 4,
     borderRadius: 9,
-    backgroundColor: colors.green,
+    backgroundColor: noir.green,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { fontFamily: font.bold, fontSize: 10, color: colors.white },
+  badgeText: { fontFamily: font.bold, fontSize: 10, color: noir.text },
 
   loading: { paddingVertical: spacing.xl, alignItems: 'center' },
   group: {
-    fontFamily: font.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    color: colors.steel,
-    textTransform: 'uppercase',
+    ...type.capsNoir,
     paddingTop: spacing.xl,
     paddingBottom: spacing.md,
   },
@@ -359,19 +359,21 @@ const s = StyleSheet.create({
     gap: spacing.md,
     minHeight: 52,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.square,
+    borderBottomWidth: 1,
+    borderBottomColor: noir.hairline,
   },
-  optionRowOn: { backgroundColor: colors.greenFaint },
-  optionText: { flex: 1, fontFamily: font.regular, fontSize: 15, color: colors.ink2 },
-  optionOn: { fontFamily: font.bold, color: colors.ink },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.chrome, alignItems: 'center', justifyContent: 'center' },
-  radioOn: { borderColor: colors.green },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.green },
+  optionRowOn: { backgroundColor: noir.goldFaint },
+  optionText: { flex: 1, fontFamily: font.regular, fontSize: 15, color: noir.textMuted },
+  optionOn: { fontFamily: font.bold, color: noir.text },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: noir.textFaint, alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: noir.gold },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: noir.gold },
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 44 },
-  switch: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.line, padding: 3, justifyContent: 'center' },
-  switchOn: { backgroundColor: colors.green },
-  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: colors.white },
+  switch: { width: 44, height: 26, borderRadius: 13, backgroundColor: noir.hairlineStrong, padding: 3, justifyContent: 'center' },
+  switchOn: { backgroundColor: noir.green },
+  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: noir.text },
   knobOn: { alignSelf: 'flex-end' },
 
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -382,16 +384,16 @@ const s = StyleSheet.create({
     maxWidth: '100%',
     height: 38,
     paddingHorizontal: spacing.md + 2,
-    borderRadius: radius.pill,
+    borderRadius: radius.square,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.card,
+    borderColor: noir.hairlineStrong,
+    backgroundColor: noir.page,
   },
-  choiceOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  choiceText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
-  choiceTextOn: { fontFamily: font.bold, color: colors.white },
-  choiceCount: { fontFamily: font.regular, fontSize: 12, color: colors.muted },
-  choiceCountOn: { color: colors.onDarkMuted },
+  choiceOn: { backgroundColor: noir.cta, borderColor: noir.cta },
+  choiceText: { flexShrink: 1, fontFamily: font.medium, fontSize: 13.5, color: noir.textMuted },
+  choiceTextOn: { fontFamily: font.bold, color: noir.ctaText },
+  choiceCount: { fontFamily: font.regular, fontSize: 12, color: noir.textFaint },
+  choiceCountOn: { color: noir.ctaText },
 
   range: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   inputWrap: {
@@ -401,16 +403,16 @@ const s = StyleSheet.create({
     gap: 4,
     height: 46,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.square,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.page,
+    borderColor: noir.hairlineStrong,
+    backgroundColor: noir.page,
   },
-  rupee: { fontFamily: font.medium, fontSize: 15, color: colors.muted },
-  input: { flex: 1, fontFamily: font.medium, fontSize: 15, color: colors.ink, padding: 0 },
-  dash: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
+  rupee: { fontFamily: font.medium, fontSize: 15, color: noir.textFaint },
+  input: { flex: 1, fontFamily: font.medium, fontSize: 15, color: noir.text, padding: 0 },
+  dash: { fontFamily: font.regular, fontSize: 13, color: noir.textFaint },
 
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   clear: { paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
-  clearText: { fontFamily: font.bold, fontSize: 14, color: colors.ink, textDecorationLine: 'underline' },
+  clearText: { ...type.ctaLabel, fontSize: 11, color: noir.text, textDecorationLine: 'underline' },
 });

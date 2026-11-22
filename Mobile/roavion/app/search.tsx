@@ -5,12 +5,15 @@
  * because they are all the same question with a different filter, and the API
  * answers them all through /products.
  *
- * Premium look (2026-11-22): pill search field, product thumbnails in the
+ * Heritage Noir (2026-11-22): carbon page, square search bar with a gold
+ * caret, serif titles, dark suggestions and quick picks.
+ *
+ * Premium look (2026-11-22): search field, product thumbnails in the
  * suggestions, departments as quick picks before typing, skeleton grid while
  * loading, sort/filter as bottom sheets, cards sized to the column.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Keyboard, ScrollView, StyleSheet, Text, TextInput, View, type TextInputInstance } from 'react-native';
+import { FlatList, Keyboard, ScrollView, StyleSheet, Text, View, type TextInputInstance } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -27,8 +30,8 @@ import {
 import ProductCard from '../src/components/ProductCard';
 import { GridSkeleton, useGridColumn } from '../src/components/ProductListing';
 import { useApp } from '../src/store';
-import { colors, elevation, font, radius, spacing, type } from '../src/theme';
-import { EmptyState, ErrorState, IconButton, Overline, PressScale } from '../src/ui';
+import { colors, font, noir, radius, spacing, type } from '../src/theme';
+import { EmptyState, ErrorState, IconButton, Overline, PressScale, SearchBar, SerifTitle } from '../src/ui';
 
 export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string; brand?: string; vehicleMake?: string; vehicleModel?: string }>();
@@ -121,32 +124,29 @@ export default function SearchScreen() {
       <View style={s.screen}>
         <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
           <View style={s.searchRow}>
-            <IconButton icon="arrow-back" label="Go back" onPress={() => router.back()} tone="plain" size={40} iconSize={22} />
+            <IconButton icon="arrow-back" label="Go back" onPress={() => router.back()} tone="plain" color={noir.text} size={40} iconSize={22} />
             {filtered ? (
               <View style={s.filterTitle}>
-                <Overline>{params.brand ? 'Brand' : 'Parts that fit'}</Overline>
-                <Text style={s.filterTitleText} numberOfLines={1}>{title}</Text>
+                <Overline tone="gold">{params.brand ? 'Brand' : 'Parts that fit'}</Overline>
+                <SerifTitle size="section" numberOfLines={1}>{title}</SerifTitle>
               </View>
             ) : (
-              <View style={s.inputWrap}>
-                <Ionicons name="search" size={18} color={colors.green} />
-                <TextInput
-                  ref={input}
-                  value={text}
-                  onChangeText={(t) => { setText(t); setTyping(true); }}
-                  placeholder="Search parts, brands or your car"
-                  placeholderTextColor={colors.muted}
-                  style={s.input}
-                  returnKeyType="search"
-                  onSubmitEditing={() => { setQuery(text); setTyping(false); Keyboard.dismiss(); }}
-                  accessibilityLabel="Search products"
-                />
-                {!!text && (
-                  <PressScale onPress={() => setText('')} haptic="selection" hitSlop={8} accessibilityLabel="Clear search">
-                    <Ionicons name="close-circle" size={18} color={colors.muted} />
-                  </PressScale>
-                )}
-              </View>
+              <SearchBar
+                ref={input}
+                value={text}
+                onChangeText={(t) => { setText(t); setTyping(true); }}
+                returnKeyType="search"
+                onSubmitEditing={() => { setQuery(text); setTyping(false); Keyboard.dismiss(); }}
+                accessibilityLabel="Search products"
+                style={s.inputWrap}
+                right={
+                  text ? (
+                    <PressScale onPress={() => setText('')} haptic="selection" hitSlop={8} accessibilityLabel="Clear search">
+                      <Ionicons name="close-circle" size={18} color={noir.textFaint} />
+                    </PressScale>
+                  ) : undefined
+                }
+              />
             )}
           </View>
         </View>
@@ -181,14 +181,14 @@ export default function SearchScreen() {
                   {item.imageUrl ? (
                     <Image source={{ uri: item.imageUrl }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
                   ) : (
-                    <Ionicons name={item.type === 'product' ? 'cube-outline' : 'search'} size={16} color={colors.green} />
+                    <Ionicons name={item.type === 'product' ? 'cube-outline' : 'search'} size={16} color={noir.greenText} />
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.suggestionText} numberOfLines={1}>{item.text}</Text>
                   {!!item.category && <Text style={s.suggestionSub} numberOfLines={1}>{item.category}</Text>}
                 </View>
-                <Ionicons name="arrow-forward" size={16} color={colors.chrome} />
+                <Ionicons name="arrow-forward" size={16} color={noir.textFaint} />
               </PressScale>
             )}
           />
@@ -197,11 +197,11 @@ export default function SearchScreen() {
             <GridSkeleton />
           </ScrollView>
         ) : results.error ? (
-          <ErrorState error={results.error} onRetry={() => results.refetch()} />
+          <ErrorState error={results.error} onRetry={() => results.refetch()} onDark />
         ) : !searching ? (
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.idle}>
-            <Overline>Start here</Overline>
-            <Text style={s.idleTitle}>What are you looking for?</Text>
+            <Overline noir>Start here</Overline>
+            <SerifTitle size="title" italicLast style={s.idleTitle}>What are you looking for?</SerifTitle>
             <Text style={s.idleBody}>Try a part name, a brand, or your car model.</Text>
             {departments.length > 0 && (
               <>
@@ -218,6 +218,7 @@ export default function SearchScreen() {
           </ScrollView>
         ) : products.length === 0 ? (
           <EmptyState
+            onDark
             icon="cube-outline"
             title="Nothing matched"
             body="Try a different spelling, or browse by department."
@@ -260,31 +261,19 @@ export default function SearchScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: noir.page },
   header: {
-    backgroundColor: colors.card,
+    backgroundColor: noir.page,
     paddingLeft: spacing.sm,
     paddingRight: spacing.lg,
     paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: noir.hairline,
     zIndex: 2,
-    ...elevation.e1,
   },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  inputWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.page,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.lg,
-    height: 46,
-  },
-  input: { flex: 1, fontFamily: font.regular, fontSize: 15, color: colors.ink, padding: 0 },
-  filterTitle: { flex: 1, paddingLeft: spacing.xs },
-  filterTitleText: { ...type.h1, fontSize: 20, lineHeight: 26 },
+  inputWrap: { flex: 1 },
+  filterTitle: { flex: 1, paddingLeft: spacing.xs, gap: 2 },
 
   column: { gap: spacing.md, paddingHorizontal: spacing.lg },
   content: { paddingBottom: spacing.xxl, gap: spacing.md },
@@ -296,30 +285,27 @@ const s = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: noir.hairline,
   },
+  // Suggestion photos are shot on white, so they keep a white square.
   suggestThumb: {
     width: 44,
     height: 44,
-    borderRadius: radius.md,
+    borderRadius: radius.square,
     overflow: 'hidden',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  suggestionText: { fontFamily: font.medium, fontSize: 14.5, color: colors.ink },
-  suggestionSub: { ...type.caption, marginTop: 1 },
+  suggestionText: { fontFamily: font.medium, fontSize: 14.5, color: noir.text },
+  suggestionSub: { ...type.caption, color: noir.textFaint, marginTop: 1 },
 
   idle: { padding: spacing.lg, paddingTop: spacing.xl },
-  idleTitle: { ...type.display, fontSize: 24, lineHeight: 30, marginTop: spacing.xs },
-  idleBody: { ...type.body, color: colors.muted, marginTop: spacing.xs },
+  idleTitle: { marginTop: spacing.xs },
+  idleBody: { ...type.bodyNoir, color: noir.textMuted, marginTop: spacing.xs },
   group: {
-    fontFamily: font.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.steel,
+    ...type.capsNoir,
     marginTop: spacing.xxl,
     marginBottom: spacing.md,
   },
@@ -328,10 +314,10 @@ const s = StyleSheet.create({
     height: 38,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
-    borderRadius: radius.pill,
-    backgroundColor: colors.card,
+    borderRadius: radius.square,
+    backgroundColor: noir.surface,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: noir.hairlineStrong,
   },
-  quickText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
+  quickText: { fontFamily: font.medium, fontSize: 13.5, color: noir.textSoft },
 });

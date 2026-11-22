@@ -1,10 +1,11 @@
 /**
- * Home — premium launch design (owner approved 2026-11-22).
+ * Home — Heritage Noir (owner approved 2026-11-22).
  *
- * Top to bottom: logo row, cinematic hero carousel (brand slide + promo banner
- * + top deals, with the glass car chip), search, "Shop the reel", curated
- * collections, "Fits your car" (or Popular, with an add-your-car prompt),
- * today's deals, brands marquee, best sellers, new arrivals.
+ * Top to bottom: full-bleed hero carousel (promo banner + brand slide + top
+ * deals, with the glass car chip) with the crest header laid over it, square
+ * carbon search, "Shop the reel", collections, "Fits your car" (or Popular,
+ * with an add-your-car prompt), today's deals, brands marquee, best sellers,
+ * new arrivals.
  *
  * Every row is live catalogue data. A row with nothing in it is not rendered,
  * and while data loads each row shows a skeleton in the shape of what is
@@ -24,8 +25,8 @@ import ShopTheReel from '../../src/home/ShopTheReel';
 import ProductRail from '../../src/home/ProductRail';
 import BrandStrip from '../../src/home/BrandStrip';
 import { CuratedCollections } from '../../src/home/Collections';
-import { colors, font, radius, spacing, type } from '../../src/theme';
-import { PressScale, Stripes } from '../../src/ui';
+import { font, noir, spacing, type } from '../../src/theme';
+import { GoldRule, PressScale, SerifTitle } from '../../src/ui';
 import { useApp } from '../../src/store';
 
 /** Map a web banner link to an app route; anything unknown opens the offers list. */
@@ -41,10 +42,11 @@ function bannerRoute(linkPath?: string | null): string {
 const BRAND_SLIDE: HeroSlide = {
   key: 'brand',
   overline: 'Autobacs India',
-  title: 'Make it yours',
+  title: 'Make it yours.',
   subtitle: 'Genuine parts and accessories, matched to your car.',
   cta: 'Shop now',
   route: '/(tabs)/shop',
+  italicLast: true,
 };
 
 /** Shown instead of "Fits your car" until a car is saved. */
@@ -53,13 +55,13 @@ function AddCarPrompt() {
   return (
     <PressScale onPress={() => router.push('/garage')} haptic="light" style={s.addCar} accessibilityLabel="Add your car to see parts that fit">
       <View style={s.addCarIcon}>
-        <Ionicons name="car-sport" size={22} color={colors.white} />
+        <Ionicons name="car-sport-outline" size={20} color={noir.text} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={s.addCarTitle}>Add your car</Text>
+        <SerifTitle size="small" style={s.addCarTitle}>Add your car</SerifTitle>
         <Text style={s.addCarBody}>See only the parts that fit it.</Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.green} />
+      <Ionicons name="chevron-forward" size={18} color={noir.gold} />
     </PressScale>
   );
 }
@@ -100,7 +102,8 @@ export default function HomeScreen() {
   }, [categories, deals, newest, popular, banner]);
 
   const heroSlides: HeroSlide[] = useMemo(() => {
-    const out: HeroSlide[] = [BRAND_SLIDE];
+    const out: HeroSlide[] = [];
+    // The admin's promo banner leads: it is the real photo the hero is built for.
     const b = banner.data;
     if (b && (b.mobileImageUrl || b.imageUrl)) {
       out.push({
@@ -110,8 +113,10 @@ export default function HomeScreen() {
         cover: b.mobileImageUrl || b.imageUrl,
         cta: 'Shop the offer',
         route: bannerRoute(b.linkPath),
+        italicLast: true,
       });
     }
+    out.push(BRAND_SLIDE);
     for (const d of (deals.data ?? []).filter((x) => !!x.image).slice(0, 3)) {
       out.push({
         key: d.id,
@@ -140,15 +145,15 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: spacing.xxxl }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.green} colors={[colors.green]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={noir.gold} colors={[noir.green]} progressBackgroundColor={noir.surface} />}
       >
-        <AppHeader />
-
-        <View style={{ marginTop: spacing.xs }}>
+        {/* Full-bleed hero with the crest header laid over its top. */}
+        <View>
           {deals.isLoading || banner.isLoading ? <HeroSkeleton /> : <HeroCarousel slides={heroSlides} />}
+          <AppHeader style={s.header} />
         </View>
 
-        <SearchField style={{ marginHorizontal: spacing.lg, marginTop: spacing.lg }} />
+        <SearchField style={{ marginHorizontal: spacing.lg, marginTop: spacing.xs }} />
 
         <ShopTheReel />
 
@@ -193,7 +198,7 @@ export default function HomeScreen() {
         />
 
         <View style={s.signoff}>
-          <Stripes />
+          <GoldRule label="Autobacs" style={{ alignSelf: 'stretch' }} />
           <Text style={s.signoffText}>Genuine parts · Delivered across India</Text>
         </View>
       </Animated.ScrollView>
@@ -204,7 +209,8 @@ export default function HomeScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: noir.page },
+  header: { position: 'absolute', top: 0, left: 0, right: 0 },
 
   addCar: {
     flexDirection: 'row',
@@ -213,22 +219,22 @@ const s = StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginTop: spacing.xxl,
     padding: spacing.lg,
-    borderRadius: radius.lg,
-    backgroundColor: colors.greenFaint,
+    backgroundColor: noir.greenWash,
     borderWidth: 1,
-    borderColor: colors.greenSoft,
+    borderColor: noir.greenText,
   },
   addCarIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.green,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: noir.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addCarTitle: { ...type.h3 },
-  addCarBody: { ...type.small, marginTop: 1 },
+  addCarTitle: { fontSize: 16, lineHeight: 20 },
+  addCarBody: { ...type.smallNoir, marginTop: 2 },
 
-  signoff: { alignItems: 'center', gap: spacing.sm, marginTop: spacing.xxxl },
-  signoffText: { fontFamily: font.medium, fontSize: 12, color: colors.muted },
+  signoff: { alignItems: 'center', gap: spacing.sm, marginTop: spacing.xxxl, paddingHorizontal: spacing.xxl },
+  signoffText: { fontFamily: font.medium, fontSize: 12, color: noir.textFaint },
 });

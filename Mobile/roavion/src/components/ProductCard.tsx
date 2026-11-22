@@ -2,10 +2,10 @@
  * The product card used by every list in the app. One component, two shapes,
  * so a price or a discount can never look different in two places.
  *
- * Premium look (2026-11-22): white card, photo on a soft page-grey well, red
- * savings badge on the photo, brand as a letter-spaced overline, two-line
- * name, compact rating, price with struck M.R.P., and a round ink quick-add.
- * The whole card springs on press.
+ * Heritage Noir (2026-11-22): square carbon-2 card with a hairline, the
+ * photo on a white well, red savings badge, gold brand caps, serif two-line
+ * name, rating and price on dark, and a square white quick-add. The whole
+ * card springs on press.
  *
  * Everything shown is a value the server sent. The card never computes a
  * discount or a total of its own.
@@ -14,11 +14,11 @@ import { memo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { alpha, colors, elevation, font, radius, spacing } from '../theme';
+import { alpha, colors, noir, noirSurface, radius, spacing, type } from '../theme';
 import type { Product } from '../api/catalogue';
 import { useApp } from '../store';
 import { Photo } from './ui';
-import { Badge, PressScale, Price, Rating, StripeLoader, haptic, usePressScale } from '../ui';
+import { Badge, Overline, PressScale, Price, Rating, StripeLoader, haptic, usePressScale } from '../ui';
 import Animated from 'react-native-reanimated';
 
 export const CARD_WIDTH = 172;
@@ -75,10 +75,10 @@ function ProductCard({
           <Photo uri={product.image} style={s.rowImage} />
         </View>
         <View style={s.rowBody}>
-          {!!product.brand && <Text style={s.brand} numberOfLines={1}>{product.brand}</Text>}
+          {!!product.brand && <Overline tone="gold">{product.brand}</Overline>}
           <Text style={s.name} numberOfLines={2}>{product.name}</Text>
-          <Rating rating={product.rating} count={product.reviews} compact />
-          <Price price={product.price} mrp={onSale ? product.mrp : null} offPercent={product.discountPercent} size="sm" />
+          <Rating rating={product.rating} count={product.reviews} compact onDark />
+          <Price price={product.price} mrp={onSale ? product.mrp : null} offPercent={product.discountPercent} size="sm" onDark />
           {soldOut && <Text style={s.soldOut}>Out of stock</Text>}
         </View>
       </PressScale>
@@ -114,14 +114,14 @@ function ProductCard({
 
         <View style={s.tileBody}>
           {/* Always present (blank when unbranded) so prices line up across a rail. */}
-          <Text style={s.brand} numberOfLines={1}>{product.brand || ' '}</Text>
+          <Overline tone="gold">{product.brand || '\u00A0'}</Overline>
           <Text style={s.name} numberOfLines={2}>{product.name}</Text>
-          <Rating rating={product.rating} count={product.reviews} compact />
+          <Rating rating={product.rating} count={product.reviews} compact onDark />
         </View>
       </Pressable>
 
       <View style={s.tileFoot}>
-        <Price price={product.price} mrp={onSale ? product.mrp : null} hideOff size="sm" style={s.tilePrices} />
+        <Price price={product.price} mrp={onSale ? product.mrp : null} hideOff size="sm" onDark style={s.tilePrices} />
         {!soldOut && (
           <PressScale
             onPress={quickAdd}
@@ -131,7 +131,7 @@ function ProductCard({
             style={s.add}
             accessibilityLabel={`Add ${product.name} to cart`}
           >
-            {adding ? <StripeLoader size="sm" onDark /> : <Ionicons name="add" size={20} color={colors.white} />}
+            {adding ? <StripeLoader size="sm" /> : <Ionicons name="add" size={20} color={noir.ctaText} />}
           </PressScale>
         )}
       </View>
@@ -143,12 +143,11 @@ export default memo(ProductCard);
 
 const s = StyleSheet.create({
   tile: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    ...noirSurface,
     overflow: 'hidden',
-    ...elevation.e1,
   },
-  well: { backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  // Catalogue photos are shot on white, so the photo keeps a white well.
+  well: { backgroundColor: colors.white },
   tileImage: { width: '100%' },
   tileBody: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: 4 },
   tileFoot: {
@@ -169,32 +168,30 @@ const s = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: alpha(colors.white, 0.72),
+    backgroundColor: alpha(noir.page, 0.72),
   },
-  soldOverlayText: { fontFamily: font.bold, fontSize: 12, color: colors.red },
+  soldOverlayText: { ...type.capsNoir, color: noir.text },
 
+  // Square white quick-add — the Heritage Noir primary, small.
   add: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.pill,
-    backgroundColor: colors.ink,
+    width: 34,
+    height: 34,
+    borderRadius: radius.square,
+    backgroundColor: noir.cta,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   row: {
+    ...noirSurface,
     flexDirection: 'row',
     gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
     padding: spacing.md,
-    ...elevation.e1,
   },
-  rowImageWrap: { borderRadius: radius.md, overflow: 'hidden' },
+  rowImageWrap: { borderRadius: radius.square, overflow: 'hidden', backgroundColor: colors.white },
   rowImage: { width: 92, height: 92 },
   rowBody: { flex: 1, gap: 4, justifyContent: 'center' },
 
-  brand: { fontFamily: font.bold, fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.steel },
-  name: { fontFamily: font.medium, fontSize: 13.5, lineHeight: 18.5, color: colors.ink, minHeight: 37 },
-  soldOut: { fontFamily: font.bold, fontSize: 11.5, color: colors.red },
+  name: { ...type.serifSmall, minHeight: 36 },
+  soldOut: { ...type.capsNoir, color: noir.sale },
 });

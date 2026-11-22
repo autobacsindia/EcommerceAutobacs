@@ -7,7 +7,8 @@
  *
  * "offers" is the one special case: Today's Deals is a curated list from
  * /products/offers rather than a category, so it keeps its own simple grid
- * (same premium cards, skeletons while loading).
+ * (same cards, skeletons while loading). Heritage Noir: carbon page, serif
+ * titles, dark empty/error states.
  */
 import { useMemo } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -16,15 +17,15 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchCategories, fetchOffers } from '../../src/api/catalogue';
 import ProductCard from '../../src/components/ProductCard';
 import ProductListing, { GridSkeleton, useGridColumn } from '../../src/components/ProductListing';
-import { colors, spacing, type } from '../../src/theme';
-import { EmptyState, ErrorState, Overline } from '../../src/ui';
+import { noir, spacing, type } from '../../src/theme';
+import { EmptyState, ErrorState, Overline, SerifTitle } from '../../src/ui';
 
 /** Heading for the deals page, in the same shape as a department's. */
 function DealsHead({ count }: { count?: number }) {
   return (
     <View style={s.head}>
-      <Overline>Limited time</Overline>
-      <Text style={type.h1}>Today&apos;s deals</Text>
+      <Overline tone="gold">Limited time</Overline>
+      <SerifTitle size="title" italicLast>Today&apos;s deals</SerifTitle>
       {count != null && <Text style={s.count}>{count} offers</Text>}
     </View>
   );
@@ -64,9 +65,10 @@ export default function CategoryScreen() {
             <GridSkeleton />
           </ScrollView>
         ) : offers.error ? (
-          <ErrorState error={offers.error} onRetry={() => offers.refetch()} style={s.screen} />
+          <ErrorState error={offers.error} onRetry={() => offers.refetch()} style={s.screen} onDark />
         ) : products.length === 0 ? (
           <EmptyState
+            onDark
             icon="pricetag-outline"
             title="No deals right now"
             body="Check back soon — offers change often."
@@ -107,9 +109,9 @@ export default function CategoryScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: noir.page },
   head: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: 4 },
-  count: { ...type.small },
+  count: { ...type.smallNoir },
   column: { gap: spacing.md, paddingHorizontal: spacing.lg },
   content: { paddingBottom: spacing.xxl, gap: spacing.md },
 });
