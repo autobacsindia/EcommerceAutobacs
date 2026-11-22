@@ -1,78 +1,54 @@
 /**
- * Home — the shop front, laid out the way the website lays itself out on a
- * phone, because that view is the one the business already judged as right.
+ * Home — design "Premium showroom" (owner picked 2026-11-18).
  *
- * The structure that matters is the white panel: every row on the site sits in
- * one on the grey page, with its own heading and its own "See all". Rows that
- * float loose on the background (what this screen did before) read as a pile of
- * widgets; panels read as a catalogue. The dense four-up tiles do the same job
- * from the other side — they put twelve ways into the catalogue above the fold
- * instead of one.
+ * Top to bottom: logo row, hero card (promo banner + top deals, car pill,
+ * "Make it yours", Shop now, dots), white search, tinted category tiles,
+ * "Watch and shop" reel cards, parts that fit the saved car (or Popular), then
+ * calmer sections — deals, best sellers, new arrivals.
  *
- * Every row is live catalogue data. A row with nothing in it is not rendered
- * rather than padded with filler, and while data loads each row shows skeletons
- * in the shape of what is coming, so a slow connection reads as "loading".
+ * Every row is live catalogue data. A row with nothing in it is not rendered,
+ * and while data loads each row shows skeletons in the shape of what is coming.
+ * Nothing here computes a price: cards show what the server sent.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
   Animated,
+  Dimensions,
   FlatList,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
-import Constants from 'expo-constants';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useQueries } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  fetchBrands,
-  fetchCategories,
-  fetchOffers,
-  fetchProducts,
-  fetchTestimonials,
-  fetchVehicleMakes,
-  type Category,
-  type Product,
-} from '../../src/api/catalogue';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AppHeader from '../../src/components/AppHeader';
+import { fetchActiveBanner, fetchCategories, fetchOffers, fetchProducts, type Category, type Product } from '../../src/api/catalogue';
+import AppHeader, { SearchField } from '../../src/components/AppHeader';
 import ScrollTopButton from '../../src/components/ScrollTopButton';
 import { useHeaderScroll, useScrollToTop } from '../../src/components/useHeaderScroll';
 import ProductCard from '../../src/components/ProductCard';
-import {
-  Chip,
-  MiniTile,
-  Panel,
-  Photo,
-  ProductCardSkeleton,
-  Skeleton,
-  TextLink,
-} from '../../src/components/ui';
-import { colors, font, radius, spacing } from '../../src/theme';
+import { MiniTile, Panel, ProductCardSkeleton, Skeleton, TextLink } from '../../src/components/ui';
+import { useReelFeed } from '../../src/reels/useReels';
+import { colors, font, inr, radius, spacing, tints } from '../../src/theme';
 import { useApp } from '../../src/store';
 
 const { width: SCREEN } = Dimensions.get('window');
 
-/** Usable width inside a panel, and the grid units derived from it. */
-const PANEL_INNER = SCREEN - spacing.md * 2 - spacing.lg * 2;
+const PAGE_INNER = SCREEN - spacing.lg * 2;
 const GRID_GAP = 10;
-const MINI_W = Math.floor((PANEL_INNER - GRID_GAP * 3) / 4);
-const BRAND_W = Math.floor((PANEL_INNER - GRID_GAP * 2) / 3);
-const HERO_PHOTO = 112;
+const MINI_W = Math.floor((PAGE_INNER - GRID_GAP * 3) / 4);
 
-/** Support contacts live in config, never in a screen. */
-const extra = (Constants.expoConfig?.extra ?? {}) as { supportPhone?: string; supportWhatsapp?: string };
+const light = () => Haptics.selectionAsync().catch(() => {});
 
 // ── rails ────────────────────────────────────────────────────────────────────
 
-/** A horizontal rail of product cards inside a panel, with loading skeletons. */
 function ProductRail({
   title,
   subtitle,
@@ -86,7 +62,6 @@ function ProductRail({
   products: Product[];
   loading: boolean;
   onSeeAll?: () => void;
-  /** Numbers the cards "#1 Best seller", as the website's best-seller row does. */
   ranked?: boolean;
 }) {
   if (!loading && !products.length) return null;
@@ -115,118 +90,173 @@ function ProductRail({
   );
 }
 
-/** The dense four-up tile grid: categories, departments, quick deals. */
-function MiniGrid({
-  title,
-  items,
-  loading,
-  linkLabel,
-  onLink,
-}: {
-  title: string;
-  items: { key: string; label: string; image?: string; onPress: () => void }[];
-  loading: boolean;
-  linkLabel: string;
-  onLink: () => void;
-}) {
-  if (!loading && !items.length) return null;
+const HERO_W = PAGE_INNER;
+const HERO_H = Math.round(HERO_W * 0.62);
+const REEL_W = 118;
+const REEL_H = Math.round((REEL_W * 16) / 9);
+
+/** Map a web banner link to an app route; anything unknown opens the offers list. */
+function bannerRoute(linkPath?: string | null): string {
+  const path = (linkPath || '/offers').split('?')[0].replace(/\/+$/, '');
+  const product = path.match(/^\/products?\/([^/]+)$/);
+  if (product) return `/product/${product[1]}`;
+  const category = path.match(/^\/(?:category|categories)\/([^/]+)$/);
+  if (category) return `/category/${category[1]}`;
+  return '/category/offers';
+}
+
+interface HeroSlide {
+  key: string;
+  /** Full-bleed photo (the promo banner) … */
+  cover?: string;
+  /** … or a product shot on the dark showroom backdrop (a deal). */
+  product?: string;
+  subtitle: string;
+  route: string;
+}
+
+/**
+ * The hero card: the active promo banner (if admins switched one on) and the
+ * top deals with photos, swiped sideways with dots. The car pill, title and
+ * "Shop now" sit on every slide. Display only.
+ */
+function Hero({ slides, loading }: { slides: HeroSlide[]; loading: boolean }) {
+  const router = useRouter();
+  const { garage } = useApp();
+  const [index, setIndex] = useState(0);
+
+  if (loading && !slides.length) {
+    return <Skeleton width={HERO_W} height={HERO_H} radius={18} style={{ marginHorizontal: spacing.lg, marginTop: spacing.sm }} />;
+  }
+  const list: HeroSlide[] = slides.length
+    ? slides
+    : [{ key: 'default', subtitle: 'Genuine parts and accessories, delivered', route: '/(tabs)/shop' }];
+  const current = list[Math.min(index, list.length - 1)];
+  const car = garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : null;
+
   return (
-    <Panel title={title}>
-      <View style={s.grid}>
-        {loading
-          ? [0, 1, 2, 3].map((i) => (
-              <View key={i} style={{ width: MINI_W, gap: 6 }}>
-                <Skeleton width={MINI_W} height={MINI_W} radius={radius.sm} />
-                <Skeleton width={MINI_W - 16} height={9} />
-              </View>
-            ))
-          : items.map((it) => (
-              <MiniTile key={it.key} label={it.label} image={it.image} onPress={it.onPress} width={MINI_W} />
-            ))}
+    <View style={s.hero}>
+      <FlatList
+        horizontal
+        pagingEnabled
+        data={list}
+        keyExtractor={(sl) => sl.key}
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / HERO_W))}
+        renderItem={({ item }) => (
+          <View style={{ width: HERO_W, height: HERO_H }}>
+            {item.cover ? (
+              <Image source={{ uri: item.cover }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+            ) : (
+              <LinearGradient colors={['#1c2422', '#0d3b27']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill}>
+                {item.product && (
+                  <View style={s.heroShotWell}>
+                    <Image source={{ uri: item.product }} style={s.heroShot} contentFit="contain" cachePolicy="memory-disk" />
+                  </View>
+                )}
+              </LinearGradient>
+            )}
+          </View>
+        )}
+      />
+      {/* scrim + the words on top of every slide */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.72)']}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={s.heroBody} pointerEvents="box-none">
+        <Pressable
+          onPress={() => {
+            light();
+            router.push('/garage');
+          }}
+          style={({ pressed }) => [s.glass, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityLabel={car ? `Your car: ${car}. Change` : 'Add your car'}
+        >
+          <Text style={s.glassText} numberOfLines={1}>{car ? `🚗  Your ${car}` : '🚗  Add your car'}</Text>
+          <Ionicons name="chevron-forward" size={13} color={colors.white} />
+        </Pressable>
+        <View style={{ flex: 1 }} pointerEvents="none" />
+        <Text style={s.heroTitle} pointerEvents="none">Make it yours</Text>
+        <Text style={s.heroSub} numberOfLines={1} pointerEvents="none">{current.subtitle}</Text>
+        <View style={s.heroFoot} pointerEvents="box-none">
+          <Pressable
+            onPress={() => {
+              light();
+              router.push(current.route as never);
+            }}
+            style={({ pressed }) => [s.heroBtn, pressed && { opacity: 0.9 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Shop now"
+          >
+            <Text style={s.heroBtnText}>Shop now</Text>
+            <Ionicons name="arrow-forward" size={14} color={colors.ink} />
+          </Pressable>
+          {list.length > 1 && (
+            <View style={s.dots} pointerEvents="none">
+              {list.map((sl, i) => (
+                <View key={sl.key} style={[s.dot, i === index && s.dotOn]} />
+              ))}
+            </View>
+          )}
+        </View>
       </View>
-      <TextLink label={linkLabel} onPress={onLink} style={{ marginTop: spacing.md }} />
-    </Panel>
+    </View>
   );
 }
 
-// ── hero ─────────────────────────────────────────────────────────────────────
-
-/**
- * The website's "Shop by vehicle" opener: the fitment promise first, the
- * photographs second. It sells the one thing that makes this shop different
- * from a generic marketplace, which a rotating product banner does not.
- */
-function Hero({ photos, loading }: { photos: Product[]; loading: boolean }) {
+/** "Watch and shop": tall 9:16 reel cards; each opens Reels at that reel. */
+function WatchAndShop() {
   const router = useRouter();
-  const rail = useRef<FlatList<Product>>(null);
-  const touched = useRef(false);
-  const slides = photos.slice(0, 8);
+  const feed = useReelFeed();
+  const reels = feed.reels.slice(0, 10);
 
-  // Drifts gently on its own, and yields the moment a thumb lands on it.
-  useEffect(() => {
-    if (slides.length < 3) return;
-    let at = 0;
-    const timer = setInterval(() => {
-      if (touched.current) return;
-      at = (at + 1) % Math.max(1, slides.length - 2);
-      rail.current?.scrollToOffset({ offset: at * (HERO_PHOTO + GRID_GAP), animated: true });
-    }, 3500);
-    return () => clearInterval(timer);
-  }, [slides.length]);
+  if (feed.isError || (!feed.isPending && !reels.length)) return null;
 
   return (
-    <LinearGradient
-      colors={[colors.greenMid, colors.green, colors.greenDark]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={s.hero}
-    >
-      <Text style={s.heroEyebrow}>SHOP BY VEHICLE</Text>
-      <Text style={s.heroTitle}>Parts that fit your car</Text>
-      <Text style={s.heroBody}>Choose your make and model — see only the upgrades that fit it.</Text>
-
-      <Pressable
-        onPress={() => router.push('/(tabs)/garage')}
-        android_ripple={{ color: 'rgba(10,92,51,0.12)' }}
-        style={({ pressed }) => [s.heroCta, pressed && { opacity: 0.9 }]}
-        accessibilityRole="button"
-        accessibilityLabel="Find my parts"
-      >
-        <Text style={s.heroCtaText}>Find my parts</Text>
-        <Ionicons name="arrow-forward" size={15} color={colors.green} />
-      </Pressable>
-
-      {loading ? (
-        <View style={[s.heroRail, { flexDirection: 'row', gap: GRID_GAP }]}>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} width={HERO_PHOTO} height={HERO_PHOTO * 0.78} radius={radius.md} />
-          ))}
-        </View>
-      ) : slides.length ? (
-        <FlatList
-          ref={rail}
-          horizontal
-          data={slides}
-          keyExtractor={(p) => p.id}
-          style={s.heroRail}
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={HERO_PHOTO + GRID_GAP}
-          decelerationRate="fast"
-          onTouchStart={() => { touched.current = true; }}
-          ItemSeparatorComponent={() => <View style={{ width: GRID_GAP }} />}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => router.push(`/product/${item.slug}`)}
-              accessibilityRole="button"
-              accessibilityLabel={item.name}
-              style={({ pressed }) => [s.heroPhoto, pressed && { opacity: 0.85 }]}
-            >
-              <Photo uri={item.image} style={s.heroPhotoImg} contentFit="cover" />
-            </Pressable>
-          )}
-        />
-      ) : null}
-    </LinearGradient>
+    <View style={{ marginTop: spacing.xl }}>
+      <View style={s.rowHead}>
+        <Text style={s.rowTitle}>Watch and shop</Text>
+        <TextLink label="See all" onPress={() => router.push('/(tabs)/reels')} />
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.reelRow}>
+        {feed.isPending
+          ? [0, 1, 2].map((i) => <Skeleton key={i} width={REEL_W} height={REEL_H} radius={radius.md} />)
+          : reels.map((r) => {
+              const handle = `@${r.creator.name.replace(/\s+/g, '').toLowerCase()}`;
+              const price = r.product ? (r.product.festivalPrice ?? r.product.price) : null;
+              return (
+                <Pressable
+                  key={r.id}
+                  onPress={() => {
+                    light();
+                    router.push({ pathname: '/(tabs)/reels', params: { start: r.id } });
+                  }}
+                  style={({ pressed }) => [s.reelCard, pressed && { transform: [{ scale: 0.97 }] }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Reel by ${r.creator.name}`}
+                >
+                  <Image
+                    source={{ uri: (r.posterUrl || r.product?.image) ?? undefined }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                  />
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.75)']} style={s.reelScrim} />
+                  <View style={s.play}>
+                    <Ionicons name="play" size={12} color={colors.white} />
+                  </View>
+                  <View style={s.reelMeta}>
+                    <Text style={s.reelHandle} numberOfLines={1}>{handle}</Text>
+                    {price != null && <Text style={s.reelPrice}>{inr(price)}</Text>}
+                  </View>
+                </Pressable>
+              );
+            })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -235,27 +265,24 @@ function Hero({ photos, loading }: { photos: Product[]; loading: boolean }) {
 export default function HomeScreen() {
   const router = useRouter();
   const { garage } = useApp();
-  const scroller = useRef<ScrollView>(null);
+  const scroller = useRef<ScrollViewInstance>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const insets = useSafeAreaInsets();
 
-  /*
-    The header scrolls away with the content, as the website's does, so the
-    full-size search bar is never traded for screen space. `0` because nothing
-    collapses — the hook is here only for the back-to-top button.
-  */
   const { onScroll, showTop } = useHeaderScroll(0);
   const scrollToTop = useScrollToTop(scroller);
 
-  const [categories, deals, newest, popular, brands, reviews, makes] = useQueries({
+  const [categories, deals, newest, popular, forMyCar, banner] = useQueries({
     queries: [
       { queryKey: ['categories'], queryFn: () => fetchCategories() },
       { queryKey: ['home', 'deals'], queryFn: () => fetchOffers(14) },
       { queryKey: ['home', 'new'], queryFn: () => fetchProducts({ sort: '-createdAt', limit: 12 }) },
       { queryKey: ['home', 'popular'], queryFn: () => fetchProducts({ sort: '-salesScore', limit: 12 }) },
-      { queryKey: ['brands'], queryFn: () => fetchBrands() },
-      { queryKey: ['home', 'reviews'], queryFn: () => fetchTestimonials(8) },
-      { queryKey: ['vehicleMakes'], queryFn: () => fetchVehicleMakes() },
+      {
+        queryKey: ['home', 'garage', garage?.make, garage?.model],
+        queryFn: () => fetchProducts({ vehicleMake: garage?.make, vehicleModel: garage?.model, limit: 12 }),
+        enabled: !!garage?.make,
+      },
+      { queryKey: ['home', 'banner'], queryFn: () => fetchActiveBanner(), staleTime: 5 * 60_000 },
     ],
   });
 
@@ -264,56 +291,40 @@ export default function HomeScreen() {
     [categories.data],
   );
 
-  // "Top in Lighting", "Top in Exterior"… — the website's per-department rails.
-  // Three is enough to show depth without turning the home screen into a scroll
-  // of near-identical rows.
-  const departmentRails = useQueries({
-    queries: topCategories.slice(0, 3).map((c) => ({
-      queryKey: ['home', 'dept', c.slug],
-      queryFn: () => fetchProducts({ category: c.slug, limit: 10 }),
-    })),
-  });
-
-  // Parts that fit the saved car — the row that makes the garage worth setting.
-  const [forMyCar] = useQueries({
-    queries: [
-      {
-        queryKey: ['home', 'garage', garage?.make, garage?.model],
-        queryFn: () => fetchProducts({ vehicleMake: garage?.make, vehicleModel: garage?.model, limit: 12 }),
-        enabled: !!garage?.make,
-      },
-    ],
-  });
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([
-      categories.refetch(),
-      deals.refetch(),
-      newest.refetch(),
-      popular.refetch(),
-      brands.refetch(),
-      reviews.refetch(),
-    ]);
+    await Promise.all([categories.refetch(), deals.refetch(), newest.refetch(), popular.refetch(), banner.refetch()]);
     setRefreshing(false);
-  }, [categories, deals, newest, popular, brands, reviews]);
+  }, [categories, deals, newest, popular, banner]);
 
   const dealList = deals.data ?? [];
 
-  const departments = useMemo(
-    () => [
-      { label: "Today's Deals", onPress: () => router.push('/category/offers') },
-      ...topCategories.slice(0, 8).map((c) => ({ label: c.name, onPress: () => router.push(`/category/${c.slug}`) })),
-    ],
-    [topCategories, router],
-  );
-
-  const call = (scheme: 'tel' | 'whatsapp') => {
-    const phone = (scheme === 'tel' ? extra.supportPhone : extra.supportWhatsapp) ?? extra.supportPhone;
-    if (!phone) return;
-    const url = scheme === 'tel' ? `tel:${phone}` : `https://wa.me/${phone.replace(/[^0-9]/g, '')}`;
-    Linking.openURL(url).catch(() => {});
-  };
+  const heroSlides: HeroSlide[] = useMemo(() => {
+    const out: HeroSlide[] = [];
+    const b = banner.data;
+    if (b) {
+      out.push({
+        key: 'banner',
+        cover: b.mobileImageUrl || b.imageUrl,
+        subtitle: b.title || "Today's offers",
+        route: bannerRoute(b.linkPath),
+      });
+    }
+    for (const d of (deals.data ?? []).filter((x) => !!x.image).slice(0, 3)) {
+      out.push({
+        key: d.id,
+        product: d.image,
+        // Display only: the discount the server reported.
+        subtitle: d.discountPercent > 0 ? `${d.name} · ${d.discountPercent}% off` : d.name,
+        route: `/product/${d.slug}`,
+      });
+    }
+    return out;
+  }, [banner.data, deals.data]);
+  const carName = garage ? garage.model || garage.make : null;
+  const carQuery = garage
+    ? `/search?vehicleMake=${encodeURIComponent(garage.make)}${garage.model ? `&vehicleModel=${encodeURIComponent(garage.model)}` : ''}`
+    : null;
 
   return (
     <View style={s.screen}>
@@ -321,258 +332,66 @@ export default function HomeScreen() {
         ref={scroller}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: spacing.xl }}
+        contentContainerStyle={{ paddingBottom: spacing.xxl }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.green}
-            colors={[colors.green]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.green} colors={[colors.green]} />}
       >
-        <AppHeader departments={departments} />
+        <AppHeader />
 
-        <Hero photos={dealList.length ? dealList : (popular.data?.products ?? [])} loading={deals.isLoading} />
+        <Hero slides={heroSlides} loading={deals.isLoading || banner.isLoading} />
 
-        <MiniGrid
-          title="Shop by category"
-          loading={categories.isLoading}
-          items={topCategories.slice(0, 4).map((c) => ({
-            key: c.id,
-            label: c.name,
-            image: c.image,
-            onPress: () => router.push(`/category/${c.slug}`),
-          }))}
-          linkLabel="See all categories"
-          onLink={() => router.push('/(tabs)/shop')}
-        />
+        <SearchField style={{ marginHorizontal: spacing.lg, marginTop: spacing.md }} />
 
-        <MiniGrid
-          title="Upgrade your ride"
-          loading={categories.isLoading}
-          items={topCategories.slice(4, 8).map((c) => ({
-            key: c.id,
-            label: c.name,
-            image: c.image,
-            onPress: () => router.push(`/category/${c.slug}`),
-          }))}
-          linkLabel="Explore more"
-          onLink={() => router.push('/(tabs)/shop')}
-        />
-
-        <MiniGrid
-          title="Top deals for you"
-          loading={deals.isLoading}
-          items={dealList.slice(0, 4).map((p) => ({
-            key: p.id,
-            label: p.name,
-            image: p.image,
-            onPress: () => router.push(`/product/${p.slug}`),
-          }))}
-          linkLabel="See all deals"
-          onLink={() => router.push('/category/offers')}
-        />
-
-        {/* Vehicle finder — the website's green-ruled card, as quick picks. */}
-        <View style={s.finder}>
-          <View style={s.finderHead}>
-            <View style={s.finderIcon}>
-              <Ionicons name="car-sport" size={17} color={colors.white} />
+        {/* Categories — tinted tiles, four across */}
+        {(categories.isLoading || topCategories.length > 0) && (
+          <Panel title="Shop by category" actionLabel="See all" onAction={() => router.push('/(tabs)/shop')}>
+            <View style={s.grid}>
+              {categories.isLoading
+                ? [0, 1, 2, 3].map((i) => (
+                    <View key={i} style={{ width: MINI_W, gap: 6 }}>
+                      <Skeleton width={MINI_W} height={MINI_W} radius={radius.md} />
+                      <Skeleton width={MINI_W - 16} height={9} />
+                    </View>
+                  ))
+                : topCategories.slice(0, 8).map((c, i) => (
+                    <MiniTile key={c.id} label={c.name} image={c.image} tint={tints[i % tints.length]} onPress={() => router.push(`/category/${c.slug}`)} width={MINI_W} />
+                  ))}
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.finderTitle}>Parts that fit your car</Text>
-              <Text style={s.finderSub}>Pick your car — we&apos;ll show only what fits.</Text>
-            </View>
-          </View>
-          <View style={s.finderBody}>
-            <Pressable
-              onPress={() => router.push('/(tabs)/garage')}
-              android_ripple={{ color: 'rgba(10,92,51,0.08)' }}
-              style={({ pressed }) => [s.finderSelect, pressed && { opacity: 0.9 }]}
-              accessibilityRole="button"
-              accessibilityLabel={garage ? 'Change your car' : 'Select your car'}
-            >
-              <Text style={s.finderSelectText} numberOfLines={1}>
-                {garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : 'Select make and model'}
-              </Text>
-              <Ionicons name="chevron-down" size={17} color={colors.ink2} />
-            </Pressable>
-            <View style={s.finderChips}>
-              {(makes.data ?? []).slice(0, 6).map((m) => (
-                <Chip
-                  key={m}
-                  label={m}
-                  active={garage?.make === m}
-                  onPress={() => router.push(`/search?vehicleMake=${encodeURIComponent(m)}`)}
-                />
-              ))}
-            </View>
-          </View>
-        </View>
+          </Panel>
+        )}
 
-        {garage?.make && (
+        <WatchAndShop />
+
+        {carName && carQuery ? (
           <ProductRail
-            title={`For your ${garage.make}`}
+            title={`Fits your ${carName}`}
             subtitle="Parts matched to the car in your garage"
-            products={forMyCar?.data?.products ?? []}
-            loading={!!forMyCar?.isLoading}
-            onSeeAll={() =>
-              router.push(
-                `/search?vehicleMake=${encodeURIComponent(garage.make)}${
-                  garage.model ? `&vehicleModel=${encodeURIComponent(garage.model)}` : ''
-                }`,
-              )
-            }
+            products={forMyCar.data?.products ?? []}
+            loading={forMyCar.isLoading}
+            onSeeAll={() => router.push(carQuery as never)}
           />
+        ) : (
+          <ProductRail title="Popular" subtitle="Most bought by our customers" products={popular.data?.products ?? []} loading={popular.isLoading} />
         )}
 
         <ProductRail
           title="Today's Deals"
-          subtitle="Real savings on genuine parts — M.R.P. shown on every deal"
           products={dealList}
           loading={deals.isLoading}
           onSeeAll={() => router.push('/category/offers')}
         />
 
-        <ProductRail
-          title="Best Sellers"
-          subtitle="Most bought by our customers"
-          products={popular.data?.products ?? []}
-          loading={popular.isLoading}
-          ranked
-        />
-
-        {/* Trust — the website's 2×2, which is where it answers "why here". */}
-        <Panel>
-          <View style={s.trust}>
-            {[
-              { icon: 'shield-checkmark-outline' as const, title: 'Genuine parts', body: 'Sourced from trusted brands' },
-              { icon: 'headset-outline' as const, title: 'Fitment support', body: 'Talk to a specialist before you buy' },
-              { icon: 'lock-closed-outline' as const, title: 'Secure payments', body: 'Razorpay · UPI · Cards · EMI' },
-              { icon: 'cube-outline' as const, title: 'Delivered across India', body: 'Track every order online' },
-            ].map((t) => (
-              <View key={t.title} style={s.trustItem}>
-                <View style={s.trustIcon}>
-                  <Ionicons name={t.icon} size={17} color={colors.green} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.trustTitle}>{t.title}</Text>
-                  <Text style={s.trustBody}>{t.body}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </Panel>
-
-        {topCategories.slice(0, 3).map((c, i) => (
-          <ProductRail
-            key={c.id}
-            title={`Top in ${c.name}`}
-            products={departmentRails[i]?.data?.products ?? []}
-            loading={!!departmentRails[i]?.isLoading}
-            onSeeAll={() => router.push(`/category/${c.slug}`)}
-          />
-        ))}
+        {/* With a car saved, Popular wasn't shown above — show it here as best sellers. */}
+        {carName && (
+          <ProductRail title="Best sellers" products={popular.data?.products ?? []} loading={popular.isLoading} ranked />
+        )}
 
         <ProductRail
-          title="New Arrivals"
-          subtitle="Fresh additions to the catalogue"
+          title="New arrivals"
           products={newest.data?.products ?? []}
           loading={newest.isLoading}
           onSeeAll={() => router.push('/(tabs)/shop')}
         />
-
-        {/* Brands — bordered boxes in a grid, as on the site. */}
-        {(brands.data ?? []).length > 0 && (
-          <Panel title="Shop by brand" actionLabel="See all" onAction={() => router.push('/(tabs)/shop')}>
-            <View style={s.grid}>
-              {(brands.data ?? []).slice(0, 6).map((b) => (
-                <Pressable
-                  key={b.slug}
-                  onPress={() => router.push(`/search?brand=${encodeURIComponent(b.name)}`)}
-                  android_ripple={{ color: 'rgba(10,92,51,0.07)' }}
-                  style={({ pressed }) => [s.brandBox, { width: BRAND_W }, pressed && { opacity: 0.85 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={b.name}
-                >
-                  {b.logo ? (
-                    <Photo uri={b.logo} style={{ width: BRAND_W - 20, height: 42 }} />
-                  ) : (
-                    <Text style={s.brandName} numberOfLines={2}>{b.name}</Text>
-                  )}
-                </Pressable>
-              ))}
-            </View>
-          </Panel>
-        )}
-
-        {/* Reviews */}
-        {(reviews.data ?? []).length > 0 && (
-          <Panel title="What customers say" flush>
-            <FlatList
-              horizontal
-              data={reviews.data ?? []}
-              keyExtractor={(r) => r.id}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={s.railContent}
-              ItemSeparatorComponent={() => <View style={{ width: GRID_GAP }} />}
-              renderItem={({ item }) => (
-                <View style={s.review}>
-                  <View style={s.reviewStars}>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <Ionicons key={n} name={n <= item.rating ? 'star' : 'star-outline'} size={13} color={colors.star} />
-                    ))}
-                  </View>
-                  <Text style={s.reviewText} numberOfLines={4}>{item.comment}</Text>
-                  <View style={s.reviewWho}>
-                    <View style={s.avatar}>
-                      <Text style={s.avatarText}>{item.name.trim().charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <Text style={s.reviewName} numberOfLines={1}>{item.name}</Text>
-                    {item.verified && <Ionicons name="checkmark-circle" size={13} color={colors.green} />}
-                  </View>
-                  {!!item.productName && <Text style={s.reviewProduct} numberOfLines={1}>{item.productName}</Text>}
-                </View>
-              )}
-            />
-          </Panel>
-        )}
-
-        {/* Footer — back to top, then the two ways to reach a human. */}
-        <Pressable
-          onPress={() => scroller.current?.scrollTo({ y: 0, animated: true })}
-          android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
-          style={s.backToTop}
-          accessibilityRole="button"
-          accessibilityLabel="Back to top"
-        >
-          <Ionicons name="arrow-up" size={15} color={colors.white} />
-          <Text style={s.backToTopText}>Back to top</Text>
-        </Pressable>
-
-        <View style={s.footer}>
-          {(['tel', 'whatsapp'] as const).map((how) => (
-            <Pressable
-              key={how}
-              onPress={() => call(how)}
-              disabled={!extra.supportPhone}
-              android_ripple={{ color: 'rgba(255,255,255,0.08)' }}
-              style={s.footerItem}
-              accessibilityRole="button"
-              accessibilityLabel={how === 'tel' ? 'Call us' : 'Chat on WhatsApp'}
-            >
-              <Ionicons name={how === 'tel' ? 'call-outline' : 'logo-whatsapp'} size={20} color={colors.white} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.footerTitle}>{how === 'tel' ? 'Call us' : 'WhatsApp'}</Text>
-                <Text style={s.footerBody} numberOfLines={1}>
-                  {how === 'tel' ? (extra.supportPhone ?? 'Talk to our team') : 'Chat with an expert'}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
       </Animated.ScrollView>
 
       <ScrollTopButton visible={showTop} onPress={scrollToTop} />
@@ -585,173 +404,67 @@ const s = StyleSheet.create({
   railContent: { paddingHorizontal: spacing.lg, paddingVertical: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
 
+  rowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  rowTitle: { fontFamily: font.heading, fontSize: 18, letterSpacing: -0.2, color: colors.ink },
+
   hero: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    borderRadius: radius.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
-    paddingLeft: spacing.lg,
-    overflow: 'hidden',
-  },
-  heroEyebrow: {
-    fontFamily: font.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    color: 'rgba(255,255,255,0.75)',
-  },
-  heroTitle: { fontFamily: font.extrabold, fontSize: 25, lineHeight: 31, color: colors.white, marginTop: 6 },
-  heroBody: {
-    fontFamily: font.regular,
-    fontSize: 13.5,
-    lineHeight: 19,
-    color: 'rgba(255,255,255,0.82)',
-    marginTop: 6,
-    paddingRight: spacing.lg,
-  },
-  heroCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    alignSelf: 'flex-start',
-    marginTop: spacing.lg,
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.xl,
-    height: 44,
-    borderRadius: radius.pill,
-    overflow: 'hidden',
-  },
-  heroCtaText: { fontFamily: font.bold, fontSize: 14.5, color: colors.green },
-  heroRail: { marginTop: spacing.lg, overflow: 'visible' },
-  heroPhoto: {
-    width: HERO_PHOTO,
-    height: HERO_PHOTO * 0.78,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  heroPhotoImg: { width: '100%', height: '100%' },
-
-  finder: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.green,
-    backgroundColor: colors.card,
-    overflow: 'hidden',
-  },
-  finderHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.green,
-    padding: spacing.lg,
-  },
-  finderIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  finderTitle: { fontFamily: font.bold, fontSize: 15.5, color: colors.white },
-  finderSub: { fontFamily: font.regular, fontSize: 12, color: 'rgba(255,255,255,0.82)', marginTop: 1 },
-  finderBody: { padding: spacing.lg, gap: spacing.md },
-  finderSelect: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 46,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    overflow: 'hidden',
-  },
-  finderSelectText: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink },
-  finderChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-
-  trust: { flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.lg },
-  trustItem: { width: '50%', flexDirection: 'row', gap: spacing.sm, paddingRight: spacing.sm },
-  trustIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.pill,
-    backgroundColor: colors.greenFaint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trustTitle: { fontFamily: font.semibold, fontSize: 12.5, lineHeight: 17, color: colors.ink },
-  trustBody: { fontFamily: font.regular, fontSize: 11.5, lineHeight: 16, color: colors.muted, marginTop: 1 },
-
-  brandBox: {
-    height: 68,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.sm,
-    overflow: 'hidden',
-  },
-  brandName: { fontFamily: font.bold, fontSize: 12, color: colors.ink, textAlign: 'center' },
-
-  review: {
-    width: 258,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  reviewStars: { flexDirection: 'row', gap: 2 },
-  reviewText: { fontFamily: font.regular, fontSize: 13, lineHeight: 19, color: colors.ink2 },
-  reviewWho: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.pill,
-    backgroundColor: colors.greenSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: font.bold, fontSize: 12.5, color: colors.green },
-  reviewName: { flex: 1, fontFamily: font.semibold, fontSize: 12.5, color: colors.ink },
-  reviewProduct: { fontFamily: font.medium, fontSize: 11.5, color: colors.green },
-
-  backToTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 46,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.green,
-    overflow: 'hidden',
-  },
-  backToTopText: { fontFamily: font.semibold, fontSize: 14, color: colors.white },
-
-  footer: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.md,
+    marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
-    borderRadius: radius.lg,
-    backgroundColor: colors.header,
+    width: HERO_W,
+    height: HERO_H,
+    borderRadius: 18,
     overflow: 'hidden',
+    backgroundColor: '#1c2422',
   },
-  footerItem: {
-    flex: 1,
+  heroShotWell: { position: 'absolute', right: 12, top: 12, height: HERO_H * 0.56, width: HERO_W * 0.42, alignItems: 'center', justifyContent: 'center' },
+  heroShot: { width: '100%', height: '100%' },
+  heroBody: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: spacing.lg },
+  glass: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.lg,
+    gap: 4,
+    alignSelf: 'flex-start',
+    maxWidth: '80%',
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.45)',
   },
-  footerTitle: { fontFamily: font.semibold, fontSize: 13.5, color: colors.white },
-  footerBody: { fontFamily: font.regular, fontSize: 11.5, color: 'rgba(255,255,255,0.65)', marginTop: 1 },
+  glassText: { flexShrink: 1, fontFamily: font.semibold, fontSize: 12.5, color: colors.white },
+  heroTitle: { fontFamily: font.extrabold, fontSize: 26, lineHeight: 31, letterSpacing: -0.4, color: colors.white },
+  heroSub: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.86)', marginTop: 2, maxWidth: '92%' },
+  heroFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
+  heroBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: radius.pill,
+    backgroundColor: colors.white,
+  },
+  heroBtnText: { fontFamily: font.bold, fontSize: 13.5, color: colors.ink },
+  dots: { flexDirection: 'row', gap: 5 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.45)' },
+  dotOn: { width: 16, backgroundColor: colors.white },
+
+  reelRow: { paddingHorizontal: spacing.lg, gap: GRID_GAP },
+  reelCard: { width: REEL_W, height: REEL_H, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.ink },
+  reelScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
+  play: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reelMeta: { position: 'absolute', left: 8, right: 8, bottom: 9 },
+  reelHandle: { fontFamily: font.medium, fontSize: 11, color: 'rgba(255,255,255,0.9)' },
+  reelPrice: { fontFamily: font.bold, fontSize: 13.5, color: colors.white, marginTop: 1 },
 });

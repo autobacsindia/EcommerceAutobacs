@@ -20,10 +20,19 @@ export const colors = {
   muted: '#5f6363',
   grey: '#707070',
 
-  /** Page background and surfaces. */
-  bg: '#eef1f0',
+  /**
+   * Page background and surfaces — design "Premium showroom" (2026-11-18, on
+   * top of "A clean light"): soft off-white page, white cards with hairline
+   * borders, green only on key actions and active states.
+   */
+  bg: '#f7f8f7',
   card: '#ffffff',
-  line: '#dfe3e2',
+  /** Hairline border for cards and dividers. */
+  line: '#eef0ef',
+  /** Stronger border for inputs and outline controls that must read as tappable. */
+  lineStrong: '#dfe3e2',
+  /** Light grey fill: search fields, inset panels, image wells. */
+  subtle: '#f4f6f5',
 
   /** Dark chrome (header / hero overlays). */
   header: '#121414',
@@ -38,10 +47,16 @@ export const colors = {
   black: '#000000',
 } as const;
 
+/**
+ * Soft tints for category tiles and chips — each tile gets a different one,
+ * cycling in this order.
+ */
+export const tints = ['#e7f3ec', '#fdf1dc', '#e6eefb', '#fbe9ee'] as const;
+
 export const radius = {
   sm: 8,
-  md: 10,
-  lg: 14,
+  md: 12,
+  lg: 16,
   xl: 20,
   pill: 999,
 } as const;
@@ -95,19 +110,17 @@ export const type = {
 } as const;
 
 /**
- * Elevation matching the website's card shadow
- * (`0 1px 3px rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1)`) — much tighter
- * than the soft 10px blur the app used, which read as a floating panel rather
- * than a card sitting on the page. The site pairs it with a 1px #dfe3e2
+ * Elevation. Design "A clean light": on a white page a card is defined by its
+ * hairline border, so the shadow is only a soft lift, never a dark edge. The site pairs it with a 1px #dfe3e2
  * border; `cardBorder` below is that border, so the two always travel together.
  */
 export const shadow = {
   card: {
-    shadowColor: '#000000',
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
+    shadowColor: '#0f1111',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   raised: {
     shadowColor: '#0f1111',
@@ -121,7 +134,7 @@ export const shadow = {
 /** The website's card: 12px radius, hairline border, the shadow above. */
 export const cardSurface = {
   backgroundColor: colors.card,
-  borderRadius: 12,
+  borderRadius: 16,
   borderWidth: 1,
   borderColor: colors.line,
 } as const;

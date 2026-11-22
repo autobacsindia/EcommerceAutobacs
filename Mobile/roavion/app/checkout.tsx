@@ -54,7 +54,7 @@ function razorpayPage(opts: { key: string; orderId: string; amount: number; name
       order_id: o.orderId,
       amount: o.amount,
       currency: 'INR',
-      name: 'Roavion',
+      name: 'Autobacs',
       description: 'Order payment',
       prefill: { name: o.name, email: o.email, contact: o.phone },
       theme: { color: '#0a5c33' },
@@ -299,7 +299,7 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   label: { fontFamily: font.semibold, fontSize: 12.5, color: colors.ink2, marginBottom: 5 },
   input: {
-    backgroundColor: colors.bg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
+    backgroundColor: colors.subtle, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
     paddingHorizontal: spacing.md, height: 46, fontFamily: font.regular, fontSize: 14.5,
     color: colors.ink, marginBottom: spacing.md,
   },

@@ -10,10 +10,10 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchVehicles } from '../../src/api/catalogue';
-import { Button, Card, Screenful, T } from '../../src/components/ui';
-import { colors, font, radius, shadow, spacing } from '../../src/theme';
-import { useApp } from '../../src/store';
+import { fetchVehicles } from '../src/api/catalogue';
+import { Button, Card, Screenful, T } from '../src/components/ui';
+import { colors, font, radius, shadow, spacing } from '../src/theme';
+import { useApp } from '../src/store';
 
 export default function GarageScreen() {
   const router = useRouter();
@@ -51,7 +51,17 @@ export default function GarageScreen() {
   return (
     <View style={s.screen}>
       <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Text style={s.title}>My garage</Text>
+        <View style={s.titleRow}>
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={24} color={colors.ink} />
+          </Pressable>
+          <Text style={s.title}>My garage</Text>
+        </View>
         <Text style={s.subtitle}>Save your car to see parts that fit</Text>
       </View>
 
@@ -173,9 +183,10 @@ export default function GarageScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.header, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: font.bold, fontSize: 22, color: colors.white },
-  subtitle: { fontFamily: font.regular, fontSize: 12.5, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  header: { backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.line },
+  title: { fontFamily: font.heading, fontSize: 22, letterSpacing: -0.2, color: colors.ink },
+  subtitle: { fontFamily: font.regular, fontSize: 12.5, color: colors.muted, marginTop: 2 },
 
   savedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   savedIcon: { width: 46, height: 46, borderRadius: radius.md, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },

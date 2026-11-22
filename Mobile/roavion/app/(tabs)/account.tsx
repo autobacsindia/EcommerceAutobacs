@@ -75,7 +75,7 @@ export default function AccountScreen() {
           style: 'destructive',
           onPress: () =>
             open(
-              `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Delete my Roavion account')}&body=${encodeURIComponent(
+              `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Delete my Autobacs account')}&body=${encodeURIComponent(
                 `Please delete the account for ${customer?.email ?? ''}.`,
               )}`,
             ),
@@ -97,7 +97,7 @@ export default function AccountScreen() {
                 <Text style={s.avatarText}>{customer.name.slice(0, 1).toUpperCase() || 'R'}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <T kind="h3">{customer.name || 'Roavion customer'}</T>
+                <T kind="h3">{customer.name || 'Autobacs customer'}</T>
                 <T kind="small">{customer.email}</T>
                 {garage && <T kind="small">Garage: {garage.make}{garage.model ? ` ${garage.model}` : ''}</T>}
               </View>
@@ -105,7 +105,7 @@ export default function AccountScreen() {
           </Card>
         ) : (
           <Card>
-            <T kind="h3">Sign in to Roavion</T>
+            <T kind="h3">Sign in to Autobacs</T>
             <T kind="small" style={{ marginTop: 4 }}>
               Track orders, save your car and check out faster.
             </T>
@@ -121,11 +121,22 @@ export default function AccountScreen() {
             title="ORDERS"
             rows={[
               { icon: 'receipt-outline', label: 'My orders', onPress: () => router.push('/orders') },
-              { icon: 'car-sport-outline', label: 'My garage', onPress: () => router.push('/(tabs)/garage') },
               { icon: 'repeat-outline', label: 'Returns', onPress: () => open(`${SITE}/returns`) },
             ]}
           />
         )}
+
+        <RowList
+          title="MY STUFF"
+          rows={[
+            { icon: 'film-outline', label: 'My reels', onPress: () => router.push(customer ? '/reels/mine' : '/login?next=/reels/mine') },
+            {
+              icon: 'car-sport-outline',
+              label: garage ? `My garage · ${garage.make}${garage.model ? ` ${garage.model}` : ''}` : 'My garage',
+              onPress: () => router.push('/garage'),
+            },
+          ]}
+        />
 
         <RowList
           title="HELP"
@@ -157,7 +168,7 @@ export default function AccountScreen() {
           />
         )}
 
-        <Text style={s.version}>Roavion v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+        <Text style={s.version}>Autobacs v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
       </ScrollView>
     </View>
   );
@@ -165,8 +176,8 @@ export default function AccountScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.header, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: font.bold, fontSize: 22, color: colors.white },
+  header: { backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.line },
+  title: { fontFamily: font.heading, fontSize: 22, letterSpacing: -0.2, color: colors.ink },
 
   identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: { width: 50, height: 50, borderRadius: radius.pill, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },

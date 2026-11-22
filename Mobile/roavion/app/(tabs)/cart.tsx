@@ -132,7 +132,7 @@ export default function CartScreen() {
       </ScrollView>
 
       {/* Sticky summary — the subtotal the server returned, never a local sum. */}
-      <View style={[s.bar, { paddingBottom: insets.bottom + spacing.md }]}>
+      <View style={s.bar}>
         <View style={s.barRow}>
           <T kind="small">Subtotal</T>
           <Text style={s.barTotal}>{inr(cart.totalPrice)}</Text>
@@ -152,9 +152,9 @@ export default function CartScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.header, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: font.bold, fontSize: 22, color: colors.white },
-  subtitle: { fontFamily: font.regular, fontSize: 12.5, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  header: { backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.line },
+  title: { fontFamily: font.heading, fontSize: 22, letterSpacing: -0.2, color: colors.ink },
+  subtitle: { fontFamily: font.regular, fontSize: 12.5, color: colors.muted, marginTop: 2 },
 
   line: {
     flexDirection: 'row', gap: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg,
