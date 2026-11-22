@@ -72,10 +72,11 @@ function CartPageContent() {
     })),
     [cart?.items]
   );
-  // "Apply Black Friday offer" intent (carried into checkout). The server decides.
-  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer();
   // Delivery fees depend on the PIN (distance + remote area): none are shown before it.
   const [deliveryPin, setDeliveryPin] = useDeliveryPin();
+  // Black Friday waiver: asked for automatically once a PIN is known while the offer is
+  // live (unless the shopper tapped "Remove"). Carried into checkout; the server decides.
+  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer(deliveryPin);
   const { quote, quotedCouponCode, loading: quoteLoading, error: quoteError } = useCheckoutQuote(
     quoteItems, cart?.couponCode || undefined, 0, { applyDeliveryFeeOffer: offerRequested, deliveryPin },
   );

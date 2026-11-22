@@ -6,6 +6,7 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import DeliveryFeeBreakdown from './DeliveryFeeBreakdown';
+import { resetOfferCelebrated } from '@/hooks/useDeliveryFeeOffer';
 import type { DeliveryFeesQuote } from '@/hooks/useCheckoutQuote';
 
 const fees = (over: Partial<DeliveryFeesQuote> = {}, offer: Partial<DeliveryFeesQuote['offer']> = {}): DeliveryFeesQuote => ({
@@ -30,7 +31,7 @@ const fees = (over: Partial<DeliveryFeesQuote> = {}, offer: Partial<DeliveryFees
 
 const props = { requested: false, onRequestChange: jest.fn(), reducedMotionOverride: true };
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => { jest.clearAllMocks(); resetOfferCelebrated(); });
 
 it('fees switched off → the old "paid on delivery" row', () => {
   render(<DeliveryFeeBreakdown {...props} fees={null} />);
@@ -84,6 +85,25 @@ it('server-confirmed offer → fees struck through, ₹0 total, celebration once
   // A re-quote that is still applied does not celebrate again.
   rerender(<DeliveryFeeBreakdown {...props} requested fees={{ ...applied }} />);
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('celebration shows once per session — not again when a new PIN re-applies the offer', () => {
+  const pending = fees({}, { requested: true });
+  const applied = fees({}, { requested: true, applied: true, saving: 1140 });
+  const first = render(<DeliveryFeeBreakdown {...props} requested fees={pending} loading />);
+  first.rerender(<DeliveryFeeBreakdown {...props} requested fees={applied} />);
+  expect(screen.getByRole('dialog')).toHaveTextContent('Congratulations!');
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  // PIN changed → re-quote in flight → applied again (and on a later page/mount).
+  first.rerender(<DeliveryFeeBreakdown {...props} requested fees={pending} loading />);
+  first.rerender(<DeliveryFeeBreakdown {...props} requested fees={{ ...applied, total: 2200 }} />);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  first.unmount();
+  const second = render(<DeliveryFeeBreakdown {...props} requested fees={pending} loading />);
+  second.rerender(<DeliveryFeeBreakdown {...props} requested fees={applied} />);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  // The inline "you saved" lines still show every time.
+  expect(screen.getByTestId('savings-breakdown')).toHaveTextContent(/Total savings\s*₹1,140/);
 });
 
 it('offer ended → plain notice, no button', () => {
