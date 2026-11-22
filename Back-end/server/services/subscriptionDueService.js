@@ -9,16 +9,26 @@
  *   see                    accounts and admin: every team; a team: its own
  *   edit / delete          whoever added it, their team head, accounts, admin
  *   verify / reject        accounts (and admin)
- *   record a bill          whoever may edit it — usage-based, verified items only
+ *   mark a cycle paid      whoever added it, their team head, admin — verified
+ *                          items, from MARK_PAID_FROM_DAYS before the due day
+ *   approve that expense   accounts / admin in Payments — never whoever marked it
  *
- * ── USAGE-BASED BILLS ("Amount varies") ─────────────────────────────────────────
- * Some tools charge what you used (MongoDB Atlas, Railway…). For those
- * `variableAmount` is on and `amount` is only the ESTIMATE ("~USD 100"). When a
- * cycle is due, someone records the real bill — the actual amount (> 0) and the
- * invoice, both required — which adds it to `cycles` (the paid history: Oct
- * USD 95, Nov USD 112…) and moves the due date on one month / year. The actual
- * amount, never the estimate, is what is recorded as paid. A fixed-amount item
- * has no such step and behaves exactly as before.
+ * ── MARK PAID → EXPENSE ─────────────────────────────────────────────────────────
+ * When a cycle falls due, "Mark paid" records it (amount, how / when it was paid,
+ * reference, receipt) and raises ONE expense in Payments for accounts to approve
+ * (paymentRequestService.raiseForSubscription), in one transaction. The cycle then
+ * follows that expense (settleFromExpense): approved and paid → the cycle is paid
+ * and the due date moves on one month / year; declined or cancelled → the cycle
+ * is due again, with the reason. The expense is the source of truth: opening the
+ * item re-syncs any cycle that missed a step.
+ *   • Paid already (company card, auto-debit — the usual case): accounts'
+ *     approval closes the expense as paid. Not paid yet: the normal approve →
+ *     admin pays flow, and the cycle is paid when the admin pays.
+ *   • The money comes from the item, never the browser: a fixed bill is its
+ *     amount (a different figure needs a reason); a usage-based bill
+ *     (`variableAmount`, `amount` only the ESTIMATE) takes this cycle's actual
+ *     amount and its invoice, both required. A foreign bill paid already also
+ *     takes the rupees charged, so the rupee totals are real.
  *
  * ── EDITING A VERIFIED ITEM ─────────────────────────────────────────────────────
  * Accounts verified a bill: this amount, in this currency, on this day, paid this
@@ -34,7 +44,9 @@
  * ── ONCE ONLY ───────────────────────────────────────────────────────────────────
  * Every write is a compare-and-set on `rev` (the version the person was looking
  * at): a double click, or two people at once, changes it once; the other is told
- * to refresh. "Delete" archives — the record and its history stay.
+ * to refresh. A cycle is marked once while it is live, and the unique index on
+ * the expense's cycle makes "one expense per cycle" hold even past this code.
+ * "Delete" archives — the record and its history stay.
  */
 import crypto from 'crypto';
 import AppError from '../utils/AppError.js';
@@ -47,7 +59,9 @@ import { storeAll } from './storage/storeAll.js';
 import { MAX_ATTACHMENTS_PER_RECORD } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
-import { BASE_CURRENCY, EXPENSE_CURRENCIES } from '../config/expenseCategories.js';
+import mongoose from 'mongoose';
+import { BASE_CURRENCY, EXPENSE_CURRENCIES, MAX_FX_RATE, MIN_FX_RATE } from '../config/expenseCategories.js';
+import * as payments from './paymentRequestService.js';
 import { ROUGH_INR_PER_UNIT, roughInr } from '../config/roughFxRates.js';
 import { containsCardNumber } from '../utils/cardNumber.js';
 import { and, isObjectId, keysetPage, plainQuery, searchClauses, searchWords } from '../utils/listQuery.js';
@@ -66,6 +80,17 @@ export const KINDS = Object.freeze({ monthly: 'Monthly subscription', yearly: 'Y
 export const METHODS = Object.freeze({ card: 'Card', upi: 'UPI', bank_transfer: 'Bank transfer' });
 export const STATUS_LABELS = Object.freeze({ pending: 'Waiting for check', verified: 'Verified', rejected: 'Rejected' });
 /** The fields accounts verified: changing one puts a verified item back to "waiting for check". */
+/** "Mark paid" shows from this many days before the due day (and on every overdue one). */
+export const MARK_PAID_FROM_DAYS = 3;
+/** How it was paid, on the "Mark paid" form. */
+export const PAID_VIA = Object.freeze({ card: 'Card', upi: 'UPI', bank: 'Bank transfer', auto_debit: 'Auto-debit' });
+const MAX_RUPEES = 10000000; // the Payments typo guard (₹1 crore)
+/** A cycle's state, said plainly. Older cycles (no state) were paid. */
+export const CYCLE_LABELS = Object.freeze({
+  waiting: 'Waiting for accounts', approved: 'Approved — admin to pay', paid: 'Paid', rejected: 'Rejected',
+});
+const LIVE = (c) => c && c.state !== 'rejected';
+
 export const CHECKED_FIELDS = Object.freeze(['amount', 'currency', 'dueDate', 'kind', 'variableAmount', 'payment.method', 'payment.cardLast4', 'payment.autoDebit']);
 
 // ── Who ───────────────────────────────────────────────────────────────────────
@@ -82,6 +107,17 @@ const isHeadOf = (u, team) => isActiveStaff(u) && u.staff.isHead === true && u.s
 const mayChange = (u, r) => !r.archived && (
   seesAll(u)
   || (isActiveStaff(u) && u.staff.team === r.team && (idOf(r.addedBy) === idOf(u._id) || isHeadOf(u, r.team)))
+);
+
+/**
+ * Mark a cycle paid: whoever added it (on its team — or accounts, who add for any
+ * team), the team head, or the admin. Accounts otherwise approves the expense, so
+ * it does not also raise it.
+ */
+const mayMarkPaid = (u, r) => !r.archived && (
+  isAdmin(u)
+  || (isActiveStaff(u) && idOf(r.addedBy) === idOf(u._id) && (u.staff.team === r.team || isAccounts(u)))
+  || isHeadOf(u, r.team)
 );
 
 const entry = (actor, action, note = '') => ({
@@ -310,6 +346,34 @@ async function tellChat(r, action, message, { mention = [] } = {}) {
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
+/** One cycle, as the panel shows it. */
+function cycleShape(c) {
+  const state = c.state || 'paid';
+  return {
+    id: idOf(c._id),
+    dueDate: c.dueDate,
+    amount: c.amount,
+    currency: c.currency,
+    estimate: c.estimate ?? null,
+    approxInr: c.currency === BASE_CURRENCY ? null : roughInr(c.amount, c.currency),
+    rupees: c.rupees ?? (c.currency === BASE_CURRENCY ? c.amount : null),
+    state,
+    stateLabel: CYCLE_LABELS[state],
+    expense: c.expense ? { id: idOf(c.expense), number: c.expenseNumber || '' } : null,
+    alreadyPaid: Boolean(c.alreadyPaid),
+    paidVia: c.paidVia || '',
+    paidViaLabel: PAID_VIA[c.paidVia] || '',
+    paidOn: c.paidOn || '',
+    reference: c.reference || '',
+    amountReason: c.amountReason || '',
+    rejectReason: state === 'rejected' ? c.rejectReason || '' : '',
+    note: c.note || '',
+    paidByName: c.paidByName || '',
+    paidAt: c.paidAt,
+    invoices: (c.invoices || []).map((f) => ({ id: idOf(f._id), name: f.name, contentType: f.contentType, bytes: f.bytes })),
+  };
+}
+
 /** What the panel shows, and what this person may do with it now. */
 export function shape(r, viewer, { now = new Date() } = {}) {
   const today = todayIst(now);
@@ -319,8 +383,11 @@ export function shape(r, viewer, { now = new Date() } = {}) {
     delete: mayChange(viewer, r),
     verify: !r.archived && mayCheck(viewer) && r.status === 'pending',
     reject: !r.archived && mayCheck(viewer) && r.status !== 'rejected',
-    recordBill: Boolean(r.variableAmount) && r.status === 'verified' && mayChange(viewer, r),
   };
+  // This due day's cycle, if it was marked: the latest one for it (a rejected mark may be followed by another).
+  const last = r.lastCycle !== undefined ? r.lastCycle : (r.cycles || []).at(-1) || null;
+  const current = last && last.dueDate === r.dueDate ? last : null;
+  can.markPaid = r.status === 'verified' && mayMarkPaid(viewer, r) && !LIVE(current) && dueInDays <= MARK_PAID_FROM_DAYS;
   return {
     id: idOf(r._id),
     number: r.number,
@@ -339,6 +406,8 @@ export function shape(r, viewer, { now = new Date() } = {}) {
     dueDate: r.dueDate,
     dueInDays,
     overdue: dueInDays < 0,
+    // This due day marked paid: waiting / approved / rejected (paid moves the due date on).
+    current: current ? cycleShape(current) : null,
     payment: {
       method: r.payment?.method,
       methodLabel: METHODS[r.payment?.method] || '',
@@ -359,20 +428,7 @@ export function shape(r, viewer, { now = new Date() } = {}) {
     rev: r.rev,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
-    ...(r.cycles ? {
-      cycles: r.cycles.map((c) => ({
-        id: idOf(c._id),
-        dueDate: c.dueDate,
-        amount: c.amount,
-        currency: c.currency,
-        estimate: c.estimate ?? null,
-        approxInr: c.currency === BASE_CURRENCY ? null : roughInr(c.amount, c.currency),
-        note: c.note || '',
-        paidByName: c.paidByName || '',
-        paidAt: c.paidAt,
-        invoices: (c.invoices || []).map((f) => ({ id: idOf(f._id), name: f.name, contentType: f.contentType, bytes: f.bytes })),
-      })),
-    } : {}),
+    ...(r.cycles ? { cycles: r.cycles.map(cycleShape) } : {}),
     ...(r.history ? { history: r.history.map((h) => ({ at: h.at, byName: h.byName, role: h.role, action: h.action, note: h.note })) } : {}),
     can,
   };
@@ -528,45 +584,199 @@ export async function archive(actor, id, input = {}, req) {
 
 // ── A usage-based bill's cycle ───────────────────────────────────────────────
 
+/** A paid day: a real date, today or up to a year back (India time). */
+function cleanPaidOn(v, now = new Date()) {
+  const ymd = String(v || '').trim().slice(0, 10);
+  const ok = /^\d{4}-\d{2}-\d{2}$/.test(ymd) && new Date(`${ymd}T00:00:00Z`).toISOString().slice(0, 10) === ymd;
+  if (!ok) throw fail('Enter the day it was paid.', 400);
+  const today = todayIst(now);
+  if (ymd > today) throw fail('The paid day cannot be in the future — mark it paid once it is paid, or choose "Not paid yet".', 400);
+  if (ymd < addDays(today, -366)) throw fail('That paid day is more than a year ago — check the year.', 400);
+  return ymd;
+}
+
+/** Card / bank / UPI as Payments records it; auto-debit is the item's own method, debited automatically. */
+const PAID_METHOD = Object.freeze({ card: 'card', upi: 'upi', bank: 'bank', bank_transfer: 'bank' });
+
 /**
- * Record this cycle's real bill for a usage-based item: the actual amount (> 0,
- * in the item's currency) and the invoice — both required. Adds it to the paid
- * history and moves the due date on one month / year. Once per cycle: a double
- * click, a retry or a stale screen records it once (409 for the other).
- * Input: rev, amount, note?; files: the invoice(s).
+ * What this cycle costs, from the item — never the browser's figure.
+ *   • usage-based: this cycle's actual bill (required, > 0);
+ *   • fixed: the item's amount; a different figure (a late fee, a price rise) only with a reason.
+ * Then the expense's money: a rupee bill is its amount; a foreign one is billed in
+ * its own currency, with the rupees charged when it was paid already (required
+ * then, so totals are real) or left for the admin to enter when paying.
  */
-export async function recordBill(actor, id, input = {}, invoices = [], req) {
+function cycleMoney(r, input, alreadyPaid) {
+  let amount = r.amount;
+  let amountReason = '';
+  if (r.variableAmount) {
+    amount = cleanAmount(input.amount, `this ${r.kind === 'yearly' ? "year's" : "month's"} actual bill amount`);
+  } else if (filled(input.amount)) {
+    amount = cleanAmount(input.amount, 'the amount paid');
+    if (amount !== r.amount) {
+      amountReason = noCard(text(input.amountReason, 300));
+      if (amountReason.length < 3) throw fail(`The bill is ${money(r)} — say why ${money({ amount, currency: r.currency })} was paid (e.g. late fee).`, 400);
+    }
+  }
+  if (r.currency === BASE_CURRENCY) {
+    if (amount > MAX_RUPEES) throw fail('That amount looks too large — check it.', 400);
+    return { amount, amountReason, rupees: amount, expense: { amount, currency: BASE_CURRENCY, foreignAmount: null, fxRate: null } };
+  }
+  if (!alreadyPaid) {
+    return { amount, amountReason, rupees: null, expense: { amount: 0, currency: r.currency, foreignAmount: amount, fxRate: null } };
+  }
+  const rupees = Math.round(Number(input.rupees) * 100) / 100;
+  if (!filled(input.rupees) || !Number.isFinite(rupees) || rupees <= 0) {
+    throw fail(`Enter the rupees charged for this ${r.currency} bill (from the card or bank statement).`, 400);
+  }
+  if (rupees > MAX_RUPEES) throw fail('That rupee amount looks too large — check it.', 400);
+  const fxRate = Math.round((rupees / amount) * 10000) / 10000;
+  if (fxRate < MIN_FX_RATE || fxRate > MAX_FX_RATE) {
+    throw fail(`₹${rupees} for ${money({ amount, currency: r.currency })} does not look right — check both amounts.`, 400);
+  }
+  return { amount, amountReason, rupees, expense: { amount: rupees, currency: r.currency, foreignAmount: amount, fxRate } };
+}
+
+/**
+ * "Mark paid": record this cycle and raise its expense for accounts. One expense
+ * per cycle: a double click, a retry or a stale screen marks it once (409 for the
+ * other), and a lost attempt keeps no receipt.
+ *
+ * Input: rev; alreadyPaid (default yes); paidVia, paidOn, reference (when paid
+ * already); amount (usage-based: required; fixed: only to differ, with
+ * amountReason); rupees (foreign bill, paid already); note. Files: receipt(s) —
+ * required for a usage-based bill (its invoice is the amount's proof).
+ */
+export async function markPaid(actor, id, input = {}, receipts = [], req) {
   const r = await loadVisible(actor, id);
-  if (!mayChange(actor, r)) throw fail('Only the person who added this, their team head, or accounts can record its bill.', 403);
-  if (!r.variableAmount) throw fail('This one has a fixed amount — there is no bill amount to enter.', 400);
-  if (r.kind === 'one_time') throw fail('A one-time purchase has no monthly bill.', 400);
-  if (r.status !== 'verified') throw fail('Accounts must verify this subscription before its bills are recorded.', 400);
+  if (!mayMarkPaid(actor, r)) throw fail('Only the person who added this, their team head, or the admin can mark it paid.', 403);
+  if (r.status !== 'verified') throw fail('Accounts must verify this subscription before it is marked paid.', 400);
   const rev = revOf(input, r);
   if (rev !== r.rev) throw fail(MOVED, 409);
-  const amount = cleanAmount(input.amount, `this ${r.kind === 'yearly' ? "year's" : "month's"} actual bill amount`);
-  const note = noCard(text(input.note, 500));
-  const newFiles = (invoices || []).filter((f) => f?.buffer?.length);
-  if (!newFiles.length) throw fail('Attach the invoice for this bill.', 400);
-
-  const stored = await storeInvoices(newFiles, actor);
-  const cycle = {
-    dueDate: r.dueDate, amount, currency: r.currency, estimate: r.amount, invoices: stored, note,
-    paidBy: actor._id, paidByName: actor.name || '', paidAt: new Date(),
-  };
-  const anchorDay = r.cycles?.length ? Number(r.cycles[0].dueDate.slice(8, 10)) : null;
-  const next = nextDueDate(r.dueDate, r.kind, anchorDay);
-  const paid = { amount, currency: r.currency };
-  const updated = await subscriptionDueRepository.recordCycle(
-    id, { rev, dueDate: r.dueDate }, cycle, next,
-    entry(actor, 'bill recorded', `bill for ${dayText(r.dueDate)}: ${money(paid)} (estimate ${money(r)}); next due ${dayText(next)}`),
-  ).catch(async (err) => { await discard(stored); throw err; });
-  if (!updated) {
-    await discard(stored);
-    throw fail(MOVED, 409);
+  const live = (r.cycles || []).find((c) => c.dueDate === r.dueDate && LIVE(c));
+  if (live) throw fail(alreadyMarked(live), 409);
+  const now = new Date();
+  if (daysBetween(todayIst(now), r.dueDate) > MARK_PAID_FROM_DAYS) {
+    throw fail(`This is due ${dayText(r.dueDate)} — it can be marked paid from ${MARK_PAID_FROM_DAYS} days before.`, 400);
   }
-  auditLogger.logAction(req, 'UPDATE', 'SubscriptionDue', id, { change: 'bill recorded', cycleDueDate: r.dueDate, amount, currency: r.currency, estimate: r.amount, nextDueDate: next });
-  await tellChat(updated, 'bill', `🧾 ${actor.name || 'Someone'} recorded the ${r.name} (${r.number}) bill due ${dayText(r.dueDate)}: ${money(paid)} (estimate ${money(r)}), invoice attached. Next due ${dayText(next)}.`);
-  return shape(updated, actor);
+  const alreadyPaid = !(input.alreadyPaid === false || input.alreadyPaid === 'false' || input.alreadyPaid === '0');
+  const m = cycleMoney(r, input, alreadyPaid);
+  let paid;
+  if (alreadyPaid) {
+    const via = String(input.paidVia || '');
+    if (!PAID_VIA[via]) throw fail('Choose how it was paid: card, UPI, bank transfer or auto-debit.', 400);
+    const method = via === 'auto_debit' ? PAID_METHOD[r.payment?.method] || 'other' : PAID_METHOD[via];
+    const on = cleanPaidOn(input.paidOn, now);
+    paid = { via, method, autoDebit: via === 'auto_debit', on, reference: noCard(text(input.reference, 120)) };
+  }
+  const note = noCard(text(input.note, 500));
+  const files = (receipts || []).filter((f) => f?.buffer?.length);
+  if (r.variableAmount && !files.length) throw fail('Attach the invoice for this bill.', 400);
+
+  const due = dayText(r.dueDate);
+  const bill = money({ amount: m.amount, currency: r.currency });
+  const cycleId = new mongoose.Types.ObjectId();
+  const how = paid ? `paid ${paid.autoDebit ? `by auto-debit (${howPaid(r.payment)})` : `by ${PAID_VIA[paid.via]}`} on ${dayText(paid.on)}${paid.reference ? `, ref ${paid.reference}` : ''}` : 'not paid yet — please pay';
+  const description = [
+    `${r.name} (${r.number}) — ${r.kind === 'one_time' ? 'purchase' : 'bill'} due ${due}: ${bill}${r.variableAmount ? ` (estimate ${money(r)})` : ''}.`,
+    `${how[0].toUpperCase()}${how.slice(1)}.`,
+    m.amountReason ? `Differs from the plan (${money(r)}): ${m.amountReason}.` : '',
+    note,
+  ].filter(Boolean).join(' ');
+
+  let marked;
+  const claim = async (session, expense) => {
+    marked = await subscriptionDueRepository.claimCycle(id, { rev, dueDate: r.dueDate }, {
+      _id: cycleId, dueDate: r.dueDate, amount: m.amount, currency: r.currency, estimate: r.amount, invoices: [], note,
+      paidBy: actor._id, paidByName: actor.name || '', paidAt: now,
+      state: 'waiting', expense: expense.id, expenseNumber: expense.number, alreadyPaid,
+      ...(paid ? { paidVia: paid.via, paidOn: paid.on, reference: paid.reference } : {}),
+      ...(m.amountReason ? { amountReason: m.amountReason } : {}),
+      ...(m.rupees != null ? { rupees: m.rupees } : {}),
+    }, entry(actor, 'marked paid', `${due}: ${bill}${paid ? ` (${how})` : ' (not paid yet)'} — ${expense.number} sent to accounts`), session);
+    return marked;
+  };
+  const { claimed } = await payments.raiseForSubscription(actor, {
+    team: r.team,
+    money: m.expense,
+    description,
+    payeeName: r.name,
+    reference: r.number,
+    dueText: due,
+    historyNote: `${r.number} ${due}${paid ? ' — already paid' : ''}`,
+    subscription: {
+      item: r._id, number: r.number, name: r.name, cycle: cycleId, cycleDueDate: r.dueDate, alreadyPaid,
+      ...(paid ? { paid: { method: paid.method, autoDebit: paid.autoDebit, on: new Date(`${paid.on}T12:00:00+05:30`), reference: paid.reference } } : {}),
+    },
+  }, files, claim, req);
+  if (!claimed) {
+    const nowR = await subscriptionDueRepository.findById(id);
+    const c = (nowR?.cycles || []).find((x) => x.dueDate === r.dueDate && LIVE(x));
+    throw fail(c ? alreadyMarked(c) : MOVED, 409);
+  }
+  auditLogger.logAction(req, 'UPDATE', 'SubscriptionDue', id, { change: 'marked paid', cycleDueDate: r.dueDate, amount: m.amount, currency: r.currency, alreadyPaid, rupees: m.rupees });
+  return shape(marked, actor);
+}
+
+const alreadyMarked = (c) => `${c.paidByName || 'Someone'} already marked this one paid${c.expenseNumber ? ` (${c.expenseNumber})` : ''} — ${CYCLE_LABELS[c.state || 'paid'].toLowerCase()}.`;
+
+/** What a cycle's state is, given its expense's status. */
+const STATE_OF = Object.freeze({
+  submitted: 'waiting', approved: 'approved', on_hold: 'approved', paid: 'paid', declined: 'rejected', cancelled: 'rejected',
+});
+
+/**
+ * Bring a cycle in line with its expense (Payments calls this after every step;
+ * opening the item calls it for any cycle still open). Idempotent: a cycle already
+ * in that state is left alone, and a paid or rejected cycle never moves again.
+ * Paid moves the item's due date on — only if it is still that cycle's due day.
+ * Returns the updated item, or null when there was nothing to do.
+ */
+export async function settleFromExpense(e) {
+  const itemId = e?.subscription?.item;
+  const state = STATE_OF[e?.status];
+  if (!itemId || !state) return null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const r = await subscriptionDueRepository.findById(itemId);
+    const c = (r?.cycles || []).find((x) => idOf(x._id) === idOf(e.subscription.cycle));
+    if (!c || !c.state || c.state === state || c.state === 'paid' || c.state === 'rejected') return null;
+    const set = { 'cycles.$[c].state': state, 'cycles.$[c].settledAt': new Date() };
+    let note;
+    if (state === 'rejected') {
+      const why = e.status === 'cancelled' ? `cancelled by ${e.requestedByName || 'the requester'}` : e.decisionNote || 'declined';
+      set['cycles.$[c].rejectReason'] = String(why).slice(0, 1000);
+      note = `${e.number} ${e.status} — ${dayText(c.dueDate)} is due again: ${why}`;
+    } else {
+      // The expense's figures are what accounts approved (an edit may have changed them).
+      const amount = c.currency === BASE_CURRENCY ? e.amount : e.foreignAmount;
+      if (Number(amount) > 0) set['cycles.$[c].amount'] = amount;
+      if (Number(e.amount) > 0) set['cycles.$[c].rupees'] = e.amount;
+      note = `${e.number} ${state === 'paid' ? 'paid' : 'approved — waiting for the admin to pay'}`;
+    }
+    if (state === 'paid' && r.dueDate === c.dueDate && r.kind !== 'one_time') {
+      const anchorDay = Number((r.cycles[0] || c).dueDate.slice(8, 10));
+      set.dueDate = nextDueDate(r.dueDate, r.kind, anchorDay);
+      note += `; next due ${dayText(set.dueDate)}`;
+    }
+    const updated = await subscriptionDueRepository.settleCycle(itemId, r.rev, c._id, set, {
+      at: new Date(), byName: 'Payments', role: 'system', action: state === 'rejected' ? 'payment rejected' : state === 'paid' ? 'paid' : 'approved', note,
+    });
+    if (updated) return updated;
+  }
+  console.error(`[SubscriptionDue] ${itemId}: cycle not settled from ${e.number} after 3 tries — it re-syncs when opened`);
+  return null;
+}
+
+/** Open cycles whose expense moved without them (a step that failed half-way): bring them in line. */
+async function resync(r) {
+  const open = (r.cycles || []).filter((c) => c.expense && (c.state === 'waiting' || c.state === 'approved'));
+  if (!open.length) return r;
+  let latest = null;
+  for (const e of await subscriptionDueRepository.expensesFor(open.map((c) => c.expense))) {
+    const c = open.find((x) => idOf(x.expense) === idOf(e._id));
+    if (c && STATE_OF[e.status] !== c.state) latest = (await settleFromExpense(e)) || latest;
+  }
+  return latest ? subscriptionDueRepository.findById(r._id) : r;
 }
 
 // ── Check ────────────────────────────────────────────────────────────────────
@@ -651,7 +861,29 @@ export async function list(actor, params = {}) {
 
 /** One item with its history. */
 export async function getOne(actor, id) {
-  return shape(await loadVisible(actor, id), actor);
+  const r = await loadVisible(actor, id);
+  return shape(await resync(r), actor);
+}
+
+/**
+ * Paid bills per month, last `months` months (default 12, at most 24): rupees,
+ * how many bills, and how many foreign bills have no rupee figure yet. Accounts /
+ * admin: every team (or one); a team: its own.
+ */
+export async function monthly(actor, params = {}, now = new Date()) {
+  if (!seesAll(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  const f = plainQuery(params);
+  const months = Math.min(Math.max(Number.parseInt(f.months, 10) || 12, 1), 24);
+  const today = todayIst(now);
+  const [y, m] = today.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - months, 1)).toISOString().slice(0, 10);
+  const match = seesAll(actor)
+    ? (STAFF_TEAM_VALUES.includes(f.team) ? { team: f.team } : {})
+    : { team: actor.staff.team };
+  const rows = await subscriptionDueRepository.monthly(match, first);
+  return {
+    months: rows.map((x) => ({ month: x._id, bills: x.bills, rupees: Math.round(x.rupees * 100) / 100, unpriced: x.unpriced })),
+  };
 }
 
 /** What the form offers: types, payment methods, currencies, teams (accounts / admin pick one). */
@@ -665,6 +897,8 @@ export function options(actor) {
     teams: seesAll(actor) ? STAFF_TEAM_VALUES.map((value) => ({ value, label: STAFF_TEAM_LABELS[value] })) : [],
     team: isActiveStaff(actor) ? actor.staff.team : null,
     canCheck: mayCheck(actor),
+    paidVia: Object.entries(PAID_VIA).map(([value, label]) => ({ value, label })),
+    markPaidFromDays: MARK_PAID_FROM_DAYS,
   };
 }
 
@@ -681,4 +915,4 @@ export async function getFile(actor, id, fileId) {
   return { buffer, contentType: f.contentType, name: f.name || `${r.number}-invoice` };
 }
 
-export const _test = { mayChange, canSee, describeChanges, howPaid, billMoney };
+export const _test = { mayChange, mayMarkPaid, canSee, describeChanges, howPaid, billMoney, cycleMoney, cleanPaidOn };

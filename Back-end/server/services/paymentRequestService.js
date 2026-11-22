@@ -43,7 +43,7 @@ import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import {
   BASE_CURRENCY, MAX_FX_RATE, MIN_FX_RATE, categoriesFor, categoriesNamed, categoryLabel, expenseOptionsFor,
-  filterCategories, findCategory, isCurrencyAllowed, noteRequiredFor,
+  filterCategories, findCategory, isCurrencyAllowed, noteRequiredFor, SUBSCRIPTION_CATEGORY,
 } from '../config/expenseCategories.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
@@ -462,6 +462,38 @@ async function withHoldHistory(rows) {
   return rows.map((r) => (r.status === 'on_hold' && !r.history ? { ...r, history: found.get(idOf(r._id)) || [] } : r));
 }
 
+/**
+ * A subscription expense is approved by someone other than whoever marked it paid —
+ * accounts or the admin, never their own (they recorded the payment themselves).
+ */
+const ownSubscriptionExpense = (u, r) => Boolean(r?.subscription) && idOf(r.requestedBy) === idOf(u?._id);
+
+const subscriptionOf = (r) => (r.subscription?.item ? {
+  id: idOf(r.subscription.item),
+  number: r.subscription.number,
+  name: r.subscription.name || '',
+  cycleDueDate: r.subscription.cycleDueDate,
+  alreadyPaid: Boolean(r.subscription.alreadyPaid),
+  paid: r.subscription.paid ? {
+    method: r.subscription.paid.method,
+    autoDebit: Boolean(r.subscription.paid.autoDebit),
+    on: r.subscription.paid.on,
+    reference: r.subscription.paid.reference || '',
+  } : null,
+} : null);
+
+/** After a subscription expense moves: its cycle follows (subscriptionDueService). Never throws. */
+async function followOnSubscription(r) {
+  if (!r?.subscription?.item) return;
+  try {
+    const subs = await import('./subscriptionDueService.js');
+    await subs.settleFromExpense(r);
+  } catch (err) {
+    // The expense is the source of truth; the item re-syncs when it is next opened.
+    console.error(`[PaymentRequest] ${r.number}: subscription cycle not updated:`, err.message);
+  }
+}
+
 /** What the panel shows, and what this person may do with it now. */
 export function shape(r, viewer) {
   // Procurement as a team sees its suppliers' bank details anyway (the directory),
@@ -500,6 +532,8 @@ export function shape(r, viewer) {
     // The snapshot taken when it was linked: still reads right after a rename or delete.
     project: r.project ? { id: idOf(r.project), code: r.projectCode || '', name: r.projectName || '' } : null,
     reference: r.reference || '',
+    // Raised by "Mark paid" on a subscription / due: which one, which cycle, and how it was paid already.
+    subscription: subscriptionOf(r),
     // One part of a made-to-order deal (advance / part / balance), or ''.
     dealId: r.deal ? idOf(r.deal) : null,
     part: r.part || '',
@@ -520,12 +554,12 @@ export function shape(r, viewer) {
     createdAt: r.createdAt,
     approver: 'accounts',
     can: {
-      approve: mayDecide(viewer) && r.status === 'submitted',
+      approve: mayDecide(viewer) && r.status === 'submitted' && !ownSubscriptionExpense(viewer, r),
       decline: mayDecide(viewer) && ['submitted', 'on_hold'].includes(r.status),
       // Only the admin pays — an approved request, or a waiting one directly
       // (the approval is recorded with the payment).
       // Never while on hold: a hold means "do not pay this yet" (release it first).
-      pay: mayPay(viewer) && PAYABLE.includes(r.status),
+      pay: mayPay(viewer) && PAYABLE.includes(r.status) && !r.subscription?.alreadyPaid,
       hold: mayHold(viewer) && r.status === 'approved',
       release: mayHold(viewer) && r.status === 'on_hold',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
@@ -603,6 +637,69 @@ export async function createExpense(actor, input, uploaded, req) {
   auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency, foreignAmount: money.foreignAmount, ...(link.order ? { orderId: idOf(link.order) } : {}), ...(extra.project ? { projectId: idOf(extra.project) } : {}) });
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[team]}). Accounts: please approve or decline.`);
   return shape(doc, actor);
+}
+
+/**
+ * The expense for a subscription / due cycle marked paid (subscriptionDueService
+ * markPaid builds `spec`: the money from the item, never from the browser).
+ *
+ * One write, two documents, in one transaction: `claim(session, { id, number })`
+ * marks the cycle on the item (a compare-and-set that only one caller wins), and
+ * the expense is created beside it. Either both are saved or neither is. A caller
+ * that loses the claim gets `{ claimed: null }` and its uploaded receipts are
+ * removed. The unique index on `subscription.cycle` is the last guard: one expense
+ * per marked cycle, whatever happens.
+ */
+export async function raiseForSubscription(actor, spec, uploads, claim, req) {
+  const files = (uploads || []).filter((f) => f?.buffer?.length);
+  const stored = await storeFiles(files, files.map(() => 'bill'), actor);
+  const drop = () => Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+  const id = new mongoose.Types.ObjectId();
+  const number = await nextNumber();
+  let claimed = null;
+  let doc = null;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      claimed = null;
+      doc = null;
+      claimed = await claim(session, { id, number });
+      if (!claimed) return;
+      doc = await paymentRequestRepository.create({
+        _id: id,
+        number,
+        kind: 'expense',
+        status: 'submitted',
+        team: spec.team,
+        requestedBy: actor._id,
+        requestedByName: actor.name || '',
+        ...spec.money,
+        category: SUBSCRIPTION_CATEGORY,
+        description: spec.description,
+        payee: { name: spec.payeeName.slice(0, 120), method: '' },
+        reference: spec.reference.slice(0, REFERENCE_MAX),
+        subscription: spec.subscription,
+        files: stored,
+        history: [entry(actor, 'submitted', spec.historyNote)],
+      }, session);
+    });
+  } catch (err) {
+    await drop();
+    throw err;
+  } finally {
+    await session.endSession();
+  }
+  if (!doc) {
+    await drop();
+    return { claimed: null, expense: null };
+  }
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, {
+    kind: 'expense', amount: doc.amount, team: doc.team, currency: doc.currency, foreignAmount: doc.foreignAmount,
+    subscriptionId: idOf(spec.subscription.item), cycleDueDate: spec.subscription.cycleDueDate, alreadyPaid: spec.subscription.alreadyPaid,
+  });
+  const ask = spec.subscription.alreadyPaid ? 'Already paid — accounts: please approve (it closes as paid) or decline.' : 'Accounts: please approve or decline.';
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[doc.team] || doc.team}) for ${spec.subscription.name} (${spec.subscription.number}), due ${spec.dueText}. ${ask}`);
+  return { claimed, expense: shape(doc, actor) };
 }
 
 /**
@@ -953,16 +1050,37 @@ async function assertOrderLive(r) {
   if (await orderGone(r)) throw fail(`${r.number}: this order (or the item) was cancelled — decline this supplier payment instead.`, 409);
 }
 
+/** A subscription expense paid already: what approving it records as the payment, or null. */
+function alreadyPaidSet(r, now) {
+  const p = r.subscription?.alreadyPaid ? r.subscription.paid : null;
+  if (!p) return null;
+  return {
+    status: 'paid',
+    payment: {
+      method: p.method, reference: p.reference || '', paidAt: now, transactionAt: p.on,
+      paidBy: r.requestedBy, paidByName: r.requestedByName || '',
+    },
+  };
+}
+
 export async function approve(actor, id, { note } = {}, req) {
   const r0 = await loadVisible(actor, id);   // 404s a request this person may not see
   if (!mayDecide(actor)) throw fail('Only accounts (or an admin) approves payments.', 403);
+  if (ownSubscriptionExpense(actor, r0)) throw fail('You marked this one paid yourself — someone else in accounts (or the admin) approves it.', 403);
   await assertOrderLive(r0);
+  const now = new Date();
+  // Paid already (company card, auto-debit): approving it closes it as paid — the
+  // admin is not asked to pay money that has already left.
+  const settled = alreadyPaidSet(r0, now);
   const r = await paymentRequestRepository.transition(id, ['submitted'],
-    { status: 'approved', approvedBy: actor._id, approvedAt: new Date(), decisionNote: String(note || '').slice(0, 1000) },
-    entry(actor, 'approved', note));
+    { status: 'approved', approvedBy: actor._id, approvedAt: now, decisionNote: String(note || '').slice(0, 1000), ...settled },
+    entry(actor, settled ? 'approved — already paid' : 'approved', note));
   if (!r) throw fail(MOVED, 409);
-  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'approved' });
-  await tellChat(r, 'approved', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)}. Admin: please pay and record the payment.`, { mentionAdmins: true });
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: settled ? 'approved (already paid)' : 'approved' });
+  await followOnSubscription(r);
+  await tellChat(r, 'approved', settled
+    ? `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)} — already paid, closed as paid.`
+    : `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)}. Admin: please pay and record the payment.`, settled ? { mentionRequester: true } : { mentionAdmins: true });
   return shape(r, actor);
 }
 
@@ -979,6 +1097,7 @@ export async function decline(actor, id, { note } = {}, req) {
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'declined' });
   await followOnOrder(r, actor, 'declined');
+  await followOnSubscription(r);
   await tellChat(r, 'declined', `⛔ ${isAdmin(actor) ? 'Admin' : 'Accounts'} declined ${what(r)}: “${reason.slice(0, 200)}”.`, { mentionRequester: true });
   return shape(r, actor);
 }
@@ -1045,6 +1164,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   // compare-and-set below pins the same facts either way.)
   if (filled(payVersion) && String(payVersion) !== payVersionOf(r0)) throw fail(PAY_CHANGED, 409);
   if (r0.status === 'on_hold') throw fail(heldMessage(await paymentRequestRepository.findById(id) || r0), 409);
+  if (r0.subscription?.alreadyPaid) throw fail(`${r0.number} was paid already (${r0.requestedByName} marked it paid) — accounts approves it, which closes it as paid.`, 409);
   await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   const fromForeign = paidFrom === 'foreign';
@@ -1098,6 +1218,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
     ...(fromAccount ? { fromAccount } : {}),
   });
   await followOnOrder(r, actor, 'paid');
+  await followOnSubscription(r);
   const next = r.kind === 'supplier' ? ' Procurement: get the shipping details from the supplier and upload them.' : '';
   await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''}.${next}`, { mentionRequester: true });
   return shape(r, actor);
@@ -1114,6 +1235,7 @@ export async function cancel(actor, id, { note } = {}, req) {
   if (!r) throw fail('Only a request still waiting for approval can be cancelled.', 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'cancelled' });
   await followOnOrder(r, actor, 'cancelled');
+  await followOnSubscription(r);
   await tellChat(r, 'cancelled', `↩️ ${r.requestedByName} cancelled ${what(r)}.`);
   return shape(r, actor);
 }

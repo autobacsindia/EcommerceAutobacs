@@ -47,26 +47,52 @@ export type Subscription = {
   rev: number;
   createdAt: string;
   updatedAt: string;
-  /** The paid history of a usage-based bill, oldest first (one item read only — never in the list). */
+  /** This due day, once marked paid: waiting for accounts / approved / rejected (paid moves the due date on). In the list too. */
+  current: BillCycle | null;
+  /** The paid history, oldest first (one item read only — never in the list). */
   cycles?: BillCycle[];
   history?: { at: string; byName: string; role: string; action: string; note: string }[];
-  can: { edit: boolean; delete: boolean; verify: boolean; reject: boolean; recordBill: boolean };
+  can: { edit: boolean; delete: boolean; verify: boolean; reject: boolean; markPaid: boolean };
 };
 
-/** One cycle of a usage-based bill as actually paid: "Nov 2026 — USD 112 (estimate USD 100)". */
+/** waiting: accounts to approve · approved: the admin to pay · paid · rejected: due again. */
+export type CycleState = 'waiting' | 'approved' | 'paid' | 'rejected';
+export type PaidVia = 'card' | 'upi' | 'bank' | 'auto_debit';
+
+/** One cycle marked paid: "Nov 2026 — USD 112, paid by card, PR-0912 waiting for accounts". */
 export type BillCycle = {
   id: string;
   /** The cycle's due day, YYYY-MM-DD. */
   dueDate: string;
+  /** The bill, in `currency`. */
   amount: number;
   currency: string;
+  /** The plan amount (or estimate) at the time. */
   estimate: number | null;
   approxInr: number | null;
+  /** What it cost in rupees, once known. */
+  rupees: number | null;
+  state: CycleState;
+  stateLabel: string;
+  /** The expense raised for it in Payments (none on bills recorded before "Mark paid"). */
+  expense: { id: string; number: string } | null;
+  alreadyPaid: boolean;
+  paidVia: PaidVia | '';
+  paidViaLabel: string;
+  /** YYYY-MM-DD */
+  paidOn: string;
+  reference: string;
+  amountReason: string;
+  rejectReason: string;
   note: string;
+  /** Who marked it paid, and when. */
   paidByName: string;
   paidAt: string;
+  /** Older bills only: their invoice. New ones keep the receipt on the expense. */
   invoices: { id: string; name: string; contentType: string; bytes: number }[];
 };
+
+export type MonthlyTotal = { month: string; bills: number; rupees: number; unpriced: number };
 
 export type SubscriptionOptions = {
   kinds: { value: SubscriptionKind; label: string }[];
@@ -77,6 +103,9 @@ export type SubscriptionOptions = {
   teams: { value: string; label: string }[];
   team: string | null;
   canCheck: boolean;
+  paidVia: { value: PaidVia; label: string }[];
+  /** "Mark paid" shows from this many days before the due day. */
+  markPaidFromDays: number;
 };
 
 export type SubscriptionPage = {
@@ -90,6 +119,14 @@ export const subscriptionKeys = {
   list: (filters: Record<string, string>) => [...subscriptionKeys.all, 'list', filters] as const,
   one: (id: string) => [...subscriptionKeys.all, 'one', id] as const,
   options: () => [...subscriptionKeys.all, 'options'] as const,
+  monthly: (team: string) => [...subscriptionKeys.all, 'monthly', team] as const,
+};
+
+export const CYCLE_TONE: Record<CycleState, string> = {
+  waiting: 'bg-amber-100 text-amber-800',
+  approved: 'bg-blue-100 text-blue-800',
+  paid: 'bg-green-100 text-green-800',
+  rejected: 'bg-red-100 text-red-800',
 };
 
 export const STATUS_TONE: Record<SubscriptionStatus, string> = {
@@ -107,9 +144,15 @@ export const getSubscriptionOptions = () => apiClient.get<{ options: Subscriptio
 export const saveSubscription = (form: FormData, id?: string) => (id
   ? postForm<{ item: Subscription }>(`/subscription-dues/${encodeURIComponent(id)}`, form, 'PUT')
   : postForm<{ item: Subscription }>('/subscription-dues', form));
-/** Record this cycle's actual bill (usage-based only): rev, amount, note?, invoice files (required). */
-export const recordBill = (id: string, form: FormData) =>
-  postForm<{ item: Subscription }>(`/subscription-dues/${encodeURIComponent(id)}/bills`, form);
+/**
+ * Mark this due cycle paid: rev, alreadyPaid, paidVia, paidOn, reference, amount?, amountReason?,
+ * rupees?, note?, invoice (receipt). Raises ONE expense in Payments for accounts to approve.
+ */
+export const markPaid = (id: string, form: FormData) =>
+  postForm<{ item: Subscription }>(`/subscription-dues/${encodeURIComponent(id)}/mark-paid`, form);
+/** Paid bills per month, in rupees (a team: its own; accounts / admin: every team, or `team`). */
+export const getMonthlyTotals = (team = '') =>
+  apiClient.get<{ months: MonthlyTotal[] }>(`/subscription-dues/monthly${team ? `?team=${encodeURIComponent(team)}` : ''}`);
 export const verifySubscription = (s: Pick<Subscription, 'id' | 'rev'>) =>
   apiClient.post<{ item: Subscription }>(`/subscription-dues/${encodeURIComponent(s.id)}/verify`, { rev: s.rev });
 export const rejectSubscription = (s: Pick<Subscription, 'id' | 'rev'>, reason: string) =>
@@ -150,6 +193,9 @@ export function dueText(s: Pick<Subscription, 'dueInDays'>) {
   if (d === 1) return 'Due tomorrow';
   return `Due in ${d} days`;
 }
+
+/** "₹54,700" */
+export const rupeeText = (n: number) => `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 /** "Card 4007 · auto-debit" */
 export const payText = (p: Subscription['payment']) =>

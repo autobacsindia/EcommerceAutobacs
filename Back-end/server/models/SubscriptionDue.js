@@ -11,7 +11,8 @@ import mongoose from 'mongoose';
  *       └──accounts rejects (with a reason)──▶ rejected
  *
  * What it is NOT: a payment. Nothing here moves money or adds to the expense
- * totals — a bill paid by bank transfer still goes through a payment request.
+ * totals. "Mark paid" on a due cycle raises an expense in Payments
+ * (models/PaymentRequest.js), and accounts approves that — see CycleSchema.
  *
  * Never holds a full card number, CVV or password: the card is its last 4 digits
  * only, and free text that looks like a card number is refused on save
@@ -50,23 +51,54 @@ const HistorySchema = new mongoose.Schema(
 );
 
 /**
- * One cycle of a usage-based bill, as actually paid: "Nov — USD 112, invoice
- * attached, recorded by Priya". `dueDate` is the cycle's due day (the item's
- * dueDate when it was recorded), so each cycle is recorded once. Never edited or
- * removed — it is the paid history.
+ * One cycle of a bill, as marked paid: "Nov — USD 112, paid by card on 2 Dec,
+ * expense PR-0912". `dueDate` is the cycle's due day (the item's dueDate when it
+ * was marked), so each cycle is marked once while it is live.
+ *
+ * Marking it paid raises ONE expense in Payments (`expense`), which accounts
+ * approves or declines. `state` follows that expense:
+ *
+ *   waiting (accounts to approve) ──approved──▶ approved (admin to pay; only when
+ *       │                                        │       it was NOT paid already)
+ *       │                                        ▼
+ *       ├──────────── already paid, approved ──▶ paid ── the item's due date moves on
+ *       └──declined / cancelled──▶ rejected (the cycle is due again; mark it paid again)
+ *
+ * Cycles recorded before this existed (usage-based bills, invoice on the cycle)
+ * have no `state` and read as paid. Never removed: it is the paid history.
  */
 const CycleSchema = new mongoose.Schema(
   {
     dueDate: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+    // The bill, in the item's currency.
     amount: { type: Number, required: true, min: 0.01 },
     currency: { type: String, required: true, maxlength: 3 },
-    // The estimate at the time, for "estimate USD 100 → actual USD 112".
+    // The plan amount (or estimate) at the time, for "estimate USD 100 → actual USD 112".
     estimate: { type: Number, default: null },
+    // Older cycles only: the invoice was kept here. New cycles keep it on the expense.
     invoices: { type: [FileSchema], default: [] },
     note: { type: String, default: '', maxlength: 500 },
+    // Who marked it paid, and when that was recorded.
     paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     paidByName: { type: String, default: '' },
     paidAt: { type: Date, required: true },
+
+    // ── Marked paid → expense (absent on older cycles) ──
+    state: { type: String, enum: ['waiting', 'approved', 'paid', 'rejected'], default: undefined },
+    expense: { type: mongoose.Schema.Types.ObjectId, ref: 'PaymentRequest', default: undefined },
+    expenseNumber: { type: String, default: undefined },
+    // true: the money already left (company card, auto-debit) — approving it closes it.
+    alreadyPaid: { type: Boolean, default: undefined },
+    // card | upi | bank | auto_debit, the day it was paid, and the UTR / reference.
+    paidVia: { type: String, default: undefined },
+    paidOn: { type: String, default: undefined },
+    reference: { type: String, default: undefined, maxlength: 120 },
+    // Why the amount differs from the plan amount (a fixed bill only).
+    amountReason: { type: String, default: undefined, maxlength: 300 },
+    // What it cost in rupees, once known (the expense's amount).
+    rupees: { type: Number, default: undefined },
+    rejectReason: { type: String, default: undefined, maxlength: 1000 },
+    settledAt: { type: Date, default: undefined },
   },
   { _id: true }
 );
@@ -104,7 +136,7 @@ const SubscriptionDueSchema = new mongoose.Schema(
     billingUrl: { type: String, default: '', maxlength: 500 },
     notes: { type: String, default: '', maxlength: 6000 },
     files: { type: [FileSchema], default: [] },
-    // The paid history of a usage-based bill, oldest first (one per cycle, ~12 a year).
+    // The paid history, oldest first (one per cycle, ~12 a year; a rejected one stays, marked so).
     cycles: { type: [CycleSchema], default: [] },
 
     status: { type: String, enum: ['pending', 'verified', 'rejected'], default: 'pending', required: true },

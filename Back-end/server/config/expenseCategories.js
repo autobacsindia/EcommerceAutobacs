@@ -79,6 +79,12 @@ export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
 /** A team added to config/staff.js before it has a list here can still claim — as "Others", with details. */
 const FALLBACK = Object.freeze([others]);
 
+/**
+ * A subscription / due marked paid (services/subscriptionDueService.js "Mark
+ * paid"). Never on a team's list: only that step raises it, so nobody picks it by hand.
+ */
+export const SUBSCRIPTION_CATEGORY = 'subscription';
+
 /** The shared list every team used before per-team lists (still on old records). */
 export const LEGACY_LABELS = Object.freeze({
   fuel: 'Fuel',
@@ -135,7 +141,7 @@ const ALL_LABELS = Object.freeze(Object.assign(
   {},
   LEGACY_LABELS,
   ...Object.values(TEAM_EXPENSE_CATEGORIES).map((list) => Object.fromEntries(list.map((x) => [x.value, x.label]))),
-  { supplier: 'Supplier payment' },
+  { supplier: 'Supplier payment', [SUBSCRIPTION_CATEGORY]: 'Subscription / due' },
 ));
 
 /** The readable name of any category ever stored — new, old, or 'supplier'. Unknown values show as stored. */
