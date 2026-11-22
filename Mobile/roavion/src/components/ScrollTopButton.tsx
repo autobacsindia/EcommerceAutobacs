@@ -13,9 +13,10 @@
  * screen reader does not announce a control nobody can see.
  */
 import { useEffect, useState } from 'react';
-import { Animated, Pressable, StyleSheet } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, shadow } from '../theme';
+import { colors, elevation, radius } from '../theme';
+import { PressScale } from '../ui';
 
 export default function ScrollTopButton({ visible, onPress }: { visible: boolean; onPress: () => void }) {
   // Created once; see the note in useHeaderScroll on why this is not a ref.
@@ -42,29 +43,24 @@ export default function ScrollTopButton({ visible, onPress }: { visible: boolean
         },
       ]}
     >
-      <Pressable
-        onPress={onPress}
-        hitSlop={8}
-        android_ripple={{ color: 'rgba(255,255,255,0.2)', borderless: true }}
-        style={s.btn}
-        accessibilityRole="button"
-        accessibilityLabel="Back to top"
-      >
+      <PressScale onPress={onPress} haptic="selection" scaleTo={0.9} hitSlop={8} style={s.btn} accessibilityLabel="Back to top">
         <Ionicons name="arrow-up" size={20} color={colors.white} />
-      </Pressable>
+      </PressScale>
     </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', right: 16, bottom: 20 },
+  wrap: { position: 'absolute', right: 16, bottom: 16 },
   btn: {
     width: 44,
     height: 44,
     borderRadius: radius.pill,
     backgroundColor: colors.ink,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.onDarkFaint,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow.raised,
+    ...elevation.e2,
   },
 });
