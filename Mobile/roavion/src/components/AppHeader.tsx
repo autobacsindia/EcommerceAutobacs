@@ -12,35 +12,37 @@
  * It sits inside the scroll view as its first child, so it scrolls away with
  * the content.
  *
+ * Premium pass (2026-11-22): shared IconButtons, press-scale search field
+ * with a soft lift and a green search glyph.
+ *
  * Presentation only — every tap routes, nothing here fetches or decides.
  */
 import { memo } from 'react';
-import { Image as RNImage, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Image as RNImage, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, radius, spacing } from '../theme';
+import { colors, elevation, font, radius, spacing } from '../theme';
 import { useApp } from '../store';
-
-const tap = () => Haptics.selectionAsync().catch(() => {});
+import { IconButton, PressScale } from '../ui';
 
 /** White rounded search field; opens the search screen. */
-export function SearchField({ style }: { style?: ViewStyle }) {
+export function SearchField({ style }: { style?: StyleProp<ViewStyle> }) {
   const router = useRouter();
   const { garage } = useApp();
   const hint = garage ? `Search parts for your ${garage.model || garage.make}` : 'Search parts, brands or your car';
   return (
-    <Pressable
+    <PressScale
       onPress={() => router.push('/search')}
-      android_ripple={{ color: 'rgba(0,0,0,0.05)' }}
-      style={({ pressed }) => [s.search, style, pressed && { opacity: 0.9 }]}
+      haptic="selection"
+      scaleTo={0.985}
+      style={[s.search, style]}
       accessibilityRole="search"
       accessibilityLabel={hint}
     >
-      <Ionicons name="search" size={18} color={colors.muted} />
+      <Ionicons name="search" size={18} color={colors.green} />
       <Text style={s.searchText} numberOfLines={1}>{hint}</Text>
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -64,36 +66,20 @@ function AppHeader({
           accessibilityLabel="Autobacs"
         />
         <View style={{ flex: 1 }} />
-        <Pressable
-          onPress={() => {
-            tap();
-            // No notification centre exists yet; order updates are the closest thing.
-            router.push(customer ? '/orders' : '/login');
-          }}
-          hitSlop={8}
-          style={s.iconBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Order updates"
-        >
-          <Ionicons name="notifications-outline" size={20} color={colors.ink} />
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            tap();
-            router.push('/(tabs)/cart');
-          }}
-          hitSlop={8}
-          style={s.iconBtn}
-          accessibilityRole="button"
-          accessibilityLabel={`Cart, ${cart.totalItems} items`}
-        >
-          <Ionicons name="bag-handle-outline" size={20} color={colors.ink} />
-          {cart.totalItems > 0 && (
-            <View style={s.cartCount}>
-              <Text style={s.cartCountText}>{cart.totalItems > 9 ? '9+' : cart.totalItems}</Text>
-            </View>
-          )}
-        </Pressable>
+        <IconButton
+          icon="notifications-outline"
+          label="Order updates"
+          // No notification centre exists yet; order updates are the closest thing.
+          onPress={() => router.push(customer ? '/orders' : '/login')}
+          tone="light"
+        />
+        <IconButton
+          icon="bag-handle-outline"
+          label={`Cart, ${cart.totalItems} items`}
+          onPress={() => router.push('/(tabs)/cart')}
+          badge={cart.totalItems}
+          tone="light"
+        />
       </View>
 
       {compact && <SearchField style={{ marginHorizontal: spacing.lg, marginTop: spacing.xs }} />}
@@ -114,47 +100,18 @@ const s = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   logo: { width: 128, height: 30 },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartCount: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    backgroundColor: colors.green,
-    borderWidth: 2,
-    borderColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartCountText: { fontFamily: font.bold, fontSize: 9.5, color: colors.white, lineHeight: 12 },
 
   search: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.sm + 2,
     height: 48,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.line,
-    shadowColor: colors.ink,
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    ...elevation.e1,
   },
   searchText: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.muted },
 });

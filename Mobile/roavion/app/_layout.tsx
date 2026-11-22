@@ -23,8 +23,12 @@ import {
   DMSans_500Medium,
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
+import {
+  PlayfairDisplay_600SemiBold,
+  PlayfairDisplay_600SemiBold_Italic,
+} from '@expo-google-fonts/playfair-display';
 import { AppProvider } from '../src/store';
-import { colors, font } from '../src/theme';
+import { colors, font, noir } from '../src/theme';
 import { LaunchIntro, ToastProvider } from '../src/ui';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -52,6 +56,9 @@ export default function RootLayout() {
     Montserrat_600SemiBold,
     Montserrat_700Bold,
     Montserrat_800ExtraBold,
+    // Heritage Noir display serif (titles, hero, product names).
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_600SemiBold_Italic,
   });
 
   // The native splash (void + AB badge) hides only once the animated intro has
@@ -67,15 +74,18 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AppProvider>
           <ToastProvider>
-          <StatusBar style="dark" />
+          <StatusBar style="light" />
           <Stack
             screenOptions={{
-              // Design "A clean light": white bars, ink text, hairline-free.
-              headerStyle: { backgroundColor: colors.card },
-              headerTintColor: colors.ink,
-              headerTitleStyle: { fontFamily: font.heading, fontSize: 17, color: colors.ink },
+              // Heritage Noir: carbon bars, white serif title, no shadow.
+              headerStyle: { backgroundColor: noir.page },
+              headerTintColor: noir.text,
+              headerTitleStyle: { fontFamily: font.serif, fontSize: 18, color: noir.text },
               headerBackButtonDisplayMode: 'minimal',
               headerShadowVisible: false,
+              // Still the light page: login/register paint no background of
+              // their own and still use ink text. Flip to `noir.page` once every
+              // stack screen is on Heritage Noir.
               contentStyle: { backgroundColor: colors.bg },
               animation: 'slide_from_right',
             }}

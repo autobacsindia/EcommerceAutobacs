@@ -147,6 +147,16 @@ router.post("/create-order", optionalAuth, createOrderLimiter, validateRazorpayO
       });
     }
 
+    // Already paid (another tab, a retry after a slow webhook, a payment link): never
+    // open a second Razorpay order for it — that is how a customer gets charged twice.
+    if (order.paymentStatus === 'paid') {
+      return res.status(409).json({
+        success: false,
+        code: 'ORDER_ALREADY_PAID',
+        message: "This order is already paid. You don't need to pay again."
+      });
+    }
+
     // SECURITY: amount is always taken from the DB order, never from the request body.
     // The browser is user-controlled territory — any client-supplied amount is ignored.
     const authorativeAmount = Math.round(order.totalAmount * 100); // convert ₹ → paise

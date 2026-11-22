@@ -3,7 +3,7 @@
  * candidates batched and held until a description arrives, the polite side
  * yielding on a clash, and recovery from a dropped connection.
  */
-import { CallEngine, CANDIDATE_BATCH_MS, CONNECT_TIMEOUT_MS, FAIL_AFTER_MS, RESTART_AFTER_MS, withSdpLineEnd } from './callEngine';
+import { CallEngine, SEND_RETRY_MS, CANDIDATE_BATCH_MS, CONNECT_TIMEOUT_MS, FAIL_AFTER_MS, RESTART_AFTER_MS, withSdpLineEnd } from './callEngine';
 import type { EngineState, SignalKind } from './callEngine';
 
 class FakePeer {
@@ -48,15 +48,15 @@ class FakePeer {
 const track = (kind: string) => ({ kind, stop: jest.fn() }) as unknown as MediaStreamTrack;
 const stream = () => ({ getTracks: () => [track('audio'), track('video')] }) as unknown as MediaStream;
 
-function setup(initiator: boolean) {
-  const peer = new FakePeer();
+function setup(initiator: boolean, opts: { peer?: FakePeer; sendSignal?: (kind: SignalKind, data: unknown) => Promise<void> } = {}) {
+  const peer = opts.peer ?? new FakePeer();
   const sent: { kind: SignalKind; data: unknown }[] = [];
   const states: EngineState[] = [];
   const engine = new CallEngine({
     iceServers: [{ urls: 'stun:stun.example.com' }],
     initiator,
     localStream: stream(),
-    sendSignal: async (kind, data) => { sent.push({ kind, data }); },
+    sendSignal: opts.sendSignal ?? (async (kind, data) => { sent.push({ kind, data }); }),
     onRemoteStream: jest.fn(),
     onState: (s) => states.push(s),
     createPeer: () => peer as unknown as RTCPeerConnection,
@@ -200,5 +200,86 @@ describe('CallEngine', () => {
     expect(peer.remoteDescription).toEqual({ type: 'offer', sdp: 'v=0\r\na=ssrc:1 msid:s t\r\n' });
     expect(withSdpLineEnd({ type: 'answer', sdp: 'v=0\r\n' })).toEqual({ type: 'answer', sdp: 'v=0\r\n' });
     expect(withSdpLineEnd(null)).toBeNull();
+  });
+});
+
+describe('CallEngine signalling order', () => {
+  /** Like a browser: the description only counts once setRemoteDescription resolves. */
+  class SlowPeer extends FakePeer {
+    release: (() => void) | null = null;
+    log: string[] = [];
+    async setRemoteDescription(d: RTCSessionDescriptionInit) {
+      await new Promise<void>((r) => { this.release = r; });
+      await super.setRemoteDescription(d);
+      this.log.push(`remote:${d.type}`);
+    }
+    async addIceCandidate(c: RTCIceCandidateInit) {
+      if (!this.remoteDescription) throw new Error('InvalidStateError: no remote description');
+      this.log.push(`cand:${c.candidate}`);
+      await super.addIceCandidate(c);
+    }
+  }
+
+  it('candidates that land while the offer is still being applied are queued behind it, not lost', async () => {
+    const peer = new SlowPeer();
+    const { engine, sent } = setup(false, { peer });
+    // The page hands signals over without waiting (CallProvider: void handleSignal).
+    const a = engine.handleSignal('offer', { type: 'offer', sdp: 'x' });
+    const b = engine.handleSignal('candidates', [{ candidate: 'c1' }]);
+    const c = engine.handleSignal('candidates', [{ candidate: 'c2' }]);
+    await tick();
+    peer.release?.();
+    await Promise.all([a, b, c]);
+    expect(peer.log).toEqual(['remote:offer', 'cand:c1', 'cand:c2']);
+    expect(sent.map((s) => s.kind)).toEqual(['answer']);
+  });
+
+  it('a failed signal does not block the ones after it', async () => {
+    const { engine, peer } = setup(false);
+    peer.setRemoteDescription = async () => { throw new Error('bad sdp'); };
+    await expect(engine.handleSignal('offer', { type: 'offer', sdp: 'bad' })).rejects.toThrow('bad sdp');
+    peer.setRemoteDescription = FakePeer.prototype.setRemoteDescription.bind(peer);
+    await engine.handleSignal('offer', { type: 'offer', sdp: 'good' });
+    expect(peer.remoteDescription).toEqual({ type: 'offer', sdp: 'good\r\n' });
+  });
+
+  it('retries an answer whose request failed on the network, so the caller is not left on "Connecting…"', async () => {
+    jest.useFakeTimers();
+    try {
+      const calls: SignalKind[] = [];
+      let fail = 2;
+      const { engine } = setup(false, {
+        sendSignal: async (kind) => {
+          calls.push(kind);
+          if (fail-- > 0) throw Object.assign(new TypeError('Failed to fetch'), { status: undefined });
+        },
+      });
+      const done = engine.handleSignal('offer', { type: 'offer', sdp: 'x' });
+      for (const ms of SEND_RETRY_MS) await jest.advanceTimersByTimeAsync(ms);
+      await done;
+      expect(calls).toEqual(['answer', 'answer', 'answer']);
+      engine.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not retry when the server says the call is over (409)', async () => {
+    const calls: SignalKind[] = [];
+    const { engine } = setup(false, {
+      sendSignal: async (kind) => { calls.push(kind); throw Object.assign(new Error('That call has ended'), { status: 409 }); },
+    });
+    await expect(engine.handleSignal('offer', { type: 'offer', sdp: 'x' })).rejects.toThrow('ended');
+    expect(calls).toEqual(['answer']);
+  });
+
+  it('restartIce re-runs setup while connecting, and leaves a live call alone', () => {
+    const { engine, peer } = setup(true);
+    engine.restartIce();
+    expect(peer.restarts).toBe(1);
+    peer.setConn('connected');
+    engine.restartIce();
+    expect(peer.restarts).toBe(1);
+    engine.close();
   });
 });

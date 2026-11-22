@@ -39,6 +39,8 @@ const MUST_404: { route: string; file: string; redirects?: boolean }[] = [
   { route: '/[slug]',                  file: '[slug]/page.tsx' },
   { route: '/blog/[slug]',             file: 'blog/[slug]/page.tsx' },
   { route: '/products/[slug]',         file: 'products/[slug]/page.tsx', redirects: true },
+  // WooCommerce's /product/<slug>: redirects to the live page, else 404s.
+  { route: '/product/[slug]',          file: 'product/[slug]/page.tsx', redirects: true },
   { route: '/categories/[slug]',       file: 'categories/[slug]/page.tsx' },
   { route: '/brands/[slug]',           file: 'brands/[slug]/page.tsx' },
   { route: '/model/[slug]',            file: 'model/[slug]/page.tsx', redirects: true },

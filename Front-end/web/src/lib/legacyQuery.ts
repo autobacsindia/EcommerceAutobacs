@@ -41,6 +41,8 @@ export const LEGACY_PARAMS: readonly string[] = [
   'shop_view',
   'product_view',
   'orderby',
+  'dgwt_wcas', // FiboSearch (WooCommerce search plugin) marker
+  'post_type',
 ];
 
 /**
@@ -56,6 +58,35 @@ export function stripLegacyParams(url: URL): URL | null {
   for (const k of LEGACY_PARAMS) clean.searchParams.delete(k);
   if (clean.pathname.length > 1) clean.pathname = clean.pathname.replace(/\/+$/, '');
   return clean;
+}
+
+/**
+ * WooCommerce product search (`?s=winch&post_type=product`, or FiboSearch's
+ * `&dgwt_wcas=1`) → our product search `/products/search?q=winch`, in ONE hop
+ * from any path. Only `ref` rides along (affiliate credit); WooCommerce's other
+ * parameters mean nothing here. Null when the URL is not a product search.
+ */
+export function legacyProductSearch(url: URL): URL | null {
+  const p = url.searchParams;
+  if (!p.has('s')) return null;
+  if (p.get('post_type') !== 'product' && !p.has('dgwt_wcas')) return null;
+  const q = (p.get('s') ?? '').trim().slice(0, 100);
+  const out = new URL(q ? '/products/search' : '/products', url);
+  if (q) out.searchParams.set('q', q);
+  const ref = p.get('ref');
+  if (ref !== null) out.searchParams.set('ref', ref);
+  return out;
+}
+
+/**
+ * Remove legacy parameters from `url` in place (for a caller already building a
+ * redirect, so path + query are fixed in the same hop). True if any were removed.
+ */
+export function removeLegacyParams(url: URL): boolean {
+  const keys = Array.from(url.searchParams.keys());
+  if (!keys.some((k) => LEGACY_PARAMS.includes(k))) return false;
+  for (const k of LEGACY_PARAMS) url.searchParams.delete(k);
+  return true;
 }
 
 /** Query parameters that turn a page into a site-search result. `s` is WordPress's. */

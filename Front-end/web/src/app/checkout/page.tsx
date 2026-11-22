@@ -30,6 +30,7 @@ import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
+import { useStepScroll } from '@/hooks/useStepScroll';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import CheckoutSummary from '@/components/checkout/CheckoutSummary';
@@ -127,6 +128,8 @@ function CheckoutPageContent() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { cart, clearCart, isLoading: cartLoading, refreshCart } = useCart();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('cart');
+  // Each step change scrolls back to the stepper and focuses the new step's heading.
+  const { containerRef: stepTopRef, headingRef: stepHeadingRef } = useStepScroll(currentStep);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [stockValidationErrors, setStockValidationErrors] = useState<any[]>([]);
@@ -165,9 +168,10 @@ function CheckoutPageContent() {
   );
   // "Apply Black Friday offer" intent, shared with the cart page and the final summary.
   // The server decides whether it applies; this never changes a price on its own.
-  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer();
   // PIN typed on the cart (or here); the final step prices from the address's own PIN.
   const [deliveryPin, setDeliveryPin] = useDeliveryPin();
+  // Auto-applied once a PIN is known while the offer is live (see useDeliveryFeeOffer).
+  const [offerRequested, setOfferRequested] = useDeliveryFeeOffer(deliveryPin);
   const { quote: reviewQuote, loading: reviewQuoteLoading } = useCheckoutQuote(
     reviewItems,
     cart?.couponCode || undefined,
@@ -793,7 +797,7 @@ function CheckoutPageContent() {
 
         {/* Progress Steps */}
         {/* Fits a 320px phone: circles shrink and connectors flex, so all four steps stay on screen. */}
-        <div className="mx-auto mb-12 flex w-full max-w-xl items-start">
+        <div ref={stepTopRef} className="mx-auto mb-12 flex w-full max-w-xl scroll-mt-24 items-start">
           {steps.map((step, index) => {
             const Icon = step.icon;
             const isActive = step.id === currentStep;
@@ -817,7 +821,7 @@ function CheckoutPageContent() {
         {/* Cart Review */}
         {currentStep === 'cart' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Review Your Cart</h2>
+            <h2 ref={stepHeadingRef} tabIndex={-1} className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-4 focus:outline-none">Review Your Cart</h2>
 
             {stockValidationErrors.length > 0 && (
               <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4">
@@ -941,7 +945,7 @@ function CheckoutPageContent() {
         {/* Shipping Address */}
         {currentStep === 'address' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Shipping Address</h2>
+            <h2 ref={stepHeadingRef} tabIndex={-1} className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6 focus:outline-none">Shipping Address</h2>
 
             {!isAuthenticated && (
               <div className="mb-6 bg-obsidian border border-hairline rounded-lg p-6">
@@ -1190,7 +1194,7 @@ function CheckoutPageContent() {
         {/* Payment Method */}
         {currentStep === 'payment' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Payment Method</h2>
+            <h2 ref={stepHeadingRef} tabIndex={-1} className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6 focus:outline-none">Payment Method</h2>
             <div className="mb-8">
               <PaymentMethodSelector
                 selectedMethod={paymentChoice}
@@ -1206,7 +1210,7 @@ function CheckoutPageContent() {
         {/* Review Order */}
         {currentStep === 'review' && (
           <div>
-            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Review Your Order</h2>
+            <h2 ref={stepHeadingRef} tabIndex={-1} className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6 focus:outline-none">Review Your Order</h2>
 
             {/* Price-change confirmation banner — shown when server prices differ from CartContext */}
             {priceConfirmationPending && serverValidation && (

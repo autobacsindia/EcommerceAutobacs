@@ -1,8 +1,9 @@
 /**
  * Launch intro — plays once per cold start, right after the native splash
  * (void #080808 + AB badge) so the hand-off is seamless:
- *   badge settles → three stripes sweep in → AUTOBACS letter-spaces in →
- *   thin green progress bar → whole layer fades away.
+ *   badge settles → fine gold crest ring draws around it → three stripes
+ *   sweep in → serif AUTOBACS letter-spaces in → thin gold progress bar →
+ *   whole layer fades away (Heritage Noir).
  * Hard cap `motion.introMax` (1.6s). Reduce-motion: a short static hold + fade.
  *
  * It is an overlay: the app mounts underneath at the same time, so the first
@@ -23,11 +24,13 @@ import Animated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, font, motion, palette } from '../theme';
+import { font, motion, noir, palette } from '../theme';
 
 let played = false;
 
 const BADGE = 132;
+/** The badge disc is ~48.5% of splash-icon.png; the ring sits just outside it. */
+const RING = Math.round(BADGE * 2 * 0.485) + 18;
 const STRIPE_COLORS = [palette.green, palette.white, palette.steel];
 
 export function LaunchIntro({ onReady }: { onReady?: () => void }) {
@@ -73,6 +76,10 @@ export function LaunchIntro({ onReady }: { onReady?: () => void }) {
     transform: [{ translateY: interpolate(t.value, [0.35, 0.65], [6, 0], 'clamp') }],
   }));
   const bar = useAnimatedStyle(() => ({ transform: [{ scaleX: t.value }] }));
+  const ring = useAnimatedStyle(() => ({
+    opacity: interpolate(t.value, [0.08, 0.3], [0, 1], 'clamp'),
+    transform: [{ scale: interpolate(t.value, [0.08, 0.34], [0.86, 1], 'clamp') }],
+  }));
 
   if (!visible) return null;
 
@@ -84,6 +91,7 @@ export function LaunchIntro({ onReady }: { onReady?: () => void }) {
       importantForAccessibility="no-hide-descendants"
     >
       <Animated.View style={badge}>
+        <Animated.View style={[s.ring, ring]} />
         <Image source={require('../../assets/splash-icon.png')} style={{ width: BADGE * 2, height: BADGE * 2 }} contentFit="contain" />
       </Animated.View>
       <View style={s.stripes}>
@@ -111,9 +119,19 @@ function Stripe({ i, color, t }: { i: number; color: string; t: { value: number 
 }
 
 const s = StyleSheet.create({
-  root: { backgroundColor: colors.void, alignItems: 'center', justifyContent: 'center', zIndex: 9999, elevation: 9999 },
+  root: { backgroundColor: noir.void, alignItems: 'center', justifyContent: 'center', zIndex: 9999, elevation: 9999 },
   stripes: { flexDirection: 'row', gap: 6, marginTop: -BADGE * 0.32 },
-  word: { fontFamily: font.extrabold, fontSize: 20, letterSpacing: 8, color: colors.white, marginTop: 18, marginLeft: 8 },
-  track: { position: 'absolute', bottom: '18%', width: 140, height: 2, borderRadius: 1, backgroundColor: colors.carbon2, overflow: 'hidden' },
-  fill: { width: '100%', height: '100%', backgroundColor: colors.greenOnDark, transformOrigin: 'left' },
+  ring: {
+    position: 'absolute',
+    width: RING,
+    height: RING,
+    left: BADGE - RING / 2,
+    top: BADGE - RING / 2,
+    borderRadius: RING / 2,
+    borderWidth: 1.5,
+    borderColor: noir.gold,
+  },
+  word: { fontFamily: font.serif, fontSize: 22, letterSpacing: 8, color: noir.text, marginTop: 18, marginLeft: 8 },
+  track: { position: 'absolute', bottom: '18%', width: 140, height: 1, backgroundColor: noir.surface, overflow: 'hidden' },
+  fill: { width: '100%', height: '100%', backgroundColor: noir.gold, transformOrigin: 'left' },
 });

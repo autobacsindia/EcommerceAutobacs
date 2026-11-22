@@ -141,7 +141,11 @@ export async function paymentPage(by, cursor, { shape = paymentRow, purposeChars
 
 /** Paid / waiting / declined… for a project, in rupees. Foreign bills not yet priced count as 0. */
 export async function paymentTotals(projectId) {
-  const rows = await paymentRequestRepository.totalsForProject(projectId);
+  return totalsOf(await paymentRequestRepository.totalsForProject(projectId));
+}
+
+/** Rows of { _id: status, n, amount } → paid / waiting / closed. */
+export function totalsOf(rows) {
   const by = Object.fromEntries(rows.map((r) => [r._id, { count: r.n, amount: Math.round(r.amount * 100) / 100 }]));
   const sum = (ks) => ks.reduce((s, k) => s + (by[k]?.amount || 0), 0);
   const n = (ks) => ks.reduce((s, k) => s + (by[k]?.count || 0), 0);

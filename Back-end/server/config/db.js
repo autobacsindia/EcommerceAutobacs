@@ -744,6 +744,14 @@ export async function ensureCriticalIndexes() {
     // double-submit guard (one request per requester + clientId) — same names as the schema.
     // Not partial: see models/PaymentRequest.js for why.
     await db.collection('paymentrequests').createIndex({ project: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_project', background: true });
+    // A task's linked payments, and the monthly reimbursement report (services/reimbursement.js).
+    await db.collection('paymentrequests').createIndex({ task: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_task', background: true });
+    await db.collection('paymentrequests').createIndex(
+      { 'reimbursement.on': 1 },
+      { partialFilterExpression: { 'reimbursement.on': { $type: 'string' } }, name: 'payment_request_reimbursement_on', background: true }
+    );
+    // The expense form's last-UPI prefill (lastOwnPayee): without it, a full scan per form open.
+    await db.collection('paymentrequests').createIndex({ requestedBy: 1, category: 1, createdAt: -1 }, { name: 'payment_request_requester_category', background: true });
     await db.collection('paymentrequests').createIndex(
       { reference: 1, createdAt: -1 },
       { partialFilterExpression: { reference: { $gt: '' } }, name: 'payment_request_reference', background: true }
@@ -756,6 +764,12 @@ export async function ensureCriticalIndexes() {
     await db.collection('paymentrequests').createIndex(
       { requestedBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'payment_request_client_id', background: true }
+    );
+    // Subscriptions & dues "Mark paid" (services/subscriptionDueService.js): one expense per
+    // cycle — the guard must exist before the first write, so it is built here.
+    await db.collection('paymentrequests').createIndex(
+      { 'subscription.cycle': 1 },
+      { unique: true, partialFilterExpression: { 'subscription.cycle': { $type: 'objectId' } }, name: 'payment_request_subscription_cycle', background: true }
     );
     console.log('✓ SupplierDeal indexes confirmed');
 
@@ -867,6 +881,11 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasks').createIndex(
       { createdBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_client_id', background: true }
+    );
+    // Redirect table (models/Redirect.js): one row per old URL.
+    await db.collection('redirects').createIndex(
+      { fromPath: 1 },
+      { unique: true, name: 'redirect_from_path', background: true }
     );
     // One next copy per repeating task (models/StaffTask.js repeatOf): done twice makes one copy.
     await db.collection('stafftasks').createIndex(

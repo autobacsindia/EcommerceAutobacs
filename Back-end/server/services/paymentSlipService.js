@@ -14,7 +14,8 @@ import { loadLogo, pdfFonts } from './invoiceService.js';
 import { formatLongDateIST, formatDateTimeIST } from '../utils/datetime.js';
 import { rupeesInWords } from '../utils/amountInWords.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
-import { BASE_CURRENCY, categoryLabel } from '../config/expenseCategories.js';
+import { BASE_CURRENCY, categoryLabel, REIMBURSEMENT } from '../config/expenseCategories.js';
+import { claimLabel } from './reimbursement.js';
 import { STATUS_LABELS, maskAccount, paidFromForeign, rupeesPending } from './paymentRequestService.js';
 import { CARD_NETWORKS, CARD_TYPES, methodLabel } from '../utils/payee.js';
 import { richTextToPlain } from '../utils/richText.js';
@@ -125,7 +126,7 @@ export async function renderPaymentSlip(r) {
 
       // Amount block
       doc.roundedRect(L, y, R - L, 64, 8).fill(C.zebra);
-      doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? `SUPPLIER PAYMENT${r.dealSummary?.partLabel ? ` — ${r.dealSummary.partLabel.toUpperCase()}` : ''}` : `${categoryLabel(r.category).toUpperCase()} EXPENSE`, L + 16, y + 12, { characterSpacing: 1 });
+      doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? `SUPPLIER PAYMENT${r.dealSummary?.partLabel ? ` — ${r.dealSummary.partLabel.toUpperCase()}` : ''}` : `${categoryLabel(r.category).toUpperCase()}${r.category === REIMBURSEMENT ? '' : ' EXPENSE'}`, L + 16, y + 12, { characterSpacing: 1 });
       // A foreign bill not yet paid has no rupee figure: the bill is the amount.
       // Nor one paid from a foreign-currency account: no rupees were debited at all.
       const pending = rupeesPending(r);
@@ -177,7 +178,11 @@ export async function renderPaymentSlip(r) {
       const leftEnd = block(L, 'REQUEST', [
         ['Team', STAFF_TEAM_LABELS[r.team] || r.team],
         ['Raised by', r.requestedByName],
-        ['For', r.kind === 'supplier' ? (r.itemNames || []).join(', ') : categoryLabel(r.category)],
+        ['For', r.kind === 'supplier' ? (r.itemNames || []).join(', ')
+          : r.category === REIMBURSEMENT && r.reimbursement?.type
+            ? `${categoryLabel(r.category)} – ${claimLabel(r.reimbursement)}${r.reimbursement.on ? `, spent ${r.reimbursement.on}` : ''}${r.reimbursement.from || r.reimbursement.to ? `, ${[r.reimbursement.from, r.reimbursement.to].filter(Boolean).join(' → ')}` : ''}`
+            : categoryLabel(r.category)],
+        ...(r.taskNumber ? [['Task', `T-${r.taskNumber}${r.taskTitle ? ` ${r.taskTitle}` : ''}`]] : []),
         ['Bill', billLine(r)],
         ['Order', r.orderNumber],
         ['Customer', r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : ''],

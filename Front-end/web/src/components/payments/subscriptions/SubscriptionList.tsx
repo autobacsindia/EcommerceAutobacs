@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useListParams } from '@/lib/hooks/useListParams';
 import { ListClear, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
@@ -9,8 +9,30 @@ import { errorMessage } from '../api';
 import SubscriptionDetail from './SubscriptionDetail';
 import SubscriptionForm from './SubscriptionForm';
 import {
-  approxText, billText, dayText, dueText, estimateText, listSubscriptions, payText, perText, STATUS_TONE, subscriptionKeys,
+  approxText, billText, CYCLE_TONE, dayText, dueText, estimateText, getMonthlyTotals, listSubscriptions, monthText, payText, perText,
+  rupeeText, STATUS_TONE, subscriptionKeys,
 } from './api';
+
+/**
+ * Paid bills per month, in rupees — the last three months. Accounts / admin see
+ * every team (or the one filtered); a team sees its own.
+ */
+function MonthlyTotals({ team }: { team: string }) {
+  const q = useQuery({ queryKey: subscriptionKeys.monthly(team), queryFn: () => getMonthlyTotals(team) });
+  const months = (q.data?.months ?? []).slice(0, 3);
+  if (!months.length) return null;
+  return (
+    <section aria-label="Paid per month" className="flex flex-wrap gap-2">
+      {months.map((m) => (
+        <div key={m.month} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+          <p className="text-xs text-gray-500">Paid · {monthText(`${m.month}-01`)}</p>
+          <p className="font-semibold text-gray-900">{rupeeText(m.rupees)}</p>
+          <p className="text-xs text-gray-500">{m.bills} bill{m.bills === 1 ? '' : 's'}{m.unpriced ? ` · ${m.unpriced} without rupees yet` : ''}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
 
 /** The quick filters. "Due in 7 days" and "Overdue" are about the date; the rest about the check. */
 const VIEWS = [
@@ -71,6 +93,8 @@ export default function SubscriptionList({ teams, intro }: {
         )}
       </div>
 
+      <MonthlyTotals team={teams ? v.team : ''} />
+
       {notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
       {adding && (
         <SubscriptionForm
@@ -117,7 +141,8 @@ export default function SubscriptionList({ teams, intro }: {
         <ul className={`divide-y overflow-hidden rounded-lg border border-gray-200 bg-white ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
           {rows.map((s) => (
             <li key={s.id}>
-              <button type="button" onClick={() => setOpen(s.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50">
+              <button type="button" onClick={() => setOpen(s.id)}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 ${s.overdue && s.status === 'verified' && (!s.current || s.current.state === 'rejected') ? 'border-l-4 border-red-500 bg-red-50/40' : ''}`}>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-900">{s.name} <span className="font-normal text-gray-500">· {s.number}</span></p>
                   <p className="truncate text-xs text-gray-500">{s.teamLabel} · {s.kindLabel} · {payText(s.payment)}</p>
@@ -129,7 +154,15 @@ export default function SubscriptionList({ teams, intro }: {
                   {billText(s)}{perText(s.kind)}{estimateText(s)}
                   {approxText(s.approxInr) && <span className="block text-xs font-normal text-gray-500">{approxText(s.approxInr)}</span>}
                 </span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[s.status]}`}>{s.statusLabel}</span>
+                {s.current ? (
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${CYCLE_TONE[s.current.state]}`}>
+                    {s.current.state === 'rejected' ? 'Payment rejected' : s.current.stateLabel}
+                  </span>
+                ) : s.can.markPaid ? (
+                  <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">Mark paid</span>
+                ) : (
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[s.status]}`}>{s.statusLabel}</span>
+                )}
               </button>
             </li>
           ))}

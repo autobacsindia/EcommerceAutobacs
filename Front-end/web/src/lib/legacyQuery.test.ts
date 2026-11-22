@@ -6,7 +6,7 @@
  * (sort, category, page, q) stripped by a 301 throws the shopper's choice away on
  * every click, and nothing else would notice.
  */
-import { isInternalSearch, LEGACY_PARAMS, stripLegacyParams } from './legacyQuery';
+import { isInternalSearch, LEGACY_PARAMS, stripLegacyParams, legacyProductSearch, removeLegacyParams } from './legacyQuery';
 
 const strip = (u: string) => stripLegacyParams(new URL(u))?.toString() ?? null;
 
@@ -77,4 +77,26 @@ describe('isInternalSearch', () => {
     'https://shop.test/model/toyota-hilux?sort=date',
     'https://shop.test/consultation?item=bull-bar',
   ])('%s is a real page (indexable)', (u) => expect(is(u)).toBe(false));
+});
+
+describe('legacyProductSearch (one hop to /products/search)', () => {
+  const run = (u: string) => legacyProductSearch(new URL(u, 'https://www.autobacsindia.com'))?.toString().replace('https://www.autobacsindia.com', '') ?? null;
+  it.each([
+    ['/?s=winch&post_type=product', '/products/search?q=winch'],
+    ['/?s=floor+mat&post_type=product&add-to-cart=12', '/products/search?q=floor+mat'],
+    ['/shop/?s=led&dgwt_wcas=1', '/products/search?q=led'],
+    ['/?s=winch&post_type=product&ref=ABC12', '/products/search?q=winch&ref=ABC12'],
+    ['/?s=&post_type=product', '/products'],
+    ['/?s=winch', null], // WordPress blog search: not a product search
+    ['/products?category=x', null],
+  ])('%s → %s', (u, expected) => expect(run(u)).toBe(expected));
+});
+
+describe('removeLegacyParams', () => {
+  it('drops legacy params in place and keeps the rest', () => {
+    const url = new URL('https://x.test/categories/a?per_page=12&sort=price&dgwt_wcas=1');
+    expect(removeLegacyParams(url)).toBe(true);
+    expect(url.search).toBe('?sort=price');
+    expect(removeLegacyParams(new URL('https://x.test/a?sort=1'))).toBe(false);
+  });
 });

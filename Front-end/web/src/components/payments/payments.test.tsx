@@ -73,6 +73,15 @@ beforeEach(() => {
 
 const shot = (name: string, type = 'image/jpeg', size = 10) => new File([new Uint8Array(size)], name, { type });
 
+/** The edit form posts multipart: what it sent, as an object (payee parsed). */
+const sentEdit = () => {
+  const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+  const body: Record<string, unknown> = {};
+  (init.body as FormData).forEach((v, k) => { body[k] = k === 'payee' ? JSON.parse(String(v)) : v; });
+  return { url, method: init.method, body };
+};
+const giveReason = () => fireEvent.change(screen.getByLabelText('Why are you changing it?'), { target: { value: 'Wrong amount' } });
+
 describe('raising', () => {
   const fillExpense = async () => {
     await optionsLoaded();
@@ -427,7 +436,15 @@ describe('each team’s own options', () => {
   });
 
   it('if the options cannot load, says so and offers to try again — it does not guess a list', async () => {
-    get.mockRejectedValueOnce(Object.assign(new Error('down'), { rawData: { message: 'Server unavailable' } }));
+    // The options fail once (the form's task picker reads its own list: left alone).
+    let failed = false;
+    get.mockImplementation(async (url: string) => {
+      if (url.startsWith('/payment-requests/expense-options')) {
+        if (!failed) { failed = true; throw Object.assign(new Error('down'), { rawData: { message: 'Server unavailable' } }); }
+        return { options: OPS };
+      }
+      throw new Error(`unexpected GET ${url}`);
+    });
     wrap(<PaymentRequestForm onDone={() => {}} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Server unavailable');
     expect(screen.queryByRole('combobox', { name: 'What for' })).toBeNull();
@@ -438,16 +455,20 @@ describe('each team’s own options', () => {
   it('an old expense keeps its old option when edited, marked as such', async () => {
     serveOptions(PROCUREMENT);
     const old: PaymentRequest = { ...base, status: 'submitted', team: 'procurement', category: 'fuel', categoryLabel: 'Fuel', currency: 'INR' };
-    put.mockResolvedValue({ request: old });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: old }) });
     const onDone = jest.fn();
     wrap(<EditPaymentRequest r={old} onDone={onDone} onCancel={() => {}} />);
     expect(await screen.findByRole('option', { name: 'Fuel (old option)' })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith('/payment-requests/expense-options?team=procurement');
     expect(screen.getByLabelText('What for')).toHaveValue('fuel');
     fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '900' } });
+    giveReason();
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
-    expect(put).toHaveBeenCalledWith('/payment-requests/r1', expect.objectContaining({ category: 'fuel', currency: 'INR', amount: '900' }));
+    const sent = sentEdit();
+    expect(sent).toMatchObject({ url: '/api/v1/payment-requests/r1', method: 'PUT' });
+    expect(sent.body).toMatchObject({ category: 'fuel', currency: 'INR', amount: '900', reason: 'Wrong amount', rev: '0' });
+    expect(put).not.toHaveBeenCalled();
   });
 
   it('editing a baht bill changes the bill, never a rate or rupees', async () => {
@@ -456,16 +477,17 @@ describe('each team’s own options', () => {
       ...base, status: 'submitted', team: 'procurement', category: 'import_purchase', categoryLabel: 'Import purchase',
       amount: 0, currency: 'THB', foreignAmount: 22950, fxRate: null, rupeesPending: true,
     };
-    put.mockResolvedValue({ request: thb });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: thb }) });
     const onDone = jest.fn();
     wrap(<EditPaymentRequest r={thb} onDone={onDone} onCancel={() => {}} />);
     await screen.findByRole('option', { name: 'Import purchase' });
     expect(screen.queryByLabelText('Amount (₹)')).toBeNull();
     expect(screen.queryByLabelText(/Rate/)).toBeNull();
     fireEvent.change(screen.getByLabelText('Bill amount (THB)'), { target: { value: '23000' } });
+    giveReason();
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
-    const body = put.mock.calls[0][1];
+    const { body } = sentEdit();
     expect(body).toMatchObject({ currency: 'THB', foreignAmount: '23000' });
     expect(body).not.toHaveProperty('amount');
     expect(body).not.toHaveProperty('fxRate');
@@ -476,13 +498,39 @@ describe('each team’s own options', () => {
       ...base, status: 'submitted',
       payee: { name: 'Open N', method: 'bank', accountName: 'Nikom Amranan', accountNumber: '8582102601', swift: 'KASITHBK', ifsc: '', bankName: 'KASIKORNBANK' },
     };
-    put.mockResolvedValue({ request: swiftPayee });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: swiftPayee }) });
     const onDone = jest.fn();
     wrap(<EditPaymentRequest r={swiftPayee} onDone={onDone} onCancel={() => {}} />);
     expect(screen.getByLabelText('SWIFT code')).toHaveValue('KASITHBK');
+    giveReason();
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
-    expect(put.mock.calls[0][1].payee).toMatchObject({ swift: 'KASITHBK', ifsc: '' });
+    expect(sentEdit().body.payee).toMatchObject({ swift: 'KASITHBK', ifsc: '' });
+  });
+
+  it('accounts sees "Edited after submit" with the reason and old → new, and Approve sends the version on screen', async () => {
+    const edited = {
+      ...base, status: 'submitted', statusLabel: 'Waiting for accounts', rev: 3, editedAt: '2026-11-21T09:00:00Z',
+      edits: [{ at: '2026-11-21T09:00:00Z', byName: 'Omar', role: 'operations', reason: 'Bill was ₹1,100', fromStatus: 'on_hold',
+        changes: [{ field: 'Amount', from: '₹1,250', to: '₹1,100' }] }],
+      can: { ...base.can, approve: true, pay: false, hold: false },
+    };
+    get.mockResolvedValue({ request: edited });
+    post.mockResolvedValue({ request: { ...edited, status: 'approved' } });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const history = await screen.findByRole('region', { name: 'Edit history' });
+    expect(within(history).getByText('Edited after submit (1)')).toBeInTheDocument();
+    expect(within(history).getByText(/Bill was ₹1,100/)).toBeInTheDocument();
+    expect(within(history).getByText(/was on hold, sent back to accounts/)).toBeInTheDocument();
+    expect(within(history).getByText('₹1,250')).toHaveClass('line-through');
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/payment-requests/r1/approve', { note: '', rev: 3 }));
+  });
+
+  it('a declined request offers "Edit & send again"', async () => {
+    get.mockResolvedValue({ request: { ...base, status: 'declined', statusLabel: 'Declined', decisionNote: 'Wrong amount', can: { ...base.can, pay: false, hold: false, edit: true } } });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    expect(await screen.findByRole('button', { name: /Edit & send again/ })).toBeInTheDocument();
   });
 
   it('the detail shows the readable name and the bill beside the rupees', async () => {

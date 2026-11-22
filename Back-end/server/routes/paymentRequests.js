@@ -7,6 +7,7 @@ import {
 } from '../middleware/uploadMiddleware.js';
 import * as pr from '../services/paymentRequestService.js';
 import * as deals from '../services/supplierDealService.js';
+import * as claims from '../services/reimbursement.js';
 import { renderPaymentSlip } from '../services/paymentSlipService.js';
 
 /**
@@ -38,10 +39,24 @@ router.get('/filter-options', asyncHandler(async (req, res) => {
 
 // GET /payment-requests/expense-options?team= — what this team's expense form offers (the server's own list)
 router.get('/expense-options', asyncHandler(async (req, res) => {
-  res.json({ success: true, options: pr.expenseOptions(req.user, req.query) });
+  res.json({ success: true, options: await pr.expenseOptions(req.user, req.query) });
 }));
 
-// POST /payment-requests/expenses — multipart: team?, orderId? (link to an order), category, description, payee(JSON), bill, qr,
+// GET /payment-requests/reimbursements/settings — the per-km fuel rate (anyone who can raise one sees it)
+router.get('/reimbursements/settings', asyncHandler(async (req, res) => {
+  res.json({ success: true, settings: await pr.reimbursementSettings(req.user) });
+}));
+// PUT /payment-requests/reimbursements/settings { fuelRatePerKm } — admin only; new claims use it
+router.put('/reimbursements/settings', asyncHandler(async (req, res) => {
+  res.json({ success: true, settings: await claims.updateSettings(req.user, req.body, req) });
+}));
+// GET /payment-requests/reimbursements/report?month=YYYY-MM — admin / accounts: per person and per task
+router.get('/reimbursements/report', asyncHandler(async (req, res) => {
+  res.json({ success: true, report: await pr.reimbursementReport(req.user, req.query) });
+}));
+
+// POST /payment-requests/expenses — multipart: team?, orderId? (link to an order), project?, task?, category, description, payee(JSON), bill, qr,
+//   reimbursement(JSON: type, on, km?, from?, to?) when category is 'reimbursement' (Fuel: no amount — the server works it out),
 //   and amount (rupees) — or currency + foreignAmount + fxRate for a foreign bill
 router.post('/expenses', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
   const request = await pr.createExpense(req.user, { ...req.body, payee: json(req.body.payee, {}) }, req.files || {}, req);
@@ -132,9 +147,11 @@ router.get('/:id/files/:fileId', asyncHandler(async (req, res) => {
   res.send(buffer);
 }));
 
-// PUT /payment-requests/:id { amount?, description?, category?, payee? | supplierId? } — correct it
-router.put('/:id', asyncHandler(async (req, res) => {
-  res.json({ success: true, request: await pr.update(req.user, req.params.id, req.body, req) });
+// PUT /payment-requests/:id — JSON or multipart: reason, rev?, formKey?, amount?, description?, category?,
+//   payee(JSON)? | supplierId?, removeFileIds(JSON)?, bill, qr — correct it before accounts approves
+router.put('/:id', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
+  const body = { ...req.body, ...(req.body.payee != null ? { payee: json(req.body.payee, undefined) } : {}) };
+  res.json({ success: true, request: await pr.update(req.user, req.params.id, body, req.files || {}, req) });
 }));
 
 router.post('/:id/approve', asyncHandler(async (req, res) => {
@@ -160,7 +177,7 @@ router.post('/:id/pay', concurrentUploadGuard, attachmentSizeGuard, uploadPaymen
 router.put('/:id/payment', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.editPayment(req.user, req.params.id, req.body, req.files || [], req) });
 }));
-// POST /payment-requests/:id/links { project?: 'PRJ-0007' | '', reference?: text | '' } — which project / other ID it is for
+// POST /payment-requests/:id/links { project?: 'PRJ-0007' | '', task?: id | 'T-42' | '', reference?: text | '' } — what it is for
 router.post('/:id/links', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.setLinks(req.user, req.params.id, req.body, req) });
 }));

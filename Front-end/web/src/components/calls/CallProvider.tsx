@@ -412,14 +412,11 @@ export default function CallProvider({ children }: { children: ReactNode }) {
     }
   }, [meId, peerFor, connect, finish, releaseMedia]);
 
-  useSSE({ url: '/api/v1/chat/stream', token: null, enabled: canChat && !!meId, onMessage: onEvent });
-
-  // A call already ringing or going on when this page loaded.
-  useEffect(() => {
-    if (!canChat || !meId) return;
-    let off = false;
+  // A call already ringing or going on when this page loaded — or one that rang
+  // while the live stream was down (laptop asleep, Wi-Fi change, server deploy).
+  const pickUpLiveCall = useCallback((isCancelled: () => boolean = () => false) => {
     apiClient.get<LiveResponse>('/chat/calls/live').then((res) => {
-      if (off || !res.call || stateRef.current.phase !== 'idle') return;
+      if (isCancelled() || !res.call || stateRef.current.phase !== 'idle') return;
       const c = res.call;
       const peerId = c.callerId === meId ? c.calleeId : c.callerId;
       const peer = peerFor(c.channelId, peerId, res.peer?.name);
@@ -431,8 +428,26 @@ export default function CallProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'rejoin', call: c, peer });
       }
     }).catch(() => {});
+  }, [meId, peerFor]);
+
+  // The stream came back after a gap: signals sent meanwhile are gone. Idle →
+  // look for a ring we missed; mid-setup → exchange connection details afresh.
+  const streamUpBefore = useRef(false);
+  const onStreamConnect = useCallback(() => {
+    if (!streamUpBefore.current) { streamUpBefore.current = true; return; } // first connect: the effect below covers it
+    const phase = stateRef.current.phase;
+    if (phase === 'idle') pickUpLiveCall();
+    else if (phase === 'connecting' || phase === 'reconnecting') engineRef.current?.restartIce();
+  }, [pickUpLiveCall]);
+
+  useSSE({ url: '/api/v1/chat/stream', token: null, enabled: canChat && !!meId, onMessage: onEvent, onConnect: onStreamConnect });
+
+  useEffect(() => {
+    if (!canChat || !meId) return;
+    let off = false;
+    pickUpLiveCall(() => off);
     return () => { off = true; };
-  }, [canChat, meId, peerFor]);
+  }, [canChat, meId, pickUpLiveCall]);
 
   // Heartbeat while in a call; also notices an end this tab never heard about.
   const inCall = IN_CALL.has(state.phase);

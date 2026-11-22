@@ -1,5 +1,5 @@
 /**
- * Toast — a short ink-black message that drops in under the status bar.
+ * Toast — a short carbon message (square, gold hairline, Heritage Noir) that drops in under the status bar.
  *
  *   const toast = useToast();
  *   toast.show('Added to cart');                                   // after the server confirms
@@ -14,7 +14,7 @@ import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-nati
 import Animated, { FadeIn, FadeOut, SlideInUp, SlideOutUp, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, elevation, font, radius, spacing } from '../theme';
+import { colors, elevation, font, noir, radius, spacing } from '../theme';
 import { haptic } from './motion';
 
 type ToastTone = 'default' | 'success' | 'error';
@@ -67,7 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ show, hide }), [show, hide]);
   const icon = toast?.icon ?? (toast?.tone === 'success' ? 'checkmark-circle' : toast?.tone === 'error' ? 'alert-circle' : undefined);
-  const iconColor = toast?.tone === 'error' ? colors.red : colors.greenOnDark;
+  const iconColor = toast?.tone === 'error' ? colors.red : toast?.tone === 'success' ? noir.greenText : noir.gold;
 
   return (
     <ToastCtx.Provider value={value}>
@@ -115,10 +115,12 @@ const s = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.ink,
+    borderRadius: radius.square,
+    backgroundColor: noir.surface,
+    borderWidth: 1,
+    borderColor: noir.goldLine,
     ...elevation.e3,
   },
-  msg: { flex: 1, fontFamily: font.medium, fontSize: 14, lineHeight: 19, color: colors.white },
-  action: { fontFamily: font.bold, fontSize: 14, color: colors.greenOnDark },
+  msg: { flex: 1, fontFamily: font.medium, fontSize: 14, lineHeight: 19, color: noir.text },
+  action: { fontFamily: font.heading, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase', color: noir.gold },
 });

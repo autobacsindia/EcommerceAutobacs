@@ -54,6 +54,8 @@ const staffTaskRepository = {
 
   create: async (doc) => (await StaffTask.create(doc)).toObject(),
   findById: (id) => StaffTask.findById(id).lean(),
+  /** "T-42" → that task (staff_task_number). */
+  findByNumber: (number) => StaffTask.findOne({ number }).lean(),
 
   /*
     The duplicate checks run on every create and comment. Their unique indexes are

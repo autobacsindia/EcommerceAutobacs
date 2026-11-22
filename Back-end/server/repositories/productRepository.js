@@ -66,6 +66,26 @@ class ProductRepository {
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
 
+  /** Soft-deleted products, for the redirect map (old URL → its category). */
+  async findDeletedForRedirects() {
+    return Product.find({ deletedAt: { $ne: null }, slug: { $exists: true, $nin: [null, ''] } })
+      .setOptions({ includeDeleted: true })
+      .select('slug previousSlugs categories')
+      .limit(50000)
+      .lean()
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /** Any product, deleted ones included, with only the fields a redirect needs. */
+  async findForRedirect(id) {
+    return Product.findById(id).setOptions({ includeDeleted: true }).select('name slug previousSlugs isActive').lean();
+  }
+
+  /** True when a LIVE product currently answers on this slug. */
+  async existsLiveSlug(slug) {
+    return Boolean(await Product.exists({ slug, isActive: true }));
+  }
+
   async countSitemap() {
     return Product.countDocuments({
       isActive: true,

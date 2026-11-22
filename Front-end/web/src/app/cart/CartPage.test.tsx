@@ -6,6 +6,7 @@ import '@testing-library/jest-dom';
 
 // Mocks
 // Cart page boundaries (auth, server quote, campaign) — keep the test offline.
+jest.mock('@/hooks/queries/useDeliveryFeesPublic', () => require('@/test-utils/cartPageMocks').deliveryFeesPublicOffMock);
 jest.mock('@/context/AuthContext', () => require('@/test-utils/cartPageMocks').authGuestMock);
 jest.mock('@/hooks/useCheckoutQuote', () => require('@/test-utils/cartPageMocks').checkoutQuoteIdleMock);
 jest.mock('@/hooks/queries/useCampaign', () => require('@/test-utils/cartPageMocks').campaignNoneMock);

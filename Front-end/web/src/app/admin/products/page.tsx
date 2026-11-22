@@ -19,6 +19,7 @@ import { productsListPath, productEditHref } from '@/lib/adminProductsReturn';
 import { usePanel } from '@/lib/usePanel';
 import { useAuth } from '@/context/AuthContext';
 import FestivalOfferBulkBar from '@/components/admin/FestivalOfferBulkBar';
+import OldLinkTarget from '@/components/admin/OldLinkTarget';
 import FestivalOfferExceptions from '@/components/admin/FestivalOfferExceptions';
 import ShippingClassBulkBar from '@/components/admin/ShippingClassBulkBar';
 import ShippingClassList from '@/components/admin/ShippingClassList';
@@ -216,11 +217,23 @@ function AdminProductsPageInner() {
     return () => { cancelled = true; };
   }, [categoryId, categoryNameParam]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+  // Delete asks where the product's old URL should send people (redirect table);
+  // no choice = its own category, decided by the backend.
+  const [deleting, setDeleting] = useState<Product | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
+  const askDelete = (product: Product) => {
+    setDeleteTarget(null);
+    setDeleting(product);
+  };
+
+  const handleDelete = async (id: string, redirectTo: string | null) => {
+    setDeleteBusy(true);
     try {
-      await apiClient.delete(`${API_ENDPOINTS.PRODUCTS}/${id}`);
+      const qs = redirectTo ? `?redirectTo=${encodeURIComponent(redirectTo)}` : '';
+      await apiClient.delete(`${API_ENDPOINTS.PRODUCTS}/${id}${qs}`);
+      setDeleting(null);
       // Optimistically drop the row from the current page's cache, and keep the
       // total/page counts in sync so the footer ("of N") isn't off by one.
       queryClient.setQueryData<{ products: Product[]; totalCount: number; totalPages: number }>(
@@ -246,6 +259,8 @@ function AdminProductsPageInner() {
       alert('Product deleted successfully');
     } catch (err: any) {
       alert(err.message || 'Failed to delete product');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -257,6 +272,32 @@ function AdminProductsPageInner() {
 
   return (
     <div className="p-4 md:p-6 w-full">
+      {deleting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-product-title">
+          <div className="w-full max-w-md space-y-4 rounded-lg bg-white p-5 shadow-xl">
+            <h2 id="delete-product-title" className="text-lg font-semibold">Delete &ldquo;{deleting.name}&rdquo;?</h2>
+            <OldLinkTarget
+              value={deleteTarget}
+              onChange={setDeleteTarget}
+              defaultLabel="Its own category (automatic)"
+              excludeSlug={deleting.slug}
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleting(null)} disabled={deleteBusy} className="rounded border px-4 py-2 text-sm">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(deleting._id, deleteTarget)}
+                disabled={deleteBusy}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-2xl md:text-3xl font-bold">Products Management</h1>
         <div className="flex flex-wrap items-start gap-2">
@@ -513,7 +554,8 @@ function AdminProductsPageInner() {
                       </Link>
                       {canManage && (
                         <button
-                          onClick={() => handleDelete(product._id)}
+                          onClick={() => askDelete(product)}
+                          aria-label={`Delete ${product.name}`}
                           className="text-red-600 hover:text-red-900"
                         >
                           <Trash2 className="h-4 w-4" />

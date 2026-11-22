@@ -19,7 +19,7 @@ export const sumByCurrency = (rows = []) => {
  * Payment requests (models/PaymentRequest.js). Data access only — who may do
  * what lives in services/paymentRequestService.js.
  */
-const LINKED_FIELDS = 'number kind status team category amount currency foreignAmount payee.name order orderNumber project projectCode projectName reference requestedByName payment.paidAt payment.transactionAt createdAt'
+const LINKED_FIELDS = 'number kind status team category amount currency foreignAmount payee.name order orderNumber project projectCode projectName task taskNumber taskTitle reimbursement reference requestedByName payment.paidAt payment.transactionAt createdAt'
   .split(' ');
 /** At most this many item names ride along as a supplier payment's "what for". */
 const PURPOSE_ITEMS_MAX = 10;
@@ -57,6 +57,7 @@ const paymentRequestRepository = {
     // One order's rows ride payment_request_order and are sorted in memory: an order has a handful.
     // Plain equality on the project (an ObjectId from our own read): payment_request_project is a sorted range.
     const base = by.project ? { project: by.project }
+      : by.task ? { task: by.task }
       : by.order ? { order: { $eq: by.order, $type: 'objectId' } }
         : { reference: { $eq: by.reference, $gt: '' } };
     // `createdAt ≤ cursor` bounds the index range so the next page starts where the last ended
@@ -81,6 +82,53 @@ const paymentRequestRepository = {
     { $match: { project: projectId } },
     { $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' } } },
   ]).option({ maxTimeMS: 5000 }),
+  /** The same, for one task's payments (payment_request_task). */
+  totalsForTask: (taskId) => PaymentRequest.aggregate([
+    { $match: { task: taskId } },
+    { $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' } } },
+  ]).option({ maxTimeMS: 5000 }),
+
+  /** This person's latest request of `category` that named how to pay them. */
+  lastOwnPayee: (requestedBy, category) => PaymentRequest.findOne({ requestedBy, category, 'payee.method': { $in: ['upi', 'bank'] } })
+    .sort({ createdAt: -1 }).select('payee').lean(),
+
+  /**
+   * A month of reimbursements (payment_request_reimbursement_on: by the day spent,
+   * 'YYYY-MM-DD' in [from, to)), declined and cancelled left out — per person and
+   * per task, in rupees. Bounded: one month's claims; at most `cap` people / tasks.
+   */
+  reimbursementReport: (from, to, cap) => PaymentRequest.aggregate([
+    { $match: { 'reimbursement.on': { $type: 'string', $gte: from, $lt: to }, category: 'reimbursement', status: { $nin: ['declined', 'cancelled'] } } },
+    { $project: {
+      requestedBy: 1, requestedByName: 1, team: 1, task: 1, taskNumber: 1, taskTitle: 1, amount: 1, status: 1,
+      type: '$reimbursement.type', km: { $ifNull: ['$reimbursement.km', 0] },
+      paid: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] },
+    } },
+    { $facet: {
+      people: [
+        { $group: {
+          _id: '$requestedBy', name: { $last: '$requestedByName' }, team: { $last: '$team' },
+          count: { $sum: 1 }, amount: { $sum: '$amount' }, paid: { $sum: '$paid' }, km: { $sum: '$km' },
+          fuel: { $sum: { $cond: [{ $eq: ['$type', 'fuel'] }, '$amount', 0] } },
+          food: { $sum: { $cond: [{ $eq: ['$type', 'food'] }, '$amount', 0] } },
+          transport: { $sum: { $cond: [{ $eq: ['$type', 'transport'] }, '$amount', 0] } },
+          other: { $sum: { $cond: [{ $eq: ['$type', 'other'] }, '$amount', 0] } },
+        } },
+        { $sort: { amount: -1, _id: 1 } },
+        { $limit: cap },
+      ],
+      tasks: [
+        { $match: { task: { $type: 'objectId' } } },
+        { $group: {
+          _id: '$task', number: { $last: '$taskNumber' }, title: { $last: '$taskTitle' },
+          count: { $sum: 1 }, amount: { $sum: '$amount' }, paid: { $sum: '$paid' }, km: { $sum: '$km' },
+        } },
+        { $sort: { amount: -1, _id: 1 } },
+        { $limit: cap },
+      ],
+      total: [{ $group: { _id: null, count: { $sum: 1 }, amount: { $sum: '$amount' }, paid: { $sum: '$paid' }, km: { $sum: '$km' } } }],
+    } },
+  ]).option({ maxTimeMS: 10000 }),
 
   /**
    * Move a request on, but only if it is still in one of `from` — the guard that
@@ -97,7 +145,7 @@ const paymentRequestRepository = {
   page: (query, { sort, limit }) => PaymentRequest.find(query)
     .sort(sort)
     .limit(limit)
-    .select('-history -files.publicId -files.provider')
+    .select('-history -edits -files.publicId -files.provider')
     .lean(),
 
   /**
@@ -163,7 +211,7 @@ const paymentRequestRepository = {
   findSupplierToPay: (limit) => PaymentRequest.find({ status: { $in: ['approved', 'on_hold'] }, kind: 'supplier', currency: { $in: ['INR', null] } })
     .sort({ createdAt: 1, _id: 1 })
     .limit(limit)
-    .select('-history -files.publicId -files.provider')
+    .select('-history -edits -files.publicId -files.provider')
     .lean(),
 
   /** Just the history of these requests — for the held rows of a list read without it (holdOf). */

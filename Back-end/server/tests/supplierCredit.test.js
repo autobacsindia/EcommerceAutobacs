@@ -88,7 +88,7 @@ const staff = (team, isHead = false) => ({ team, isHead, active: true });
 const UPI = { name: 'Fuel Station', method: 'upi', upiId: 'fuelstation@okaxis' };
 const BANK = { name: 'ARB Supplies', method: 'bank', accountName: 'ARB Supplies Pvt Ltd', accountNumber: '123456789012', ifsc: 'HDFC0001234', bankName: 'HDFC' };
 const expense = (s, over = {}, files = [{ field: 'bill', buffer: JPEG, name: 'bill.jpg', type: 'image/jpeg' }]) =>
-  s.form('/payment-requests/expenses', { category: 'fuel', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
+  s.form('/payment-requests/expenses', { category: 'other', amount: 1250.5, description: 'Diesel for delivery van', payee: UPI, ...over }, files);
 
 async function paidOrder(salesUser = null) {
   const order = await Order.create({
@@ -339,11 +339,11 @@ describe('Supplier credit', () => {
     const other = await saveSupplier({ ...ARB, name: 'Other Supplies', phone: '9800000002' });
     const o2 = await paidOrder();
     const r = (await raise(String(o2._id), String(o2.items[0]._id), arb, 40000, { creditToUse: 15000 })).body.request;
-    const edit = await procurement.session.put(`/payment-requests/${r.id}`, { amount: 45000 });
+    const edit = await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 45000 });
     expect(edit.status).toBe(200);
     expect(edit.body.request).toMatchObject({ amount: 30000, bill: 45000, credit: { amount: 15000 } });
-    expect((await procurement.session.put(`/payment-requests/${r.id}`, { amount: 15000 })).status).toBe(400);
-    const swap = await procurement.session.put(`/payment-requests/${r.id}`, { supplierId: other });
+    expect((await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 15000 })).status).toBe(400);
+    const swap = await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", supplierId: other });
     expect(swap.status).toBe(409);
     expect(swap.body.message).toMatch(/supplier cannot change/);
     expect(await owed(arb)).toBe(15000);

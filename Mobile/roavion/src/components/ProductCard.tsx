@@ -1,29 +1,29 @@
 /**
- * The product card used by every list in the app. One component, three shapes,
+ * The product card used by every list in the app. One component, two shapes,
  * so a price or a discount can never look different in two places.
  *
- * It carries the same signals the website's mobile card does — the red savings
- * pill, the struck-through M.R.P., the brand byline and the best-seller rank.
- * Those are what make a listing look like a shop rather than a gallery, and
- * leaving them off was most of why the app read as emptier than the web view.
+ * Premium look (2026-11-22): white card, photo on a soft page-grey well, red
+ * savings badge on the photo, brand as a letter-spaced overline, two-line
+ * name, compact rating, price with struck M.R.P., and a round ink quick-add.
+ * The whole card springs on press.
  *
  * Everything shown is a value the server sent. The card never computes a
  * discount or a total of its own.
  */
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, font, inr, radius, shadow, spacing } from '../theme';
+import { alpha, colors, elevation, font, radius, spacing } from '../theme';
 import type { Product } from '../api/catalogue';
 import { useApp } from '../store';
-import { Photo, Stars } from './ui';
-import { StripeLoader } from '../ui';
+import { Photo } from './ui';
+import { Badge, PressScale, Price, Rating, StripeLoader, haptic, usePressScale } from '../ui';
+import Animated from 'react-native-reanimated';
 
 export const CARD_WIDTH = 172;
 
-export default function ProductCard({
+function ProductCard({
   product,
   variant = 'tile',
   width = CARD_WIDTH,
@@ -33,12 +33,13 @@ export default function ProductCard({
   variant?: 'tile' | 'row';
   /** Tile width. Grids pass `flex: 1` wrappers and leave this alone. */
   width?: number;
-  /** 1-based position, shown as the website's "#1 Best seller" ribbon. */
+  /** 1-based position, shown as a "#1 Best seller" ribbon. */
   rank?: number;
 }) {
   const router = useRouter();
   const { addItem } = useApp();
   const [adding, setAdding] = useState(false);
+  const press = usePressScale();
   const open = () => router.push(`/product/${product.slug}`);
   const soldOut = product.stock === 'out';
   const onSale = product.discountPercent > 0 && !!product.mrp;
@@ -51,13 +52,15 @@ export default function ProductCard({
     wrong variant silently is the one failure a cart must never have — it asks
     the server, and ON ANY REFUSAL opens the product page so the customer
     finishes the choice there. The fast path stays one tap; the ambiguous one
-    lands exactly where it can be resolved.
+    lands exactly where it can be resolved. The success buzz fires only after
+    the server confirmed the add.
   */
   const quickAdd = async () => {
+    haptic.light();
     setAdding(true);
     try {
       await addItem(product.id, 1);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      haptic.success();
     } catch {
       open();
     } finally {
@@ -67,156 +70,114 @@ export default function ProductCard({
 
   if (variant === 'row') {
     return (
-      <Pressable
-        onPress={open}
-        accessibilityRole="button"
-        accessibilityLabel={product.name}
-        android_ripple={{ color: 'rgba(10,92,51,0.07)' }}
-        style={({ pressed }) => [s.row, pressed && s.pressed]}
-      >
-        <Photo uri={product.image} style={s.rowImage} />
+      <PressScale onPress={open} haptic="selection" accessibilityLabel={product.name} style={s.row}>
+        <View style={s.rowImageWrap}>
+          <Photo uri={product.image} style={s.rowImage} />
+        </View>
         <View style={s.rowBody}>
+          {!!product.brand && <Text style={s.brand} numberOfLines={1}>{product.brand}</Text>}
           <Text style={s.name} numberOfLines={2}>{product.name}</Text>
-          <Stars rating={product.rating} reviews={product.reviews} />
-          <View style={s.priceLine}>
-            <Text style={s.price}>{inr(product.price)}</Text>
-            {onSale ? <Text style={s.mrp}>{inr(product.mrp!)}</Text> : null}
-          </View>
-          {!!product.brand && <Text style={s.by} numberOfLines={1}>by {product.brand}</Text>}
+          <Rating rating={product.rating} count={product.reviews} compact />
+          <Price price={product.price} mrp={onSale ? product.mrp : null} offPercent={product.discountPercent} size="sm" />
           {soldOut && <Text style={s.soldOut}>Out of stock</Text>}
         </View>
-      </Pressable>
+      </PressScale>
     );
   }
 
   /*
     The root is a View, not a Pressable. The quick-add button has to sit beside
     the card's own tap target, not inside it: a button nested in a button is
-    invalid on web (React logs it, and the DOM reparents the markup) and
-    ambiguous on native, where the outer press can swallow the inner one. So
-    the card's tap target wraps only the image and the text, and the add button
-    is its sibling.
+    invalid on web and ambiguous on native, where the outer press can swallow
+    the inner one. So the tap target wraps the image and the text, the add
+    button is its sibling, and the whole card scales from the shared press value.
   */
   return (
-    <View style={[s.tile, { width }]}>
+    <Animated.View style={[s.tile, { width }, press.style]}>
       <Pressable
         onPress={open}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
         accessibilityRole="button"
         accessibilityLabel={product.name}
-        android_ripple={{ color: 'rgba(10,92,51,0.07)' }}
-        style={({ pressed }) => pressed && s.pressed}
       >
-      <View style={s.tileImageWrap}>
-        <Photo uri={product.image} style={[s.tileImage, { height: width * 0.98 }]} />
-        {/* Discount sits ON the image, top-left, as on the website. */}
-        {onSale && (
-          <View style={s.badge}>
-            <Text style={s.badgeText}>-{product.discountPercent}%</Text>
-          </View>
-        )}
-        {rank ? (
-          <View style={s.rank}>
-            <Text style={s.rankText}>#{rank} Best seller</Text>
-          </View>
-        ) : null}
-        {soldOut && (
-          <View style={s.soldOverlay}>
-            <Text style={s.soldOverlayText}>Out of stock</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={s.tileBody}>
-        <Text style={s.name} numberOfLines={2}>{product.name}</Text>
-        <Stars rating={product.rating} reviews={product.reviews} />
-      </View>
-      </Pressable>
-
-      <View style={[s.tileBody, s.tileFootWrap]}>
-        <View style={s.tileFoot}>
-          <View style={s.tilePrices}>
-            <Text style={s.price}>{inr(product.price)}</Text>
-            {onSale ? <Text style={s.mrp}>{inr(product.mrp!)}</Text> : null}
-          </View>
-          {!soldOut && (
-            <Pressable
-              onPress={quickAdd}
-              disabled={adding}
-              hitSlop={6}
-              style={s.add}
-              accessibilityRole="button"
-              accessibilityLabel={`Add ${product.name} to cart`}
-            >
-              {adding
-                ? <StripeLoader size="sm" onDark />
-                : <Ionicons name="bag-handle" size={18} color={colors.white} />}
-            </Pressable>
+        <View style={s.well}>
+          <Photo uri={product.image} style={[s.tileImage, { height: Math.round(width * 0.92) }]} />
+          {onSale && <Badge text={`-${product.discountPercent}%`} tone="solidRed" style={s.badge} />}
+          {rank ? <Badge text={`#${rank} Best seller`} tone="ink" style={[s.badge, onSale && s.badgeLow]} /> : null}
+          {soldOut && (
+            <View style={s.soldOverlay}>
+              <Text style={s.soldOverlayText}>Out of stock</Text>
+            </View>
           )}
         </View>
+
+        <View style={s.tileBody}>
+          {/* Always present (blank when unbranded) so prices line up across a rail. */}
+          <Text style={s.brand} numberOfLines={1}>{product.brand || ' '}</Text>
+          <Text style={s.name} numberOfLines={2}>{product.name}</Text>
+          <Rating rating={product.rating} count={product.reviews} compact />
+        </View>
+      </Pressable>
+
+      <View style={s.tileFoot}>
+        <Price price={product.price} mrp={onSale ? product.mrp : null} hideOff size="sm" style={s.tilePrices} />
+        {!soldOut && (
+          <PressScale
+            onPress={quickAdd}
+            disabled={adding}
+            hitSlop={8}
+            scaleTo={0.9}
+            style={s.add}
+            accessibilityLabel={`Add ${product.name} to cart`}
+          >
+            {adding ? <StripeLoader size="sm" onDark /> : <Ionicons name="add" size={20} color={colors.white} />}
+          </PressScale>
+        )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
-const s = StyleSheet.create({
-  pressed: { opacity: 0.92 },
+export default memo(ProductCard);
 
+const s = StyleSheet.create({
   tile: {
     backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    ...shadow.card,
+    ...elevation.e1,
   },
-  tileImageWrap: { backgroundColor: colors.subtle },
+  well: { backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   tileImage: { width: '100%' },
-  tileBody: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: 3 },
-  tileFootWrap: { paddingTop: 0, paddingBottom: spacing.md },
-
-  rank: {
-    position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
-    backgroundColor: colors.ink,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
+  tileBody: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: 4 },
+  tileFoot: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
-  rankText: { fontFamily: font.bold, fontSize: 10, color: colors.white },
+  tilePrices: { flex: 1 },
+
+  badge: { position: 'absolute', top: spacing.sm, left: spacing.sm },
+  badgeLow: { top: spacing.sm + 26 },
 
   soldOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: alpha(colors.white, 0.72),
   },
   soldOverlayText: { fontFamily: font.bold, fontSize: 12, color: colors.red },
 
-  /* Measured off the website: #cc0c39, 11px bold, radius 6, padding 4x8. */
-  badge: {
-    position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
-    backgroundColor: colors.greenSoft,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-  },
-  badgeText: { fontFamily: font.bold, fontSize: 11, color: colors.green },
-
-  tileFoot: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.sm },
-  tilePrices: { flex: 1 },
-  /* The site's green circle, 40x40, bottom-right of the card. */
   add: {
     width: 36,
     height: 36,
     borderRadius: radius.pill,
-    backgroundColor: colors.green,
+    backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -225,19 +186,15 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderRadius: radius.lg,
     padding: spacing.md,
-    overflow: 'hidden',
+    ...elevation.e1,
   },
-  rowImage: { width: 92, height: 92, borderRadius: radius.sm },
-  rowBody: { flex: 1, gap: 3, justifyContent: 'center' },
+  rowImageWrap: { borderRadius: radius.md, overflow: 'hidden' },
+  rowImage: { width: 92, height: 92 },
+  rowBody: { flex: 1, gap: 4, justifyContent: 'center' },
 
-  name: { fontFamily: font.medium, fontSize: 14, lineHeight: 19.25, color: colors.ink },
-  priceLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2, flexWrap: 'wrap' },
-  price: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
-  mrp: { fontFamily: font.regular, fontSize: 12, color: colors.muted, textDecorationLine: 'line-through' },
-  by: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted },
-  soldOut: { fontFamily: font.semibold, fontSize: 11.5, color: colors.red },
+  brand: { fontFamily: font.bold, fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.steel },
+  name: { fontFamily: font.medium, fontSize: 13.5, lineHeight: 18.5, color: colors.ink, minHeight: 37 },
+  soldOut: { fontFamily: font.bold, fontSize: 11.5, color: colors.red },
 });

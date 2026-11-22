@@ -6,22 +6,35 @@
  * resolves the slug to a department and hands over its name and blurb.
  *
  * "offers" is the one special case: Today's Deals is a curated list from
- * /products/offers rather than a category, so it keeps its own simple grid.
+ * /products/offers rather than a category, so it keeps its own simple grid
+ * (same premium cards, skeletons while loading).
  */
 import { useMemo } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCategories, fetchOffers } from '../../src/api/catalogue';
 import ProductCard from '../../src/components/ProductCard';
-import ProductListing from '../../src/components/ProductListing';
-import { Screenful } from '../../src/components/ui';
-import { colors, spacing } from '../../src/theme';
+import ProductListing, { GridSkeleton, useGridColumn } from '../../src/components/ProductListing';
+import { colors, spacing, type } from '../../src/theme';
+import { EmptyState, ErrorState, Overline } from '../../src/ui';
+
+/** Heading for the deals page, in the same shape as a department's. */
+function DealsHead({ count }: { count?: number }) {
+  return (
+    <View style={s.head}>
+      <Overline>Limited time</Overline>
+      <Text style={type.h1}>Today&apos;s deals</Text>
+      {count != null && <Text style={s.count}>{count} offers</Text>}
+    </View>
+  );
+}
 
 export default function CategoryScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const deals = slug === 'offers';
+  const col = useGridColumn();
 
   const categories = useQuery({
     queryKey: ['categories'],
@@ -43,34 +56,37 @@ export default function CategoryScreen() {
     const products = offers.data ?? [];
     return (
       <>
-        <Stack.Screen options={{ title: "Today's deals" }} />
-        {offers.isPending || offers.error ? (
-          <Screenful
-            loading={offers.isPending}
-            error={offers.error ? (offers.error as Error).message : null}
-            onRetry={() => offers.refetch()}
-          />
+        {/* The page shows its own large title; the bar keeps only the back button. */}
+        <Stack.Screen options={{ title: '' }} />
+        {offers.isPending ? (
+          <ScrollView style={s.screen} scrollEnabled={false}>
+            <DealsHead />
+            <GridSkeleton />
+          </ScrollView>
+        ) : offers.error ? (
+          <ErrorState error={offers.error} onRetry={() => offers.refetch()} style={s.screen} />
         ) : products.length === 0 ? (
-          <Screenful
-            emptyIcon="pricetag-outline"
-            emptyTitle="No deals right now"
-            emptyBody="Check back soon — offers change often."
+          <EmptyState
+            icon="pricetag-outline"
+            title="No deals right now"
+            body="Check back soon — offers change often."
             action={{ label: 'Browse the shop', onPress: () => router.push('/(tabs)/shop') }}
+            style={s.screen}
           />
         ) : (
           <FlatList
-            style={{ backgroundColor: colors.bg }}
+            style={s.screen}
             data={products}
             keyExtractor={(p) => p.id}
             numColumns={2}
-            columnWrapperStyle={{ gap: spacing.md, paddingHorizontal: spacing.lg }}
-            contentContainerStyle={{ paddingVertical: spacing.lg, gap: spacing.md }}
+            ListHeaderComponent={<DealsHead count={products.length} />}
+            columnWrapperStyle={s.column}
+            contentContainerStyle={s.content}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <View style={{ flex: 1 }}>
-                <ProductCard product={item} />
-              </View>
-            )}
+            initialNumToRender={6}
+            windowSize={7}
+            removeClippedSubviews
+            renderItem={({ item }) => <ProductCard product={item} width={col} />}
           />
         )}
       </>
@@ -79,8 +95,9 @@ export default function CategoryScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: category?.name ?? 'Shop' }} />
+      <Stack.Screen options={{ title: '' }} />
       <ProductListing
+        overline="Department"
         title={category?.name ?? 'Shop'}
         blurb={category?.description || undefined}
         categorySlug={String(slug)}
@@ -88,3 +105,11 @@ export default function CategoryScreen() {
     </>
   );
 }
+
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg },
+  head: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, gap: 4 },
+  count: { ...type.small },
+  column: { gap: spacing.md, paddingHorizontal: spacing.lg },
+  content: { paddingBottom: spacing.xxl, gap: spacing.md },
+});
