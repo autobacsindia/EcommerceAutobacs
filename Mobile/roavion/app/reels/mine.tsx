@@ -135,7 +135,8 @@ export default function MyReelsScreen() {
       refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.green} colors={[colors.green]} />}
       ListHeaderComponent={
         <View style={s.head}>
-          {reels.length > 0 && (
+          {/* Counts only once every page is loaded, so they are never short. */}
+          {reels.length > 0 && !q.hasNextPage && (
             <View style={s.stats}>
               <View style={s.stat}>
                 <Text style={s.statNum}>{reels.length}</Text>
