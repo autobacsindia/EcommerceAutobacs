@@ -15,6 +15,7 @@ import { slugToSearchWords } from '@/lib/legacySearchRedirect';
 
 export type LegacyVehicle = { slug: string; make?: string; model?: string };
 export type LegacyProduct = { slug: string };
+export type LegacyCategory = { slug: string };
 
 const tokens = (s: string) => slugToSearchWords(s).split(' ').filter(Boolean);
 const slugify = (s: string) => tokens(String(s).replace(/[^a-z0-9]+/gi, '-'));
@@ -72,6 +73,27 @@ export function matchProduct(slug: string, products: LegacyProduct[]): string | 
   return best?.slug ?? null;
 }
 
+/** "dash-cams" and "dash-cam" are the same words for matching. */
+const singular = (w: string) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+
+/**
+ * The category a dead product slug belongs to, judged by name: every word of the
+ * category's slug appears, in order, in the product slug ("70mai-a400-dash-cam"
+ * → "dash-cams"). The most specific (longest) category wins; one-word categories
+ * must be at least 4 letters so "car" or "kit" cannot claim half the catalogue.
+ */
+export function matchCategory(slug: string, categories: LegacyCategory[]): string | null {
+  const words = tokens(slug).map(singular);
+  let best: { slug: string; n: number } | null = null;
+  for (const c of categories) {
+    if (!c?.slug) continue;
+    const cw = tokens(c.slug).map(singular);
+    if (!cw.length || (cw.length === 1 && cw[0].length < 4)) continue;
+    if (containsRun(words, cw) && (!best || cw.length > best.n)) best = { slug: c.slug, n: cw.length };
+  }
+  return best?.slug ?? null;
+}
+
 /**
  * The page a dead slug should permanently redirect to, or null for a 404.
  * `kind` is where the dead URL lived: an old product page tries the product
@@ -80,7 +102,11 @@ export function matchProduct(slug: string, products: LegacyProduct[]): string | 
 export function legacyTarget(
   slug: string,
   kind: 'product' | 'model',
-  { vehicles, products }: { vehicles: LegacyVehicle[]; products: LegacyProduct[] },
+  { vehicles, products, categories = [] }: {
+    vehicles: LegacyVehicle[];
+    products: LegacyProduct[];
+    categories?: LegacyCategory[];
+  },
 ): string | null {
   const vehicle = matchVehicle(slug, vehicles);
   const product = matchProduct(slug, products);
@@ -89,5 +115,8 @@ export function legacyTarget(
   if (kind === 'model') return toVehicle ?? toProduct;
   // A product URL that is nothing but a vehicle's name ("bmw-5-series") is that vehicle.
   if (vehicle && vehicle.covers >= tokens(slug).length) return toVehicle;
-  return toProduct ?? toVehicle;
+  if (toProduct ?? toVehicle) return toProduct ?? toVehicle;
+  // Last resort for an old product URL: the category it was in, by name.
+  const category = matchCategory(slug, categories);
+  return category ? `/categories/${category}` : null;
 }
