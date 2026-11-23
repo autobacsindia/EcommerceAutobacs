@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import type { SlipRead } from './slipReader';
 import { SlipSources } from './SlipReadStatus';
 import Link from 'next/link';
+import EntityLink from '@/components/ui/EntityLink';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, Loader2, Package, X } from 'lucide-react';
@@ -300,7 +301,11 @@ export default function BankTransferDetails({ id, onClose }: { id: string; onClo
       <div role="dialog" aria-modal="true" aria-label="Bank transfer details" className="flex w-full flex-col bg-white sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
         <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-4">
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-gray-900">{d ? `${d.orderNumber || 'Bank transfer'} · ${money(d.amount)}` : 'Bank transfer details'}</h2>
+            <h2 className="text-lg font-bold text-gray-900">
+              {d ? (
+                <>{d.orderNumber ? <EntityLink type="order" id={d.orderId} value={d.orderNumber} label="Order number" /> : 'Bank transfer'} · {money(d.amount)}</>
+              ) : 'Bank transfer details'}
+            </h2>
             {d && <span className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${BANK_TRANSFER_BADGE[d.status]}`}>{d.statusLabel}</span>}
           </div>
           <button ref={closeRef} type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>

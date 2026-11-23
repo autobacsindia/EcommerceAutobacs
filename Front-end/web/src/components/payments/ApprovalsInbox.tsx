@@ -5,7 +5,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { formatDateIST } from '@/lib/datetime';
-import CopyId from '@/components/ui/CopyId';
+import EntityLink from '@/components/ui/EntityLink';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import { EntryRow } from './SupplierCredit';
 import { creditKeys, getPendingCredit } from './credit';
@@ -108,7 +108,7 @@ function PaymentRow({ r, onOpen }: { r: PaymentRequest; onOpen: () => void }) {
           </p>
           <p className="text-xs text-gray-600">
             Raised by {r.requestedBy} ({r.teamLabel}) on {formatDateIST(r.createdAt)}
-            {r.order?.number && <> · order {r.order.number} <CopyId value={r.order.number} label="Order number" /></>}
+            {r.order?.number && <> · order <EntityLink type="order" id={r.order.id} value={r.order.number} label="Order number" /></>}
             {r.itemNames?.length ? ` · ${r.itemNames.join(', ')}` : ''}
           </p>
           {r.description && <p className="text-sm text-gray-700">{r.description}</p>}
@@ -161,7 +161,7 @@ function ChangeRow({ c }: { c: SupplierChangeRow }) {
             <span>{c.to}</span>
           </p>
           <p className="text-xs text-gray-600">
-            Order {c.orderNumber} <CopyId value={c.orderNumber} label="Order number" /> · {c.itemName}{c.what ? ` (${c.what})` : ''}
+            Order <EntityLink type="order" id={c.orderId} value={c.orderNumber} label="Order number" /> · {c.itemName}{c.what ? ` (${c.what})` : ''}
           </p>
           <p className="text-xs text-gray-600">
             Changed by {c.changedByName}{c.changedAt ? ` on ${formatDateIST(c.changedAt)}` : ''}

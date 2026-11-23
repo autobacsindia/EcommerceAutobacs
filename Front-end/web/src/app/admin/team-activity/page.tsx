@@ -7,6 +7,7 @@ import apiClient from '@/lib/api-client';
 import { teamActivityKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { duration } from '@/lib/teamActivity';
+import EntityLink from '@/components/ui/EntityLink';
 
 /**
  * Team activity — who is holding what, and how long each step took.
@@ -149,7 +150,7 @@ function WaitingTab({ onOpen }: { onOpen: (id: string) => void }) {
               {data.rows.map((r) => (
                 <tr key={`${r.orderId}-${r.stage}`} className={r.overdue ? 'bg-red-50/60' : ''}>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{r.orderNumber}</p>
+                    <p className="font-medium text-gray-900"><EntityLink type="order" id={r.orderId} value={r.orderNumber} label="Order number" /></p>
                     <p className="text-xs text-gray-500">{r.customer} · {rupees(r.totalAmount)}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{r.stageLabel}</td>

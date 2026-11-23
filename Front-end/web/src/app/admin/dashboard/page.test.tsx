@@ -36,6 +36,9 @@ jest.mock('lucide-react', () => ({
   IndianRupee: () => <span>IndianRupeeIcon</span>,
   Inbox: () => <span>InboxIcon</span>,
   ReceiptText: () => <span>ReceiptTextIcon</span>,
+  // The copy button beside each order number (CopyId).
+  Copy: () => <span>CopyIcon</span>,
+  Check: () => <span>CheckIcon</span>,
 }));
 
 describe('AdminDashboardPage', () => {

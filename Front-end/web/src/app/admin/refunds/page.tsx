@@ -261,7 +261,7 @@ function AdminRefunds() {
 
       <section aria-label="Extra charges to refund" className="mb-6">
         <h2 className="mb-2 text-lg font-semibold">Extra charges to refund</h2>
-        <ExtraChargesList fixedTab="refund_due" orderBase="/admin/orders" />
+        <ExtraChargesList fixedTab="refund_due" />
       </section>
 
       <div role="search" aria-label="Search and filter refunds" className="mb-6 space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">

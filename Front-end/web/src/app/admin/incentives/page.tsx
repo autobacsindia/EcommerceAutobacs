@@ -9,6 +9,7 @@ import { useIncentiveMonth, useIncentiveRows } from '@/hooks/queries/useIncentiv
 import { currentMonthIST, shiftMonth, monthLabel, points, rupees, describeRow, type Statement } from '@/lib/incentives';
 import IncentiveRulesForm from './IncentiveRulesForm';
 import OrderFlagBox from './OrderFlagBox';
+import EntityLink from '@/components/ui/EntityLink';
 
 /**
  * Roav Points — month close (lock → review → approve → CSV for payroll), the
@@ -200,7 +201,7 @@ function StatementOrders({ earnerKey, month }: { earnerKey: string; month: strin
         <tbody>
           {data.rows.map((r) => (
             <tr key={r._id} className="border-t border-gray-200">
-              <td className="py-1 pr-3 font-mono">{r.orderNumber}</td>
+              <td className="py-1 pr-3 font-mono"><EntityLink type="order" value={r.orderNumber} label="Order number" /></td>
               <td className="py-1 pr-3">{describeRow(r)}</td>
               <td className="py-1 pr-3 text-right">{r.inputs?.valueExGst != null ? rupees(r.inputs.valueExGst) : ''}</td>
               <td className="py-1 pr-3 text-right">{r.inputs?.discountPercent != null ? `${r.inputs.discountPercent.toFixed(2)}% (keeps ${Math.round((r.inputs.discountKeep ?? 1) * 100)}%)` : ''}</td>

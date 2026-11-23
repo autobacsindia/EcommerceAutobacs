@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSSE } from '@/hooks/useSSE';
 import { useCurrency } from '@/context/CurrencyContext';
+import EntityLink from '@/components/ui/EntityLink';
 
 // Types
 interface HealthMetrics {
@@ -454,7 +455,7 @@ export default function AdminDashboardPage() {
               {analytics.orders.recentOrders.map((order) => (
                 <div key={order.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
                   <div>
-                    <p className="font-medium">{order.orderNumber}</p>
+                    <p className="font-medium"><EntityLink type="order" id={order.id} value={order.orderNumber} label="Order number" /></p>
                     <p className="text-sm text-gray-600">{order.customerName}</p>
                   </div>
                   <div className="text-right">

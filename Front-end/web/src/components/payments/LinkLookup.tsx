@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import EntityLink from '@/components/ui/EntityLink';
+import CopyId from '@/components/ui/CopyId';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Loader2, Search } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -159,7 +161,7 @@ function ProjectCard({ p }: { p: ProjectInfo }) {
   return (
     <section aria-label="Project" className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-xs text-gray-700">{p.code}</span>
+        <span className="inline-flex items-center rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-xs text-gray-700">{p.code}{p.code && <CopyId value={p.code} label="Project ID" />}</span>
         <h2 className="text-lg font-semibold text-gray-900">{p.name}</h2>
         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{p.archivedAt ? 'Deleted' : p.statusLabel}</span>
       </div>
@@ -175,7 +177,7 @@ function OrderCard({ o }: { o: OrderRow }) {
   return (
     <div className="rounded-lg border border-gray-100 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/admin/orders/${encodeURIComponent(o.id)}`} className="font-semibold text-blue-700 hover:underline">{o.number}</Link>
+        <EntityLink type="order" id={o.id} value={o.number} label="Order number" linkClassName="font-semibold" />
         <span className="text-gray-700">{o.customer}{o.city ? `, ${o.city}` : ''}</span>
         {o.total != null && <span className="text-gray-700">· {rupees(o.total)}</span>}
         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">{words(o.status)} · payment {o.paymentStatus}</span>
@@ -216,7 +218,7 @@ function TaskList({ q, section, title, first }: { q: string; section: 'open' | '
       {rows.length ? (
         <ul className="divide-y">{rows.map((t) => (
           <li key={t.id} className="flex flex-wrap items-center gap-2 py-1.5 text-sm">
-            <Link href={`/admin/tasks?task=${encodeURIComponent(t.id)}`} className="font-mono text-xs text-blue-700 hover:underline">{t.code}</Link>
+            <EntityLink type="task" id={t.id} value={t.code} label="Task ID" linkClassName="font-mono text-xs" />
             <span className="min-w-0 flex-1 truncate text-gray-900">{t.title}</span>
             <span className="text-xs text-gray-600">{words(t.status)}{t.dueOn ? ` · due ${formatDateIST(t.dueOn)}` : ''}{t.assignees.length ? ` · ${t.assignees.join(', ')}` : ''}</span>
           </li>

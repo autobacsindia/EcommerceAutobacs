@@ -1,6 +1,6 @@
 'use client';
 
-import CopyId from '@/components/ui/CopyId';
+import EntityLink from '@/components/ui/EntityLink';
 import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronLeft, Loader2, Paperclip } from 'lucide-react';
@@ -118,7 +118,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                     <td className="p-3"><span className="font-medium text-gray-900">{r.number}</span><span className="block text-xs text-gray-500">{formatDateIST(r.createdAt)} · {r.requestedBy}</span>
                       {r.bankNotice && <span className="mt-1 flex items-center gap-1 text-xs text-amber-700"><AlertTriangle className="h-3 w-3" /> Bank details changed recently</span>}</td>
                     <td className="p-3">
-                      {r.order?.number && <span className="inline-flex items-center gap-1">{r.order.number}<CopyId value={r.order.number} label="Order number" /></span>}
+                      {r.order?.number && <EntityLink type="order" id={r.order.id} value={r.order.number} label="Order number" />}
                       {r.order?.number ? ' · ' : ''}{r.itemNames.join(', ')}{r.deal && <DealLine d={r.deal} />}
                     </td>
                     <td className="p-3">{r.customer?.name}</td>

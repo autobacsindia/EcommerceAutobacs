@@ -19,6 +19,7 @@ import { useListParams } from '@/lib/hooks/useListParams';
 import { ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField } from '@/components/panel/ListControls';
 import ReturnPanel from './ReturnPanel';
 import { FAULT_LABEL, FAULT_TONE, ORIGIN_OPTIONS, REASON_OPTIONS, SETTLEMENT_LABEL, tabsFor, type ReturnQueue, type ReturnRow } from './types';
+import EntityLink from '@/components/ui/EntityLink';
 
 type Summary = { count: number; capped: boolean; total?: number | null };
 type Page = { success: boolean; returns: ReturnRow[]; nextCursor: string | null; summary?: Summary; searchCapped?: boolean };
@@ -69,7 +70,7 @@ function Row({ r, showRefund }: { r: ReturnRow; showRefund: boolean }) {
         className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 p-4 text-left">
         <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
           <p className="text-sm font-semibold text-gray-900">
-            {r.customer || 'Customer'} <span className="font-normal text-gray-500">· return {r.ref}{r.orderNumber ? ` · order ${r.orderNumber}` : ''}</span>
+            {r.customer || 'Customer'} <span className="font-normal text-gray-500">· return {r.ref}{r.orderNumber && <> · order <EntityLink type="order" id={r.orderId} value={r.orderNumber} label="Order number" /></>}</span>
           </p>
           <p className="text-xs text-gray-500">
             Raised {formatDateTimeIST(r.createdAt)}{r.ageDays ? ` · ${r.ageDays} day${r.ageDays > 1 ? 's' : ''} ago` : ''}{r.origin === 'customer' ? ' · website' : ''}
