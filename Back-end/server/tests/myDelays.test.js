@@ -168,6 +168,8 @@ describe('who owns a step', () => {
     const noEta = items.find((i) => i.key === `parcel:${id}:${s2}`);
     expect(withEta).toMatchObject({ kind: 'parcel', bucket: 'late', owner: { name: 'Ops', via: 'moved' }, flags: { noEta: false } });
     expect(noEta).toMatchObject({ owner: { name: 'Packer' }, flags: { noEta: true } });
+    // The courier is stored as carrier.name — the title must show it (regression).
+    expect(noEta.title).toMatch(/Parcel \(Blue Dart BD2\)$/);
   });
 });
 

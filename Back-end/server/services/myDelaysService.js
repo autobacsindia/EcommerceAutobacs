@@ -238,7 +238,8 @@ export function orderSteps(order, { now, office }) {
       candidate: p.eta?.setBy ? idOf(p.eta.setBy) : (p.createdBy ? idOf(p.createdBy) : null),
       stageTeam: TRANSIT_TEAM,
       bucket,
-      title: `${number} · Parcel${p.courierName ? ` (${p.courierName}${p.trackingNumber ? ` ${p.trackingNumber}` : ''})` : ''}`,
+      // The courier is `carrier.name` (models/Order.js shipments[]); older parcels may have none.
+      title: `${number} · Parcel${[p.carrier?.name, p.trackingNumber].filter(Boolean).length ? ` (${[p.carrier?.name, p.trackingNumber].filter(Boolean).join(' ')})` : ''}`,
       subtitle: customer,
       stage: STAGE.SHIPPED,
       stageLabel: STAGE_LABELS[STAGE.SHIPPED],

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck } from 'lucide-react';
+import { AlarmClock, BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -43,6 +43,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
     { href: '/team/chat', label: 'Team chat', icon: MessagesSquare },
     // Every team: heads give tasks to their team, members keep their own.
     { href: '/team/tasks', label: 'Tasks', icon: ListTodo },
+    // Every team: what each person owns that is late, due today or pending.
+    { href: '/team/delays', label: 'My delays', icon: AlarmClock },
     // Every team: training that heads and admins post.
     { href: '/team/lessons', label: 'Lessons', icon: GraduationCap },
     { href: '/team/training', label: 'Training', icon: BookOpenCheck },

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpenCheck,
+import { AlarmClock, BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ScanSearch, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
@@ -130,6 +130,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       // The printable slips a project offers in "Create slip" (delivery slip, driver authorisation…).
       { href: '/admin/slip-templates', label: 'Slip templates', icon: Printer },
       { href: '/admin/team-activity', label: 'Team activity', icon: Timer },
+      { href: '/admin/delays', label: 'Delays by person', icon: AlarmClock },
       { href: '/admin/pop-ups', label: 'Pop-up check', icon: BellRing },
       { href: '/admin/payments', label: 'Payments', icon: CreditCard },
       // What accounts decides — payments, supplier refunds / credit, supplier changes — across orders.
