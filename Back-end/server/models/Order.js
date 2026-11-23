@@ -1088,6 +1088,10 @@ const OrderSchema = new mongoose.Schema({
       eta.day it explains: a new date makes it stale (currentOverdueReason), so
       a parcel overdue again needs a fresh reason. Every save is kept, newest
       MAX_OVERDUE_REASON_HISTORY, in `overdueReasonHistory`.
+      `attachment` (optional): ONE private file (photo / screenshot / PDF) proving
+      the reason, stored like parcel proofs (storage/privateUploads.js). The
+      history entry carries the same ref, so a changed reason never loses an
+      older file; files are never deleted. `requestId` makes a retried save a no-op.
     */
     overdueReason: {
       code: String,
@@ -1096,7 +1100,17 @@ const OrderSchema = new mongoose.Schema({
       by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       byName: String,
       byTeam: String,
-      at: Date
+      at: Date,
+      attachment: { type: new mongoose.Schema({
+        key: String,
+        provider: String,
+        url: String, // Cloudinary only (private); R2 is read by key
+        name: String,
+        mime: String,
+        size: Number,
+        uploadedAt: Date,
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+      }, { _id: false }), default: undefined }
     },
     overdueReasonHistory: [{
       code: { type: String, required: true },
@@ -1105,6 +1119,17 @@ const OrderSchema = new mongoose.Schema({
       by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       byName: String,
       at: { type: Date, required: true },
+      requestId: String,
+      attachment: { type: new mongoose.Schema({
+        key: String,
+        provider: String,
+        url: String, // Cloudinary only (private); R2 is read by key
+        name: String,
+        mime: String,
+        size: Number,
+        uploadedAt: Date,
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+      }, { _id: false }), default: undefined },
       _id: false
     }]
   }],

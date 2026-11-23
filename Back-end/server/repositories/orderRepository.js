@@ -1600,9 +1600,11 @@ class OrderRepository extends BaseRepository {
    * delivery marked meanwhile is not explained by a stale reason. null when the
    * parcel no longer matches.
    */
-  async setShipmentOverdueReasonIf(orderId, shipmentId, etaDay, { reason, change, event, maxHistory }) {
+  async setShipmentOverdueReasonIf(orderId, shipmentId, etaDay, { reason, change, event, maxHistory, requestId = null }) {
+    // `requestId`: the same save twice (double-click, retry) matches nothing the second time.
+    const once = requestId ? { 'overdueReasonHistory.requestId': { $ne: requestId } } : {};
     return Order.findOneAndUpdate(
-      { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, status: 'shipped', 'eta.day': etaDay } } },
+      { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, status: 'shipped', 'eta.day': etaDay, ...once } } },
       {
         $set: { 'shipments.$.overdueReason': reason },
         $push: {
