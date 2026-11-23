@@ -8,7 +8,7 @@ export function isHelpBotSuppressed(pathname: string | null): boolean {
   const p = pathname.replace(/\/+$/, '') || '/';
   return (
     p.startsWith('/admin') ||
-    p === '/team' || p.startsWith('/team/') ||
+    p === '/team' || p.startsWith('/team/') || p === '/hr' || p.startsWith('/hr/') ||
     p === '/cart' ||                  // nor with the cart's own buttons
     p.startsWith('/checkout') ||      // nothing competes with Pay
     p.startsWith('/staff-invite') ||

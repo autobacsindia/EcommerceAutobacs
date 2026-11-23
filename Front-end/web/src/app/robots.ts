@@ -38,6 +38,8 @@ const DISALLOW = [
   // Internal staff panel and its invite-redemption page.
   '/team',
   '/staff-invite',
+  // HR panel: employee records, attendance, leave and payroll.
+  '/hr',
   // Private campaign landing pages — reached only by the QR printed on a
   // thank-you card. Never indexed, never in the sitemap.
   '/festive',
