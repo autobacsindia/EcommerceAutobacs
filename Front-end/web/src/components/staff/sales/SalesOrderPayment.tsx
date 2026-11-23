@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import EntityLink from '@/components/ui/EntityLink';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Banknote, FileText, Link2, Loader2, Plus, ReceiptText, Split, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -198,7 +199,7 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
         {o.quotation && (
           <p className="mt-3 text-xs text-gray-500">
             From quotation{' '}
-            <Link href={`/team/sales/quotations/${o.quotation.id}`} className="font-medium text-blue-700 hover:text-blue-900">{o.quotation.number}</Link>
+            <EntityLink type="quotation" id={o.quotation.id} value={o.quotation.number} label="Quotation number" linkClassName="font-medium" />
             {open && !anyPaid && !transferWaiting && ' — to change the items, price or discount, open it and choose Edit quotation.'}
           </p>
         )}

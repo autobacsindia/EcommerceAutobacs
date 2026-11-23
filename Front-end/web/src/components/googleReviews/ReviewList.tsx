@@ -9,6 +9,7 @@ import {
   type GoogleReview, type ReviewFilter,
 } from '@/lib/googleReviews';
 import { monthLabel } from '@/lib/incentives';
+import EntityLink from '@/components/ui/EntityLink';
 
 const TABS: { key: ReviewFilter; label: string }[] = [
   { key: 'pending', label: 'Pending' },
@@ -96,7 +97,7 @@ function ReviewRow({ r, mode, onOpen }: { r: GoogleReview; mode: 'mine' | 'queue
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={r.status} />
             <span className="truncate font-medium text-gray-900">{who}</span>
-            {r.orderNumber && <span className="text-xs text-gray-500">Order {r.orderNumber}</span>}
+            {r.orderNumber && <span className="text-xs text-gray-500">Order <EntityLink type="order" id={r.orderId} value={r.orderNumber} label="Order number" /></span>}
           </div>
           <p className="mt-1 text-xs text-gray-500">
             {mode === 'queue' && <>From <b className="font-medium text-gray-700">{r.submittedBy.name}</b> · </>}
