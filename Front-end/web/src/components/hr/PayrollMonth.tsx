@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Lock, Send, ShieldCheck, RefreshCw } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/context/AuthContext';
 import { hrApi } from '@/lib/hr/api';
 import { hrKeys } from '@/lib/hr/keys';
 import { describeHrError } from '@/lib/hr/errors';
@@ -118,9 +117,12 @@ function RunActions({ month, run, isAdmin }: { month: string; run: PayrollRun | 
   );
 }
 
-export default function PayrollMonth() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+/**
+ * `isAdmin` comes from the server layout's session check (not the client auth
+ * context, which added ~85 kB to this page). It only decides whether the Approve
+ * button shows; the API refuses approval from anyone but admin regardless.
+ */
+export default function PayrollMonth({ isAdmin = false }: { isAdmin?: boolean }) {
   const [month, setMonth] = useState(() => currentMonthIST());
   const list = useHrList<PayslipRow, PayrollMonthData>(hrKeys.payrollMonth(month), (cursor) => hrApi.payrollMonth(month, cursor));
   const run = list.first?.run ?? null;

@@ -16,8 +16,6 @@ jest.mock('@/lib/hr/api', () => ({
     preparePayroll: jest.fn(), recomputePayroll: jest.fn(), unlockPayroll: jest.fn(), createPayouts: jest.fn(),
   },
 }));
-let role = 'staff';
-jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { role } }) }));
 
 const run = (over: Record<string, unknown> = {}) => ({
   month: '2026-11', status: 'draft', employeeCount: 1, rev: 2, inputsFingerprint: 'fp1',
@@ -33,7 +31,7 @@ const wrap = (ui: ReactNode) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>{ui}</QueryClientProvider>,
 );
 
-beforeEach(() => { payrollMonth.mockReset(); lockPayroll.mockReset(); approvePayroll.mockReset(); role = 'staff'; });
+beforeEach(() => { payrollMonth.mockReset(); lockPayroll.mockReset(); approvePayroll.mockReset(); });
 
 it('shows the server totals and per-person figures as given', async () => {
   payrollMonth.mockResolvedValue({ run: run(), items: [slip], nextCursor: null });
@@ -61,9 +59,8 @@ it('only admin gets the approve button on a locked month', async () => {
   expect(screen.queryByRole('button', { name: /^approve$/i })).toBeNull();
   unmount();
 
-  role = 'admin';
   approvePayroll.mockReturnValue(new Promise(() => {}));
-  wrap(<PayrollMonth />);
+  wrap(<PayrollMonth isAdmin />);
   fireEvent.click(await screen.findByRole('button', { name: /^approve$/i }));
   fireEvent.click(screen.getByRole('button', { name: /yes, approve/i }));
   await waitFor(() => expect(approvePayroll).toHaveBeenCalledWith(expect.any(String), 2, 'fp1'));
