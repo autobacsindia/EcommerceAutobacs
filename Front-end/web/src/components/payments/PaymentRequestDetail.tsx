@@ -1,6 +1,7 @@
 'use client';
 
 import CopyId from '@/components/ui/CopyId';
+import EntityLink from '@/components/ui/EntityLink';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
@@ -80,7 +81,7 @@ function OrderLinkRow({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Payme
         {!picking && (
           <div className="flex flex-wrap items-center gap-2">
             {r.order
-              ? <span className="inline-flex items-center gap-1 font-medium">{r.order.number}<CopyId value={r.order.number} label="Order number" /></span>
+              ? <EntityLink type="order" id={r.order.id} value={r.order.number} label="Order number" className="font-medium" />
               : <span className="text-gray-500">Not linked to an order</span>}
             {may && (
               <button type="button" onClick={() => setPicking(true)} className={`${small} text-blue-700`}>
@@ -168,7 +169,7 @@ function ProjectLinkRows({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Pa
         <dt className="text-gray-500">Project</dt>
         <dd className="flex flex-wrap items-center gap-2 text-gray-900">
           {r.project
-            ? <span className="inline-flex items-center gap-1"><span className="font-mono font-medium">{r.project.code}</span> {r.project.name}<CopyId value={r.project.code} label="Project ID" /></span>
+            ? <EntityLink type="project" id={r.project.id} value={r.project.code} label="Project ID"><span className="font-mono font-medium">{r.project.code}</span> {r.project.name}</EntityLink>
             : <span className="text-gray-500">Not linked to a project</span>}
           {may && (
             <button type="button" onClick={() => setEditing(true)}
@@ -178,7 +179,14 @@ function ProjectLinkRows({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Pa
           )}
         </dd>
       </div>
-      {r.task && <Row k="Task" v={`${r.task.code}${r.task.title ? ` ${r.task.title}` : ''}`} copy="Task ID" />}
+      {r.task && (
+        <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+          <dt className="text-gray-500">Task</dt>
+          <dd className="break-words text-gray-900">
+            <EntityLink type="task" id={r.task.id} value={r.task.code} label="Task ID">{r.task.code}{r.task.title ? ` ${r.task.title}` : ''}</EntityLink>
+          </dd>
+        </div>
+      )}
       {r.reference && <Row k="Other ID" v={r.reference} copy="Other ID" />}
     </>
   );
@@ -305,7 +313,12 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                   if (was) qc.invalidateQueries({ queryKey: paymentKeys.forOrder(was) });
                   done(next);
                 }} />
-              ) : <Row k="Order" v={r.order?.number} copy="Order number" />}
+              ) : r.order && (
+                <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+                  <dt className="text-gray-500">Order</dt>
+                  <dd className="text-gray-900"><EntityLink type="order" id={r.order.id} value={r.order.number} label="Order number" /></dd>
+                </div>
+              )}
               <ProjectLinkRows key={`${r.id}-${r.project?.code ?? ''}-${r.task?.code ?? ''}-${r.reference ?? ''}`} r={r} onSaved={done} />
               <Row k="Items" v={r.itemNames.join(', ')} />
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.alternatePhone && `Alt: ${r.customer.alternatePhone}`, r.customer.city].filter(Boolean).join(' · ') : null} />

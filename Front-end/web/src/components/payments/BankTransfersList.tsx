@@ -12,6 +12,7 @@ import {
   ListAmountRange, ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
 } from '@/components/panel/ListControls';
 import BankTransferDetails, { BANK_TRANSFER_BADGE, type BankTransferStatus } from './BankTransferDetails';
+import EntityLink from '@/components/ui/EntityLink';
 
 export { transferFileHref, type BankTransferStatus } from './BankTransferDetails';
 
@@ -114,7 +115,7 @@ function TransferCard({ t, onOpen }: { t: BankTransfer; onOpen: (id: string) => 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900">
-            {t.orderNumber} · {rupees(t.amount)}
+            <EntityLink type="order" id={t.orderId} value={t.orderNumber} label="Order number" /> · {rupees(t.amount)}
             {t.extraChargeId && <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">Extra charge</span>}
           </p>
           <p className="text-sm text-gray-600">

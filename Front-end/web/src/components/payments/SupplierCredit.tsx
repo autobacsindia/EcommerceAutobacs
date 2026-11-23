@@ -1,6 +1,6 @@
 'use client';
 
-import CopyId from '@/components/ui/CopyId';
+import EntityLink from '@/components/ui/EntityLink';
 import { useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Loader2 } from 'lucide-react';
@@ -401,14 +401,13 @@ export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupp
           <p className="flex flex-wrap items-center gap-x-1 text-xs text-gray-600">
             {[
               e.paymentRequest && `payment ${e.paymentRequest.number}`,
-              e.order?.number && `order ${e.order.number}`,
               e.link && `about payment ${e.link.paymentRequest.number}`,
               e.link?.order?.number && `order ${e.link.order.number}`,
               e.date && `${e.kind === 'repaid' ? 'repaid' : 'dated'} ${day(e.date)}`,
               e.methodLabel && `by ${e.methodLabel}`,
               e.reference && `ref ${e.reference}`,
             ].filter(Boolean).join(' · ')}
-            {e.order?.number && <CopyId value={e.order.number} label="Order number" />}
+            {e.order?.number && <> · order <EntityLink type="order" id={e.order.id} value={e.order.number} label="Order number" /></>}
             {(e.files || []).map((f) => (
               <a key={f.id} href={creditFileHref(e.id, f.id)} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-700 underline">Proof</a>
             ))}
