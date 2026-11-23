@@ -62,6 +62,7 @@ import analyticsRoutes from './analytics.js';
 import leadRoutes from './leads.js';
 import salesRepRoutes from './salesReps.js';
 import staffRoutes from './staff.js';
+import hrRoutes from './hr/index.js';
 import chatRoutes from './chat.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
@@ -197,6 +198,9 @@ apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
 // Staff panel (/team): invite redemption is public; everything else is active staff
 // or admin, scoped per team inside staffService. Limiters are applied per route.
 apiRouter.use('/staff', staffRoutes);
+// HR system (docs/ADR-hr-system.md): employee profiles, attendance, leave, payroll.
+// protect + per-user limiter inside; role checks on every route (middleware/hrAuth.js).
+apiRouter.use('/hr', hrRoutes);
 // Payment-slip reader: suggests UTR / date / amount from an attached slip (staff + admin).
 apiRouter.use('/slip-reader', slipReaderRoutes);
 // Team chat: admins + active staff only (never customers). Rate limit is applied
