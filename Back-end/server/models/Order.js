@@ -1040,6 +1040,23 @@ const OrderSchema = new mongoose.Schema({
     estimatedDelivery: Date,
     shippedAt: Date,
     deliveredAt: Date,
+    /*
+      What the courier's own tracking said, read by services/courier/courierSyncService.js.
+      STAFF ONLY, written by the sync and nothing else. `lastStatus` is the normalised
+      courier state (in_transit | out_for_delivery | delivered | failed | unknown);
+      `lastScanAt` the courier's newest scan; `noMovementSince` is set while no scan has
+      come for COURIER_SYNC_NO_MOVEMENT_HOURS (cleared when one does).
+      `deliveredByCourierAt` is the courier's delivery time when the SYNC marked the
+      parcel delivered — it doubles as a once-only claim: if staff undo that delivery,
+      the sync never marks this parcel delivered again (a person decided otherwise).
+    */
+    courierSync: {
+      lastCheckedAt: Date,
+      lastScanAt: Date,
+      lastStatus: String,
+      noMovementSince: Date,
+      deliveredByCourierAt: Date
+    },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     notes: String,
     /*

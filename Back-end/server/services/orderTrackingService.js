@@ -814,6 +814,7 @@ export default orderTrackingService;
 export {
   OrderTrackingService,
   CARRIERS,
+  carrierByName,
   OTHER_CARRIER_CODE,
   MAX_CUSTOM_CARRIER_NAME,
   MAX_CUSTOM_CARRIER_URL,
