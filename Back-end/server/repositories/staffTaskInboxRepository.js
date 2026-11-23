@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
-import StaffTaskInbox, { INBOX_STATES, PROJECT_INBOX_KINDS } from '../models/StaffTaskInbox.js';
+import StaffTaskInbox, {
+  INBOX_STATES, PROJECT_INBOX_KINDS, FOLLOWUP_INBOX_KINDS, ALERT_STATE,
+} from '../models/StaffTaskInbox.js';
 
-export { PROJECT_INBOX_KINDS };
+export { PROJECT_INBOX_KINDS, FOLLOWUP_INBOX_KINDS };
 import StaffTask from '../models/StaffTask.js';
 
 /** The unread count stops here; the badge shows "99+". */
@@ -59,6 +61,28 @@ const staffTaskInboxRepository = {
     _id: { $gt: mongoose.Types.ObjectId.createFromTime(Math.floor(since.getTime() / 1000)) },
     kind: { $in: kinds },
   }).sort({ _id: -1 }).limit(limit).select('kind task project number title by byName text createdAt').lean(),
+
+  /**
+   * The newest order follow-up pop-up lines (state `alert`) written after `since`,
+   * at most `limit` — one range on staff_task_inbox_list, like recentUnread.
+   */
+  recentFollowUpAlerts: (user, since, limit) => StaffTaskInbox.find({
+    user,
+    state: ALERT_STATE,
+    _id: { $gt: mongoose.Types.ObjectId.createFromTime(Math.floor(since.getTime() / 1000)) },
+  }).sort({ _id: -1 }).limit(limit).select('kind order title byName text createdAt').lean(),
+
+  /**
+   * Take follow-up pop-up lines off the panel once their step has moved on
+   * (`keys` for `users`, one range per user on staff_task_inbox_key).
+   */
+  clearAlertKeys: async (users, keys) => {
+    if (!users.length || !keys.length) return 0;
+    return (await StaffTaskInbox.updateMany(
+      { user: { $in: users }, key: { $in: keys }, state: ALERT_STATE },
+      { $set: { state: 'cleared' } },
+    )).modifiedCount;
+  },
 
   /** Unread rows, counted up to `cap` — the badge says "99+" past that. */
   countUnread: (user, cap) => StaffTaskInbox.countDocuments({ user, state: 'unread' }, { limit: cap }),
