@@ -159,7 +159,12 @@ export async function createOnnxEngine({ modelDir = process.env.HR_FACE_MODEL_DI
     const bytes = await fs.readFile(path.join(modelDir, file)).catch(() => {
       throw new Error(`Face model ${file} is missing in ${modelDir}. Run: node scripts/fetch-face-models.js`);
     });
-    return ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+    // logSeverityLevel 3 (error): the opencv_zoo exports list their weights as graph
+    // inputs, so the default level prints ~170 warning lines per process start
+    // (measured), which would bury real errors in Railway logs. Also 242 → 182 ms load.
+    return ort.InferenceSession.create(bytes, {
+      executionProviders: ['wasm'], graphOptimizationLevel: 'all', logSeverityLevel: 3,
+    });
   };
   const detector = await load(DETECTOR_FILE);
   const recogniser = await load(RECOGNISER_FILE);
