@@ -2,118 +2,182 @@
  * Mock reels source — ONLY used when EXPO_PUBLIC_REELS_MOCK=1. It answers with
  * the server's exact JSON (contract 2026-11-18: wrapped `{ success, ... }`,
  * cursor pagination, limit), so switching the flag off changes nothing on screen.
- * A few reels show each edge case by eye: festival price, backorder, out of
- * stock, a product with variants, a team upload, and a null shareUrl.
  *
- * Videos are Cloudinary's public demo clips cropped to 9:16 — the same CDN and
- * URL style the real backend will return. Products are REAL catalogue products
- * read from the live API, so Add to cart / Buy now exercise the genuine cart
- * (a guest cart only; nothing here creates an order or payment).
+ * Demo content for presentations: each reel pairs a car clip with a REAL live
+ * catalogue product that matches it, read by slug from the live API at runtime,
+ * so price, sale price, stock and variants are exactly what the shop shows. The
+ * edge cases come from the real products themselves (out of stock, backorder,
+ * variants, a live sale), plus a team upload and one null shareUrl. There is no
+ * festival price: none is live, and the demo does not invent one.
+ *
+ * Videos stream from Pexels (free licence, commercial use, no attribution
+ * needed) at 720x1280 or smaller; nothing is bundled in the app. Add to cart /
+ * Buy now use the genuine guest cart; nothing here creates an order or payment.
  */
-import { fetchProducts } from './catalogue';
+import { fetchProduct, type Product } from './catalogue';
 import type { Reel, ReelPage, ReelProduct, UploadTarget } from './reels';
 
 type Ok<T> = { success: true } & T;
 
-const CLIP = (name: string) => ({
-  mp4Url: `https://res.cloudinary.com/demo/video/upload/c_fill,h_1280,w_720,q_auto/${name}.mp4`,
-  posterUrl: `https://res.cloudinary.com/demo/video/upload/c_fill,h_1280,w_720,q_auto,so_0/${name}.jpg`,
+const pexels = (videoId: number, file: string, poster: string) => ({
+  mp4Url: `https://videos.pexels.com/video-files/${videoId}/${file}`,
+  posterUrl: `https://images.pexels.com/videos/${videoId}/${poster}?auto=compress&cs=tinysrgb&w=720`,
 });
 
-const CLIPS = ['ski_jump', 'dog', 'kitten_fighting', 'sea_turtle', 'elephants', 'snow_horses'].map(CLIP);
+const TEAM: Reel['creator'] = { id: null, name: 'Autobacs India', avatarUrl: null };
+const creator = (id: string, name: string): Reel['creator'] => ({ id, name, avatarUrl: null });
 
-const CREATORS: Reel['creator'][] = [
-  { id: 'c1', name: 'Arjun Drives', avatarUrl: null },
-  { id: 'c2', name: 'Meera on Wheels', avatarUrl: null },
-  { id: null, name: 'Autobacs India', avatarUrl: null }, // team upload
-  { id: 'c4', name: 'Kerala Overlanders', avatarUrl: null },
+interface DemoReel {
+  clip: { mp4Url: string; posterUrl: string };
+  durationSec: number;
+  /** Live catalogue slug; looked up at runtime so money and stock are real. */
+  productSlug: string;
+  creator: Reel['creator'];
+  caption: string;
+}
+
+/** Clip → product pairs. Each clip was checked by eye to show what the product is for. */
+const DEMO: DemoReel[] = [
+  {
+    // Cabin glowing red and blue at night.
+    clip: pexels(10385805, '10385805-hd_720_1366_25fps.mp4', 'pexels-photo-10385805.jpeg'),
+    durationSec: 32,
+    productSlug: 'ambient-lights-for-xuv-700',
+    creator: creator('c1', 'Arjun Drives'),
+    caption: 'Night drives hit different now 🌌 Ambient lights in, mood set.',
+  },
+  {
+    // A modern dashboard with a wide touch screen.
+    clip: pexels(36202861, '15352315_720_1280_30fps.mp4', 'pexels-photo-36202861.jpeg'),
+    durationSec: 5,
+    productSlug: 'diamond-2k-android-with-360-camera-kit', // has variants
+    creator: creator('c2', 'Meera on Wheels'),
+    caption: 'Big screen, 360 camera, no more guessing in tight parking 📱',
+  },
+  {
+    // Black alloy wheel, low angle.
+    clip: pexels(33596417, '14281088_720_1280_24fps.mp4', 'pexels-photo-33596417.jpeg'),
+    durationSec: 13,
+    productSlug: 'thar-roxx-wheel-spacer', // out of stock
+    creator: creator('c3', 'Stance by Rohan'),
+    caption: 'Wheels flush with the arches. That stance though 😮‍💨',
+  },
+  {
+    // A Thar ROXX climbing out of a muddy pit.
+    clip: pexels(40486505, '17301272_720_1280_50fps.mp4', 'pexels-photo-40486505.jpeg'),
+    durationSec: 9,
+    productSlug: 'ironman-nitrogas-suspension-kit-for-mahindra-thar-roxx',
+    creator: creator('c4', 'Thar Tribe Chennai'),
+    caption: 'Sunday at the off-road track with the ROXX 🏁 Who is coming next week?',
+  },
+  {
+    // Red Jeep on a trail through puddles.
+    clip: pexels(40414356, '17267785_720_1280_30fps.mp4', 'pexels-photo-40414356.jpeg'),
+    durationSec: 13,
+    productSlug: 'jeep-wrangler-functional-snorkel',
+    creator: creator('c5', 'Kerala Overlanders'),
+    caption: 'Monsoon trails are calling 🌧️ Water crossings, sorted.',
+  },
+  {
+    // Headlights on a dark country road.
+    clip: pexels(34738405, '14726106_720_1280_32fps.mp4', 'pexels-photo-34738405.jpeg'),
+    durationSec: 9,
+    productSlug: 'lightforce-genesis-professional-edition-led-driving-light', // live sale
+    creator: TEAM,
+    caption: 'Highway nights need proper light. Lightforce Genesis, now in store.',
+  },
+  {
+    // Classic Defender parked by a barn.
+    clip: pexels(31943164, '13607996_720_1280_100fps.mp4', 'pexels-photo-31943164.jpeg'),
+    durationSec: 15,
+    productSlug: 'land-rover-defender-2023-heavy-duty-rooflight', // live sale
+    creator: creator('c6', 'Defender Diaries'),
+    caption: 'Some cars you just walk up to slowly 🖤',
+  },
+  {
+    // Small 4x4s on a snowy hillside trail.
+    clip: pexels(8737890, '8737890-hd_720_1280_60fps.mp4', 'pexels-photo-8737890.jpeg'),
+    durationSec: 15,
+    productSlug: 'hamer-rear-bumper-for-suzuki-jimni',
+    creator: creator('c7', 'Himachal Off-Road Club'),
+    caption: 'Snow, slush and a small 4x4 that refuses to quit ❄️',
+  },
+  {
+    // SUV on a green hillside, drone shot.
+    clip: pexels(38499146, '16349993_720_1280_60fps.mp4', 'pexels-photo-38499146.jpeg'),
+    durationSec: 15,
+    productSlug: 'profender-titan-series-suspension-bundle-kit-toyota-hilux-travo', // backorder
+    creator: creator('c8', 'Overland with Kabir'),
+    caption: 'Long weekend, no plan, good suspension ⛰️',
+  },
+  {
+    // Driver's view: phone navigation on the dash, city traffic ahead.
+    clip: pexels(36067574, '15295724_720_1280_24fps.mp4', 'pexels-photo-36067574.jpeg'),
+    durationSec: 15,
+    productSlug: '70mai-omni-4k-dash-cam',
+    creator: TEAM,
+    caption: 'Every city drive, on record. The 70mai Omni 4K dash cam.',
+  },
 ];
 
-const CAPTIONS = [
-  'Fitted this in 20 minutes — the difference on the highway is unreal 🔥',
-  'Weekend road trip essential. Honest review after 3,000 km.',
-  'Before vs after. My Thar finally feels finished.',
-  'Monsoon-proof setup for Kerala roads 🌧️',
-  'Unboxing + first impressions. Build quality is premium.',
-  'This one surprised me. Worth every rupee.',
-];
-
-const TOTAL = 18;
+const TOTAL = DEMO.length;
 
 export const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** Offline fallback so the feed still renders (cart adds would then fail cleanly). */
-const FALLBACK: ReelProduct = {
-  id: 'mock-product',
-  slug: 'mock-product',
-  title: 'Autobacs sample product',
-  image: 'https://res.cloudinary.com/demo/image/upload/c_fill,h_400,w_400/sample.jpg',
-  price: 4999,
-  festivalPrice: null,
-  mrp: 6999,
-  discountPercent: 29,
-  averageRating: 4.5,
-  ratingCount: 780,
-  availability: 'in',
-  hasVariants: false,
-};
+function toReelProduct(p: Product): ReelProduct {
+  const variable = p.productType === 'variable';
+  const price = variable ? p.priceFrom : p.price;
+  return {
+    id: p.id,
+    slug: p.slug,
+    title: p.name,
+    image: p.image || null,
+    price,
+    festivalPrice: null,
+    mrp: p.mrp ?? price,
+    discountPercent: p.discountPercent,
+    averageRating: p.rating,
+    ratingCount: p.reviews,
+    // The live API also sends 'backorder', which the catalogue type does not list.
+    availability: p.stock as ReelProduct['availability'],
+    hasVariants: variable,
+  };
+}
 
-let productsPromise: Promise<ReelProduct[]> | null = null;
+/** One entry per DEMO reel; null when that product could not be read (offline, or delisted). */
+let productsPromise: Promise<(ReelProduct | null)[]> | null = null;
 
-function loadProducts(): Promise<ReelProduct[]> {
-  productsPromise ??= fetchProducts({ limit: 12, sort: '-salesScore' })
-    .then(({ products }) =>
-      products
-        .map<ReelProduct>((p) => ({
-          id: p.id,
-          slug: p.slug,
-          title: p.name,
-          image: p.image,
-          price: p.productType === 'variable' ? p.priceFrom : p.price,
-          festivalPrice: null,
-          mrp: p.mrp ?? p.price,
-          discountPercent: p.discountPercent,
-          averageRating: p.rating,
-          ratingCount: p.reviews,
-          availability: p.stock,
-          hasVariants: p.productType === 'variable',
-        })),
-    )
-    .then((list) => (list.length ? list : [FALLBACK]))
-    .catch(() => {
-      productsPromise = null; // try again next time
-      return [FALLBACK];
-    });
+function loadProducts(): Promise<(ReelProduct | null)[]> {
+  productsPromise ??= Promise.all(
+    DEMO.map((d) => fetchProduct(d.productSlug).then(toReelProduct, () => null)),
+  ).then((list) => {
+    if (list.every((p) => p === null)) productsPromise = null; // offline: try again next time
+    return list;
+  });
   return productsPromise;
 }
 
 const likes = new Map<string, boolean>();
 
-function buildReel(i: number, products: ReelProduct[], status: Reel['status'] = 'approved'): Reel {
-  const clip = CLIPS[i % CLIPS.length];
-  const base = products[i % products.length];
-  // Edge cases, one per reel, so each can be checked by eye.
-  let product: ReelProduct = base;
-  if (i === 1) product = { ...base, festivalPrice: Math.round(base.price * 0.9) };
-  if (i === 3) product = { ...base, availability: 'backorder' };
-  if (i === 4) product = { ...base, availability: 'out' };
-  if (i === 5) product = { ...base, hasVariants: true };
+function buildReel(i: number, products: (ReelProduct | null)[], status: Reel['status'] = 'approved'): Reel {
+  const demo = DEMO[i % TOTAL];
+  const product = products[i % TOTAL];
   const id = `mock-reel-${i + 1}`;
   return {
     id,
     status,
     hlsUrl: null,
-    mp4Url: clip.mp4Url,
-    posterUrl: clip.posterUrl,
-    durationSec: 15,
-    caption: CAPTIONS[i % CAPTIONS.length],
+    mp4Url: demo.clip.mp4Url,
+    posterUrl: demo.clip.posterUrl,
+    durationSec: demo.durationSec,
+    caption: demo.caption,
     createdAt: new Date(Date.now() - i * 3_600_000).toISOString(),
-    creator: CREATORS[i % CREATORS.length],
+    creator: demo.creator,
     product,
     likeCount: 120 + ((i * 97) % 900) + (likes.get(id) ? 1 : 0),
     viewerLiked: likes.get(id) ?? false,
     // null = server has no site URL configured; the app falls back itself.
-    shareUrl: i === 2 ? null : `https://www.autobacsindia.com/products/${product.slug}`,
+    shareUrl: i === 2 || !product ? null : `https://www.autobacsindia.com/products/${product.slug}`,
   };
 }
 
@@ -197,7 +261,7 @@ export function fakeUpload(
 export async function createReel(input: { publicId: string; productId: string; caption: string }): Promise<Ok<{ reel: Reel }>> {
   await delay(500);
   const products = await loadProducts();
-  const product = products.find((p) => p.id === input.productId) ?? products[0];
+  const product = products.find((p) => p?.id === input.productId) ?? products.find((p) => p !== null) ?? null;
   const reel: Reel = {
     ...buildReel(1, products, 'pending'),
     id: `mine-${Date.now()}`,

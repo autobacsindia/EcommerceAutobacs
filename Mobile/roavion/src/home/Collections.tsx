@@ -2,79 +2,123 @@
  * Category presentation for Home and Shop — real categories only, never
  * invented collections.
  *
- *  - `CuratedCollections` (Home): wide photo cards for the top-level
- *    departments that have a photo, dark scrim, name and "Explore".
+ *  - `CategoryQuads` (Home): the website's Amazon-style 4-up cards
+ *    (store `CategoryCards.tsx`): "Shop by category", "Upgrade your ride" and
+ *    "Top deals for you", each a white card with a 2×2 grid of real photos.
+ *    On a phone they sit in a swipeable row.
  *  - `DepartmentGrid` (Shop): every top-level department as a photo tile,
- *    three across, on white cards (no off-brand tints).
+ *    three across, on white cards.
  */
 import { memo, useCallback } from 'react';
 import { FlatList, StyleSheet, Text, View, useWindowDimensions, type ListRenderItemInfo } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import type { Category } from '../api/catalogue';
-import { alpha, colors, elevation, font, radius, spacing, type } from '../theme';
-import { Overline, PressScale, SectionHeader, Shimmer } from '../ui';
+import type { Category, Product } from '../api/catalogue';
+import { colors, elevation, font, radius, spacing, type } from '../theme';
+import { PressScale, SectionHeader, Shimmer } from '../ui';
 
-const COLL_W = 248;
-const COLL_H = 168;
 const GAP = spacing.md;
 
-const CollectionCard = memo(function CollectionCard({ cat, onOpen }: { cat: Category; onOpen: (slug: string) => void }) {
+interface QuadTile {
+  key: string;
+  label: string;
+  image: string;
+  route: string;
+  /** Product photos sit on the grey well, contained; category photos fill. */
+  contain?: boolean;
+}
+interface Quad {
+  key: string;
+  title: string;
+  tiles: QuadTile[];
+  more: { label: string; route: string };
+}
+
+const QuadCard = memo(function QuadCard({ quad, width }: { quad: Quad; width: number }) {
+  const router = useRouter();
+  // -2: the card's hairline border eats into the row; without it the 2×2 wraps to 1 column.
+  const tile = Math.floor((width - spacing.lg * 2 - spacing.sm - 2) / 2);
   return (
-    <PressScale onPress={() => onOpen(cat.slug)} haptic="selection" style={s.coll} accessibilityLabel={`${cat.name} collection`}>
-      <Image source={{ uri: cat.image }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={200} />
-      <LinearGradient
-        colors={[alpha(colors.void, 0), alpha(colors.void, 0.88)]}
-        locations={[0.2, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      <View style={s.collBody}>
-        <Overline onDark>Collection</Overline>
-        <Text style={s.collTitle} numberOfLines={1}>{cat.name}</Text>
-        <View style={s.explore}>
-          <Text style={s.exploreText}>Explore</Text>
-          <Ionicons name="arrow-forward" size={12} color={colors.white} />
-        </View>
+    <View style={[s.quad, { width }]}>
+      <Text style={s.quadTitle} numberOfLines={1}>{quad.title}</Text>
+      <View style={s.quadGrid}>
+        {quad.tiles.slice(0, 4).map((t) => (
+          <PressScale
+            key={t.key}
+            onPress={() => router.push(t.route as never)}
+            haptic="selection"
+            scaleTo={0.96}
+            style={{ width: tile }}
+            accessibilityLabel={t.label}
+          >
+            <View style={[s.quadMedia, { height: Math.round(tile * 0.82) }]}>
+              <Image
+                source={{ uri: t.image }}
+                style={t.contain ? s.quadContain : StyleSheet.absoluteFill}
+                contentFit={t.contain ? 'contain' : 'cover'}
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+            </View>
+            <Text style={s.quadLabel} numberOfLines={1}>{t.label}</Text>
+          </PressScale>
+        ))}
       </View>
-    </PressScale>
+      <PressScale onPress={() => router.push(quad.more.route as never)} haptic="selection" hitSlop={8} style={s.quadMore} accessibilityLabel={quad.more.label}>
+        <Text style={s.quadMoreText}>{quad.more.label}</Text>
+        <Ionicons name="chevron-forward" size={13} color={colors.green} />
+      </PressScale>
+    </View>
   );
 });
 
-export function CuratedCollections({ categories, loading }: { categories: Category[]; loading: boolean }) {
-  const router = useRouter();
-  const withPhoto = categories.filter((c) => !!c.image).slice(0, 8);
-  const open = useCallback((slug: string) => router.push(`/category/${slug}`), [router]);
-  const renderItem = useCallback(({ item }: ListRenderItemInfo<Category>) => <CollectionCard cat={item} onOpen={open} />, [open]);
+export function CategoryQuads({ categories, deals = [], loading }: { categories: Category[]; deals?: Product[]; loading: boolean }) {
+  const { width } = useWindowDimensions();
+  const cardW = Math.min(Math.round(width * 0.8), 340);
 
-  if (!loading && !withPhoto.length) return null;
+  const withImg = categories.filter((c) => !!c.image);
+  const cats: QuadTile[] = withImg.map((c) => ({ key: c.id, label: c.name, image: c.image, route: `/category/${c.slug}` }));
+  const dealTiles: QuadTile[] = deals
+    .filter((d) => !!d.image)
+    .slice(0, 4)
+    .map((d) => ({ key: d.id, label: d.name, image: d.image as string, route: `/product/${d.slug}`, contain: true }));
+
+  const quads: Quad[] = [];
+  if (cats.length >= 4) quads.push({ key: 'cats', title: 'Shop by category', tiles: cats.slice(0, 4), more: { label: 'See all categories', route: '/(tabs)/shop' } });
+  if (cats.length >= 8) quads.push({ key: 'ride', title: 'Upgrade your ride', tiles: cats.slice(4, 8), more: { label: 'Explore more', route: '/(tabs)/shop' } });
+  if (dealTiles.length >= 4) quads.push({ key: 'deals', title: 'Top deals for you', tiles: dealTiles, more: { label: 'See all deals', route: '/category/offers' } });
+
+  const renderItem = useCallback(({ item }: ListRenderItemInfo<Quad>) => <QuadCard quad={item} width={cardW} />, [cardW]);
+
+  if (!loading && !quads.length) return null;
   return (
     <View style={s.section}>
-      <SectionHeader overline="Curated" title="Collections" actionLabel="All departments" onAction={() => router.push('/(tabs)/shop')} />
       {loading ? (
         <View style={s.row}>
           {[0, 1].map((i) => (
-            <Shimmer key={i} width={COLL_W} height={COLL_H} radius={radius.lg} />
+            <Shimmer key={i} width={cardW} height={cardW * 0.98} radius={radius.lg} />
           ))}
         </View>
       ) : (
         <FlatList
           horizontal
-          data={withPhoto}
-          keyExtractor={(c) => c.id}
+          data={quads}
+          keyExtractor={(q) => q.key}
           renderItem={renderItem}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.row}
+          contentContainerStyle={[s.row, { paddingVertical: spacing.xs }]}
           decelerationRate="fast"
-          snapToInterval={COLL_W + GAP}
-          initialNumToRender={2}
-          windowSize={3}
+          snapToInterval={cardW + GAP}
         />
       )}
     </View>
   );
+}
+
+/** Older name, kept for any caller still importing it. */
+export function CuratedCollections({ categories, loading }: { categories: Category[]; loading: boolean }) {
+  return <CategoryQuads categories={categories} loading={loading} />;
 }
 
 // ── Shop: department grid ───────────────────────────────────────────────────
@@ -121,13 +165,24 @@ export function DepartmentGrid({ categories, loading }: { categories: Category[]
 }
 
 const s = StyleSheet.create({
-  section: { marginTop: spacing.xxl },
+  section: { marginTop: spacing.xl },
   row: { flexDirection: 'row', gap: GAP, paddingHorizontal: spacing.lg },
-  coll: { width: COLL_W, height: COLL_H, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.carbon },
-  collBody: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.md },
-  collTitle: { ...type.h2, color: colors.white, marginTop: 2 },
-  explore: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs },
-  exploreText: { fontFamily: font.medium, fontSize: 12, color: colors.onDarkMuted },
+
+  quad: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    ...elevation.e1,
+  },
+  quadTitle: { ...type.h2, marginBottom: spacing.md },
+  quadGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, rowGap: spacing.md },
+  quadMedia: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.well, alignItems: 'center', justifyContent: 'center' },
+  quadContain: { width: '86%', height: '86%' },
+  quadLabel: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink2, marginTop: 6 },
+  quadMore: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: spacing.md, alignSelf: 'flex-start' },
+  quadMoreText: { fontFamily: font.bold, fontSize: 13, color: colors.green },
 
   deptSection: { marginTop: spacing.lg },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, rowGap: spacing.lg, paddingHorizontal: spacing.lg },
@@ -135,7 +190,9 @@ const s = StyleSheet.create({
   deptImgWrap: {
     borderRadius: radius.lg,
     overflow: 'hidden',
-    backgroundColor: colors.greenFaint,
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
     ...elevation.e1,

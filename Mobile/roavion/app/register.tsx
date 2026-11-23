@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, font, spacing, type } from '../src/theme';
 import { PremiumButton, PressScale } from '../src/ui';
 import { AuthShell, Field, FormMessage } from '../src/account/AuthShell';
@@ -12,6 +12,7 @@ import { useApp } from '../src/store';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { next } = useLocalSearchParams<{ next?: string }>();
   const { signUp } = useApp();
 
   const [name, setName] = useState('');
@@ -30,7 +31,8 @@ export default function RegisterScreen() {
     setBusy(true);
     try {
       await signUp(name, email, password, phone || undefined);
-      router.replace('/(tabs)');
+      // Back to what they were doing (Buy now → checkout), else Home.
+      router.replace((next || '/(tabs)') as never);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -47,7 +49,7 @@ export default function RegisterScreen() {
         keyboardType="email-address" autoCapitalize="none" autoComplete="email" accessibilityLabel="Email" />
 
       <Field label="Mobile number (optional)" icon="call-outline" value={phone} onChangeText={setPhone} placeholder="10-digit mobile number"
-        keyboardType="phone-pad" maxLength={16} accessibilityLabel="Mobile number" />
+        keyboardType="phone-pad" maxLength={16} autoComplete="tel" textContentType="telephoneNumber" accessibilityLabel="Mobile number" />
 
       <Field label="Password" icon="lock-closed-outline" value={password} onChangeText={setPassword}
         placeholder="At least 8 characters" secureTextEntry={!show} secureToggle={{ shown: show, onToggle: () => setShow((v) => !v) }}
@@ -55,13 +57,17 @@ export default function RegisterScreen() {
 
       <FormMessage text={error} tone="error" />
 
-      <PremiumButton label="Create account" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
+      <PremiumButton label="Create account" variant="green" onPress={submit} loading={busy} iconRight="arrow-forward" full style={{ marginTop: spacing.sm }} />
 
       <Text style={s.legal}>By continuing you agree to our Terms and Privacy Policy.</Text>
 
       <View style={s.footer}>
         <Text style={s.footText}>Already have an account?</Text>
-        <PressScale onPress={() => router.replace('/login')} accessibilityLabel="Sign in">
+        <PressScale
+          onPress={() => router.replace(next ? { pathname: '/login', params: { next } } : '/login')}
+          hitSlop={10}
+          accessibilityLabel="Sign in"
+        >
           <Text style={s.linkText}>Sign in</Text>
         </PressScale>
       </View>

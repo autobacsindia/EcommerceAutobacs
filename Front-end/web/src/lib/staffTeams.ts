@@ -22,6 +22,7 @@ export const STAFF_TEAM_LABELS = {
   marketing: 'Marketing',
   operations: 'Operations',
   developer: 'Developer',
+  hr: 'HR',
 } as const;
 
 export type StaffTeam = keyof typeof STAFF_TEAM_LABELS;

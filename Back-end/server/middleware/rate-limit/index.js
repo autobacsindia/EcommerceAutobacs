@@ -6,3 +6,4 @@ export * from './searchLimiters.js';
 export * from './apiLimiters.js';
 export * from './ugcLimiters.js';
 export * from './chatCallLimiters.js';
+export * from './hrLimiters.js';

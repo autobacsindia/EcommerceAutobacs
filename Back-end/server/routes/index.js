@@ -62,6 +62,7 @@ import analyticsRoutes from './analytics.js';
 import leadRoutes from './leads.js';
 import salesRepRoutes from './salesReps.js';
 import staffRoutes from './staff.js';
+import hrRoutes from './hr/index.js';
 import chatRoutes from './chat.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
@@ -98,6 +99,7 @@ import googleReviewRoutes from './googleReviews.js';
 import supplierRoutes from './suppliers.js';
 import supplierEnquiryRoutes from './supplierEnquiries.js';
 import procurementPartnerRoutes from './procurementPartners.js';
+import partnerRoutes from './partner.js';
 import pushRoutes from './push.js';
 import notificationRoutes from './notifications.js';
 import redirectRoutes from './redirects.js';
@@ -198,6 +200,9 @@ apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
 // Staff panel (/team): invite redemption is public; everything else is active staff
 // or admin, scoped per team inside staffService. Limiters are applied per route.
 apiRouter.use('/staff', staffRoutes);
+// HR system (docs/ADR-hr-system.md): employee profiles, attendance, leave, payroll.
+// protect + per-user limiter inside; role checks on every route (middleware/hrAuth.js).
+apiRouter.use('/hr', hrRoutes);
 // Payment-slip reader: suggests UTR / date / amount from an attached slip (staff + admin).
 apiRouter.use('/slip-reader', slipReaderRoutes);
 // Team chat: admins + active staff only (never customers). Rate limit is applied
@@ -246,6 +251,8 @@ apiRouter.use('/google-reviews', googleReviewRoutes);
 apiRouter.use('/suppliers', supplierRoutes);
 apiRouter.use('/supplier-enquiries', supplierEnquiryRoutes);
 apiRouter.use('/procurement/partners', procurementPartnerRoutes); // Autobacs Partner: procurement review (docs/ADR-supplier-portal.md)
+// Autobacs Partner supplier app (Bearer supplier token; docs/ADR-supplier-portal.md).
+apiRouter.use('/partner', partnerRoutes);
 apiRouter.use('/push', pushRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/admin', adminStatsRoutes);

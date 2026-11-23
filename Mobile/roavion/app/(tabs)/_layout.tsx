@@ -1,11 +1,11 @@
 /**
  * The five places a customer lives: Home, Shop, Reels, Cart, Account.
  *
- * Design "Premium launch" (2026-11-22): a floating ink-black pill with Reels as
- * a raised brand-green disc in the centre — see src/ui/FloatingTabBar.tsx for
- * the safe-area handling (iOS home indicator, Android gesture and 3-button
- * navigation). Over Reels the area around the pill turns black so the video
- * page has no light strip under it.
+ * WhatsApp-style bar (owner, 2026-11-22): white, hairline top border, the
+ * active tab in a soft green pill — see src/ui/FloatingTabBar.tsx for the
+ * safe-area handling (iOS home indicator, Android gesture and 3-button nav).
+ * The Reels tab is a white hub now; the full-screen player is the stack
+ * route /reels/watch, which has no tab bar, so no tab needs a dark surround.
  */
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,12 +25,12 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      tabBar={(props) => <FloatingTabBar {...props} darkRoutes={['reels']} centerRoute="reels" />}
+      tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: icon('home-outline', 'home') }} />
       <Tabs.Screen name="shop" options={{ title: 'Shop', tabBarIcon: icon('grid-outline', 'grid') }} />
-      <Tabs.Screen name="reels" options={{ title: 'Reels' }} />
+      <Tabs.Screen name="reels" options={{ title: 'Reels', tabBarIcon: icon('play-circle-outline', 'play-circle') }} />
       <Tabs.Screen
         name="cart"
         // The count is display-only (cart badge may be optimistic per CLAUDE.md).

@@ -30,10 +30,14 @@ const MODELS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..',
 const NEVER_BLANKET_TTL = new Set(['Cart', 'Order', 'User', 'Payment', 'ReturnRequest']);
 
 beforeAll(async () => {
-  const entries = readdirSync(MODELS_DIR, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
-    await import(pathToFileURL(path.join(MODELS_DIR, entry.name)).href);
+  // Top-level models plus the model subfolders (models/hr/ — the HR system).
+  // plugins/ and shared/ hold schema pieces, not models.
+  for (const dir of [MODELS_DIR, path.join(MODELS_DIR, 'hr')]) {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
+      await import(pathToFileURL(path.join(dir, entry.name)).href);
+    }
   }
 });
 

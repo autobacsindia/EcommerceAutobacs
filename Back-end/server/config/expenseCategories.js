@@ -80,6 +80,13 @@ export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
     c('ai_tools', 'AI tools'),
     others,
   ]),
+  hr: Object.freeze([
+    reimbursement,
+    c('recruitment', 'Recruitment (job ads, agencies)'),
+    c('training', 'Training'),
+    c('staff_welfare', 'Staff welfare'),
+    others,
+  ]),
   // GTM (stored as 'sales').
   sales: Object.freeze([
     reimbursement,

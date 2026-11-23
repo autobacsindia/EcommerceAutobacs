@@ -11,8 +11,9 @@
  * server then verifies. A native SDK can replace this later without any change
  * to the backend.
  */
-import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ScrollViewInstance } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -32,6 +33,17 @@ interface Address {
   state: string;
   postalCode: string;
 }
+
+/** Autofill hints per field (look/UX only — the values are sent exactly as typed). */
+const AUTOFILL: Record<keyof Address, Pick<TextInputProps, 'autoComplete' | 'textContentType' | 'autoCapitalize'>> = {
+  fullName: { autoComplete: 'name', textContentType: 'name', autoCapitalize: 'words' },
+  phone: { autoComplete: 'tel', textContentType: 'telephoneNumber', autoCapitalize: 'none' },
+  addressLine1: { autoComplete: 'address-line1', textContentType: 'streetAddressLine1', autoCapitalize: 'words' },
+  addressLine2: { autoComplete: 'address-line2', textContentType: 'streetAddressLine2', autoCapitalize: 'words' },
+  city: { autoComplete: 'postal-address-locality', textContentType: 'addressCity', autoCapitalize: 'words' },
+  state: { autoComplete: 'postal-address-region', textContentType: 'addressState', autoCapitalize: 'words' },
+  postalCode: { autoComplete: 'postal-code', textContentType: 'postalCode', autoCapitalize: 'none' },
+};
 
 const EMPTY: Address = {
   fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '',
@@ -74,6 +86,8 @@ export default function CheckoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { cart, customer, refreshCart } = useApp();
+  const queryClient = useQueryClient();
+  const scrollRef = useRef<ScrollViewInstance>(null);
 
   const [address, setAddress] = useState<Address>({
     ...EMPTY,
@@ -86,6 +100,11 @@ export default function CheckoutScreen() {
   const [done, setDone] = useState<string | null>(null);
   /** Purely visual: which address field has focus (green outline). */
   const [focused, setFocused] = useState<keyof Address | null>(null);
+
+  // An error is shown at the end of the form — bring it into view.
+  useEffect(() => {
+    if (error) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+  }, [error]);
 
   const set = (key: keyof Address) => (value: string) => setAddress((a) => ({ ...a, [key]: value }));
 
@@ -192,7 +211,15 @@ export default function CheckoutScreen() {
             icon="checkmark-circle-outline"
             title="Thank you — your order is placed"
             body="We have emailed your confirmation. You can follow it in My orders."
-            action={{ label: 'View my orders', onPress: () => router.replace('/orders') }}
+            action={{
+              label: 'View my orders',
+              onPress: () => {
+                // The orders list may be cached from before this purchase.
+                queryClient.invalidateQueries({ queryKey: ['orders'] });
+                router.replace('/orders');
+              },
+            }}
+            secondary={{ label: 'Continue shopping', onPress: () => router.replace('/(tabs)') }}
           />
         </View>
       </>
@@ -218,7 +245,7 @@ export default function CheckoutScreen() {
     <>
       <Stack.Screen options={{ title: 'Checkout' }} />
       <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 200 }} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={{ padding: spacing.lg, paddingBottom: 220 }} keyboardShouldPersistTaps="handled">
           {/* Where they are in the journey — purely visual. */}
           <View style={s.steps} accessibilityLabel="Step 2 of 3: delivery and payment">
             {['Cart', 'Delivery', 'Payment'].map((label, i) => (
@@ -270,6 +297,8 @@ export default function CheckoutScreen() {
                     keyboardType={key === 'phone' || key === 'postalCode' ? 'number-pad' : 'default'}
                     maxLength={key === 'postalCode' ? 6 : key === 'phone' ? 16 : 120}
                     accessibilityLabel={label}
+                    {...AUTOFILL[key]}
+                    returnKeyType={key === 'postalCode' ? 'done' : 'next'}
                   />
                 </View>
               ))}
@@ -303,7 +332,7 @@ export default function CheckoutScreen() {
             <View style={s.secure}>
               <Ionicons name="lock-closed" size={13} color={colors.green} />
               <Text style={s.secureText}>
-                Delivery and taxes are added by our server on the payment screen. You always pay the amount Razorpay shows.
+                Our server works out the final amount, including any delivery charge. You always pay exactly the amount Razorpay shows.
               </Text>
             </View>
           </Card>
@@ -318,9 +347,17 @@ export default function CheckoutScreen() {
 
         <View style={[s.bar, { paddingBottom: insets.bottom + spacing.md }]}>
           <View style={s.barRow}>
-            <Text style={s.barLabel}>Subtotal</Text>
+            <View>
+              <Text style={s.barLabel}>Subtotal</Text>
+              <Text style={s.barHint}>Final amount confirmed on the payment screen</Text>
+            </View>
             <Text style={s.barTotal}>{inr(cart.totalPrice)}</Text>
           </View>
+          {missing.length > 0 && (
+            <Text style={s.barMissing} accessibilityLiveRegion="polite">
+              {missing.length === 1 ? 'Fill in 1 more delivery field to continue' : `Fill in ${missing.length} more delivery fields to continue`}
+            </Text>
+          )}
           <PremiumButton
             label={busy ? 'Please wait…' : 'Place order and pay'}
             onPress={placeOrder}
@@ -415,6 +452,8 @@ const s = StyleSheet.create({
   barRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   barLabel: { fontFamily: font.semibold, fontSize: 14, color: colors.ink2 },
   barTotal: { fontFamily: font.extrabold, fontSize: 20, color: colors.ink },
+  barHint: { ...type.caption, color: colors.muted },
+  barMissing: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink2, textAlign: 'center' },
   barTrust: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   barTrustText: { ...type.tiny, color: colors.muted },
 });

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  
+  <rect x="0" y="0" width="1024" height="1024" rx="230" fill="#0f1111"/>
+  <g transform="translate(0 36) scale(1)">
+    <polygon points="744,150 798,150 730,330 676,330" fill="#228a57"/><polygon points="816,150 870,150 802,330 748,330" fill="#ffffff"/><polygon points="888,150 942,150 874,330 820,330" fill="#9a9f9e"/>
+    <text x="492" y="690" text-anchor="middle" font-family="MontserratXB, Montserrat, 'Arial Black', sans-serif" font-weight="800" font-size="430" letter-spacing="-14" fill="#ffffff">AB</text>
+    <rect x="232" y="752" width="520" height="44" rx="22" fill="#228a57"/>
+  </g>
+</svg>

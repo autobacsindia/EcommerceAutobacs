@@ -35,6 +35,8 @@ export const LISTING_STATUS_VALUES = Object.freeze(Object.values(LISTING_STATUS)
 const ImageSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, maxlength: 300 }, // private storage key
+    // Which store holds it (see SupplierAccount DocFileSchema). Missing = cloudinary.
+    provider: { type: String, enum: ['r2', 'cloudinary'] },
     contentType: { type: String, default: '', maxlength: 80 },
   },
   { _id: false }

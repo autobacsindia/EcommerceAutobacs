@@ -1,45 +1,21 @@
 /**
  * Shop — departments, then the whole catalogue, filterable.
  *
- * Premium look (2026-11-22): a pinned search bar (with the cart) that stays
- * while the page scrolls, a photo grid of every top-level department (each
- * opens its own page), then the full catalogue grid with the department chips,
- * sort and filter sheets.
+ * WhatsApp-style (owner, 2026-11-22): the pinned white app bar, then a large
+ * bold "Shop" title and grey search pill (like WhatsApp's "Chats"), a photo
+ * grid of every top-level department (each opens its own page), then the full
+ * catalogue grid with tinted department chips, sort and filter sheets.
  *
  * Brands keep their own route (Home's brand strip → /search?brand=…).
  */
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCategories } from '../../src/api/catalogue';
-import { SearchField } from '../../src/components/AppHeader';
+import AppHeader, { ScreenTitle, SearchField } from '../../src/components/AppHeader';
 import ProductListing from '../../src/components/ProductListing';
 import { DepartmentGrid } from '../../src/home/Collections';
-import { colors, elevation, spacing } from '../../src/theme';
-import { IconButton } from '../../src/ui';
-import { useApp } from '../../src/store';
-
-/** The pinned bar: search field + cart. */
-function StickySearch() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { cart } = useApp();
-  return (
-    <View style={[s.bar, { paddingTop: insets.top + spacing.sm }]}>
-      <SearchField style={s.search} />
-      <IconButton
-        icon="bag-handle-outline"
-        label={`Cart, ${cart.totalItems} items`}
-        onPress={() => router.push('/(tabs)/cart')}
-        badge={cart.totalItems}
-        tone="light"
-        size={48}
-      />
-    </View>
-  );
-}
+import { colors, spacing } from '../../src/theme';
 
 export default function ShopScreen() {
   const [slug, setSlug] = useState<string | null>(null);
@@ -52,10 +28,16 @@ export default function ShopScreen() {
   return (
     <View style={s.screen}>
       <ProductListing
-        stickyTop={<StickySearch />}
-        topSlot={<DepartmentGrid categories={parents} loading={categories.isLoading} />}
-        overline={current ? 'Department' : 'Everything'}
-        title={current?.name ?? 'Shop all'}
+        stickyTop={<AppHeader />}
+        topSlot={
+          <>
+            <ScreenTitle title="Shop" />
+            <SearchField style={{ marginHorizontal: spacing.lg, marginBottom: spacing.sm }} />
+            <DepartmentGrid categories={parents} loading={categories.isLoading} />
+          </>
+        }
+        overline={current ? 'Department' : undefined}
+        title={current?.name ?? 'All products'}
         blurb={current?.description || undefined}
         categorySlug={slug ?? undefined}
         chips={parents}
@@ -66,16 +48,5 @@ export default function ShopScreen() {
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.bg,
-    zIndex: 2,
-    ...elevation.e1,
-  },
-  search: { flex: 1 },
+  screen: { flex: 1, backgroundColor: colors.screen },
 });

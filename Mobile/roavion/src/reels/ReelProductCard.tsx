@@ -1,5 +1,6 @@
 /**
- * The frosted shoppable card at the bottom of a reel.
+ * The compact white product strip under a reel's caption (Instagram's
+ * "View products" tag, made shoppable).
  *
  * Every number here is what the server sent in the reel's live product block —
  * the card never computes a price (`Price` only formats). Tapping the card
@@ -7,12 +8,11 @@
  * the feed screen (attribution first, then the cart API). Products with
  * variants say "Choose option" and open the product page.
  */
-import { Platform, StyleSheet, Text, View } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import type { ReelProduct } from '../api/reels';
-import { alpha, colors, elevation, font, palette, radius, spacing } from '../theme';
+import { colors, elevation, font, radius, spacing } from '../theme';
 import { PremiumButton, Price, PressScale, Rating } from '../ui';
 
 const STOCK: Record<ReelProduct['availability'], { label: string; color: string }> = {
@@ -41,18 +41,13 @@ export function ReelProductCard({
 
   return (
     <View style={s.card}>
-      {Platform.OS === 'ios' ? (
-        <BlurView intensity={70} tint="systemChromeMaterialLight" style={StyleSheet.absoluteFill} />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: alpha(palette.white, 0.94) }]} />
-      )}
 
       <PressScale onPress={onOpen} haptic="selection" scaleTo={0.98} style={s.top} accessibilityLabel={`Open ${product.title}`}>
         <View style={s.photoWell}>
           <Image source={{ uri: product.image ?? undefined }} style={s.photo} contentFit="contain" transition={200} cachePolicy="memory-disk" />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.title} numberOfLines={2}>{product.title}</Text>
+          <Text style={s.title} numberOfLines={1}>{product.title}</Text>
           <View style={s.priceRow}>
             {product.hasVariants && <Text style={s.from}>From</Text>}
             <Price
@@ -74,20 +69,23 @@ export function ReelProductCard({
       </PressScale>
 
       <View style={s.actions}>
+        {/* Sold out: the first button still goes somewhere useful (details,
+            similar parts) instead of sitting there greyed out. */}
         <PremiumButton
-          label={choose ? 'Choose option' : 'Add to cart'}
-          icon={choose ? 'options-outline' : 'bag-add-outline'}
+          label={out ? 'View details' : choose ? 'Choose option' : 'Add to cart'}
+          icon={out ? 'eye-outline' : choose ? 'options-outline' : 'bag-add-outline'}
           variant="outline"
           size="sm"
-          onPress={onAdd}
-          disabled={out || (!!busy && busy !== 'add')}
+          onPress={out ? onOpen : onAdd}
+          disabled={!!busy && busy !== 'add'}
           loading={busy === 'add'}
           haptic={false}
           style={s.btn}
         />
         <PremiumButton
-          label={out ? 'Out of stock' : 'Buy now'}
-          icon={out ? undefined : 'flash'}
+          label={out ? 'Sold out' : 'Buy now'}
+          icon={out ? 'close-circle-outline' : 'flash'}
+          variant="green"
           size="sm"
           onPress={onBuy}
           disabled={out || (!!busy && busy !== 'buy')}
@@ -102,16 +100,17 @@ export function ReelProductCard({
 
 const s = StyleSheet.create({
   card: {
-    borderRadius: radius.xl,
-    padding: spacing.md,
-    gap: spacing.md,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: alpha(palette.white, 0.6),
-    ...elevation.e3,
+    borderRadius: radius.md,
+    padding: spacing.sm + 2,
+    gap: spacing.sm + 2,
+    backgroundColor: colors.white,
+    ...elevation.e2,
   },
   top: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  photoWell: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.white, padding: 4 },
+  photoWell: {
+    width: 52, height: 52, borderRadius: radius.sm, backgroundColor: colors.white, padding: 3,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line,
+  },
   photo: { width: '100%', height: '100%' },
   title: { fontFamily: font.semibold, fontSize: 13.5, lineHeight: 18, color: colors.ink },
   priceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, marginTop: 4 },

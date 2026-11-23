@@ -25,6 +25,10 @@ export const STAFF_TEAMS = Object.freeze({
   // the things every team has: a login, their team space and the team-to-team
   // conversations, expenses, and their own member list.
   DEVELOPER: 'developer',
+  // People team (docs/ADR-hr-system.md): employee profiles, attendance, leave and
+  // payroll for every employee. Salary is visible to HR, admins and the employee
+  // themself only — the HR guards in middleware/hrAuth.js enforce that.
+  HR: 'hr',
 });
 
 export const STAFF_TEAM_VALUES = Object.freeze(Object.values(STAFF_TEAMS));
@@ -40,6 +44,7 @@ export const STAFF_TEAM_LABELS = Object.freeze({
   marketing: 'Marketing',
   operations: 'Operations',
   developer: 'Developer',
+  hr: 'HR',
 });
 
 /** How long an emailed invite link stays usable. Personal inboxes are read late. */

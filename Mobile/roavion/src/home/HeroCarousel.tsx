@@ -1,14 +1,23 @@
 /**
- * Home hero — the cinematic carousel at the top of the app.
+ * Home hero — a swipeable carousel of the website's own home banners.
  *
- * Slides come from live data only: a brand slide (always first, so the hero is
- * never empty), the promo banner admins switched on, and the top deals that
- * have a photo. Each slide: dark scrim, overline, Montserrat display title,
- * white pill button, animated dots. The photo drifts slower than the swipe
- * (parallax) and the carousel auto-advances every few seconds while Home is on
- * screen — both off when the phone asks for reduced motion.
+ * The website (Front-end/web `components/home/store/HeroBanners.tsx` +
+ * `StoreHome.buildSlides`) composes its hero from live catalogue content:
+ * Today's Deals (green), Shop by vehicle (mint), New arrivals — copy on the
+ * left, real product photos on white plates. The app shows the same slides,
+ * plus the promo banner admins switched on (`/promo-banners/active`) first.
+ * When none of those exist the Home screen builds slides from the category
+ * photos instead, so the hero is never a dark empty box.
  *
- * Display only: a deal's "% off" is the number the server sent.
+ * Slide kinds:
+ *   - `banner`: the admin's artwork, full-bleed, light (no dark scrim over it).
+ *   - `tone`: website slide — tinted panel, eyebrow, title, subtitle, button,
+ *     up to three product photos on white plates.
+ *   - `photo`: a category photo with a soft bottom fade and its name.
+ *
+ * Auto-advances every few seconds while Home is focused and the customer isn't
+ * touching it; off for reduced motion. Display only — any "% off" is the
+ * figure the server sent.
  */
 import { memo, useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions, type FlatList, type ListRenderItemInfo } from 'react-native';
@@ -28,113 +37,146 @@ import Animated, {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { alpha, colors, elevation, radius, spacing, stripes, type } from '../theme';
-import { GlassChip, Overline, PremiumButton, Shimmer, useReduceMotion } from '../ui';
-import { useApp } from '../store';
+import { Ionicons } from '@expo/vector-icons';
+import { alpha, colors, elevation, font, radius, slideTones, spacing, type, type SlideTone } from '../theme';
+import { PressScale, Shimmer, useReduceMotion } from '../ui';
 
-export interface HeroSlide {
-  key: string;
-  overline: string;
-  title: string;
-  subtitle?: string;
-  /** Full-bleed photo (promo banner). */
-  cover?: string;
-  /** Product shot shown on a white plate over the dark backdrop (a deal). */
-  product?: string;
-  cta: string;
+export interface HeroPhoto {
+  uri: string;
+  /** Route the photo opens (its product). */
   route: string;
+  name: string;
 }
 
-const AUTO_ADVANCE_MS = 5500;
+export type HeroSlide =
+  | { kind: 'banner'; key: string; image: string; title: string; cta: string; route: string }
+  | {
+      kind: 'tone';
+      key: string;
+      tone: SlideTone;
+      eyebrow: string;
+      title: string;
+      subtitle?: string;
+      cta: string;
+      route: string;
+      photos: HeroPhoto[];
+    }
+  | { kind: 'photo'; key: string; image: string; eyebrow: string; title: string; cta: string; route: string };
+
+const AUTO_ADVANCE_MS = 6000;
 const GUTTER = spacing.lg;
 
-/** Hero size from the window: near-square, capped so small phones still see the next section. */
+/** Hero size from the window: wide card, capped so small phones still see the next row. */
 export function useHeroSize() {
   const { width, height } = useWindowDimensions();
   const w = width - GUTTER * 2;
-  const h = Math.round(Math.min(w * 1.02, height * 0.52, 440));
+  const h = Math.round(Math.min(w * 0.86, height * 0.42, 360));
   return { w, h };
 }
 
-/** The car pill on the hero: "Creta · Change" or "Add your car". */
-function CarChip() {
-  const router = useRouter();
-  const { garage } = useApp();
-  const car = garage ? [garage.make, garage.model].filter(Boolean).join(' ') : null;
+function CtaPill({ label, onDark, onPress }: { label: string; onDark?: boolean; onPress: () => void }) {
   return (
-    <GlassChip
-      icon="car-sport-outline"
-      label={car ?? 'Add your car'}
-      action={car ? 'Change' : undefined}
-      onPress={() => router.push('/garage')}
-      style={s.chip}
-    />
+    <PressScale
+      onPress={onPress}
+      haptic="light"
+      scaleTo={0.96}
+      style={[s.cta, onDark ? s.ctaOnDark : s.ctaOnLight]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={[s.ctaText, { color: onDark ? colors.green : colors.white }]}>{label}</Text>
+      <Ionicons name="arrow-forward" size={14} color={onDark ? colors.green : colors.white} />
+    </PressScale>
   );
 }
 
-const Slide = memo(function Slide({
-  slide,
-  index,
-  w,
-  h,
-  scrollX,
-  parallax,
-}: {
-  slide: HeroSlide;
-  index: number;
-  w: number;
-  h: number;
-  scrollX: SharedValue<number>;
-  parallax: boolean;
-}) {
-  // The photo moves at ~70% of the swipe, so it seems to sit behind the card.
-  const drift = useAnimatedStyle(() => {
-    if (!parallax) return {};
-    const x = interpolate(scrollX.value, [(index - 1) * w, index * w, (index + 1) * w], [-w * 0.3, 0, w * 0.3], Extrapolation.CLAMP);
-    return { transform: [{ translateX: x }] };
-  });
+const ToneSlide = memo(function ToneSlide({ slide, w, h }: { slide: Extract<HeroSlide, { kind: 'tone' }>; w: number; h: number }) {
+  const router = useRouter();
+  const t = slideTones[slide.tone];
+  const onDark = slide.tone === 'green';
+  const photos = slide.photos.slice(0, 3);
+  const plate = Math.round(Math.min(w * 0.25, h * 0.3));
   return (
-    <View style={{ width: w, height: h, overflow: 'hidden' }}>
-      <Animated.View style={[s.backdrop, { width: w * 1.6, left: -w * 0.3 }, drift]}>
-        {slide.cover ? (
-          <Image source={{ uri: slide.cover }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={250} />
-        ) : (
-          <LinearGradient
-            colors={[colors.void, colors.carbon2, colors.greenDeep]}
-            locations={[0, 0.55, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
-        {!slide.cover && !slide.product && <BrandStripes h={h} />}
-      </Animated.View>
-      {slide.product && (
-        <View style={[s.plate, { width: w * 0.4, height: w * 0.4, top: h * 0.1 }]}>
-          <Image source={{ uri: slide.product }} style={s.plateImg} contentFit="contain" cachePolicy="memory-disk" transition={250} />
+    <View style={{ width: w, height: h }}>
+      <LinearGradient colors={[t.from, t.to]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      {/* The website's soft white glow, top-right. */}
+      <View style={[s.glow, { backgroundColor: alpha(colors.white, onDark ? 0.08 : 0.55), width: w * 0.8, height: w * 0.8, borderRadius: w * 0.4 }]} />
+      <View style={s.copy}>
+        <Text style={[s.eyebrow, { color: onDark ? colors.greenSoft : colors.green }]} numberOfLines={1}>{slide.eyebrow}</Text>
+        <Text style={[s.title, { color: t.ink }]} numberOfLines={2}>{slide.title}</Text>
+        {!!slide.subtitle && <Text style={[s.sub, { color: t.muted }]} numberOfLines={2}>{slide.subtitle}</Text>}
+        <View style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}>
+          <CtaPill label={slide.cta} onDark={onDark} onPress={() => router.push(slide.route as never)} />
+        </View>
+      </View>
+      {photos.length > 0 && (
+        <View style={[s.plates, { height: plate + spacing.sm }]}>
+          {photos.map((p, i) => (
+            <PressScale
+              key={`${p.route}-${i}`}
+              onPress={() => router.push(p.route as never)}
+              haptic="selection"
+              scaleTo={0.95}
+              style={[s.plate, { width: plate, height: plate, marginTop: i === 1 ? 0 : spacing.sm }]}
+              accessibilityLabel={p.name}
+            >
+              <Image source={{ uri: p.uri }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" transition={200} />
+            </PressScale>
+          ))}
         </View>
       )}
     </View>
   );
 });
 
-/** The logo's three slanted stripes, large and faint, behind the brand slide. */
-function BrandStripes({ h }: { h: number }) {
+const BannerSlide = memo(function BannerSlide({ slide, w, h }: { slide: Extract<HeroSlide, { kind: 'banner' }>; w: number; h: number }) {
+  const router = useRouter();
   return (
-    <View style={[s.bigStripes, { height: h * 1.3, top: -h * 0.15 }]} pointerEvents="none">
-      {stripes.map((c, i) => (
-        <View key={i} style={[s.bigStripe, { backgroundColor: c, opacity: i === 0 ? 0.55 : 0.08 }]} />
-      ))}
+    <PressScale
+      onPress={() => router.push(slide.route as never)}
+      haptic="light"
+      scaleTo={0.99}
+      style={{ width: w, height: h, backgroundColor: colors.white }}
+      accessibilityRole="button"
+      accessibilityLabel={`${slide.title}. ${slide.cta}`}
+    >
+      <Image source={{ uri: slide.image }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={250} />
+      <View style={s.bannerCta} pointerEvents="none">
+        <Text style={s.bannerCtaText}>{slide.cta}</Text>
+        <Ionicons name="arrow-forward" size={13} color={colors.ink} />
+      </View>
+    </PressScale>
+  );
+});
+
+const PhotoSlide = memo(function PhotoSlide({ slide, w, h }: { slide: Extract<HeroSlide, { kind: 'photo' }>; w: number; h: number }) {
+  const router = useRouter();
+  return (
+    <View style={{ width: w, height: h, backgroundColor: colors.greenFaint }}>
+      <Image source={{ uri: slide.image }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={250} />
+      <LinearGradient
+        pointerEvents="none"
+        colors={[alpha(colors.ink, 0), alpha(colors.ink, 0.7)]}
+        locations={[0.35, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={s.photoCopy}>
+        <Text style={[s.eyebrow, { color: colors.greenSoft }]}>{slide.eyebrow}</Text>
+        <Text style={[s.title, { color: colors.white }]} numberOfLines={2}>{slide.title}</Text>
+        <View style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}>
+          <CtaPill label={slide.cta} onDark onPress={() => router.push(slide.route as never)} />
+        </View>
+      </View>
     </View>
   );
-}
+});
 
-function Dot({ i, w, scrollX }: { i: number; w: number; scrollX: SharedValue<number> }) {
+function Dot({ i, w, scrollX, color }: { i: number; w: number; scrollX: SharedValue<number>; color: string }) {
   const st = useAnimatedStyle(() => {
     const t = interpolate(scrollX.value, [(i - 1) * w, i * w, (i + 1) * w], [0, 1, 0], Extrapolation.CLAMP);
-    return { width: 6 + 14 * t, opacity: 0.45 + 0.55 * t };
+    return { width: 6 + 14 * t, opacity: 0.35 + 0.65 * t };
   });
-  return <Animated.View style={[s.dot, st]} />;
+  return <Animated.View style={[s.dot, { backgroundColor: color }, st]} />;
 }
 
 export function HeroSkeleton() {
@@ -143,7 +185,6 @@ export function HeroSkeleton() {
 }
 
 export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
-  const router = useRouter();
   const reduce = useReduceMotion();
   const { w, h } = useHeroSize();
   const list = useAnimatedRef<FlatList<HeroSlide>>();
@@ -157,7 +198,6 @@ export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     },
   });
 
-  // The words follow the slide actually on screen — swipe, timer or anything else.
   useAnimatedReaction(
     () => Math.round(scrollX.value / w),
     (i, prev) => {
@@ -183,16 +223,21 @@ export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     }, [reduce, slides.length, w, scrollX, list]),
   );
 
-  const current = slides[Math.max(0, Math.min(index, slides.length - 1))];
-
   const renderItem = useCallback(
-    ({ item, index: i }: ListRenderItemInfo<HeroSlide>) => (
-      <Slide slide={item} index={i} w={w} h={h} scrollX={scrollX} parallax={!reduce} />
-    ),
-    [w, h, scrollX, reduce],
+    ({ item }: ListRenderItemInfo<HeroSlide>) =>
+      item.kind === 'banner' ? (
+        <BannerSlide slide={item} w={w} h={h} />
+      ) : item.kind === 'photo' ? (
+        <PhotoSlide slide={item} w={w} h={h} />
+      ) : (
+        <ToneSlide slide={item} w={w} h={h} />
+      ),
+    [w, h],
   );
 
-  if (!current) return null;
+  if (!slides.length) return null;
+  const current = slides[Math.max(0, Math.min(index, slides.length - 1))];
+  const darkDots = current?.kind === 'tone' && current.tone !== 'green';
 
   return (
     <View style={[s.hero, { width: w, height: h }]}>
@@ -216,42 +261,15 @@ export default function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
         onMomentumScrollEnd={() => {
           touching.current = false;
         }}
-        accessibilityRole="adjustable"
-        accessibilityLabel={`Featured, ${index + 1} of ${slides.length}`}
+        accessibilityLabel={`Offers, ${index + 1} of ${slides.length}`}
       />
-
-      {/* Scrim: clear at the top, deep at the bottom where the words sit. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[alpha(colors.void, 0.35), alpha(colors.void, 0), alpha(colors.void, 0.35), alpha(colors.void, 0.88)]}
-        locations={[0, 0.25, 0.55, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <View style={s.body} pointerEvents="box-none">
-        <CarChip />
-        <View style={{ flex: 1 }} pointerEvents="none" />
-        <View pointerEvents="none">
-          <Overline onDark>{current.overline}</Overline>
-          <Text style={s.title} numberOfLines={2}>{current.title}</Text>
-          {!!current.subtitle && <Text style={s.sub} numberOfLines={2}>{current.subtitle}</Text>}
+      {slides.length > 1 && (
+        <View style={[s.dots, darkDots ? s.dotsOnLight : s.dotsOnDark]} pointerEvents="none">
+          {slides.map((sl, i) => (
+            <Dot key={sl.key} i={i} w={w} scrollX={scrollX} color={darkDots ? colors.green : colors.white} />
+          ))}
         </View>
-        <View style={s.foot} pointerEvents="box-none">
-          <PremiumButton
-            label={current.cta}
-            variant="light"
-            iconRight="arrow-forward"
-            onPress={() => router.push(current.route as never)}
-          />
-          {slides.length > 1 && (
-            <View style={s.dots} pointerEvents="none">
-              {slides.map((sl, i) => (
-                <Dot key={sl.key} i={i} w={w} scrollX={scrollX} />
-              ))}
-            </View>
-          )}
-        </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -261,28 +279,72 @@ const s = StyleSheet.create({
     marginHorizontal: GUTTER,
     borderRadius: radius.xl,
     overflow: 'hidden',
-    backgroundColor: colors.void,
+    backgroundColor: colors.card,
     ...elevation.e2,
   },
-  backdrop: { position: 'absolute', top: 0, bottom: 0 },
-  plate: {
-    position: 'absolute',
-    right: spacing.lg,
-    borderRadius: radius.lg,
-    backgroundColor: colors.white,
-    padding: spacing.md,
-    transform: [{ rotate: '-4deg' }],
-    ...elevation.e3,
-  },
-  plateImg: { width: '100%', height: '100%' },
-  bigStripes: { position: 'absolute', right: '8%', flexDirection: 'row', gap: 14, transform: [{ skewX: '-25deg' }] },
-  bigStripe: { width: 34, height: '100%' },
+  glow: { position: 'absolute', top: '-30%', right: '-25%' },
 
-  body: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: spacing.lg + 2 },
-  chip: { alignSelf: 'flex-start', maxWidth: '86%' },
-  title: { ...type.display, color: colors.white, marginTop: spacing.xs },
-  sub: { ...type.small, color: colors.onDarkMuted, marginTop: spacing.xs, maxWidth: '92%' },
-  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
-  dots: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dot: { height: 6, borderRadius: 3, backgroundColor: colors.white },
+  copy: { paddingHorizontal: spacing.lg + 2, paddingTop: spacing.lg + 2, maxWidth: '92%' },
+  eyebrow: { fontFamily: font.bold, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase' },
+  title: { ...type.h1, fontFamily: font.extrabold, fontSize: 23, lineHeight: 28, marginTop: spacing.xs },
+  sub: { ...type.small, marginTop: spacing.xs },
+
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 38,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+  },
+  ctaOnLight: { backgroundColor: colors.green },
+  ctaOnDark: { backgroundColor: colors.white },
+  ctaText: { fontFamily: font.bold, fontSize: 13.5 },
+
+  plates: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: spacing.lg + 6,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  plate: {
+    borderRadius: radius.md,
+    backgroundColor: colors.white,
+    overflow: 'hidden',
+    ...elevation.e2,
+  },
+
+  bannerCta: {
+    position: 'absolute',
+    left: spacing.md,
+    bottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 32,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.white,
+    ...elevation.e1,
+  },
+  bannerCtaText: { fontFamily: font.bold, fontSize: 12.5, color: colors.ink },
+
+  photoCopy: { position: 'absolute', left: spacing.lg + 2, right: spacing.lg + 2, bottom: spacing.lg + 8 },
+
+  dots: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  dotsOnDark: { backgroundColor: alpha(colors.ink, 0.28) },
+  dotsOnLight: { backgroundColor: alpha(colors.white, 0.7) },
+  dot: { height: 6, borderRadius: 3 },
 });

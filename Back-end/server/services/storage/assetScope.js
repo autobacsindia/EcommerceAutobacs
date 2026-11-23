@@ -53,6 +53,9 @@ export const PRIVATE_PREFIXES = [
   'autobacs/lessons',
   // Photos on procurement's supplier price enquiries (services/supplierEnquiryService.js).
   'supplier-enquiries',
+  // Autobacs Partner: supplier GST certificates, cancelled cheques and listing
+  // photos before approval (services/supplierPortal/uploads.js).
+  'supplier-portal',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

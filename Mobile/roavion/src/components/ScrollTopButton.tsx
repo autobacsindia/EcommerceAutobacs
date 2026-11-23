@@ -53,12 +53,11 @@ export default function ScrollTopButton({ visible, onPress }: { visible: boolean
 const s = StyleSheet.create({
   wrap: { position: 'absolute', right: 16, bottom: 16 },
   btn: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    backgroundColor: colors.ink,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.onDarkFaint,
+    // WhatsApp-style FAB: brand-green rounded square.
+    width: 52,
+    height: 52,
+    borderRadius: radius.lg,
+    backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
     ...elevation.e2,

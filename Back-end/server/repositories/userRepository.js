@@ -234,6 +234,11 @@ class UserRepository extends BaseRepository {
     return User.find({ _id: { $in: ids } }).select('name email').lean();
   }
 
+  /** Role + staff membership + name, for linking an HR profile to a login. */
+  async findStaffPrincipal(id) {
+    return User.findById(id).select('name role staff').lean();
+  }
+
   /** Fresh role/staff/session state for re-checking a long-lived chat stream. */
   async findChatPrincipal(id) {
     return User.findById(id).select('name role staff sessionVersion').lean();
