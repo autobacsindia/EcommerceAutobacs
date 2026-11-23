@@ -107,6 +107,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   // Procurement's own tools: ask suppliers for prices on WhatsApp; work out a price.
   if (team === 'procurement') {
     nav.push(
+      // Autobacs Partner: supplier sign-ups, their products, price changes, margin rules.
+      { href: '/team/partners', label: 'Supplier partners', icon: Handshake },
       { href: '/team/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
       { href: '/team/price-calculator', label: 'Price calculator', icon: Calculator },
       { href: '/team/shipping-calculator', label: 'Shipping calculator', icon: Truck },

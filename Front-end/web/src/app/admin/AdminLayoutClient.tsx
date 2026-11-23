@@ -135,6 +135,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       // What accounts decides — payments, supplier refunds / credit, supplier changes — across orders.
       { href: '/admin/approvals', label: 'Waiting for approval', icon: ClipboardCheck },
       { href: '/admin/suppliers', label: 'Suppliers', icon: Factory },
+      { href: '/admin/supplier-partners', label: 'Supplier partners', icon: Handshake },
       { href: '/admin/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
       { href: '/admin/price-calculator', label: 'Price calculator', icon: Calculator },
       { href: '/admin/shipping-calculator', label: 'Shipping calculator', icon: Truck },

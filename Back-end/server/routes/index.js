@@ -98,6 +98,7 @@ import incentiveRoutes from './incentives.js';
 import googleReviewRoutes from './googleReviews.js';
 import supplierRoutes from './suppliers.js';
 import supplierEnquiryRoutes from './supplierEnquiries.js';
+import procurementPartnerRoutes from './procurementPartners.js';
 import partnerRoutes from './partner.js';
 import pushRoutes from './push.js';
 import notificationRoutes from './notifications.js';
@@ -249,6 +250,7 @@ apiRouter.use('/incentives', incentiveRoutes);
 apiRouter.use('/google-reviews', googleReviewRoutes);
 apiRouter.use('/suppliers', supplierRoutes);
 apiRouter.use('/supplier-enquiries', supplierEnquiryRoutes);
+apiRouter.use('/procurement/partners', procurementPartnerRoutes); // Autobacs Partner: procurement review (docs/ADR-supplier-portal.md)
 // Autobacs Partner supplier app (Bearer supplier token; docs/ADR-supplier-portal.md).
 apiRouter.use('/partner', partnerRoutes);
 apiRouter.use('/push', pushRoutes);
