@@ -61,6 +61,7 @@
     "count-products": "node scripts/legacy/count-products.js",
     "add-sample-products": "node scripts/legacy/add-sample-products.js",
     "bulk-import-products": "node scripts/legacy/bulk-import-products.js",
+    "import-legacy-redirects": "node scripts/import-legacy-redirects.js",
     "csv-import-products": "node scripts/legacy/csv-import-products.js",
     "cleanup-wordpress-products": "node utils/wordpressProductCleanup.js",
     "test-wordpress-cleanup": "node scripts/legacy/test-wordpress-cleanup.js",
