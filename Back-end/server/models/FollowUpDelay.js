@@ -76,6 +76,7 @@ const FollowUpDelaySchema = new mongoose.Schema(
         at: { type: Date, required: true },
         mode: { type: String, enum: ['shadow', 'live'], required: true },
         recipients: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+        /** People it went out to (live); 0 in shadow. */
         sent: { type: Number, default: 0 },
         _id: false,
       }],

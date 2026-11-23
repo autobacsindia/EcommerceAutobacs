@@ -75,6 +75,8 @@ const DEFAULTS = Object.freeze({
   adminAfterMin: OFFICE_DAY_MIN,
   maxOrders: 5000,
   pageSize: 100,
+  // The cron lock is 270 s: a pass stops scanning after this and resumes next time.
+  passBudgetSec: 180,
 });
 
 /** "HH:MM" → minutes after midnight, or null. */
@@ -174,6 +176,7 @@ export function loadFollowUpConfig(env = process.env, log = console.warn) {
     headAfterMin,
     adminAfterMin,
     maxOrders: pick('FOLLOWUP_MAX_ORDERS', intIn(100, 50000), DEFAULTS.maxOrders),
+    passBudgetMs: pick('FOLLOWUP_PASS_BUDGET_SEC', intIn(30, 240), DEFAULTS.passBudgetSec) * 1000,
     pageSize: DEFAULTS.pageSize,
     problems: Object.freeze(problems),
   });

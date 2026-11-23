@@ -80,43 +80,55 @@ export function buildAlert(level, row, cycle, recipients, now) {
   };
 }
 
-/** Claim, pick recipients, send (live) and record one level. Returns 1 when claimed. */
+/** Was `level` already claimed for this cycle? (A read of the prefetched row: no round trip.) */
+const claimed = (row, level, cycle) => !!row.levels?.[level] && time(row.levels[level]) === time(cycle);
+
+/**
+ * Claim one level (the claim and its record are ONE write), then send (live).
+ * Returns 1 when this pass won the claim.
+ */
 async function fireLevel({ row, level, cycle, people, mode, now, alerted, out, deps }) {
-  if (!await followUpDelayRepository.claimLevel(row._id, level, cycle, row.pausedUntil)) return 0;
+  if (claimed(row, level, cycle)) return 0;
   const owner = row.ownerAtLate || row.owner;
   const recipients = recipientsFor(level, owner, row.team, people).filter((u) => !alerted.has(idOf(u._id)));
+  const live = mode === 'live' && recipients.length > 0;
+  // `sent` = people it went out to (live); device-level delivery is the channels' concern.
+  const entry = { level, cycle, at: now, mode, recipients: recipients.map((u) => u._id), sent: live ? recipients.length : 0 };
+  if (!await followUpDelayRepository.claimLevel(row._id, level, cycle, row.pausedUntil, entry)) return 0;
   recipients.forEach((u) => alerted.add(idOf(u._id)));
-  let sent = 0;
-  if (mode === 'live' && recipients.length) {
-    const result = await deps.dispatch(buildAlert(level, row, cycle, recipients, now));
-    sent = Object.values(result).reduce((t, n) => t + n, 0);
-    out.sent += sent;
+  if (live) {
+    await deps.dispatch(buildAlert(level, row, cycle, recipients, now));
+    out.sent += recipients.length;
   }
-  await followUpDelayRepository.recordLevel(row._id, {
-    level, cycle, at: now, mode, recipients: recipients.map((u) => u._id), sent,
-  });
   out.levels[level] += 1;
   return 1;
 }
 
-/** Everything one waiting step needs this pass. */
-async function handleStep(step, order, ctx) {
+/** Everything one waiting step needs this pass. `existing` is its row, if any (prefetched). */
+async function handleStep(step, order, ctx, existing) {
   const { now, cfg, people, out } = ctx;
   const owner = resolveOwner(step, people);
-  let row = await followUpDelayRepository.ensure(step.key, {
-    subject: 'order',
-    order: order._id,
-    orderNumber: orderNumber(order),
-    stage: step.stage,
-    team: step.team,
-    itemKind: step.itemKind,
-    itemId: step.itemId,
-    itemName: step.itemName,
-    enteredAt: step.enteredAt,
-    dueAt: step.dueAt,
-    remindAt: step.remindAt,
-    owner,
-  });
+  let row = existing;
+  if (!row) {
+    const lateAlready = now.getTime() >= step.dueAt.getTime();
+    row = await followUpDelayRepository.ensure(step.key, {
+      subject: 'order',
+      order: order._id,
+      orderNumber: orderNumber(order),
+      stage: step.stage,
+      team: step.team,
+      itemKind: step.itemKind,
+      itemId: step.itemId,
+      itemName: step.itemName,
+      enteredAt: step.enteredAt,
+      dueAt: step.dueAt,
+      remindAt: step.remindAt,
+      owner,
+      // Found already past its deadline: born late, owner frozen, in the same write.
+      ...(lateAlready ? { lateAt: step.dueAt, ownerAtLate: owner } : {}),
+    });
+    if (lateAlready && row?.lateAt) out.late += 1;
+  }
   if (!row?.open) return;
 
   if (!row.lateAt && now.getTime() < step.dueAt.getTime()) {
@@ -207,23 +219,30 @@ export async function runFollowUpSweep({ now = new Date(), env = process.env, de
     const scannedOrders = new Set();
     let after = null;
     let lastFull = false;
+    let overBudget = false;
+    const started = Date.now();
     while (out.scanned < cfg.maxOrders) {
       const limit = Math.min(cfg.pageSize, cfg.maxOrders - out.scanned);
       const page = await orderRepository.findOpenWorkflowPage({ after, limit });
       if (!page.length) { lastFull = false; break; }
+      // One read for every row this page's due steps already have.
+      const due = [];
       for (const order of page) {
         scannedOrders.add(idOf(order._id));
         for (const step of followUpSteps(order, cfg)) {
           live.add(step.key);
           out.steps += 1;
-          if (now.getTime() < step.remindAt.getTime()) continue;
-          try {
-            await handleStep(step, order, ctx);
-          } catch (err) {
-            out.failed += 1;
-            console.error(`[FollowUp] step ${step.key} failed:`, err.message);
-            Sentry.captureException(err);
-          }
+          if (now.getTime() >= step.remindAt.getTime()) due.push({ step, order });
+        }
+      }
+      const existing = new Map((await followUpDelayRepository.findByKeys(due.map((d) => d.step.key))).map((r) => [r.key, r]));
+      for (const { step, order } of due) {
+        try {
+          await handleStep(step, order, ctx, existing.get(step.key));
+        } catch (err) {
+          out.failed += 1;
+          console.error(`[FollowUp] step ${step.key} failed:`, err.message);
+          Sentry.captureException(err);
         }
       }
       out.scanned += page.length;
@@ -231,9 +250,11 @@ export async function runFollowUpSweep({ now = new Date(), env = process.env, de
       const last = page[page.length - 1];
       after = { enteredAt: last.workflow.enteredAt, id: last._id };
       if (!lastFull) break;
+      // Stay well inside the cron lock: the rest waits for the next pass.
+      if (Date.now() - started > cfg.passBudgetMs) { overBudget = true; break; }
     }
-    out.truncated = out.scanned >= cfg.maxOrders && lastFull;
-    if (out.truncated) console.warn(`[FollowUp] stopped at ${cfg.maxOrders} open orders — the rest wait for the next pass`);
+    out.truncated = overBudget || (out.scanned >= cfg.maxOrders && lastFull);
+    if (out.truncated) console.warn(`[FollowUp] stopped after ${out.scanned} open orders (${overBudget ? 'time budget' : 'FOLLOWUP_MAX_ORDERS'}) — the rest wait for the next pass`);
     await resolveFinished(ctx, live, scannedOrders, out.truncated);
   } catch (err) {
     out.failed += 1;

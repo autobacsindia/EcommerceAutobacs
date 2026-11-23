@@ -50,19 +50,20 @@ const followUpDelayRepository = {
   ),
 
   /**
-   * Claim one ladder level for one cycle. Compare-and-set on the level AND on the
-   * pause the sweep read, so a reason saved mid-sweep (a new cycle) wins. True
-   * when this caller won and must send.
+   * Claim one ladder level for one cycle AND record it, in one write.
+   * Compare-and-set on the level and on the pause the sweep read, so a reason
+   * saved mid-sweep (a new cycle) wins. True when this caller won and must send.
    */
-  async claimLevel(id, level, cycle, pausedUntil) {
+  async claimLevel(id, level, cycle, pausedUntil, entry) {
     const res = await FollowUpDelay.updateOne(
       { _id: id, open: true, pausedUntil: pausedUntil ?? null, [`levels.${level}`]: { $ne: cycle } },
-      { $set: { [`levels.${level}`]: cycle } },
+      { $set: { [`levels.${level}`]: cycle }, $push: { levelsReached: entry } },
     );
     return res.modifiedCount === 1;
   },
 
-  recordLevel: (id, entry) => FollowUpDelay.updateOne({ _id: id }, { $push: { levelsReached: entry } }),
+  /** The rows for a page of step keys — one read on `followup_key`. */
+  findByKeys: (keys) => (keys.length ? FollowUpDelay.find({ key: { $in: keys } }).lean() : []),
 
   /** Append a reason; its next date (if any) becomes the pause. */
   addReason: (id, reason) => FollowUpDelay.findOneAndUpdate(
