@@ -25,8 +25,7 @@ import repo, { SUPPLIER_ACCOUNT_STATUS as S } from '../../repositories/supplierP
 import * as supplierService from '../supplierService.js';
 import { keysetPage } from '../../utils/listQuery.js';
 import { decryptField } from '../../utils/fieldEncryption.js';
-import { readPrivateAsset } from '../storage/privateUploads.js';
-import { PAGE_SIZE, fail, guard, idOf, iso, requireId, requireNote, stamp, text } from './shared.js';
+import { PAGE_SIZE, fail, guard, idOf, iso, readSupplierFile, requireId, requireNote, stamp, text } from './shared.js';
 
 export const ACCOUNT_LIST_STATUSES = Object.freeze([S.IN_REVIEW, S.CHANGES_REQUESTED, S.APPROVED, S.SUSPENDED, S.REJECTED]);
 const SORTS = Object.freeze({
@@ -130,10 +129,7 @@ export async function getDocument(actor, id, kind) {
   const a = await load(id);
   const doc = a[field];
   if (!doc?.key) throw fail('The supplier has not sent that document.', 404);
-  // Supplier documents are written to the private R2 bucket (key = object key).
-  const buffer = await readPrivateAsset({ publicId: doc.key, provider: 'r2' }, async () => {
-    throw new Error('supplier documents are R2-only');
-  });
+  const buffer = await readSupplierFile(doc);
   const ext = String(doc.contentType || '').includes('pdf') ? 'pdf' : 'jpg';
   return { buffer, contentType: doc.contentType || 'application/octet-stream', name: `${kind}.${ext}` };
 }

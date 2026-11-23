@@ -18,11 +18,10 @@ import repo from '../../repositories/supplierPartnerAdminRepository.js';
 import { invalidateCache } from '../../middleware/cacheMiddleware.js';
 import { revalidateFrontendTags } from '../frontendRevalidator.js';
 import { productTags } from '../../utils/nextTags.js';
-import { readPrivateAsset } from '../storage/privateUploads.js';
 import { putPublicAsset } from '../storage/publicUploads.js';
 import { deleteHostedImages } from '../storage/publicImageDeletes.js';
 import { cleanHTML } from '../../utils/htmlSanitizer.js';
-import { fail, text } from './shared.js';
+import { fail, readSupplierFile, text } from './shared.js';
 
 const PRODUCT_IMAGE_FOLDER = 'autobacs/products';
 const FORBIDDEN = /cost|margin|supplier/i;
@@ -47,9 +46,7 @@ export async function copyListingImages(images, alt) {
   const copied = [];
   try {
     for (const img of images) {
-      const buffer = await readPrivateAsset({ publicId: img.key, provider: 'r2' }, async () => {
-        throw new Error('supplier photos are R2-only');
-      });
+      const buffer = await readSupplierFile(img);
       const up = await putPublicAsset(buffer, { folder: PRODUCT_IMAGE_FOLDER, contentType: img.contentType || 'image/jpeg' });
       copied.push({ url: up.secure_url, public_id: up.public_id });
     }

@@ -10,6 +10,8 @@ import { resolveMarginRule } from '../supplierPortal/marginRules.js';
 import marginRuleRepository, { marginRuleKey } from '../../repositories/marginRuleRepository.js';
 import { DEFAULT_MARGIN_BP, DEFAULT_FLOOR_BP } from '../../config/supplierPortal.js';
 import { suggestSellingPrice, checkPrice } from '../../utils/supplierPricing.js';
+import { readPrivateAsset } from '../storage/privateUploads.js';
+import { signedAttachmentUrl } from '../../utils/supportAttachments.js';
 
 export const PAGE_SIZE = 30;
 export const MAX_PRICE_RUPEES = 10_000_000; // ₹1 crore — beyond any real part
@@ -124,6 +126,27 @@ export async function resolveMarginRules(categorySets) {
     out.set(ids.join(','), rule || { targetBp: DEFAULT_MARGIN_BP, floorBp: DEFAULT_FLOOR_BP, source: 'built-in' });
   }
   return out;
+}
+
+const FILE_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * Bytes of a supplier-app file ({ key, provider, contentType }), from whichever
+ * store holds it. The supplier app stores through putPrivateAsset, so a file is
+ * on R2 or (with STORAGE_PROVIDER=cloudinary, or a missing provider) Cloudinary:
+ * route on the file's OWN provider, never assume one. Cloudinary refs carry no
+ * url, so sign one the same way the supplier app signs its photo links.
+ */
+export async function readSupplierFile(file) {
+  const resourceType = String(file?.contentType || '').startsWith('image/') ? 'image' : 'raw';
+  const ref = { publicId: file?.key, provider: file?.provider };
+  return readPrivateAsset(ref, async () => {
+    const url = await signedAttachmentUrl(file.key, resourceType, ref);
+    if (!url) throw new Error('supplier file has no key');
+    const res = await fetch(url, { signal: AbortSignal.timeout(FILE_FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error(`supplier file fetch failed: ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  });
 }
 
 /** The actor stamp every decision carries. */

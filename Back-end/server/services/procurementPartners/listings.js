@@ -25,10 +25,9 @@ import auditLogger from '../auditLogger.js';
 import SearchService from '../searchService.js';
 import repo, { LISTING_STATUS as L, SUPPLIER_ACCOUNT_STATUS as A } from '../../repositories/supplierPartnerAdminRepository.js';
 import { keysetPage } from '../../utils/listQuery.js';
-import { readPrivateAsset } from '../storage/privateUploads.js';
 import { deleteHostedImages } from '../storage/publicImageDeletes.js';
 import {
-  PAGE_SIZE, cleanPrice, fail, guard, idOf, iso, priceDecision, pricingView, requireId, requireNote, stamp, text,
+  PAGE_SIZE, cleanPrice, fail, guard, idOf, iso, priceDecision, pricingView, readSupplierFile, requireId, requireNote, stamp, text,
 } from './shared.js';
 import { cleanProductForm, copyListingImages, createProduct, updateProduct } from './productWrites.js';
 
@@ -165,7 +164,7 @@ export async function getImage(actor, id, index) {
   const l = await load(id);
   const img = (l.images || [])[Number(index)];
   if (!Number.isInteger(Number(index)) || !img) throw fail('That photo was not found.', 404);
-  const buffer = await readPrivateAsset({ publicId: img.key, provider: 'r2' }, async () => { throw new Error('supplier photos are R2-only'); });
+  const buffer = await readSupplierFile(img);
   return { buffer, contentType: img.contentType || 'image/jpeg', name: `photo-${Number(index) + 1}` };
 }
 
