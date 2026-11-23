@@ -40,6 +40,9 @@ const DocFileSchema = new mongoose.Schema(
   {
     // Private storage key (services/storage/privateUploads.js). Never a public URL.
     key: { type: String, required: true, maxlength: 300 },
+    // Which store holds it — read/delete route on this, never on the key's shape
+    // (services/storage/privateAssetUrl.js providerOf). Missing = cloudinary.
+    provider: { type: String, enum: ['r2', 'cloudinary'] },
     contentType: { type: String, default: '', maxlength: 80 },
     uploadedAt: { type: Date, default: Date.now },
   },
