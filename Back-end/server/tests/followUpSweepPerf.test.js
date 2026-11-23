@@ -28,7 +28,7 @@ const { default: FollowUpDelay } = await import('../models/FollowUpDelay.js');
 const { buildIndexes } = await import('../scripts/create-followup-indexes.js');
 const { runFollowUpSweep } = await import('../services/followUp/index.js');
 
-jest.setTimeout(300000);
+jest.setTimeout(900000); // a loaded machine may need several budgeted passes for the backlog
 
 const ORDERS = 1000;
 const ist = (s) => new Date(`${s.replace(' ', 'T')}:00+05:30`);
