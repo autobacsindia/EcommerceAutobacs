@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "Autobacs Team",
+    "slug": "autobacs-team",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "autobacsteam",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "in.autobacs.team",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Autobacs Team uses the front camera to check it is you when you clock in or out. Photos go only to Autobacs.",
+        "NSLocationWhenInUseUsageDescription": "Autobacs Team checks you are at your work site when you clock in or out. It does not track you."
+      }
+    },
+    "android": {
+      "package": "in.autobacs.team",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f1111"
+      },
+      "permissions": ["android.permission.CAMERA", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO", "android.permission.ACCESS_BACKGROUND_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-dev-client",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#f3f5f4"
+        }
+      ],
+      "expo-status-bar",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Autobacs Team uses the front camera to check it is you when you clock in or out. Photos go only to Autobacs.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Autobacs Team checks you are at your work site when you clock in or out. It does not track you.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "https://api.autobacsindia.com/api/v1"
+    }
+  }
+}
