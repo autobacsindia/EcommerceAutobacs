@@ -16,7 +16,11 @@ export const hrKeys = {
   balances: (id: string, year: number) => [...hrKeys.employees(), 'balances', id, year] as const,
   today: (p: Params) => [...hrKeys.all, 'today', normalizeParams(p)] as const,
   leave: () => [...hrKeys.all, 'leave'] as const,
+  /** The paged inbox (useInfiniteQuery: { pages }). */
   leaveInbox: () => [...hrKeys.leave(), 'inbox'] as const,
+  /** The sidebar badge (useQuery: one page). A separate key: a query and an
+   *  infinite query must never share one, their cached shapes differ. */
+  leaveBadge: () => [...hrKeys.leave(), 'badge'] as const,
   payroll: () => [...hrKeys.all, 'payroll'] as const,
   payrollMonth: (month: string) => [...hrKeys.payroll(), month] as const,
   sites: () => [...hrKeys.all, 'sites'] as const,

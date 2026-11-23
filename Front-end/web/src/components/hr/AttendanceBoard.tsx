@@ -11,7 +11,7 @@ import StatusChip, { type ChipTone } from './StatusChip';
 import { PersonCell } from './Initials';
 import { useHrList } from './useHrList';
 import {
-  HrEmpty, HrErrorState, HrLoadMore, HrLoading, HrPageHeader, hrBtnGhost, hrCard, hrInput, hrTable, hrTd, hrTh,
+  HrEmpty, HrErrorState, HrLoadMore, HrLoading, HrPageHeader, hrBtnGhost, hrCard, hrField, hrInput, hrTable, hrTd, hrTh,
 } from './HrStates';
 
 export type BoardFilter = 'all' | 'late' | 'absent' | 'review';
@@ -74,7 +74,7 @@ export default function AttendanceBoard() {
         actions={(
           <>
             <label className="sr-only" htmlFor="hr-team">Team</label>
-            <select id="hr-team" value={team} onChange={(e) => setTeam(e.target.value)} className={`${hrInput} w-auto`}>
+            <select id="hr-team" value={team} onChange={(e) => setTeam(e.target.value)} className={`${hrField} w-auto`}>
               <option value="">All teams</option>
               {STAFF_TEAM_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>

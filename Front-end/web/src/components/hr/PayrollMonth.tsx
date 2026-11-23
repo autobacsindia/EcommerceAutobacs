@@ -13,7 +13,7 @@ import StatusChip from './StatusChip';
 import { PersonCell } from './Initials';
 import { useHrList } from './useHrList';
 import {
-  HrEmpty, HrErrorState, HrLoadMore, HrLoading, HrPageHeader, hrBtnGhost, hrBtnPrimary, hrCard, hrInput, hrTable, hrTd, hrTh,
+  HrEmpty, HrErrorState, HrLoadMore, HrLoading, HrPageHeader, hrBtnGhost, hrBtnPrimary, hrCard, hrField, hrInput, hrTable, hrTd, hrTh,
 } from './HrStates';
 
 const STEPS = [
@@ -93,7 +93,7 @@ function RunActions({ month, run, isAdmin }: { month: string; run: PayrollRun | 
     ) : unlocking ? (
       <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (reason.trim().length < 3) { setError('Say why it is being unlocked.'); return; } act.mutate(() => hrApi.unlockPayroll(month, run.rev, reason.trim())); }}>
         <label className="sr-only" htmlFor="unlock-reason">Reason for unlocking</label>
-        <input id="unlock-reason" className={`${hrInput} w-64`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why unlock? (logged)" disabled={busy} />
+        <input id="unlock-reason" className={`${hrField} w-64`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why unlock? (logged)" disabled={busy} />
         <button type="submit" className={hrBtnPrimary} disabled={busy}>{busy ? 'Unlocking…' : 'Unlock'}</button>
         <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => setUnlocking(false)}>Back</button>
       </form>

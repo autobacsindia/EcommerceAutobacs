@@ -35,7 +35,7 @@ export default function HrLayoutClient({
 
   // The "waiting" badge on Leave requests. A first page is enough to say "25+";
   // an undeployed endpoint just shows no badge.
-  const inbox = useQuery({ queryKey: hrKeys.leaveInbox(), queryFn: () => hrApi.leaveInbox(), retry: false });
+  const inbox = useQuery({ queryKey: hrKeys.leaveBadge(), queryFn: () => hrApi.leaveInbox(), retry: false });
   const waiting = inbox.data ? inbox.data.items.length : undefined;
 
   const items = HR_NAV.map(({ href, label, icon }) => ({

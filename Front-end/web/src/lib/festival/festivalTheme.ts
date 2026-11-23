@@ -51,14 +51,14 @@ export function isFestiveRoute(pathname: string | null | undefined): boolean {
     path.startsWith('/checkout') ||
     path.startsWith('/payment') ||
     path === '/admin' || path.startsWith('/admin/') ||
-    path === '/team' || path.startsWith('/team/')
+    path === '/team' || path.startsWith('/team/') || path === '/hr' || path.startsWith('/hr/')
   );
 }
 
 /** The staff panels: no decoration and the normal mouse, but a gentle sparkle trail. */
 export function isStaffPanelRoute(pathname: string | null | undefined): boolean {
   const path = (pathname || '/').replace(/\/+$/, '') || '/';
-  return path === '/admin' || path.startsWith('/admin/') || path === '/team' || path.startsWith('/team/');
+  return path === '/admin' || path.startsWith('/admin/') || path === '/team' || path.startsWith('/team/') || path === '/hr' || path.startsWith('/hr/');
 }
 
 /**

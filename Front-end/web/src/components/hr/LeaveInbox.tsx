@@ -37,8 +37,9 @@ export function DecisionCell({ request, decided, onDecided }: {
     onSuccess: (res, vars) => {
       setError(null);
       onDecided({ decision: vars.decision, request: res.request });
-      // Balances moved on the server; refresh anything that shows them.
+      // Balances moved on the server; refresh anything that shows them, and the badge.
       qc.invalidateQueries({ queryKey: hrKeys.employees() });
+      qc.invalidateQueries({ queryKey: hrKeys.leaveBadge() });
     },
     onError: (err) => {
       const view = describeHrError(err);

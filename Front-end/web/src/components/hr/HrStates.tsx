@@ -89,4 +89,6 @@ export const hrBtn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text
 export const hrBtnPrimary = `${hrBtn} bg-emerald-700 text-white hover:bg-emerald-800`;
 export const hrBtnGhost = `${hrBtn} border border-gray-300 bg-white text-gray-700 hover:bg-gray-50`;
 export const hrBtnDanger = `${hrBtn} border border-red-300 bg-white text-red-700 hover:bg-red-50`;
-export const hrInput = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100';
+/** Field look without a width, for inline controls. */
+export const hrField = 'rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100';
+export const hrInput = `${hrField} w-full`;

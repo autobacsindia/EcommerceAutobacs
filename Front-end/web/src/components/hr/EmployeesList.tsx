@@ -13,7 +13,7 @@ import StatusChip, { type ChipTone } from './StatusChip';
 import { PersonCell } from './Initials';
 import { useHrList } from './useHrList';
 import {
-  HrEmpty, HrErrorState, HrLoadMore, HrLoading, HrPageHeader, hrBtnGhost, hrBtnPrimary, hrCard, hrInput, hrTable, hrTd, hrTh,
+  HrEmpty, HrErrorState, HrLoadMore, HrLoading, HrPageHeader, hrBtnGhost, hrBtnPrimary, hrCard, hrField, hrInput, hrTable, hrTd, hrTh,
 } from './HrStates';
 
 const TABS: { key: EmployeeListFilter; label: string }[] = [
@@ -62,13 +62,13 @@ export default function EmployeesList() {
           ))}
         </div>
         <label className="sr-only" htmlFor="hr-emp-team">Team</label>
-        <select id="hr-emp-team" value={team} onChange={(e) => setTeam(e.target.value)} className={`${hrInput} w-auto`}>
+        <select id="hr-emp-team" value={team} onChange={(e) => setTeam(e.target.value)} className={`${hrField} w-auto`}>
           <option value="">All teams</option>
           {STAFF_TEAM_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select>
         <form onSubmit={onSearch} className="flex items-center gap-1.5">
           <label className="sr-only" htmlFor="hr-emp-q">Search by name or code</label>
-          <input id="hr-emp-q" value={qInput} onChange={(e) => setQInput(e.target.value)} placeholder="Name or EMP-code" className={`${hrInput} w-48`} />
+          <input id="hr-emp-q" value={qInput} onChange={(e) => setQInput(e.target.value)} placeholder="Name or EMP-code" className={`${hrField} w-48`} />
           <button type="submit" className={hrBtnGhost} aria-label="Search"><Search className="h-4 w-4" aria-hidden="true" /></button>
         </form>
       </div>
