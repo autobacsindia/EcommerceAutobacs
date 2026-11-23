@@ -401,10 +401,6 @@ export function formatDueDay(ymd: string | null): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(thisYear ? {} : { year: 'numeric' }), timeZone: 'UTC' });
 }
 
-/** Where a task's linked order opens: the admin's orders screen, or the team's order list. */
-export const orderHrefFor = (base: string, orderId: string) =>
-  (base.startsWith('/admin') ? `/admin/orders?order=${encodeURIComponent(orderId)}` : '/team/orders');
-
 /**
  * The staff safety cap on long text (server: config/staffTextLimits.js). Not a
  * limit anyone meets in normal use — the box only shows a counter past 80%.
