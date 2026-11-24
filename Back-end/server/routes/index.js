@@ -62,6 +62,7 @@ import analyticsRoutes from './analytics.js';
 import leadRoutes from './leads.js';
 import salesRepRoutes from './salesReps.js';
 import staffRoutes from './staff.js';
+import followUpRoutes from './followUps.js';
 import hrRoutes from './hr/index.js';
 import chatRoutes from './chat.js';
 import warehouseRoutes from './warehouses.js';
@@ -199,6 +200,8 @@ apiRouter.use('/leads', adminRouteRateLimit, leadRoutes);
 apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
 // Staff panel (/team): invite redemption is public; everything else is active staff
 // or admin, scoped per team inside staffService. Limiters are applied per route.
+// "My delays" (follow-ups): own gate inside; mounted before /staff so its paths win.
+apiRouter.use('/staff/delays', followUpRoutes);
 apiRouter.use('/staff', staffRoutes);
 // HR system (docs/ADR-hr-system.md): employee profiles, attendance, leave, payroll.
 // protect + per-user limiter inside; role checks on every route (middleware/hrAuth.js).
