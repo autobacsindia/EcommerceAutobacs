@@ -20,6 +20,9 @@ import { runDailyReminders, reminderCron } from './projectReminderService.js';
 import { postEtaReminders } from './parcelEtaReminders.js';
 import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
 import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthService.js';
+import { runFollowUpSweep } from './followUp/sweep.js';
+import { loadFollowUpConfig } from '../config/followUp.js';
+import { isOfficeTime } from './followUp/officeClock.js';
 
 class CronService {
   constructor() {
@@ -79,6 +82,7 @@ class CronService {
     this.schedulePushCleanup();
     this.scheduleIncentives();
     this.scheduleCallSweep();
+    this.scheduleFollowUpSweep();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -427,6 +431,42 @@ class CronService {
     });
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Project reminders scheduled: "${schedule}"`);
+    }
+  }
+
+  /**
+   * Order follow-up engine (services/followUp/sweep.js): every 5 minutes, office
+   * time only (FOLLOWUP_OFFICE_*; holidays from STAFF_HOLIDAYS). FOLLOWUP_MODE
+   * off | shadow | live (default shadow: records, sends nothing). Lock-guarded so
+   * replicas do not overlap; each ladder level is also claimed per delay row, so
+   * even a double run sends once. FOLLOWUP_CRON overrides the schedule.
+   *
+   * TODO(follow-up piece B): call runCourierSync() from services/courier before
+   * the sweep once that export lands — not wired here on purpose.
+   */
+  scheduleFollowUpSweep() {
+    const schedule = process.env.FOLLOWUP_CRON || '*/5 * * * *';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid FOLLOWUP_CRON "${schedule}" — follow-up sweep NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () => {
+      const cfg = loadFollowUpConfig();
+      if (cfg.mode === 'off' || !isOfficeTime(new Date(), cfg.office)) return undefined;
+      return this.withDistributedLock('cron:lock:followUpSweep', 4 * 60 + 30, () =>
+        runFollowUpSweep().catch(err =>
+          console.error('[CronService] Follow-up sweep failed:', err.message)
+        )
+      );
+    }, { scheduled: true, timezone: 'Asia/Kolkata' });
+    this.scheduledTasks.push({
+      name: 'followUpSweep',
+      task,
+      schedule,
+      description: 'Order follow-ups: deadlines, reminders and escalations (office time)',
+    });
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Follow-up sweep scheduled: "${schedule}" (mode ${loadFollowUpConfig().mode})`);
     }
   }
 

@@ -38,6 +38,7 @@
     "backfill-order-list-date": "node --import=dotenv/config scripts/backfill-order-list-date.js",
     "create-order-rating-indexes": "node --import=dotenv/config scripts/create-order-rating-indexes.js",
     "create-chat-call-indexes": "node --import=dotenv/config scripts/create-chat-call-indexes.js",
+    "create-followup-indexes": "node --import=dotenv/config scripts/create-followup-indexes.js",
     "create-whatsapp-indexes": "node --import=dotenv/config scripts/create-whatsapp-indexes.js",
     "create-supplier-portal-indexes": "node scripts/create-supplier-portal-indexes.js",
     "backfill-normalize-emails": "node --import=dotenv/config scripts/backfill-normalize-emails.js",

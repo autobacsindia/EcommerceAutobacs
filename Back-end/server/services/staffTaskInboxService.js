@@ -16,7 +16,7 @@
  */
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
-import staffTaskInboxRepository, { INBOX_UNREAD_CAP, PROJECT_INBOX_KINDS } from '../repositories/staffTaskInboxRepository.js';
+import staffTaskInboxRepository, { INBOX_UNREAD_CAP, PROJECT_INBOX_KINDS, FOLLOWUP_INBOX_KINDS } from '../repositories/staffTaskInboxRepository.js';
 import { canSee } from './staffTaskService.js';
 import { seesProject } from './staffProjectService.js';
 import staffProjectRepository from '../repositories/staffProjectRepository.js';
@@ -123,8 +123,22 @@ export async function readAllInbox(actor, upTo) {
 
 // ── The "new work" pop-up ───────────────────────────────────────────────────
 
-/** Kinds that pop up in the open panel: work given to you. Comments and status changes stay quiet. */
+/**
+ * Kinds that pop up in the open panel: work given to you. Comments and status
+ * changes stay quiet. Order follow-ups (FOLLOWUP_INBOX_KINDS, state `alert`) pop
+ * up too — read by a second range, merged newest first.
+ */
 export const ALERT_KINDS = Object.freeze(['assigned', 'project_added']);
+
+/** Where an alert opens. */
+function alertHref(r, user, base) {
+  if (FOLLOWUP_INBOX_KINDS.includes(r.kind)) {
+    return user.role === 'admin' ? `/admin/orders?order=${encodeURIComponent(idOf(r.order))}` : '/team/orders';
+  }
+  return aboutProject(r)
+    ? `${base}?view=project&project=${encodeURIComponent(idOf(r.project))}`
+    : `${base}/${encodeURIComponent(idOf(r.task))}`;
+}
 /** Older than this, it is in the Inbox, not news. */
 export const ALERT_WINDOW_HOURS = 24;
 export const ALERTS_MAX = 5;
@@ -136,17 +150,21 @@ export const ALERTS_MAX = 5;
  */
 export async function recentAlerts(user, now = new Date()) {
   const since = new Date(now.getTime() - ALERT_WINDOW_HOURS * 3600_000);
-  const rows = await staffTaskInboxRepository.recentUnread(user._id, ALERT_KINDS, since, ALERTS_MAX);
+  const [work, followUps] = await Promise.all([
+    staffTaskInboxRepository.recentUnread(user._id, ALERT_KINDS, since, ALERTS_MAX),
+    staffTaskInboxRepository.recentFollowUpAlerts(user._id, since, ALERTS_MAX),
+  ]);
+  const rows = [...work, ...followUps]
+    .sort((a, b) => (String(b._id) > String(a._id) ? 1 : String(b._id) < String(a._id) ? -1 : 0))
+    .slice(0, ALERTS_MAX);
   const base = user.role === 'admin' ? '/admin/tasks' : '/team/tasks';
   return rows.map((r) => ({
     id: idOf(r._id),
     kind: r.kind,
     by: r.byName || '',
-    title: aboutProject(r) ? r.title : `T-${r.number} · ${r.title}`,
+    title: aboutProject(r) || FOLLOWUP_INBOX_KINDS.includes(r.kind) ? r.title : `T-${r.number} · ${r.title}`,
     text: r.text || '',
-    href: aboutProject(r)
-      ? `${base}?view=project&project=${encodeURIComponent(idOf(r.project))}`
-      : `${base}/${encodeURIComponent(idOf(r.task))}`,
+    href: alertHref(r, user, base),
     at: r.createdAt,
   }));
 }
