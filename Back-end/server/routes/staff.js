@@ -57,6 +57,7 @@ import {
   validateParcelStep,
   validateParcelEta,
   validateOverdueReason,
+  validateOverdueReasonFile,
   validateCustomerDecision,
   validateRefundReview,
   validateRefundRetry,
@@ -76,7 +77,7 @@ import staffReturnRoutes from './staffReturns.js';
 import staffLeadRoutes from './staffLeads.js';
 import staffMetaLeadRoutes from './staffMetaLeads.js';
 import {
-  uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr, uploadCreditProof,
+  uploadProofPhotos, uploadOverdueReasonFile, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr, uploadCreditProof,
 } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
@@ -96,6 +97,7 @@ import {
   addParcelStep,
   setParcelEta,
   setParcelOverdueReason,
+  getOverdueReasonFile,
   undoDelivered,
 } from '../services/teamWorkflowService.js';
 import {
@@ -786,11 +788,18 @@ router.put('/work/orders/:id/parcels/:shipmentId/eta', validateParcelEta, valida
   res.json({ success: true, order: await setParcelEta(req.user, req.params.id, req.params.shipmentId, { date, previousDate }, req) });
 }));
 
-// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/overdue-reason  { code, note?, expectedDate? } — procurement / operations / admin: why it is overdue
-router.put('/work/orders/:id/parcels/:shipmentId/overdue-reason', validateOverdueReason, validateRequest, asyncHandler(async (req, res) => {
-  const { code, note, expectedDate } = req.body;
-  res.set('Cache-Control', 'no-store');
-  res.json({ success: true, order: await setParcelOverdueReason(req.user, req.params.id, req.params.shipmentId, { code, note, expectedDate }, req) });
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/overdue-reason  { code, note?, expectedDate?, requestId? } (JSON, or multipart with one `file`)
+//         — procurement / operations / admin: why it is overdue, optionally with a photo / PDF
+router.put('/work/orders/:id/parcels/:shipmentId/overdue-reason', concurrentUploadGuard, attachmentSizeGuard, uploadOverdueReasonFile, handleAttachmentError,
+  validateOverdueReason, validateRequest, asyncHandler(async (req, res) => {
+    const { code, note, expectedDate, requestId } = req.body;
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, order: await setParcelOverdueReason(req.user, req.params.id, req.params.shipmentId, { code, note, expectedDate, requestId }, req, req.file || null) });
+  }));
+
+// @route  GET /staff/work/orders/:id/parcels/:shipmentId/overdue-files/:fileName — the file on an overdue reason (private, staff who see the order)
+router.get('/work/orders/:id/parcels/:shipmentId/overdue-files/:fileName', validateOverdueReasonFile, validateRequest, asyncHandler(async (req, res) => {
+  sendProof(res, await getOverdueReasonFile(req.user, req.params.id, req.params.shipmentId, req.params.fileName));
 }));
 
 // @route  POST /staff/work/orders/:id/undo-delivered  { shipmentId } — operations / admin: back in transit

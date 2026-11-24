@@ -183,8 +183,8 @@ describe('history', () => {
     await explain(p, id, sid, { code: 'supplier_delay', note: 'factory shut' });
     const v = await explain(a, id, sid, { code: 'courier_delay', note: 'handed over late' });
     expect(v.parcels[0].overdueReasonHistory).toEqual([
-      { code: 'courier_delay', label: 'Courier delay', note: 'handed over late', forDate: day, by: a.name, at: expect.any(Date) },
-      { code: 'supplier_delay', label: 'Supplier delay', note: 'factory shut', forDate: day, by: p.name, at: expect.any(Date) },
+      { code: 'courier_delay', label: 'Courier delay', note: 'handed over late', forDate: day, by: a.name, at: expect.any(Date), attachment: null },
+      { code: 'supplier_delay', label: 'Supplier delay', note: 'factory shut', forDate: day, by: p.name, at: expect.any(Date), attachment: null },
     ]);
     expect(v.history.some((h) => h.action === 'Reason for overdue given' && /Parcel 1: Courier delay/.test(h.note || ''))).toBe(true);
 

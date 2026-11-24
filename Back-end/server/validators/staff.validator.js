@@ -415,6 +415,14 @@ export const validateOverdueReason = [
   body('code').isIn(OVERDUE_REASON_CODES).withMessage('Choose a reason'),
   body('note').optional({ values: 'null' }).isString().isLength({ max: MAX_OVERDUE_NOTE }).withMessage(`Keep the note under ${MAX_OVERDUE_NOTE} characters`),
   body('expectedDate').optional({ values: 'null' }).isString().isLength({ max: 10 }).withMessage('Refresh the order and try again'),
+  // One id per save attempt (the client makes it): a retry of the same save adds nothing.
+  body('requestId').optional({ values: 'falsy' }).isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Refresh the order and try again'),
+];
+
+// The stored name of an overdue-reason file (teamWorkflowService isOverdueFileName).
+export const validateOverdueReasonFile = [
+  ...validateWorkParcel,
+  param('fileName').matches(/^overdue-[a-f0-9]{24}-[a-f0-9]{12}\.(jpg|png|webp|pdf)$/).withMessage('File not found'),
 ];
 
 export const validateParcelStep = [
