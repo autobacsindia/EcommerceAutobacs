@@ -42,7 +42,7 @@ type Entries    = MetadataRoute.Sitemap;
  * empty list. Sources are isolated from each other for the same reason: a dead
  * blog API must not take the 933 product URLs down with it.
  */
-type Source = 'products' | 'categories' | 'articles' | 'brands' | 'vehicles';
+type Source = 'products' | 'categories' | 'articles' | 'brands';
 const cache = new Map<Source, { data: Entries; at: number }>();
 const CACHE_TTL = 86400000; // 24h
 
@@ -241,30 +241,9 @@ async function brandEntries(): Promise<Entries> {
     }));
 }
 
-/**
- * Vehicle fitment pages — the long-tail catalogue surface ("Thar Roxx
- * accessories"). Only /model/[slug] is submitted, deliberately:
- *
- *  - /vehicles/** is browse UI serving the same intent, so submitting both puts
- *    two of our own URLs in front of one query. /model/[slug] is the one with
- *    per-page metadata, a description and a self-canonical.
- *  - /model/[slug]/page/N self-canonicalises and stays indexable, but deep
- *    pages are for crawlers to follow, not for us to enumerate.
- */
-async function vehicleEntries(): Promise<Entries> {
-  const data = await getJson<{ vehicles?: Array<{ slug: string; updatedAt?: string }> }>(
-    '/vehicles/sitemap',
-    {},
-  );
-  return (data.vehicles ?? [])
-    .filter((v) => v.slug)
-    .map((v) => ({
-      url: `${BASE_URL}/model/${v.slug}`,
-      lastModified: safeDate(v.updatedAt),
-      changeFrequency: 'weekly' as ChangeFreq,
-      priority: 0.7,
-    }));
-}
+// No /model/ or /vehicles/ URLs are submitted (owner decision, 2026-11-24):
+// the vehicle-model pages stay up and indexable, Google just finds them by
+// crawling instead of from this list. sitemap.test.ts pins it.
 
 async function articleEntries(): Promise<Entries> {
   const data = await getJson<{
@@ -288,11 +267,10 @@ async function articleEntries(): Promise<Entries> {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const startedAt = Date.now();
 
-  const [products, categories, brands, vehicles, articles] = await Promise.all([
+  const [products, categories, brands, articles] = await Promise.all([
     collect('products', productEntries),
     collect('categories', categoryEntries),
     collect('brands', brandEntries),
-    collect('vehicles', vehicleEntries),
     collect('articles', articleEntries),
   ]);
 
@@ -303,7 +281,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...products,
     ...categories,
     ...brands,
-    ...vehicles,
     ...articles,
   ]);
 
@@ -312,7 +289,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     products: products.length,
     categories: categories.length,
     brands: brands.length,
-    vehicles: vehicles.length,
     articles: articles.length,
     durationMs: Date.now() - startedAt,
   });
