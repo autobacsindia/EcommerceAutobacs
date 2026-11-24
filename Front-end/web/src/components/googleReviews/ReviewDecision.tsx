@@ -6,6 +6,7 @@ import StarPicker, { Stars } from './StarPicker';
 import { ReviewHistory, StatusPill } from './ReviewList';
 import { useGoogleReview, useRejectGoogleReview, useVerifyGoogleReview } from '@/hooks/queries/useGoogleReviews';
 import { errorText, fmtDateTime, suggestedPoints, type GoogleReview, type ReviewPolicy } from '@/lib/googleReviews';
+import EntityLink from '@/components/ui/EntityLink';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
@@ -120,7 +121,7 @@ export default function ReviewDecision({ initial, policy, meId, onClose, onDone 
             <dl className="grid grid-cols-3 gap-x-2 gap-y-1 text-sm">
               <dt className="text-gray-500">Customer</dt><dd className="col-span-2 text-gray-900">{r.customerName || '—'}</dd>
               <dt className="text-gray-500">Phone</dt><dd className="col-span-2 text-gray-900">{r.customerPhone || '—'}</dd>
-              <dt className="text-gray-500">Order</dt><dd className="col-span-2 text-gray-900">{r.orderNumber || '—'}</dd>
+              <dt className="text-gray-500">Order</dt><dd className="col-span-2 text-gray-900">{r.orderNumber ? <EntityLink type="order" id={r.orderId} value={r.orderNumber} label="Order number" /> : '—'}</dd>
               <dt className="text-gray-500">They said</dt><dd className="col-span-2"><Stars n={r.claimedStars} /></dd>
               {r.notes && (<><dt className="text-gray-500">Notes</dt><dd className="col-span-2 whitespace-pre-wrap text-gray-900">{r.notes}</dd></>)}
               {r.status === 'verified' && (<><dt className="text-gray-500">Credited</dt><dd className="col-span-2 font-medium text-green-700">{r.points} pts ({r.stars}★) by {r.reviewedByName}</dd></>)}

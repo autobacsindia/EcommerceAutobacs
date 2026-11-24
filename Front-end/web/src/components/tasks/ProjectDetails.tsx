@@ -21,6 +21,7 @@ import { SlipMenu } from './SlipMenu';
 
 export { slipHref, SlipMenu } from './SlipMenu';
 import { LONG_TEXT_MAX, formatDueDay, isConflict, type Project, type ProjectDetails, type ProjectField, type ProjectTemplate, type ProjectTemplates } from './types';
+import EntityLink from '@/components/ui/EntityLink';
 
 const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
@@ -57,7 +58,7 @@ export function ProjectDetailsPanel({ p }: { p: Project }) {
         <ClipboardList aria-hidden className="h-4 w-4 text-gray-500" />
         <h3 className="text-sm font-semibold text-gray-900">Job details</h3>
         {d && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-700">{d.templateLabel}</span>}
-        {d?.order && <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-800"><Link2 aria-hidden className="h-3 w-3" />Order {d.order.number}</span>}
+        {d?.order && <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-800"><Link2 aria-hidden className="h-3 w-3" />Order <EntityLink type="order" id={d.order.id} value={d.order.number} label="Order number" /></span>}
         <span className="ml-auto flex flex-wrap items-center gap-2">
           <SlipMenu p={p} />
           {canEdit && d && (

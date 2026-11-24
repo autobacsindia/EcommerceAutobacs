@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CompanyOverviewPage from './page';
+import AuthContext from '@/context/AuthContext';
 
 const get = jest.fn();
 jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a) } }));
@@ -42,7 +43,12 @@ beforeEach(() => {
 });
 afterEach(() => jest.useRealTimers());
 
-const renderPage = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CompanyOverviewPage /></QueryClientProvider>);
+// Signed in as the admin: order numbers link to the admin's order page (lib/entityLinks).
+const renderPage = () => render(
+  <AuthContext.Provider value={{ user: { role: 'admin' } } as never}>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CompanyOverviewPage /></QueryClientProvider>
+  </AuthContext.Provider>,
+);
 
 it('shows today, money waiting, teams, overdue work, people and the activity feed', async () => {
   get.mockResolvedValue(overview);

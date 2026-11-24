@@ -1,6 +1,6 @@
 'use client';
 
-import CopyId from '@/components/ui/CopyId';
+import EntityLink from '@/components/ui/EntityLink';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
@@ -271,7 +271,7 @@ export default function PaymentRequestForm({
 
       {supplier ? (
         <div className="rounded-lg bg-gray-50 p-3 text-sm">
-          <p className="text-gray-700">Order <strong>{supplier.orderNumber}</strong><CopyId value={supplier.orderNumber} label="Order number" className="ml-0.5" /> · {supplier.customer} · sale closed by {supplier.closedBy}</p>
+          <p className="text-gray-700">Order <EntityLink type="order" id={supplier.orderId} value={supplier.orderNumber} label="Order number" linkClassName="font-bold" newTab /> · {supplier.customer} · sale closed by {supplier.closedBy}</p>
           {deal || setup ? (
             <div className="mt-2">
               <p className={label}>For</p>
