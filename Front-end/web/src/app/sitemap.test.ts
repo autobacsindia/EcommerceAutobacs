@@ -75,16 +75,19 @@ describe('sitemap contents', () => {
     expect(found).toContain(`${BASE}/products/led-bar`)
     expect(found).toContain(`${BASE}/categories/lighting`)
     expect(found).toContain(`${BASE}/brands/auxbeam`)
-    expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
     // Blog posts live under /blog (moved from the site root in 2026-11).
     expect(found).toContain(`${BASE}/blog/thar-roxx-accessories`)
     expect(found).not.toContain(`${BASE}/thar-roxx-accessories`)
   })
 
-  it('submits /model/[slug] but NOT the /vehicles browse tree', async () => {
+  // Owner decision 2026-11-24: vehicle-model pages stay live and indexable but
+  // are not submitted — neither /model/<slug> nor the /vehicles browse tree.
+  it('submits no /model/ or /vehicles URL, and never asks the API for vehicles', async () => {
     const found = await urls()
-    expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
+    expect(found.some((u) => u.startsWith(`${BASE}/model/`))).toBe(false)
     expect(found.some((u) => u.startsWith(`${BASE}/vehicles`))).toBe(false)
+    const paths = (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0]))
+    expect(paths.some((p) => p.includes('/vehicles/sitemap'))).toBe(false)
   })
 
   it('emits the home page without a trailing slash', async () => {
@@ -117,7 +120,6 @@ describe('sitemap contents', () => {
     expect(iso(`${BASE}/categories/lighting`)).toBe('2026-08-02T00:00:00.000Z')
     expect(iso(`${BASE}/brands/auxbeam`)).toBe('2026-08-03T00:00:00.000Z')
     expect(iso(`${BASE}/blog/thar-roxx-accessories`)).toBe('2026-08-04T00:00:00.000Z')
-    expect(iso(`${BASE}/model/mahindra-thar-roxx`)).toBe('2026-08-05T00:00:00.000Z')
   })
 
   // Static pages used to carry the generation time, so all ~24 "changed" every
@@ -159,7 +161,6 @@ describe('upstream failure', () => {
     expect(found).toContain(`${BASE}/products/led-bar`)
     expect(found).toContain(`${BASE}/categories/lighting`)
     expect(found).toContain(`${BASE}/brands/auxbeam`)
-    expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
     expect(found).not.toContain(`${BASE}/blog/thar-roxx-accessories`)
   })
 
