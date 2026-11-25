@@ -55,8 +55,10 @@ const SupplierBillSchema = new mongoose.Schema(
 
     // The supplier's own bill / invoice number as printed, and a folded copy for the
     // one-open-bill-per-number rule ("INV 4471" and "inv-4471" are the same bill).
-    billNumber: { type: String, required: true, maxlength: 60 },
-    billKey: { type: String, required: true, maxlength: 60 },
+    // Optional (owner, 2026-11-25: goods often arrive before the bill does). With no
+    // number both fields are ABSENT, never '' — so the unique index below skips them.
+    billNumber: { type: String, maxlength: 60 },
+    billKey: { type: String, maxlength: 60 },
     // 'YYYY-MM-DD' calendar days (no time zone to get wrong).
     billDate: { type: String, default: '' },
     dueDate: { type: String, required: true },
@@ -93,9 +95,12 @@ SupplierBillSchema.index({ status: 1, settled: 1, dueDate: 1, _id: 1 }, { name: 
 // One supplier's bills, and the per-supplier totals.
 SupplierBillSchema.index({ supplier: 1, status: 1, settled: 1, dueDate: 1 }, { name: 'supplier_bill_supplier' });
 // The same supplier bill cannot be added twice while it is open — even at the same moment.
+// Only bills WITH a number take part ($type, never $ne: MongoDB rejects $ne in a partial
+// filter). Replaces supplier_bill_open_number, which also covered bills with no number
+// (two of those would collide as null) — scripts/create-supplier-bill-indexes.js drops it.
 SupplierBillSchema.index(
   { supplier: 1, billKey: 1 },
-  { name: 'supplier_bill_open_number', unique: true, partialFilterExpression: { status: 'open' } }
+  { name: 'supplier_bill_open_bill_key', unique: true, partialFilterExpression: { status: 'open', billKey: { $type: 'string' } } }
 );
 SupplierBillSchema.index(
   { createdBy: 1, clientId: 1 },

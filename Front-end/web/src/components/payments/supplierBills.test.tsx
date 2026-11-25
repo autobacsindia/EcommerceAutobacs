@@ -116,7 +116,7 @@ describe('We owe suppliers', () => {
     wrap(<SupplierBillsTab canAdd />);
     fireEvent.click(await screen.findByRole('button', { name: /Add a bill/ }));
     const form = screen.getByRole('form', { name: 'Add a bill' });
-    fireEvent.change(within(form).getByLabelText('Bill number'), { target: { value: 'INV-9001' } });
+    fireEvent.change(within(form).getByLabelText('Bill number (optional)'), { target: { value: 'INV-9001' } });
     fireEvent.change(within(form).getByLabelText('Bill amount (₹)'), { target: { value: '12000' } });
     fireEvent.change(within(form).getByLabelText('Pay by (due date)'), { target: { value: '2026-12-10' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }));
@@ -133,6 +133,27 @@ describe('We owe suppliers', () => {
     expect(body.get('dueDate')).toBe('2026-12-10');
     expect(body.get('amount')).toBe('12000');
     expect(String(body.get('clientId'))).toMatch(/.{8,}/);
+  });
+
+  it('a bill can be added with no bill number (it may come later), and shows as such', async () => {
+    wrap(<SupplierBillsTab canAdd />);
+    fireEvent.click(await screen.findByRole('button', { name: /Add a bill/ }));
+    const form = screen.getByRole('form', { name: 'Add a bill' });
+    fireEvent.change(within(form).getByLabelText('Supplier'), { target: { value: 'rk' } });
+    fireEvent.click(await within(form).findByRole('option', { name: /RK New Popular/ }));
+    fireEvent.change(within(form).getByLabelText('Bill amount (₹)'), { target: { value: '12000' } });
+    fireEvent.change(within(form).getByLabelText('Pay by (due date)'), { target: { value: '2026-12-10' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/SB-0003 added/);
+    expect(screen.queryByText(/Type the supplier's bill number/)).toBeNull();
+    expect(sent().form.get('billNumber')).toBe('');
+  });
+
+  it('a bill with no number is listed by its SB number', async () => {
+    bills = [bill({ billNumber: '' })];
+    wrap(<SupplierBillsTab canAdd />);
+    const row = await screen.findByRole('listitem', { name: 'Bill SB-0001 from RK New Popular' });
+    expect(within(row).getByText(/no bill number yet/)).toBeInTheDocument();
   });
 
   it('cancelling a bill asks why', async () => {

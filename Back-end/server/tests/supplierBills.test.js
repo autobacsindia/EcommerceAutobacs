@@ -182,7 +182,7 @@ describe('We owe suppliers (supplier bills)', () => {
       const cases = [
         [{ supplierId: '' }, /Pick the supplier/],
         [{ supplierId: String(new mongoose.Types.ObjectId()) }, /Pick the supplier/],
-        [{ supplierId: s.id, billNumber: '  ' }, /bill number/],
+        [{ supplierId: s.id, billNumber: '--/--' }, /bill number needs a letter or a digit/],
         [{ supplierId: s.id, amount: 0 }, /at least ₹1/],
         [{ supplierId: s.id, amount: 'abc' }, /in rupees/],
         [{ supplierId: s.id, amount: 20000000 }, /over ₹1 crore/],
@@ -201,6 +201,85 @@ describe('We owe suppliers (supplier bills)', () => {
       expect(stored.size).toBe(0);
     });
 
+    it('the bill number is optional: none, blank or spaces all save with no number (absent, not "")', async () => {
+      const s = await addSupplier();
+      const none = await procurement.session.form('/supplier-bills', { supplierId: s.id, dueDate: istDay(10), amount: 5000 }, []);
+      expect(none.status).toBe(201);
+      expect(none.body.bill).toMatchObject({ billNumber: '', amount: 5000, state: 'unpaid' });
+      const blank = await addBill(procurement.session, { supplierId: s.id, billNumber: '   ' }, []);
+      expect(blank.status).toBe(201);
+      const raw = await SupplierBill.find({}).lean();
+      expect(raw).toHaveLength(2);
+      for (const b of raw) { expect(b).not.toHaveProperty('billNumber'); expect(b).not.toHaveProperty('billKey'); }
+    });
+    it('two bills with no number for the same supplier are both kept (even at the same moment); a numbered duplicate is still refused', async () => {
+      await SupplierBill.syncIndexes();
+      const s = await addSupplier();
+      const [a, b] = await Promise.all([
+        addBill(procurement.session, { supplierId: s.id, billNumber: '' }, []),
+        addBill(procurement.session, { supplierId: s.id, billNumber: '' }, []),
+      ]);
+      expect([a.status, b.status]).toEqual([201, 201]);
+      expect(a.body.bill.number).not.toBe(b.body.bill.number);
+      expect((await addBill(procurement.session, { supplierId: s.id }, [])).status).toBe(201);
+      const dup = await addBill(procurement.session, { supplierId: s.id, billNumber: 'INV 4471' }, []);
+      expect([dup.status, dup.body.message]).toEqual([409, expect.stringMatching(/bill INV-4471 is already added/)]);
+      // The database itself refuses the numbered duplicate, and not the unnumbered ones.
+      const base = { supplier: s.id, supplierName: 'RK New Popular', dueDate: istDay(5), amountPaise: 100, createdBy: procurement.user._id };
+      await expect(SupplierBill.create({ ...base, number: 'SB-9001', billNumber: 'inv4471', billKey: 'inv4471' })).rejects.toMatchObject({ code: 11000 });
+      await SupplierBill.create({ ...base, number: 'SB-9002' });
+      expect(await SupplierBill.countDocuments({ billKey: { $exists: false } })).toBe(3);
+    });
+    it('a double submit of a bill with no number (same clientId) still adds one', async () => {
+      const s = await addSupplier();
+      const f = { supplierId: s.id, billNumber: '', clientId: 'bill-no-number-1' };
+      const [a, b] = await Promise.all([addBill(procurement.session, f, []), addBill(procurement.session, f, [])]);
+      expect([a.status, b.status]).toEqual([201, 201]);
+      expect(a.body.bill.id).toBe(b.body.bill.id);
+      expect(await SupplierBill.countDocuments()).toBe(1);
+    });
+    it('the number can be added later, changed, or cleared — and is checked for duplicates when added', async () => {
+      const s = await addSupplier();
+      const first = (await addBill(procurement.session, { supplierId: s.id, billNumber: 'A-1' }, [])).body.bill;
+      const later = (await addBill(procurement.session, { supplierId: s.id, billNumber: '' }, [])).body.bill;
+      const clash = await procurement.session.formPut(`/supplier-bills/${later.id}`, { rev: later.rev, billNumber: 'a 1' });
+      expect([clash.status, clash.body.message]).toEqual([409, expect.stringMatching(/already added/)]);
+      const added = await procurement.session.formPut(`/supplier-bills/${later.id}`, { rev: later.rev, billNumber: 'B-2' });
+      expect(added.status).toBe(200);
+      expect(added.body.bill.billNumber).toBe('B-2');
+      const cleared = await procurement.session.formPut(`/supplier-bills/${first.id}`, { rev: first.rev, billNumber: '' });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.bill.billNumber).toBe('');
+      const raw = await SupplierBill.findById(first.id).lean();
+      expect(raw).not.toHaveProperty('billKey');
+      expect(raw.history.at(-1).note).toMatch(/bill no\. A-1 → —/);
+    });
+    it('the index script builds the new duplicate rule, then drops the retired one (dry run changes nothing)', async () => {
+      const { buildIndexes } = await import('../scripts/create-supplier-bill-indexes.js');
+      await SupplierBill.createCollection().catch(() => {});
+      await SupplierBill.collection.dropIndexes().catch(() => {});
+      // As production may have it after #624: the old index, which counts "no number" as a value.
+      await SupplierBill.collection.createIndex({ supplier: 1, billKey: 1 }, { name: 'supplier_bill_open_number', unique: true, partialFilterExpression: { status: 'open' } });
+      const quiet = () => {};
+      const dry = Object.fromEntries(await buildIndexes({ apply: false, log: quiet }));
+      expect(dry).toMatchObject({ 'supplierbills.supplier_bill_open_bill_key': 'would build', 'supplierbills.supplier_bill_open_number': 'would drop (retired)' });
+      expect((await SupplierBill.collection.indexes()).map((i) => i.name)).toContain('supplier_bill_open_number');
+      const run = Object.fromEntries(await buildIndexes({ apply: true, log: quiet }));
+      expect(run).toMatchObject({ 'supplierbills.supplier_bill_open_bill_key': 'built', 'supplierbills.supplier_bill_open_number': 'dropped (retired)' });
+      const names = (await SupplierBill.collection.indexes()).map((i) => i.name);
+      expect(names).toContain('supplier_bill_open_bill_key');
+      expect(names).not.toContain('supplier_bill_open_number');
+      const again = Object.fromEntries(await buildIndexes({ apply: true, log: quiet }));
+      expect(again).toMatchObject({ 'supplierbills.supplier_bill_open_bill_key': 'already there', 'supplierbills.supplier_bill_open_number': 'not there' });
+    });
+    it('paying a bill with no number names it by its SB number', async () => {
+      const s = await addSupplier();
+      const b = (await addBill(procurement.session, { supplierId: s.id, billNumber: '' }, [])).body.bill;
+      const res = await pay(procurement.session, b.id, { amount: 1000 });
+      expect(res.status).toBe(201);
+      expect(res.body.request.description).toBe(`Supplier bill ${b.number}`);
+      expect(res.body.request.reference).toBe(b.number);
+    });
     it('the same supplier bill cannot be added twice ("INV 4471" = "inv-4471"); another supplier may use the number', async () => {
       const s = await addSupplier();
       const other = await addSupplier({ name: 'Tyre World' });

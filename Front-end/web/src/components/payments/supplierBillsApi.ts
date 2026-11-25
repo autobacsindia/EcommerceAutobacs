@@ -18,6 +18,7 @@ export type SupplierBill = {
   id: string;
   number: string;
   supplier: { id: string; name: string };
+  /** '' when the bill has not come yet (it is optional). */
   billNumber: string;
   billDate: string;
   dueDate: string;

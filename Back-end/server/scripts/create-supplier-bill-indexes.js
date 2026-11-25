@@ -13,8 +13,17 @@
  *   node scripts/create-supplier-bill-indexes.js --apply   # build
  * Then: npm run audit-index-drift
  *
+ * Retired indexes (RETIRED below) are dropped on --apply, AFTER the new ones are
+ * built, so the rule they enforced is never missing in between:
+ *   supplier_bill_open_number → supplier_bill_open_bill_key (2026-11-25: the bill
+ *   number became optional; the old index made two open bills with no number
+ *   collide as null). The new one is a strict subset of the old, so building it
+ *   cannot fail on rows the old one accepted.
+ *
  * Rollback: drop the named `supplier_bill_*` indexes and
- * `payment_request_supplier_bill` — nothing else reads them.
+ * `payment_request_supplier_bill` — nothing else reads them. To restore the old
+ * duplicate rule, recreate supplier_bill_open_number ({supplier:1, billKey:1},
+ * unique, partial {status:'open'}) — only possible while no open bill lacks a number.
  */
 import mongoose from 'mongoose';
 import SupplierBill from '../models/SupplierBill.js';
@@ -29,7 +38,12 @@ export const TARGETS = [
   [PaymentRequest, ['payment_request_supplier_bill']],
 ];
 
-export async function buildIndexes({ apply = APPLY, log = console.log, targets = TARGETS } = {}) {
+/** [Model, index name] no longer declared; dropped once the replacements are built. */
+export const RETIRED = [
+  [SupplierBill, 'supplier_bill_open_number'],
+];
+
+export async function buildIndexes({ apply = APPLY, log = console.log, targets = TARGETS, retired = RETIRED } = {}) {
   const out = [];
   for (const [Model, only] of targets) {
     const coll = Model.collection;
@@ -46,6 +60,13 @@ export async function buildIndexes({ apply = APPLY, log = console.log, targets =
       } else state = 'would build';
       out.push([`${coll.collectionName}.${name}`, state]);
     }
+  }
+  for (const [Model, name] of retired) {
+    const coll = Model.collection;
+    const there = (await coll.indexes().catch(() => [])).some((i) => i.name === name);
+    let state = 'not there';
+    if (there && apply) { await coll.dropIndex(name); state = 'dropped (retired)'; } else if (there) state = 'would drop (retired)';
+    out.push([`${coll.collectionName}.${name}`, state]);
   }
   for (const [name, state] of out) log(`${TAG} ${name}: ${state}`);
   return out;
