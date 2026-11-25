@@ -27,6 +27,8 @@ import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import { Star, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { CUSTOMER_TEXT_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 interface LinkTarget {
   product: { id: string; name: string; slug: string; image: string };
@@ -133,7 +135,7 @@ export default function ReviewByLinkPage() {
     );
   }
 
-  const canSubmit = rating >= 1 && name.trim() && comment.trim() && !submitting;
+  const canSubmit = rating >= 1 && name.trim() && comment.trim() && !isOverLimit(comment.trim(), CUSTOMER_TEXT_MAX) && !submitting;
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8">
@@ -219,12 +221,12 @@ export default function ReviewByLinkPage() {
             id="rev-comment"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            maxLength={1000}
             required
             rows={5}
             placeholder="How does it fit? How does it perform? Would you buy it again?"
             className="mt-2 w-full rounded-lg border border-hairline px-4 py-3 text-[15px] leading-relaxed text-ink outline-none focus:border-gold"
           />
+          <TextLimitNote value={comment.trim()} max={CUSTOMER_TEXT_MAX} />
         </div>
 
         <button

@@ -14,6 +14,15 @@
  */
 export const STAFF_NOTE_MAX = 5000;
 
+/**
+ * What a shopper or visitor may write in one box (a product review, a blog
+ * comment, consultation notes, an affiliate application). Lower than staff
+ * long text because anyone on the internet can post here. = the server caps in
+ * config/reviewLimits.js CUSTOMER_COMMENT_MAX, routes/media.js, routes/consultation.js,
+ * validators/affiliate.validator.js.
+ */
+export const CUSTOMER_TEXT_MAX = 5000;
+
 /** Show the counter once the text reaches this share of the limit. */
 export const NEAR_LIMIT_SHARE = 0.8;
 

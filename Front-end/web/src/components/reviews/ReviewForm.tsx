@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import StarRating from './StarRating';
+import { CUSTOMER_TEXT_MAX, formatCount } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 interface ReviewFormProps {
   productId: string;
@@ -38,8 +40,8 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ onSubmit, onCancel }) => {
       newErrors.comment = 'Comment is required';
     } else if (comment.trim().length < 10) {
       newErrors.comment = 'Comment must be at least 10 characters';
-    } else if (comment.trim().length > 1000) {
-      newErrors.comment = 'Comment must be less than 1000 characters';
+    } else if (comment.trim().length > CUSTOMER_TEXT_MAX) {
+      newErrors.comment = `Comment must be under ${formatCount(CUSTOMER_TEXT_MAX)} characters`;
     }
 
     if (title && title.length > 100) {
@@ -106,7 +108,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ onSubmit, onCancel }) => {
             rows={5}
             className={`${inputCls} resize-none`}
           />
-          <div className="text-right text-xs text-ink-muted">{comment.length}/1000</div>
+          <TextLimitNote value={comment.trim()} max={CUSTOMER_TEXT_MAX} />
           {errors.comment && <span className="block text-sm text-red-600">{errors.comment}</span>}
         </div>
 

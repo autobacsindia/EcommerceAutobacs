@@ -9,6 +9,8 @@ import { useMyAffiliate } from '@/hooks/queries/useAffiliate';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { GST_STATE_BY_CODE } from '@/lib/legal/buyerTypes';
 import { LEGAL_DOCUMENTS } from '@/lib/legal/legalVersions';
+import { CUSTOMER_TEXT_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 /**
  * Public affiliate sign-up.
@@ -379,9 +381,9 @@ export default function AffiliatesPage() {
             <div>
               <label className={label} htmlFor="aff-pitch">How will you promote us?</label>
               <textarea id="aff-pitch" className={`${input} min-h-24`} value={form.pitch}
-                onChange={set('pitch')} maxLength={2000}
+                onChange={set('pitch')}
                 placeholder="Tell us about your audience — what you post, roughly how many people you reach." />
-              <p className={hint}>{form.pitch.length}/2000</p>
+              <TextLimitNote value={form.pitch.trim()} max={CUSTOMER_TEXT_MAX} />
             </div>
           </fieldset>
 
@@ -511,7 +513,7 @@ export default function AffiliatesPage() {
             </p>
           )}
 
-          <button type="submit" disabled={busy || !acceptTerms} className={`mt-6 w-full ${primaryBtn}`}>
+          <button type="submit" disabled={busy || !acceptTerms || isOverLimit(form.pitch.trim(), CUSTOMER_TEXT_MAX)} className={`mt-6 w-full ${primaryBtn}`}>
             {busy ? 'Sending…' : 'Apply to join'}
             {!busy && <ArrowRight className="w-4 h-4" aria-hidden />}
           </button>

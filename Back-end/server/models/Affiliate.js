@@ -269,7 +269,7 @@ const AffiliateSchema = new mongoose.Schema(
     phone: { type: String, trim: true, maxlength: 20 },
     website: { type: String, trim: true, maxlength: 500 },
     // How they intend to promote — free text, read by the human doing the approving.
-    pitch: { type: String, trim: true, maxlength: 2000 },
+    pitch: { type: String, trim: true, maxlength: 5000 }, // = config/publicTextLimits.js CUSTOMER_TEXT_MAX
     // Internal admin notes. Never surfaced to the affiliate.
     notes: { type: String, trim: true, maxlength: 2000 },
 

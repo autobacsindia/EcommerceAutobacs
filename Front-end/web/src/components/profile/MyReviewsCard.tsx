@@ -19,11 +19,13 @@ import profileService from '@/lib/profileService';
 import { profileKeys } from '@/hooks/queries/keys';
 import { formatDateIST } from '@/lib/datetime';
 import type { UserReview } from '@/lib/types';
+import { CUSTOMER_TEXT_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 const SHOWN = 10;
 const TITLE_MAX = 100;
 const COMMENT_MIN = 10;
-const COMMENT_MAX = 1000;
+const COMMENT_MAX = CUSTOMER_TEXT_MAX; // = server CUSTOMER_COMMENT_MAX
 
 /** The server stores sanitised HTML text, so `&` comes back as `&amp;`. Decode for the textarea. */
 export function decodeEntities(s: string | undefined): string {
@@ -73,14 +75,15 @@ function ReviewEditor({ review, onDone, onCancel }: { review: UserReview; onDone
           className="mt-1 w-full rounded border border-hairline bg-transparent px-3 py-2 text-sm text-ink" />
       </label>
       <label className="block text-xs font-display text-ink-muted">Your review
-        <textarea value={comment} maxLength={COMMENT_MAX} rows={4} onChange={(e) => setComment(e.target.value)}
+        <textarea value={comment} rows={4} onChange={(e) => setComment(e.target.value)}
           className="mt-1 w-full rounded border border-hairline bg-transparent px-3 py-2 text-sm text-ink" />
       </label>
       {tooShort && <p className="text-xs text-ink-muted">Write at least {COMMENT_MIN} characters.</p>}
+      <TextLimitNote value={comment.trim()} max={COMMENT_MAX} />
       <p className="text-xs text-ink-muted">After you save, your review is checked again before it shows on the product page.</p>
       {save.isError && <p role="alert" className="text-sm text-red-500">{errorText(save.error)}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={tooShort || save.isPending}
+        <button type="submit" disabled={tooShort || isOverLimit(comment.trim(), COMMENT_MAX) || save.isPending}
           className="bg-gold text-white px-4 py-2 rounded-lg text-sm font-display font-bold disabled:opacity-50">
           {save.isPending ? 'Saving…' : 'Save review'}
         </button>

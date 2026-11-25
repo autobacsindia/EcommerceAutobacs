@@ -47,7 +47,7 @@ interface Pagination {
  * long. Trimming someone's words to fit a field is how a genuine review turns
  * into a misleading one.
  */
-const COMMENT_MAX = 2000;
+const COMMENT_MAX = 10000;
 
 export default function AdminReviewsPage() {
   const router = useRouter();
