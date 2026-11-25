@@ -8,6 +8,11 @@ import PaymentRequest from '../models/PaymentRequest.js';
 const supplierBillRepository = {
   create: async (doc) => (await SupplierBill.create(doc)).toObject(),
   findById: (id) => SupplierBill.findById(id).lean(),
+  /** The bills linked to one order (newest first), bounded — through supplier_bill_order. */
+  findForOrder: (orderId, limit = 50) => SupplierBill.find({ order: { $eq: orderId, $type: 'objectId' } })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean(),
   findByClientId: (createdBy, clientId) => SupplierBill.findOne({ createdBy, clientId }).lean(),
   findOpenByKey: (supplier, billKey) => SupplierBill.findOne({ supplier, status: 'open', billKey }).lean(),
 

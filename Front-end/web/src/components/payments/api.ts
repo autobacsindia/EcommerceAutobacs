@@ -218,7 +218,11 @@ export type SupplierDeal = {
   can: { raise: boolean; edit: boolean; remove: boolean };
 };
 
-export type OrderPayments = { requests: OrderPayment[]; deals: SupplierDeal[] };
+export type OrderPayments = {
+  requests: OrderPayment[]; deals: SupplierDeal[];
+  /** Supplier bills ("We owe suppliers") linked to this order — only for procurement, accounts and admin. */
+  bills?: import('./supplierBillsApi').SupplierBill[];
+};
 
 /**
  * What a team may claim an expense for, and in which currencies. The server's

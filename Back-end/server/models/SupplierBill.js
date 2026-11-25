@@ -113,5 +113,10 @@ SupplierBillSchema.index(
   { name: 'supplier_bill_client_id', unique: true, partialFilterExpression: { clientId: { $type: 'string' } } }
 );
 SupplierBillSchema.index({ number: 1 }, { name: 'supplier_bill_number', unique: true });
+// An order's page lists the bills linked to it (supplierBillService.forOrder). Partial: most bills have no order.
+SupplierBillSchema.index(
+  { order: 1, createdAt: -1 },
+  { name: 'supplier_bill_order', partialFilterExpression: { order: { $type: 'objectId' } } }
+);
 
 export default mongoose.models.SupplierBill || mongoose.model('SupplierBill', SupplierBillSchema);

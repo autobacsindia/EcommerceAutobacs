@@ -7,6 +7,7 @@ import {
 } from '../middleware/uploadMiddleware.js';
 import * as pr from '../services/paymentRequestService.js';
 import * as deals from '../services/supplierDealService.js';
+import * as bills from '../services/supplierBillService.js';
 import * as claims from '../services/reimbursement.js';
 import { renderPaymentSlip } from '../services/paymentSlipService.js';
 
@@ -73,11 +74,13 @@ router.post('/supplier', concurrentUploadGuard, attachmentSizeGuard, uploadPayme
 
 // GET /payment-requests/order/:orderId — one order's payments (supplier + linked expenses) and supplier deals
 router.get('/order/:orderId', asyncHandler(async (req, res) => {
-  const [requests, supplierDeals] = await Promise.all([
+  const [requests, supplierDeals, supplierBills] = await Promise.all([
     pr.forOrder(req.user, req.params.orderId),
     deals.forOrder(req.user, req.params.orderId),
+    // Supplier bills ("We owe suppliers") linked to this order, with their payments.
+    bills.forOrder(req.user, req.params.orderId),
   ]);
-  res.json({ success: true, requests, deals: supplierDeals });
+  res.json({ success: true, requests, deals: supplierDeals, bills: supplierBills });
 }));
 
 // ── Supplier deals: made-to-order items paid in parts (services/supplierDealService.js) ──

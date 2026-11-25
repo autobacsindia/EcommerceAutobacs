@@ -102,6 +102,38 @@ describe('We owe suppliers', () => {
     for (const k of ['supplierId', 'payee', 'orderId', 'currency']) expect(body.get(k)).toBeNull();
   });
 
+  it('Pay with the supplier\'s credit: ₹16,000 left, ₹1,00,000 credit → nothing to pay, ₹84,000 left; sends only the tick', async () => {
+    const base = get.getMockImplementation()!;
+    get.mockImplementation(async (url: string) => (url === '/suppliers/s9'
+      ? { supplier: { ...RK, credit: [{ currency: 'INR', owed: 100000, owedText: '₹1,00,000', pending: 0, pendingText: '' }] } }
+      : base(url)));
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: { id: 'r1', number: 'PR-0161', status: 'paid' } }) });
+    wrap(<SupplierBillsTab canAdd />);
+    const row = await screen.findByRole('listitem', { name: 'Bill INV-4471 from RK New Popular' });
+    fireEvent.click(within(row).getByRole('button', { name: 'Pay' }));
+    const form = within(row).getByRole('form', { name: 'Pay this bill' });
+    const box = await within(form).findByLabelText('Supplier credit');
+    expect(box).toHaveTextContent('RK New Popular owes us ₹1,00,000');
+    fireEvent.click(within(box).getByRole('checkbox', { name: /Use supplier credit/ }));
+    expect(box).toHaveTextContent('₹16,000 − credit ₹16,000 = nothing to pay');
+    expect(box).toHaveTextContent('Credit left for next time: ₹84,000');
+    fireEvent.click(within(form).getByRole('button', { name: 'Send for approval' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('PR-0161 is paid fully from supplier credit');
+    const { form: body } = sent();
+    expect(body.get('useCredit')).toBe('true');
+    expect(body.get('amount')).toBe('16000');
+    expect(body.get('creditToUse')).toBeNull();
+  });
+
+  it('a supplier with no credit shows no credit box on Pay', async () => {
+    wrap(<SupplierBillsTab canAdd />);
+    const row = await screen.findByRole('listitem', { name: 'Bill INV-4471 from RK New Popular' });
+    fireEvent.click(within(row).getByRole('button', { name: 'Pay' }));
+    const form = within(row).getByRole('form', { name: 'Pay this bill' });
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/suppliers/s9'));
+    expect(within(form).queryByLabelText('Supplier credit')).toBeNull();
+  });
+
   it('only shows the actions the server allows', async () => {
     bills = [bill({ state: 'paid', stateLabel: 'Paid', owed: 0, leftToAsk: 0, overdue: false, can: { pay: false, edit: true, cancel: false } })];
     wrap(<SupplierBillsTab canAdd={false} />);

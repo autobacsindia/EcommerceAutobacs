@@ -147,8 +147,11 @@ const mayEdit = (u, r) => EDITABLE.includes(r.status) && resubmittable(r) && !fr
  * people who see credit (procurement, accounts, admin) — accounts and the admin on any
  * one (owner: "admin and accounts also should have the access"), procurement on their own.
  */
-const mayChangeCredit = (u, r) => r.kind === 'supplier' && r.status === 'submitted' && Boolean(r.supplier) && !fromSubscription(r)
-  && credit.maySeeCredit(u) && (mayDecide(u) || idOf(r.requestedBy) === idOf(u?._id));
+// Accounts / the admin also on one they approved or put on hold (still unpaid) — e.g. a
+// supplier bill's payment on hold while the supplier's credit covers it (owner, 2026-11-25).
+const CREDIT_STATUSES_DECIDER = Object.freeze(['submitted', 'approved', 'on_hold']);
+const mayChangeCredit = (u, r) => r.kind === 'supplier' && Boolean(r.supplier) && !fromSubscription(r) && credit.maySeeCredit(u)
+  && (mayDecide(u) ? CREDIT_STATUSES_DECIDER.includes(r.status) : r.status === 'submitted' && idOf(r.requestedBy) === idOf(u?._id));
 /** The compare-and-set clause for "still the version that was read" (old records have no rev). */
 const revIs = (rev) => ({ rev: Number(rev) > 0 ? Number(rev) : { $in: [0, null] } });
 
@@ -671,7 +674,7 @@ export function shape(r, viewer) {
       // Which project / other ID it belongs to: any kind, any status (no money changes).
       linkProject: mayLinkOrder(viewer, r),
       // After paying: the admin may correct how it was paid, the reference and the screenshots.
-      editPayment: mayPay(viewer) && r.status === 'paid',
+      editPayment: mayPay(viewer) && r.status === 'paid' && r.payment?.method !== 'credit',
     },
     // Only for whoever pays: sent back with "Pay" (see payVersionOf).
     ...(mayPay(viewer) ? { payVersion: payVersionOf(r) } : {}),
@@ -1116,8 +1119,11 @@ function creditLine(r) {
  */
 async function closeByCredit(actor, r0, req, how = 'approved', note = '') {
   const now = new Date();
-  const r = await paymentRequestRepository.transitionInSession(r0._id, ['submitted'], revIs(r0.rev),
-    creditSettledSet(actor, now), entry(actor, 'paid', [`${how} — paid fully from supplier credit (${deals.moneyOf(toPaise(r0.credit.amount), r0.currency || BASE_CURRENCY)}), nothing transferred`, note].filter(Boolean).join(' — ')), {}, undefined);
+  const set = creditSettledSet(actor, now);
+  // Approved earlier (or approved, then held): keep who approved it.
+  if (r0.status !== 'submitted') { delete set.approvedBy; delete set.approvedAt; }
+  const r = await paymentRequestRepository.transitionInSession(r0._id, [r0.status], revIs(r0.rev),
+    set, entry(actor, 'paid', [`${how} — paid fully from supplier credit (${deals.moneyOf(toPaise(r0.credit.amount), r0.currency || BASE_CURRENCY)}), nothing transferred`, note].filter(Boolean).join(' — ')), {}, undefined);
   if (!r) throw fail(EDITED_SINCE, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', idOf(r._id), { change: 'paid', method: 'credit', creditAmount: r.credit.amount });
   await followOnOrder(r, actor, 'paid');
@@ -1844,6 +1850,8 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   if (!mayPay(actor)) throw fail('Only the admin can edit a payment record.', 403);
   const r0 = await loadVisible(actor, id);
   if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
+  // Paid by supplier credit: no transfer happened, so there is no method / reference to correct.
+  if (r0.payment?.method === 'credit') throw fail(`${r0.number} was paid fully from supplier credit — no money was transferred, so there is no payment record to edit.`, 409);
 
   const how = method ? paidMethodOf(method) : r0.payment?.method;
   if (!how) throw fail('Choose how it was paid.', 400);
@@ -2175,7 +2183,8 @@ export async function setCredit(actor, id, input = {}, req) {
   if (!mayChangeCredit(actor, r0)) {
     if (!credit.maySeeCredit(actor)) throw fail('Only procurement, accounts or the admin can use supplier credit.', 403);
     if (r0.kind !== 'supplier' || !r0.supplier) throw fail('Supplier credit is used only on a payment to a saved supplier.', 400);
-    if (r0.status !== 'submitted') throw fail('Credit can be changed only while the payment is waiting for accounts.', 409);
+    if (!CREDIT_STATUSES_DECIDER.includes(r0.status)) throw fail('Credit can be changed only on a payment not paid, declined or cancelled yet.', 409);
+    if (r0.status !== 'submitted') throw fail('Accounts has approved this payment — ask accounts (or the admin) to use the credit on it.', 403);
     throw fail('Only whoever raised it, accounts or the admin can change its credit.', 403);
   }
   if (input.rev != null && input.rev !== '' && Number(input.rev) !== (r0.rev || 0)) throw fail(MOVED, 409);
@@ -2211,25 +2220,36 @@ export async function setCredit(actor, id, input = {}, req) {
   const changes = [{ field: 'Supplier credit', from: fromText, to: toText }, { field: 'To transfer', from: deals.moneyOf(billPaise - hadPaise, currency), to: deals.moneyOf(netPaise, currency) }];
   const at = new Date();
   const note = `${reason} — supplier credit: ${fromText} → ${toText}; to transfer ${deals.moneyOf(netPaise, currency)} of the ${deals.moneyOf(billPaise, currency)} bill`;
+  // It will be closed as paid below: refuse first if its order was cancelled (nothing moves then).
+  if (netPaise === 0 && mayDecide(actor)) await assertOrderLive(r0);
+  // A supplier bill's payment: the ledger row names the bill too.
+  const billRef = r0.supplierBill ? ` for supplier bill ${r0.reference || ''}`.trimEnd() : '';
   const r = await paymentRequestRepository.inTransaction(async (session) => {
     let entryId = r0.credit?.entry || null;
     const delta = wantPaise - hadPaise;
     const key = `${delta > 0 ? 'use' : 'restore'}:${idOf(r0._id)}:r${nextRev}`;
     if (delta > 0) {
-      const used = await credit.useCredit(session, { supplierId: r0.supplier, currency, creditPaise: delta, request: r0, actor, key, note: `on ${r0.number} (credit ${fromText} → ${toText})` });
+      const used = await credit.useCredit(session, { supplierId: r0.supplier, currency, creditPaise: delta, request: r0, actor, key, note: `on ${r0.number}${billRef} (credit ${fromText} → ${toText})` });
       entryId = used._id;
     } else {
       await credit.giveBackCredit(session, { supplierId: r0.supplier, currency, creditPaise: -delta, request: r0, actor, key, note: `${r0.number}: credit ${fromText} → ${toText}` });
     }
-    const next = await paymentRequestRepository.transitionInSession(id, ['submitted'], revIs(r0.rev), {
+    const next = await paymentRequestRepository.transitionInSession(id, [r0.status], revIs(r0.rev), {
       ...money,
       credit: wantPaise ? { amount: fromPaise(wantPaise), entry: entryId } : null,
       rev: nextRev, editedAt: at,
-    }, entry(actor, 'edited', note), { edits: { at, by: actor._id, byName: actor.name || '', role: roleOf(actor), reason, fromStatus: 'submitted', changes } }, session);
+    }, entry(actor, 'edited', note), { edits: { at, by: actor._id, byName: actor.name || '', role: roleOf(actor), reason, fromStatus: r0.status, changes } }, session);
     if (!next) throw fail(MOVED, 409); // aborts: no credit moves
     return next;
   });
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'credit', fromPaise: hadPaise, toPaise: wantPaise, currency });
+  // Accounts / the admin made credit cover all of it: nothing to transfer and they are
+  // the approvers — closed as paid now (the bill, order lines and deal follow).
+  if (creditCovers(r) && mayDecide(actor)) {
+    const closed = await closeByCredit(actor, r, req, r.status === 'submitted' ? 'approved' : r.status === 'on_hold' ? 'hold ended' : 'already approved');
+    await tellChat(closed, 'paid', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} used ${closed.payee?.name || 'the supplier'}'s credit on ${what(closed)} — paid fully from supplier credit, nothing to transfer. Closed as paid.`, { mentionRequester: true });
+    return shape(closed, actor);
+  }
   await tellChat(r, 'edited', `✏️ ${actor.name || 'Someone'} changed the supplier credit on ${what(r)}: ${fromText} → ${toText}.${creditLine(r)}`);
   return shape(r, actor);
 }

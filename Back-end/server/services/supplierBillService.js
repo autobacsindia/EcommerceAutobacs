@@ -529,6 +529,20 @@ export async function bySupplier(actor, now = new Date()) {
   };
 }
 
+/**
+ * The supplier bills linked to an order, for that order's page (team and admin order
+ * views): each with what is paid / owed and its payments. Only people who see supplier
+ * bills (procurement, accounts, admin) get them; anyone else gets none (not an error —
+ * the order page is shared with other teams). Two bounded reads.
+ */
+export async function forOrder(actor, orderId) {
+  if (!maySee(actor) || !/^[a-f0-9]{24}$/i.test(String(orderId))) return [];
+  const list = await supplierBillRepository.findForOrder(orderId);
+  if (!list.length) return [];
+  const requests = await supplierBillRepository.requestsFor(list.map((b) => b._id));
+  return list.map((b) => shape(b, actor, requests));
+}
+
 export async function getOne(actor, id) {
   if (!maySee(actor)) throw fail('Not authorized.', 403);
   const bill = await loadBill(id);

@@ -53,7 +53,7 @@ export function CreditControl({ r, onSaved }: { r: PaymentRequest; onSaved: (r: 
     onSuccess: (res) => { setError(''); supplierQ.refetch(); onSaved(res.request); },
     onError: (e) => setError(errorMessage(e, 'Could not change the credit. Refresh and try again.')),
   });
-  const owed = (supplierQ.data?.supplier.credit || []).find((b) => b.currency === cur)?.owed ?? 0;
+  const owed = (supplierQ.data?.supplier?.credit || []).find((b) => b.currency === cur)?.owed ?? 0;
   const bill = r.bill ?? (cur === 'INR' ? r.amount : r.foreignAmount ?? 0);
   const used = r.credit?.amount ?? 0;
   // Using more: what this payment already uses + what the supplier still has, up to the bill.

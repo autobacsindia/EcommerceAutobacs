@@ -199,6 +199,11 @@ describe('Using supplier credit on supplier payments', () => {
       const ok = await accounts.session.post(`/payment-requests/${res.body.request.id}/approve`);
       expect(ok.status).toBe(200);
       expect(ok.body.request).toMatchObject({ status: 'paid', amount: 0, payment: expect.objectContaining({ method: 'credit', reference: 'Supplier credit' }) });
+      // No payment record to "correct" (it would turn into a bank transfer that never happened); the receipt renders.
+      expect(ok.body.request.can.editPayment).toBe(false);
+      expect((await admin.session.formPut(`/payment-requests/${res.body.request.id}/payment`, { method: 'bank', reference: 'X' })).status).toBe(409);
+      const slip = await accounts.session.get(`/payment-requests/${res.body.request.id}/slip`);
+      expect(slip.status).toBe(200);
       // Not in the admin's "to pay" queue.
       const groups = (await admin.session.get('/payment-requests/to-pay/suppliers')).body.groups || [];
       expect(groups).toHaveLength(0);
@@ -371,9 +376,14 @@ describe('Using supplier credit on supplier payments', () => {
       expect(mine.status).toBe(200);
       expect(mine.body.request.can.credit).toBe(true);
       expect((await accounts.session.post(`/payment-requests/${r.id}/approve`)).status).toBe(200);
+      // After approval: procurement can no longer change the money; accounts (the approver) still can.
+      expect((await setCredit(procurement, r.id, { useCredit: true })).status).toBe(403);
       const late = await setCredit(accounts, r.id, { useCredit: true });
-      expect(late.status).toBe(409);
-      expect(await owed(arb)).toBe(5000);
+      expect(late.body.request).toMatchObject({ status: 'approved', amount: 12000, credit: { amount: 8000 } });
+      expect(await owed(arb)).toBe(0);
+      // Paid: nobody changes it any more.
+      expect((await pay(r.id)).status).toBe(200);
+      expect((await setCredit(admin, r.id, { creditToUse: 0 })).status).toBe(409);
     });
 
     it('a stale screen (old rev) is refused; two credit changes at once cannot both spend it', async () => {
@@ -434,6 +444,99 @@ describe('Using supplier credit on supplier payments', () => {
       expect(await owed(thai, 'THB')).toBe(7050);
       // A rupee bill cannot use THB credit.
       expect((await stockPay(procurement, thai, 1000, { useCredit: true })).status).toBe(409);
+    });
+  });
+
+  describe('a supplier bill we owe, paid with the supplier\'s credit (SB-0001 / PR-0149)', () => {
+    const addBill = (amount, extra = {}) => procurement.session.form('/supplier-bills', {
+      billDate: ymd(-1), amount, description: '2 Thor storm speakers + 1 echo + 1 ecu', ...extra,
+    }, [{ field: 'bill', buffer: PDF, name: 'b.pdf', type: 'application/pdf' }]);
+
+    it('the payment is already approved and on hold: accounts uses the credit → closed as paid, the bill is paid, the rest of the credit stays', async () => {
+      const rk = await saveSupplier({ ...ARB, name: 'RK New Popular', phone: '9800000009' });
+      const order = await paidOrder();
+      const b = (await addBill(75000, { supplierId: rk, orderId: String(order._id) })).body.bill;
+      const pr = (await procurement.session.form('/payment-requests/supplier', { supplierBillId: b.id, amount: 75000 }, [])).body.request;
+      expect((await accounts.session.post(`/payment-requests/${pr.id}/approve`)).status).toBe(200);
+      expect((await accounts.session.post(`/payment-requests/${pr.id}/hold`, { note: 'Funds on Friday' })).status).toBe(200);
+      await giveCredit(rk, 100000);
+      // Procurement cannot change money accounts has approved; accounts can.
+      expect((await setCredit(procurement, pr.id, { useCredit: true })).status).toBe(403);
+      const view = (await accounts.session.get(`/payment-requests/${pr.id}`)).body.request;
+      expect(view).toMatchObject({ status: 'on_hold', can: { credit: true } });
+      const used = await setCredit(accounts, pr.id, { useCredit: true, rev: view.rev });
+      expect(used.status).toBe(200);
+      expect(used.body.request).toMatchObject({ status: 'paid', amount: 0, bill: 75000, credit: { amount: 75000 }, payment: expect.objectContaining({ method: 'credit' }) });
+      expect(await owed(rk)).toBe(25000);
+      const bill = (await procurement.session.get(`/supplier-bills/${b.id}`)).body.bill;
+      expect(bill).toMatchObject({ paid: 75000, owed: 0, state: 'paid' });
+      const row = await SupplierLedgerEntry.findOne({ kind: 'credit_used', paymentRequest: pr.id }).lean();
+      expect(row.history[0].note).toMatch(new RegExp(`${pr.number} for supplier bill`));
+      expect(row.createdByName).toBe('Anu');
+    });
+
+    it('credit smaller than the approved payment: the rest stays approved for the admin, who pays only the rest; the bill counts both', async () => {
+      const rk = await saveSupplier();
+      const b = (await addBill(75000, { supplierId: rk })).body.bill;
+      const pr = (await procurement.session.form('/payment-requests/supplier', { supplierBillId: b.id, amount: 75000 }, [])).body.request;
+      expect((await accounts.session.post(`/payment-requests/${pr.id}/approve`)).status).toBe(200);
+      await giveCredit(rk, 30000);
+      const before = (await admin.session.get(`/payment-requests/${pr.id}`)).body.request;
+      const used = await setCredit(accounts, pr.id, { useCredit: true });
+      expect(used.body.request).toMatchObject({ status: 'approved', amount: 45000, credit: { amount: 30000 } });
+      // The admin's old screen (₹75,000) is refused: the amount changed.
+      const stale = await admin.session.form(`/payment-requests/${pr.id}/pay`, { method: 'bank', reference: 'UTR', payVersion: before.payVersion });
+      expect(stale.status).toBe(409);
+      expect((await pay(pr.id)).body.request).toMatchObject({ status: 'paid', amount: 45000 });
+      expect((await procurement.session.get(`/supplier-bills/${b.id}`)).body.bill).toMatchObject({ paid: 75000, owed: 0 });
+      expect(await owed(rk)).toBe(0);
+    });
+
+    it('the bill form\'s Pay takes the tick too; declining the payment gives the credit and the bill share back once', async () => {
+      const rk = await saveSupplier();
+      await giveCredit(rk, 100000);
+      const b = (await addBill(75000, { supplierId: rk })).body.bill;
+      const pr = await procurement.session.form('/payment-requests/supplier', { supplierBillId: b.id, amount: 75000, useCredit: 'true' }, []);
+      expect(pr.body.request).toMatchObject({ status: 'submitted', amount: 0, credit: { amount: 75000 }, paidByCredit: true });
+      expect(await owed(rk)).toBe(25000);
+      expect((await accounts.session.post(`/payment-requests/${pr.body.request.id}/decline`, { note: 'Wrong bill' })).status).toBe(200);
+      expect((await accounts.session.post(`/payment-requests/${pr.body.request.id}/decline`, { note: 'again' })).status).toBe(409);
+      expect(await owed(rk)).toBe(100000);
+      expect((await procurement.session.get(`/supplier-bills/${b.id}`)).body.bill).toMatchObject({ leftToAsk: 75000, paid: 0 });
+    });
+  });
+
+  describe('the order page shows supplier bills linked to the order', () => {
+    it('procurement / accounts / admin see the bill and its payments; other teams get none; changing the bill\'s order moves it', async () => {
+      const rk = await saveSupplier();
+      const order = await paidOrder();
+      const other = await paidOrder();
+      const b = (await procurement.session.form('/supplier-bills', { billDate: ymd(-1), amount: 75000, description: 'speakers', supplierId: rk, orderId: String(order._id) },
+        [{ field: 'bill', buffer: PDF, name: 'b.pdf', type: 'application/pdf' }])).body.bill;
+      const pr = (await procurement.session.form('/payment-requests/supplier', { supplierBillId: b.id, amount: 75000 }, [])).body.request;
+      for (const who of [procurement, accounts, admin]) {
+        const res = await who.session.get(`/payment-requests/order/${order._id}`);
+        expect(res.status).toBe(200);
+        expect(res.body.bills).toEqual([expect.objectContaining({
+          id: b.id, number: b.number, supplier: expect.objectContaining({ name: 'ARB Supplies' }), amount: 75000, owed: 75000, waiting: 75000,
+          payments: [expect.objectContaining({ id: pr.id, number: pr.number })],
+        })]);
+      }
+      const opsView = await ops.session.get(`/payment-requests/order/${order._id}`);
+      expect(opsView.status).toBe(200);
+      expect(opsView.body.bills).toEqual([]);
+      // Re-linked to another order: it shows there, not here.
+      const moved = await procurement.session.formPut(`/supplier-bills/${b.id}`, { orderId: String(other._id), rev: b.rev });
+      expect(moved.status).toBe(200);
+      expect((await accounts.session.get(`/payment-requests/order/${order._id}`)).body.bills).toEqual([]);
+      expect((await accounts.session.get(`/payment-requests/order/${other._id}`)).body.bills.map((x) => x.id)).toEqual([b.id]);
+    });
+
+    it('reads the bills through supplier_bill_order (no collection scan)', async () => {
+      const { default: SupplierBill } = await import('../models/SupplierBill.js');
+      await SupplierBill.init();
+      const plan = await SupplierBill.find({ order: { $eq: new mongoose.Types.ObjectId(), $type: 'objectId' } }).sort({ createdAt: -1 }).limit(50).explain('queryPlanner');
+      expect(JSON.stringify(plan.queryPlanner.winningPlan)).toMatch(/supplier_bill_order/);
     });
   });
 });
