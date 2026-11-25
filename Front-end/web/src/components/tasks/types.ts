@@ -444,7 +444,7 @@ export type TaskTimePage = {
 /** What can be added by hand at once, and how far back (the server checks both). */
 export const TIME_MAX_MINUTES = 24 * 60;
 export const TIME_PAST_DAYS = 90;
-export const TIME_NOTE_MAX = 200;
+export const TIME_NOTE_MAX = 1000; // = server staffTaskTimeService TIME_NOTE_MAX
 
 /** "45s", "12m", "1h 05m", "10h" — a length of time, rounded down to the minute past one minute. */
 export function formatDuration(seconds: number): string {

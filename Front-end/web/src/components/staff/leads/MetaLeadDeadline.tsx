@@ -9,6 +9,8 @@ import { errorMessage } from '@/components/staff/sales/types';
 import NextFollowUpPicker from './NextFollowUpPicker';
 import type { FollowUpWrite } from './FollowUpRecorder';
 import { lateBy, type MetaLead } from './metaLeadTypes';
+import { STAFF_NOTE_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 type Write = FollowUpWrite<MetaLead>;
 const REASON_MIN = 5;
@@ -44,18 +46,19 @@ export function MoveDeadline({ lead, path, onSaved, onError, onClose }: {
   const id = `move-${lead.id}`;
   return (
     <form className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3"
-      onSubmit={(e) => { e.preventDefault(); if (nextAt && reason.trim().length >= REASON_MIN) save.mutate(); }}>
+      onSubmit={(e) => { e.preventDefault(); if (nextAt && reason.trim().length >= REASON_MIN && !isOverLimit(reason.trim(), STAFF_NOTE_MAX)) save.mutate(); }}>
       <NextFollowUpPicker id={`${id}-at`} value={nextAt} onChange={setNextAt} label="Move the next follow-up to" />
       <div>
         <label htmlFor={`${id}-why`} className="block text-sm font-medium text-gray-800">
           {late ? 'Why is it late, and why move it? (required)' : 'Why move it? (required)'}
         </label>
-        <textarea id={`${id}-why`} rows={2} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)}
+        <textarea id={`${id}-why`} rows={2} value={reason} onChange={(e) => setReason(e.target.value)}
           placeholder="e.g. Customer asked us to call on Friday" className={`mt-1 ${box}`} />
+        <TextLimitNote value={reason.trim()} max={STAFF_NOTE_MAX} />
         <p className="text-xs text-gray-500">Every move is saved and counted in the team activity.</p>
       </div>
       <div className="flex gap-2">
-        <button type="submit" disabled={!nextAt || reason.trim().length < REASON_MIN || save.isPending} className={primary}>
+        <button type="submit" disabled={!nextAt || reason.trim().length < REASON_MIN || isOverLimit(reason.trim(), STAFF_NOTE_MAX) || save.isPending} className={primary}>
           {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Move
         </button>
         <button type="button" onClick={onClose} className={plain}>Cancel</button>
@@ -82,7 +85,7 @@ export function ExplanationBox({ lead, path, canAsk, onSaved, onError }: {
     onError,
   });
   const mayAsk = canAsk && !!lead.followingUp && !lead.followingUp.mine && !e?.open;
-  const ready = text.trim().length >= REASON_MIN;
+  const ready = text.trim().length >= REASON_MIN && !isOverLimit(text.trim(), STAFF_NOTE_MAX);
 
   return (
     <div className="mt-3 space-y-2">
@@ -97,7 +100,8 @@ export function ExplanationBox({ lead, path, canAsk, onSaved, onError }: {
           {e.canAnswer && (
             <form className="mt-2 space-y-2 pl-5" onSubmit={(ev) => { ev.preventDefault(); if (ready) answer.mutate(); }}>
               <label htmlFor={`answer-${lead.id}`} className="block text-sm font-medium">Your explanation (required)</label>
-              <textarea id={`answer-${lead.id}`} rows={2} maxLength={500} value={text} onChange={(ev) => setText(ev.target.value)} className={box} />
+              <textarea id={`answer-${lead.id}`} rows={2} value={text} onChange={(ev) => setText(ev.target.value)} className={box} />
+              <TextLimitNote value={text.trim()} max={STAFF_NOTE_MAX} />
               <button type="submit" disabled={!ready || answer.isPending} className={primary}>
                 {answer.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Send explanation
               </button>
@@ -113,8 +117,9 @@ export function ExplanationBox({ lead, path, canAsk, onSaved, onError }: {
       {mayAsk && asking && (
         <form className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3" onSubmit={(ev) => { ev.preventDefault(); if (ready) ask.mutate(); }}>
           <label htmlFor={`ask-${lead.id}`} className="block text-sm font-medium text-gray-800">Your question to {lead.followingUp?.name}</label>
-          <textarea id={`ask-${lead.id}`} rows={2} maxLength={500} value={text} onChange={(ev) => setText(ev.target.value)}
+          <textarea id={`ask-${lead.id}`} rows={2} value={text} onChange={(ev) => setText(ev.target.value)}
             placeholder="e.g. Why was this not followed up yesterday?" className={box} />
+          <TextLimitNote value={text.trim()} max={STAFF_NOTE_MAX} />
           <div className="flex gap-2">
             <button type="submit" disabled={!ready || ask.isPending} className={primary}>
               {ask.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Ask

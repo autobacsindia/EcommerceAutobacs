@@ -185,7 +185,7 @@ describe('2. follow-up statuses', () => {
     await record(nevin, lead, { status: 'other', note: '    ' }).expect(400);
     await record(nevin, lead, { status: 'maybe' }).expect(400);
     await record(nevin, lead, {}).expect(400);
-    await record(nevin, lead, { status: 'responded', note: 'x'.repeat(501) }).expect(400);
+    await record(nevin, lead, { status: 'responded', note: 'x'.repeat(5001) }).expect(400); // cap 5,000 (was 500)
     await record(nevin, lead, { status: 'responded', note: { $gt: '' } }).expect(400);
     const saved = await Lead.findById(lead._id);
     expect(saved.activities.filter((a) => a.type === 'follow_up')).toHaveLength(0);
@@ -196,13 +196,24 @@ describe('2. follow-up statuses', () => {
     expect((await Lead.findById(lead._id)).activities.at(-2).notes).toBe('Asked for a quote on email');
   });
 
+  it('a long note (past the old 500) is saved word for word', async () => {
+    const nevin = await gtmLead();
+    const lead = await makeLead();
+    await takeLead(nevin, lead);
+    const long = 'Customer wants the Creta seat covers in beige, call after 6 pm. '.repeat(60).trim(); // ~3,800
+    expect(long.length).toBeGreaterThan(3000);
+    await record(nevin, lead, { status: 'other', note: long }).expect(200);
+    const notes = (await Lead.findById(lead._id)).activities.filter((a) => a.type === 'follow_up').map((a) => a.notes);
+    expect(notes.at(-1)).toBe(long);
+  });
+
   it('a formatted note is saved cleaned; its words (not markup) count, empty formatting counts as no note', async () => {
     const nevin = await gtmLead();
     const lead = await makeLead();
     await takeLead(nevin, lead);
     await record(nevin, lead, { status: 'other', note: '<p> </p>' }).expect(400);
-    await record(nevin, lead, { status: 'responded', note: `<p>${'x'.repeat(501)}</p>` }).expect(400);
-    await record(nevin, lead, { status: 'responded', note: `<p><strong><em>${'x'.repeat(480)}</em></strong></p>` }).expect(200);
+    await record(nevin, lead, { status: 'responded', note: `<p>${'x'.repeat(5001)}</p>` }).expect(400);
+    await record(nevin, lead, { status: 'responded', note: `<p><strong><em>${'x'.repeat(4900)}</em></strong></p>` }).expect(200);
     await record(nevin, lead, { status: 'other', note: '<p>Call <strong>after Diwali</strong><script>alert(1)</script></p><ul><li><p>quote sent</p></li></ul>' }).expect(200);
     const notes = (await Lead.findById(lead._id)).activities.filter((a) => a.type === 'follow_up').map((a) => a.notes);
     expect(notes.at(-1)).toBe('<p>Call <strong>after Diwali</strong></p><ul><li><p>quote sent</p></li></ul>');

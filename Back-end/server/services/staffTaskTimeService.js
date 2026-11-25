@@ -27,7 +27,7 @@ const CAP_MS = TIMER_CAP_SECONDS * 1000;
 /** Time added by hand: 1 minute to 24 hours, for today or up to this many days back. */
 export const MANUAL_MAX_MINUTES = 24 * 60;
 export const MANUAL_PAST_DAYS = 90;
-export const TIME_NOTE_MAX = 200;
+export const TIME_NOTE_MAX = 1000; // was 200
 export const TIME_PAGE_SIZE = 30;
 const START_ATTEMPTS = 3;
 

@@ -494,7 +494,7 @@ describe('API', () => {
       await request(app).post(`${BASE}/${id}/follow-up`).set(a).send({}).expect(200);
       await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'nope' }).expect(400);
       await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'other', note: '  ' }).expect(400);
-      await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded', nextAt: NEXT, note: 'x'.repeat(501) }).expect(400);
+      await request(app).post(`${BASE}/${id}/follow-ups`).set(a).send({ status: 'responded', nextAt: NEXT, note: 'x'.repeat(5001) }).expect(400);
     });
 
     test('who may do what', async () => {

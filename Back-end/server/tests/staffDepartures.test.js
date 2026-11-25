@@ -90,6 +90,15 @@ describe('Departures', () => {
     return r.body.departure;
   };
 
+  test('a long reason (past the old 1,000) is kept whole; over 5,000 is refused', async () => {
+    const long = 'Moving to Bengaluru to look after family; may come back next year. '.repeat(40).trim(); // ~2,700
+    const d = await record(admin, { reason: long });
+    expect((await admin.s.get(`/${d.id}`)).body.departure.reason).toBe(long);
+    const tooLong = await admin.s.patch(`/${d.id}`, { rev: d.rev, reason: 'x'.repeat(5001) });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.message).toMatch(/under 5000 characters/);
+  });
+
   test('the reason reaches only the head and admin', async () => {
     const d = await record();
     for (const who of [head, admin]) expect((await who.s.get(`/${d.id}`)).body.departure.reason).toBe('Moving city');

@@ -1,3 +1,4 @@
+import { STAFF_NOTE_MAX } from '@/lib/textLimit';
 /**
  * Follow-up statuses on the GTM leads sheet — the same keys the server accepts
  * (Back-end/server/config/leadConstants.js FOLLOW_UP_STATUSES). "Others" needs a note.
@@ -13,6 +14,6 @@ export const FOLLOW_UP_OPTIONS: readonly { value: FollowUpStatus; label: string;
   { value: 'other', label: 'Others', hint: 'Type what happened', tone: 'bg-gray-100 text-gray-800 border-gray-300' },
 ];
 
-export const FOLLOW_UP_NOTE_MAX = 500;
+export const FOLLOW_UP_NOTE_MAX = STAFF_NOTE_MAX; // = server config/leadConstants.js
 
 export const followUpOption = (v: string | null | undefined) => FOLLOW_UP_OPTIONS.find((o) => o.value === v) ?? null;

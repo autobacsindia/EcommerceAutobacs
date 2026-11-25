@@ -13,6 +13,8 @@ import { field, primaryButton, quietButton } from '@/components/training/types';
 import WorkPanel from './WorkPanel';
 import { useCancelDeparture, useDeparture, useUpdateDeparture } from './hooks';
 import { dayLabel, timing, type Departure } from './types';
+import { STAFF_NOTE_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 function Details({ d, base }: { d: Departure; base: string }) {
   const update = useUpdateDeparture(d.id);
@@ -44,10 +46,11 @@ function Details({ d, base }: { d: Departure; base: string }) {
       </div>
       <div>
         <label htmlFor="e-reason" className="mb-1 block text-sm font-medium text-gray-800">Reason (private: only admins and their team head)</label>
-        <textarea id="e-reason" className={field} rows={2} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <textarea id="e-reason" className={field} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <TextLimitNote value={reason.trim()} max={STAFF_NOTE_MAX} />
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={update.isPending} onClick={save} className={primaryButton}>Save</button>
+        <button type="button" disabled={update.isPending || isOverLimit(reason.trim(), STAFF_NOTE_MAX)} onClick={save} className={primaryButton}>Save</button>
         <Link href={removeAt} className={quietButton}>Remove access in My team</Link>
         <button type="button" disabled={cancel.isPending} className={quietButton} onClick={() => { if (window.confirm(`${d.user.name} is staying? This cancels the record.`)) cancel.mutate(undefined, { onError: (e) => toast.error(errorMessage(e, 'That could not be saved.')) }); }}>They are staying</button>
       </div>

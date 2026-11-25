@@ -329,6 +329,22 @@ describe('Training', () => {
       const res = await hand(a, await start(a), true, '');
       expect(res.body.result).toMatchObject({ status: 'graded', score: 50, passed: false });
     });
+    test('a long answer (past the old 2,000) is kept word for word', async () => {
+      const a = await ready(qs());
+      const long = 'Check the fuse first, then the earth wire behind the dashboard. '.repeat(70).trim(); // ~4,400
+      expect(long.length).toBeGreaterThan(4000);
+      await hand(a, await start(a), true, long);
+      const view = (await head.s.get(`/assignments/${a.id}`)).body.assignment;
+      expect(view.attempts[0].questions.find((q) => q.type === 'written').answer).toBe(long);
+    });
+    test('an answer over 5,000 characters is refused with a clear message, never cut, and can be handed in again', async () => {
+      const a = await ready(qs());
+      const paper = await start(a);
+      const res = await hand(a, paper, true, 'x'.repeat(5001));
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/question \d+ is too long \(max 5,000/); // the paper is shuffled, so its place varies
+      expect((await hand(a, paper, true, 'Shorter now')).status).toBe(200);
+    });
   });
 
   describe('sign-off', () => {

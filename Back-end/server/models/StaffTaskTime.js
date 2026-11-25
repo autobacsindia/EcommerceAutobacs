@@ -30,7 +30,7 @@ const StaffTaskTimeSchema = new mongoose.Schema(
     seconds: { type: Number, default: null, min: 0 },
     /** The IST day the time counts for (YYYY-MM-DD). */
     day: { type: String, required: true },
-    note: { type: String, default: '', maxlength: 200 },
+    note: { type: String, default: '', maxlength: 1000 }, // = staffTaskTimeService TIME_NOTE_MAX
     running: { type: Boolean, default: undefined },
     /** Left running past the limit and stopped there, so the person can correct it. */
     autoStopped: { type: Boolean, default: undefined },

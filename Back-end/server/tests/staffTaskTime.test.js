@@ -200,11 +200,15 @@ describe('time added by hand', () => {
     for (const on of ['2026-02-30', 'yesterday', '', undefined]) {
       await refused(time.addTime(arun, a.id, { minutes: 30, on }, T0), 400, /valid date/);
     }
-    await refused(time.addTime(arun, a.id, { minutes: 30, on: '2026-11-02', note: 'x'.repeat(201) }, T0), 400, /200 characters/);
+    await refused(time.addTime(arun, a.id, { minutes: 30, on: '2026-11-02', note: 'x'.repeat(1001) }, T0), 400, /1000 characters/);
+    // A long note (past the old 200) is kept whole.
+    const long = 'Fitted the reverse camera and tested the wiring with the customer. '.repeat(12).trim();
+    const saved = await time.addTime(arun, a.id, { minutes: 30, on: '2026-11-01', note: long }, T0);
+    expect(JSON.stringify(saved)).toContain(long);
     // Today (IST) and the 90th day back are fine.
     await time.addTime(arun, a.id, { minutes: 30, on: '2026-11-02' }, T0);
     await time.addTime(arun, a.id, { minutes: 30, on: '2026-08-04' }, T0);
-    expect(await StaffTaskTime.countDocuments({})).toBe(2);
+    expect(await StaffTaskTime.countDocuments({})).toBe(3); // the long-note entry above + these two
   });
 
   it('a retried Add — one after another, or both at once — adds once', async () => {

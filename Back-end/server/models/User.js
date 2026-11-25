@@ -198,7 +198,7 @@ const UserSchema = new mongoose.Schema({
         }, { _id: false }),
         default: undefined,
       },
-      bio: { type: String, trim: true, maxlength: 200 },
+      bio: { type: String, trim: true, maxlength: 1000 }, // = utils/profileUpdate.js LIMITS.bio
     }, { _id: false }),
     default: undefined,
   },

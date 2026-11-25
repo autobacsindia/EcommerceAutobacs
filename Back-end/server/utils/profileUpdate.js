@@ -17,7 +17,7 @@
  */
 import { AddressBookError, normaliseAddressBook, normalisePhone } from './addressBook.js';
 
-export const LIMITS = Object.freeze({ name: 80, jobTitle: 60, contactName: 60, bio: 200 });
+export const LIMITS = Object.freeze({ name: 80, jobTitle: 60, contactName: 60, bio: 1000 });
 const OLDEST_BIRTH_YEAR = 1900;
 
 /** Thrown for any input the profile will not accept. Carries a 400. */

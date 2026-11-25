@@ -69,6 +69,16 @@ describe('record page', () => {
     expect(screen.getByText('Remove access in My team')).toHaveAttribute('href', '/team/members');
   });
 
+  test('a long reason is kept whole; over 5,000 characters it says so and Save is off', async () => {
+    show(record({ reason: 'Moving city', can: manager }));
+    const box = await screen.findByLabelText(/Reason/);
+    expect(box).not.toHaveAttribute('maxLength');
+    fireEvent.change(box, { target: { value: 'x'.repeat(5003) } });
+    expect(box).toHaveValue('x'.repeat(5003));
+    expect(screen.getByRole('alert')).toHaveTextContent(/Too long by 3 characters \(the limit is 5,000\)/);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
   test('"They are staying" confirms first', async () => {
     show(record({ can: manager }));
     jest.spyOn(window, 'confirm').mockReturnValue(false);

@@ -6,10 +6,12 @@ import { Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { errorMessage } from '@/components/staff/sales/types';
 import RichTextBox from '@/components/ui/RichTextBox';
-import { isRichTextEmpty, richTextToPlain } from '@/lib/richText';
+import { isRichTextEmpty } from '@/lib/richText';
 import { FOLLOW_UP_NOTE_MAX, FOLLOW_UP_OPTIONS, followUpOption, type FollowUpStatus } from './followUpStatus';
 import NextFollowUpPicker from './NextFollowUpPicker';
 import { formatDateTimeIST } from '@/lib/datetime';
+import { STAFF_NOTE_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 /** Meta leads only: ask when the next follow-up is due, and why a missed one is late. */
 export type FollowUpDeadline = {
@@ -90,7 +92,6 @@ export default function FollowUpRecorder<L>({ path, hints, deadline, onSaved, on
             ariaLabel={status === 'other' ? 'What happened' : 'Note'}
             placeholder={status === 'other' ? 'e.g. Asked us to call back after Diwali' : 'e.g. Rang twice, will try tomorrow'}
             className={`mt-1 ${needsNote ? 'border-red-400' : ''}`} />
-          <p className="text-right text-xs text-gray-500">{richTextToPlain(note).length}/{FOLLOW_UP_NOTE_MAX}</p>
         </div>
       )}
       {asksNext && <NextFollowUpPicker id={`${noteId}-next`} value={nextAt} onChange={setNextAt} />}
@@ -99,15 +100,16 @@ export default function FollowUpRecorder<L>({ path, hints, deadline, onSaved, on
           <label htmlFor={`${noteId}-late`} className="block text-sm font-medium text-red-800">
             This follow-up was due {deadline?.dueAt ? formatDateTimeIST(deadline.dueAt) : 'earlier'}. Why is it late? (required)
           </label>
-          <textarea id={`${noteId}-late`} value={lateReason} maxLength={500} rows={2} onChange={(e) => setLateReason(e.target.value)}
+          <textarea id={`${noteId}-late`} value={lateReason} rows={2} onChange={(e) => setLateReason(e.target.value)}
             placeholder="e.g. Customer was driving, asked to call back in the evening"
             className="mt-1 w-full rounded-lg border border-red-300 px-3 py-2 text-sm" />
+          <TextLimitNote value={lateReason.trim()} max={STAFF_NOTE_MAX} />
           <p className="text-xs text-gray-500">Saved in the history. The admin and Marketing head can see it.</p>
         </div>
       )}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={!status || missing || save.isPending}
+        <button type="submit" disabled={!status || missing || save.isPending || isOverLimit(lateReason.trim(), STAFF_NOTE_MAX)}
           className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
           {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Save follow-up
         </button>
