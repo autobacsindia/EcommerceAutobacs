@@ -14,6 +14,8 @@ jest.unstable_mockModule('../../../services/invoiceService.js', () => ({
   generateInvoicePdf: mockInvoiceSvc.generateInvoicePdf,
   invoiceFileName: mockInvoiceSvc.invoiceFileName,
   assignInvoiceNumber: mockInvoiceSvc.assignInvoiceNumber,
+  // shipmentService → payLaterService imports this formatter, so the graph needs it.
+  orderNumber: (o) => `#${String(o._id).slice(-8).toUpperCase()}`,
 }));
 // Avoid loading unrelated heavy deps pulled in by the controller module.
 jest.unstable_mockModule('../../../repositories/userRepository.js', () => ({ default: {} }));

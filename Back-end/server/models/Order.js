@@ -198,6 +198,33 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false })],
     default: undefined,
   },
+  /*
+    "Ship before payment" (config/payLater.js, services/payLaterService.js). The admin
+    let this unpaid sales order go to the teams and ship; the customer pays after
+    dispatch. paymentStatus stays `pending` until the verified webhook (or accounts
+    confirming a bank transfer) marks it paid — this block never does.
+  */
+  payLater: {
+    type: new mongoose.Schema({
+      approvedAt: { type: Date, required: true },
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      approvedByName: String,
+      reason: { type: String, default: "" },
+      // First parcel sent: the due date runs from here.
+      dispatchedAt: Date,
+      dueAt: Date,
+      // The payment link after dispatch: claimed (in flight) → sent.
+      linkClaimedAt: Date,
+      linkSentAt: Date,
+      // Why no link was sent automatically (e.g. part of the order was cancelled).
+      linkBlocked: String,
+      // Overdue chasing: one reminder + one alert per IST day.
+      lastChasedOn: String,
+      chaseCount: { type: Number, default: 0 },
+    }, { _id: false }),
+    default: undefined,
+  },
+
   // Unpaid sales order parked as "On hold — customer thinking" (utils/salesHold.js).
   // Changes nothing about price or payment: links stay live, the status stays
   // awaiting_payment. It only hides the order from the active list and the
@@ -1483,6 +1510,13 @@ OrderSchema.index(
   { partialFilterExpression: { 'workflow.open': true }, name: 'team_workflow_open_list_date' }
 );
 OrderSchema.index({ listDate: -1, _id: -1 }, { name: 'order_list_date' });
+// "Ship before payment" orders (services/payLaterService.js): the accounts list
+// (newest approval first), the outstanding-limit sum and the hourly chase. Partial,
+// so it holds only the handful of orders the admin ever let ship unpaid.
+OrderSchema.index(
+  { paymentStatus: 1, 'payLater.approvedAt': -1, _id: -1 },
+  { partialFilterExpression: { 'payLater.approvedAt': { $type: 'date' } }, name: 'order_pay_later' }
+);
 
 // SINGLE-FIELD indexes for specific lookups
 // Declared retroactively from $indexStats (2026-08-21): these were hand-built in

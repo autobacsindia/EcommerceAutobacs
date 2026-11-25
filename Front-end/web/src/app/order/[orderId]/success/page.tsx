@@ -12,6 +12,7 @@ import SpinSection from '@/components/spin/SpinSection';
 import ConversionFallback from './ConversionFallback';
 import OrderCelebration from '@/components/festival/OrderCelebration';
 import { formatLongDateIST } from '@/lib/datetime';
+import { GENERAL_DELIVERY_COPY } from '@/lib/deliveryWindow';
 
 // Transactional, per-user page — never index it.
 export const metadata: Metadata = {
@@ -101,7 +102,7 @@ export default async function OrderSuccessPage({
   // timezone (UTC on Vercel) and showed the customer the wrong delivery day.
   const estimatedDelivery = formatLongDateIST(
     order.estimatedDelivery,
-    'Typically delivered in 5–7 business days'
+    GENERAL_DELIVERY_COPY
   );
 
   return (

@@ -16,6 +16,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import VehicleModelListing from './VehicleModelListing';
 import { vehicleService } from '@/services/vehicleService';
+jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
+  useDeliveryEstimates: () => ({ estimates: null, pending: false }),
+}));
+
 
 const mockPush = jest.fn();
 let mockSearch = new URLSearchParams();

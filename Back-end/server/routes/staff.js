@@ -1,4 +1,5 @@
 import * as extraCharges from '../services/orderExtraChargeService.js';
+import * as payLater from '../services/payLaterService.js';
 import * as supplierParts from '../services/supplierPartsService.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
@@ -29,6 +30,8 @@ import {
   validateBankTransferReject,
   validateExtraChargeId,
   validateExtraChargeList,
+  validatePayLaterList,
+  validatePayLaterApprove,
   validateSetSeller, validateCreditProofFile,
   validateOrderIdParam,
   validateSalesOrder,
@@ -559,6 +562,23 @@ router.post('/bank-transfers/:id/confirm', validateBankTransferId, validateReque
 // @route  POST /staff/bank-transfers/:id/reject { note } — accounts, admin
 router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, transfer: await rejectBankTransfer(req.user, req.params.id, req.body, req) });
+}));
+
+// ── Ship before payment (scope enforced in payLaterService: approve = admin) ─
+
+// @route  GET /staff/orders/:id/pay-later — can the admin turn it on here, or its state
+router.get('/orders/:id/pay-later', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await payLater.payLaterOptionFor(req.user, req.params.id)) });
+}));
+
+// @route  POST /staff/orders/:id/pay-later { reason } — admin: ship before payment
+router.post('/orders/:id/pay-later', validatePayLaterApprove, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await payLater.approvePayLater(req.user, req.params.id, { reason: req.body.reason }, req)) });
+}));
+
+// @route  GET /staff/pay-later?view=due|paid&cursor= — accounts, admin, GTM head
+router.get('/pay-later', validatePayLaterList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await payLater.listPayLater(req.user, req.query)) });
 }));
 
 // ── Extra charges on paid orders (scope enforced in orderExtraChargeService) ─

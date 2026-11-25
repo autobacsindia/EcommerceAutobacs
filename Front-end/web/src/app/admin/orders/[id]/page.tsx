@@ -35,6 +35,7 @@ import AdminOrderJourney from '@/components/orders/AdminOrderJourney';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderOverview from '@/components/admin/OrderOverview';
 import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
+import OrderPayLater from '@/components/payments/payLater/OrderPayLater';
 import EditOrderAddress from '@/components/admin/EditOrderAddress';
 import OrderDeliveryFees, { type OrderDeliveryFeesSnapshot } from '@/components/orders/OrderDeliveryFees';
 
@@ -538,6 +539,11 @@ function AdminOrderDetailPageInner() {
               extras and nothing can be added — no blank white card. */}
           <div className="mb-6 rounded-lg bg-white p-4 shadow empty:hidden">
             <OrderExtraCharges orderId={orderId} />
+          </div>
+
+          {/* "Ship before payment" on an unpaid sales order (admin only, server-decided). */}
+          <div className="mb-6 rounded-lg bg-white p-4 shadow empty:hidden">
+            <OrderPayLater orderId={orderId} onChanged={fetchOrder} />
           </div>
         </>
       ) : (

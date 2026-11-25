@@ -39,6 +39,8 @@ import {
 import { owesGoodie } from '../utils/orderLines.js';
 import * as Sentry from '@sentry/node';
 import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
+import { isPayLaterDue } from '../config/payLater.js';
+import { afterDispatch as payLaterAfterDispatch } from './payLaterService.js';
 
 // Bounded retries for the compare-and-set. A conflict means another admin shipped
 // something while we validated; re-reading resolves it. More than a couple of rounds
@@ -86,7 +88,8 @@ class ShipmentService {
           message: `Cannot ship an order in '${order.status}'. Only paid, un-cancelled orders can be dispatched.`,
         };
       }
-      if (order.paymentStatus !== 'paid') {
+      // Paid, or the admin approved "Ship before payment" on it (config/payLater.js).
+      if (order.paymentStatus !== 'paid' && !isPayLaterDue(order)) {
         return { success: false, message: 'Cannot ship an order that has not been paid for.' };
       }
 
@@ -497,6 +500,9 @@ class ShipmentService {
    * @private
    */
   _enqueueShipmentEmail(orderId, shipmentId, kind) {
+    // Ship before payment: a sent parcel starts the clock and sends the pay link.
+    // Not gated on Redis; never throws (the hourly sweep retries a failure).
+    if (kind === 'shipped') payLaterAfterDispatch(orderId).catch(() => {});
     if (!process.env.REDIS_URL) return;
     getNotificationsQueue()
       .add('send-shipment-email', { orderId, shipmentId, kind })

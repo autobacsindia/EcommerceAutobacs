@@ -1,0 +1,70 @@
+import { staffKeys } from '@/hooks/queries/keys';
+
+/** The pay-later block the server puts on an order (Back-end utils/payLater.js shapePayLater). */
+export interface PayLaterState {
+  label: string;
+  due: boolean;
+  approvedAt: string;
+  approvedBy: string;
+  reason: string;
+  dispatchedAt: string | null;
+  dueAt: string | null;
+  overdueDays: number;
+  linkSentAt: string | null;
+  payUrl: string | null;
+  payUrlExpiresAt: string | null;
+  linkBlocked: string | null;
+  reminders: number;
+}
+
+/** One row of the "Shipped – payment due" list (services/payLaterService.js shapeRow). */
+export interface PayLaterRow {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  amount: number;
+  paidAt: string | null;
+  customer: { name: string; phone: string; city: string };
+  salesPerson: string;
+  bankTransferPending: boolean;
+  payLater: PayLaterState | null;
+}
+
+/** The server's sum: the screens never add money themselves. */
+export interface PayLaterSummary {
+  owed: number;
+  count: number;
+  overdue: number;
+  limit: number;
+  perOrderLimit: number;
+  dueDays: number;
+}
+
+export interface PayLaterOption {
+  canApprove: boolean;
+  why?: string | null;
+  approved?: PayLaterRow;
+  perOrderLimit: number;
+  dueDays: number;
+  owed?: number;
+  limit?: number;
+}
+
+export const payLaterKeys = {
+  all: [...staffKeys.all, 'pay-later'] as const,
+  list: (view: string) => [...payLaterKeys.all, 'list', view] as const,
+  option: (orderId: string) => [...payLaterKeys.all, 'option', orderId] as const,
+};
+
+export const LINK_BLOCKED_TEXT: Record<string, string> = {
+  part_cancelled: 'Part of this order was cancelled, so no link went out for the old total. Settle the amount with the customer.',
+};
+
+/** Colour for the label the server sends. */
+export const payLaterTone = (label: string) => {
+  if (/overdue/i.test(label)) return 'bg-red-100 text-red-800';
+  if (/^Paid/.test(label)) return 'bg-green-100 text-green-800';
+  if (/closed/i.test(label)) return 'bg-gray-200 text-gray-700';
+  return 'bg-amber-100 text-amber-800';
+};

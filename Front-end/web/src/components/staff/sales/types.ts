@@ -1,5 +1,6 @@
 /** Shapes returned by the /staff sales endpoints (Back-end services/salesOrderService.js). */
 import type { LineStage } from '@/components/staff/work/types';
+import type { PayLaterState } from '@/components/payments/payLater/api';
 
 export type SalesOrderItem = {
   /** Catalogue product (null for a custom item) — for the "open on the website" link. */
@@ -108,6 +109,8 @@ export type SalesOrder = {
   workflowStage?: LineStage | null;
   /** null once paid / closed. */
   linkState: 'active' | 'expired' | null;
+  /** "Ship before payment" (admin-approved): null on an ordinary order. */
+  payLater?: PayLaterState | null;
   paymentLinkUrl: string | null;
   paymentLinkExpiresAt: string | null;
   razorpayPaymentId: string | null;

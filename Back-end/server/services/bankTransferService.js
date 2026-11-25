@@ -51,6 +51,7 @@ import {
   and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
 } from '../utils/listQuery.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
+import { isPayLaterDue, payLaterDueFilter } from '../config/payLater.js';
 import { publicEmail } from '../utils/customerContact.js';
 import { quotationDetailsForOrder } from './salesQuotationService.js';
 import { slipProvenance, markEdited } from './slipReader/slipReaderService.js';
@@ -202,7 +203,9 @@ export async function recordBankTransfer(actor, orderId, input = {}, files = [],
   if (!isAdmin(actor) && !isSalesHead(actor) && idOf(order.salesUser) !== idOf(actor._id)) {
     throw fail('You can only record payments on your own orders.', 403);
   }
-  if (order.paymentStatus !== 'pending' || order.status !== 'awaiting_payment') throw fail('This order is already paid or closed.', 409);
+  // An unpaid order, or a "Ship before payment" order still owed (config/payLater.js).
+  const payLater = isPayLaterDue(order);
+  if (!payLater && (order.paymentStatus !== 'pending' || order.status !== 'awaiting_payment')) throw fail('This order is already paid or closed.', 409);
   if (order.bankTransferPendingAt) throw fail('A bank transfer is already waiting for accounts on this order.', 409);
   if ((order.paymentParts || []).some((p) => p.status === 'paid')) {
     throw fail('Part of this order is already paid by link, so a bank transfer cannot cover it. Ask accounts to record the rest.', 409);
@@ -221,7 +224,8 @@ export async function recordBankTransfer(actor, orderId, input = {}, files = [],
   // Claim the order: only one transfer waits at a time, and only on a still-unpaid order.
   const claimed = await orderRepository.model.findOneAndUpdate(
     {
-      _id: order._id, status: 'awaiting_payment', paymentStatus: 'pending',
+      _id: order._id,
+      ...(payLater ? payLaterDueFilter() : { status: 'awaiting_payment', paymentStatus: 'pending' }),
       bankTransferPendingAt: null, paymentParts: { $not: { $elemMatch: { status: 'paid' } } },
     },
     { $set: { bankTransferPendingAt: new Date() } },
@@ -525,12 +529,14 @@ export async function confirmBankTransfer(actor, id, req) {
   if (!mongoose.isValidObjectId(id)) throw fail('Bank transfer not found.', 404);
 
   let confirmedHere = false;
+  let paidLater = false;
   let orderId = null;
   let extraId = null;
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
       confirmedHere = false; // re-run on a transient write conflict
+      paidLater = false;
       const t = await bankTransferRepository.model.findById(id).session(session);
       if (!t) throw fail('Bank transfer not found.', 404);
       if (t.status === 'confirmed') return; // a second click: already done
@@ -543,7 +549,8 @@ export async function confirmBankTransfer(actor, id, req) {
       const order = await orderRepository.findById(t.order, [], session);
       if (!order) throw fail('Order not found.', 404);
       orderId = idOf(order._id);
-      if (order.paymentStatus !== 'pending' || order.status !== 'awaiting_payment') {
+      const payLater = isPayLaterDue(order);
+      if (!payLater && (order.paymentStatus !== 'pending' || order.status !== 'awaiting_payment')) {
         throw fail('This order is already paid or closed — do not confirm. If this money is in the bank, it has to go back to the customer.', 409);
       }
       if (paise(order.totalAmount) !== paise(t.amount)) {
@@ -571,6 +578,23 @@ export async function confirmBankTransfer(actor, id, req) {
         },
         { session },
       );
+      if (payLater) {
+        // "Ship before payment": the order is already with the teams (or delivered),
+        // so its status stays; only the payment axis moves — paid AND verified, in
+        // this transaction. A webhook paying it at the same moment write-conflicts
+        // with this save, and the retry above then refuses.
+        const fresh = await orderRepository.findById(orderId, [], session);
+        fresh.paymentStatus = 'paid';
+        fresh.paymentVerification = { source: 'bank_transfer', reference: t.reference, verifiedBy: actor._id, verifiedAt: now };
+        fresh.statusHistory.push({
+          status: fresh.status, timestamp: now, updatedBy: actor._id, reason: 'manual_confirmation',
+          notes: `Paid after dispatch: bank transfer ${t.reference} (${inr(t.amount)}) found in the bank by ${actor.name}`,
+        });
+        await orderRepository.save(fresh, session);
+        paidLater = true;
+        confirmedHere = true;
+        return;
+      }
       const result = await orderStatusService.updateOrderStatus(orderId, 'processing', {
         userId: actor._id,
         isAdmin: true,
@@ -596,9 +620,11 @@ export async function confirmBankTransfer(actor, id, req) {
   } else if (confirmedHere) {
     // Invoice, admin + team "paid order" alerts, affiliate, Meta — the one
     // post-payment routine every paid order goes through, once.
-    razorpayService._afterOrderPaid(orderId);
-    auditLogger.logAction(req, 'UPDATE', 'BankTransfer', id, { change: 'confirmed', orderId, amount: t.amount });
-    await tellChat(t, 'confirmed', `✅ ${t.orderNumber} — bank transfer of ${inr(t.amount)} (UTR ${t.reference}) confirmed by ${actor.name}. The order is paid and goes to the stock check.`, { mentionSeller: true });
+    razorpayService._afterOrderPaid(orderId, { paidLater });
+    auditLogger.logAction(req, 'UPDATE', 'BankTransfer', id, { change: 'confirmed', orderId, amount: t.amount, paidLater });
+    await tellChat(t, 'confirmed', paidLater
+      ? `✅ ${t.orderNumber} — bank transfer of ${inr(t.amount)} (UTR ${t.reference}) confirmed by ${actor.name}. This order shipped before payment and is now paid.`
+      : `✅ ${t.orderNumber} — bank transfer of ${inr(t.amount)} (UTR ${t.reference}) confirmed by ${actor.name}. The order is paid and goes to the stock check.`, { mentionSeller: true });
   }
   return shape(t, actor);
 }

@@ -33,6 +33,7 @@ import { countLastDaysForBell } from './staffDepartureService.js';
 import { countsFor as countReturnsFor } from './returnService.js';
 import { countUnread as countInboxUnread, recentAlerts } from './staffTaskInboxService.js';
 import { bellItemsFor as metaLeadBellItems } from './metaLeadDeadlineService.js';
+import { countOverdue as countPayLaterOverdue } from './payLaterService.js';
 
 const isAdmin = (u) => u?.role === 'admin';
 const isActiveStaff = (u) => u?.role === 'staff' && u?.staff?.active === true;
@@ -55,7 +56,7 @@ export async function summaryFor(user) {
 
   const wantsPayments = isAdmin(user) || isAccounts(user);
   // One aggregate covers both payment queues; refunds are a separate table.
-  const [byStatus, refunds, transfers, extrasWaiting, extraRefundsDue, tasksDue, returnItems, inboxUnread, alerts] = await Promise.all([
+  const [byStatus, refunds, transfers, extrasWaiting, extraRefundsDue, tasksDue, returnItems, inboxUnread, alerts, payLaterOverdue] = await Promise.all([
     wantsPayments ? paymentRequestRepository.countByStatus() : Promise.resolve([]),
     isAdmin(user) || isAccounts(user) ? orderRepository.countPendingCancellationRefunds() : Promise.resolve(0),
     // A small collection (a handful of rows a week), so a count is cheap.
@@ -71,6 +72,8 @@ export async function summaryFor(user) {
     countInboxUnread(user),
     // "New task" / "added to a project" in the last day, unread: the panel's pop-up card.
     recentAlerts(user).catch(() => []),
+    // Shipped before payment and past the due date: a handful at most (order_pay_later).
+    wantsPayments ? countPayLaterOverdue() : Promise.resolve(0),
   ]);
   const n = (status) => byStatus.find((r) => r._id === status)?.n || 0;
 
@@ -120,6 +123,16 @@ export async function summaryFor(user) {
       href: isAdmin(user) ? '/admin/extra-charges' : '/team/extra-charges',
     });
   }
+  // "Ship before payment" orders the customer has not paid by the due date.
+  if (wantsPayments && payLaterOverdue > 0) {
+    items.push({
+      key: 'pay_later_overdue',
+      label: 'Shipped – payment overdue',
+      count: payLaterOverdue,
+      href: isAdmin(user) ? '/admin/pay-later' : '/team/pay-later',
+    });
+  }
+
   if (isAdmin(user) && extraRefundsDue > 0) {
     items.push({
       key: 'extra_charge_refunds_due',

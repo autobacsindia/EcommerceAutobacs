@@ -41,6 +41,7 @@ import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { formatRupees } from '@/lib/formatRupees';
+import CheckoutDeliveryNote from '@/components/checkout/CheckoutDeliveryNote';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -1290,6 +1291,9 @@ function CheckoutPageContent() {
                 />
               </div>
             </div>
+
+            {/* Honest delivery expectation, right where the order is committed ("Nothing Extra"). */}
+            <CheckoutDeliveryNote className="mb-6" />
 
             {/* ── WhatsApp order updates (consent for THIS order) ────────── */}
             <div className="bg-obsidian border border-hairline rounded-lg p-5 mb-6">
