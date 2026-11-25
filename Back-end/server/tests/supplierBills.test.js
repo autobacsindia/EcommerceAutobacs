@@ -455,6 +455,27 @@ describe('We owe suppliers (supplier bills)', () => {
       expect([...days].sort()).toEqual(days);
     });
 
+    it('reads through indexes, not collection scans (list, one supplier, payments per bill)', async () => {
+      await SupplierBill.syncIndexes();
+      await PaymentRequest.syncIndexes();
+      // Enough rows that the planner chooses by cost, not by a tie on an empty collection.
+      const sups = Array.from({ length: 10 }, () => new mongoose.Types.ObjectId());
+      await SupplierBill.insertMany(Array.from({ length: 300 }, (_, i) => ({
+        number: `SB-${String(i + 1).padStart(4, '0')}`, supplier: sups[i % 10], supplierName: `S${i % 10}`,
+        billNumber: `X${i}`, billKey: `x${i}`, dueDate: istDay(i % 60), amountPaise: 10000,
+        status: i % 7 ? 'open' : 'cancelled', settled: i % 3 === 0, createdBy: procurement.user._id,
+      })));
+      const stages = (plan) => JSON.stringify(plan.queryPlanner.winningPlan);
+      const owed = await SupplierBill.find(billsService.listQuery({})).sort({ dueDate: 1, _id: 1 }).limit(26).explain();
+      expect(stages(owed)).toMatch(/supplier_bill_due/);
+      const one = await SupplierBill.find(billsService.listQuery({ supplier: String(sups[3]) })).sort({ dueDate: 1, _id: 1 }).limit(26).explain();
+      expect(stages(one)).toMatch(/supplier_bill_supplier/);
+      const supplierBillRepository = (await import('../repositories/supplierBillRepository.js')).default;
+      const pays = await supplierBillRepository.requestsFor([new mongoose.Types.ObjectId()]).explain();
+      expect(stages(pays)).toMatch(/payment_request_supplier_bill/);
+      expect(stages(owed) + stages(one) + stages(pays)).not.toMatch(/COLLSCAN/);
+    });
+
     it('the daily reminder lists overdue bills once a day, and stays quiet when none are', async () => {
       expect(await billsService.remindOverdue()).toMatchObject({ overdue: 0, posted: false });
       const s = await addSupplier();
