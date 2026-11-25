@@ -259,10 +259,9 @@ const handlers = {
     const { inboundId } = job.data;
     const result = await inboundEmailService.processInbound(inboundId);
 
-    if (result.shouldAcknowledge && result.ticket) {
-      const ticket = await supportTicketRepository.findByReference(result.ticket);
-      if (ticket) await supportEmailService.sendAcknowledgement(ticket);
-    }
+    // New ticket → acknowledgement; a reply out of hours → one after-hours note
+    // per ticket per night. Auto-replies and no-reply senders get nothing.
+    await supportEmailService.followUpInbound(result, (ref) => supportTicketRepository.findByReference(ref));
     return result;
   },
 
