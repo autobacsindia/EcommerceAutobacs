@@ -16,6 +16,8 @@ export interface Departure {
   reason?: string;
   createdByName?: string;
   note?: string;
+  /** Main responsibilities, written by the person leaving or an admin. */
+  responsibilities?: string;
   noteByName?: string;
   noteAt?: string | null;
   mine?: 'leaving' | 'taking_over';

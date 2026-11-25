@@ -55,17 +55,47 @@ function Details({ d, base }: { d: Departure; base: string }) {
   );
 }
 
-function Note({ d }: { d: Departure }) {
+function Notes({ d }: { d: Departure }) {
   const update = useUpdateDeparture(d.id);
   const [note, setNote] = useState(d.note ?? '');
+  const [duties, setDuties] = useState(d.responsibilities ?? '');
   useEffect(() => { setNote(d.note ?? ''); }, [d.note]);
-  if (!d.can.writeNote) return <RichText value={d.note ?? ''} empty={<p className="text-sm text-gray-600">Nothing written yet.</p>} />;
+  useEffect(() => { setDuties(d.responsibilities ?? ''); }, [d.responsibilities]);
+  const empty = <p className="text-sm text-gray-600">Nothing written yet.</p>;
+  if (!d.can.writeNote) {
+    return (
+      <>
+        <section className="mt-6">
+          <h2 className="mb-2 font-semibold text-gray-900">Main responsibilities</h2>
+          <RichText value={d.responsibilities ?? ''} empty={empty} />
+        </section>
+        <section className="mt-6">
+          <h2 className="mb-2 font-semibold text-gray-900">Handover note</h2>
+          <RichText value={d.note ?? ''} empty={empty} />
+          {d.noteAt && d.noteByName && <p className="mt-2 text-xs text-gray-600">Last updated by {d.noteByName}.</p>}
+        </section>
+      </>
+    );
+  }
+  const save = () => update.mutate({ rev: d.rev, note, responsibilities: duties }, {
+    onSuccess: () => toast.success('Saved'),
+    onError: (e) => toast.error(errorMessage(e, 'This could not be saved. Your text is still here.')),
+  });
   return (
-    <>
-      <RichTextBox value={note} onChange={setNote} ariaLabel="Handover note" placeholder="What is in progress, key suppliers or customers, what the next person must know" maxLength={20000} />
-      <p className="mt-1 text-xs text-gray-600">Never write passwords here.</p>
-      <button type="button" disabled={update.isPending} className={`${primaryButton} mt-2`} onClick={() => update.mutate({ rev: d.rev, note }, { onSuccess: () => toast.success('Note saved'), onError: (e) => toast.error(errorMessage(e, 'The note could not be saved. Your text is still here.')) })}>Save note</button>
-    </>
+    <section className="mt-6 space-y-4">
+      <p className="text-sm text-gray-600">Everyone on the {d.teamLabel} team can read this.</p>
+      <div>
+        <h2 className="mb-2 font-semibold text-gray-900">Main responsibilities</h2>
+        <RichTextBox value={duties} onChange={setDuties} ariaLabel="Main responsibilities" placeholder="What you are responsible for: daily and weekly jobs, accounts, suppliers or customers you look after" maxLength={20000} />
+      </div>
+      <div>
+        <h2 className="mb-2 font-semibold text-gray-900">Handover note</h2>
+        <RichTextBox value={note} onChange={setNote} ariaLabel="Handover note" placeholder="What is in progress, key suppliers or customers, what the next person must know" maxLength={20000} />
+        <p className="mt-1 text-xs text-gray-600">Never write passwords here.</p>
+      </div>
+      <button type="button" disabled={update.isPending} className={primaryButton} onClick={save}>Save note</button>
+      {d.noteAt && d.noteByName && <p className="text-xs text-gray-600">Last updated by {d.noteByName}.</p>}
+    </section>
   );
 }
 
@@ -82,12 +112,8 @@ export default function HandoverDetail({ id, base }: { id: string; base: string 
       <p className="mt-1 text-sm text-gray-600">{d.teamLabel} · Last day {dayLabel(d.lastDay)} · Taking over: {d.successor?.name ?? 'not named yet'}</p>
       {d.can.manage && <Details key={d.rev} d={d} base={base} />}
       {!d.can.manage && d.reason && <p className="mt-4 text-sm text-gray-800"><span className="font-medium">Reason (private):</span> {d.reason}</p>}
-      {d.can.handover && <WorkPanel key={d.successor?.id ?? 'none'} d={d} />}
-      <section className="mt-6">
-        <h2 className="mb-2 font-semibold text-gray-900">Handover note</h2>
-        <Note d={d} />
-        {d.noteAt && d.noteByName && <p className="mt-2 text-xs text-gray-600">Last updated by {d.noteByName}.</p>}
-      </section>
+      {d.status !== 'cancelled' && <WorkPanel key={d.successor?.id ?? 'none'} d={d} />}
+      <Notes d={d} />
     </article>
   );
 }

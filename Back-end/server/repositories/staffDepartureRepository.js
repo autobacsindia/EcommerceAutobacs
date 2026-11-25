@@ -6,9 +6,9 @@ const staffDepartureRepository = {
   create: async (doc) => (await StaffDeparture.create(doc)).toObject(),
   findById: (id) => StaffDeparture.findById(id).lean(),
   page: (filter, { before, limit }) => StaffDeparture.find({ ...filter, ...(before ? { _id: { $lt: before } } : {}) })
-    .select('-note').sort({ _id: -1 }).limit(limit).lean(),
+    .select('-note -responsibilities').sort({ _id: -1 }).limit(limit).lean(),
   openFor: (userId, limit) => StaffDeparture.find({ active: true, $or: [{ user: userId }, { successor: userId }] })
-    .select('-note -reason').sort({ _id: -1 }).limit(limit).lean(),
+    .select('-note -reason -responsibilities').sort({ _id: -1 }).limit(limit).lean(),
   updateIfRev: (id, rev, set) => StaffDeparture.findOneAndUpdate({ _id: id, rev, status: 'open' }, { $set: set, $inc: { rev: 1 } }, { new: true, runValidators: true }).lean(),
   cancel: (id) => StaffDeparture.findOneAndUpdate({ _id: id, status: 'open' }, { $set: { status: 'cancelled' }, $unset: { active: 1 }, $inc: { rev: 1 } }, { new: true }).lean(),
   dueBy: (filter, lastDay, limit) => StaffDeparture.find({ ...filter, active: true, lastDay: { $lte: lastDay } }).select('user').limit(limit).lean(),
