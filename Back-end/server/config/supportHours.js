@@ -1,55 +1,43 @@
 /**
- * Support team hours, for the after-hours auto-reply ("Nothing Extra" campaign,
- * 2026-11-23). India time, Monday–Saturday 9:30 am – 6:30 pm. Sundays are closed.
+ * After-hours auto-reply timing ("Nothing Extra" campaign, 2026-11-23).
  *
- * Kept as data so a change of hours is a one-line edit. No public holidays yet:
- * on a holiday the team is "open" here, so the customer simply gets no
- * after-hours note — the safe direction (no false "we're closed").
+ * NOT a second definition of support hours: it reads the published ones
+ * (config/supportPolicy.js BUSINESS_HOURS — Mon–Sat 10 am–6 pm IST) and the
+ * SUPPORT_HOLIDAYS closures, through the same utils/businessHours.js the ticket
+ * SLA clock uses. Change the hours there and both move together.
  *
- * Pure: every function takes `now` so tests never depend on the clock.
+ * Pure apart from the default `holidays` (read from env once, like the SLA code):
+ * every function takes `now`, so tests never depend on the clock.
  */
-
-/** 0 = Sunday … 6 = Saturday (India day of week). */
-export const SUPPORT_DAYS = Object.freeze([1, 2, 3, 4, 5, 6]);
-/** Minutes after India midnight. */
-export const SUPPORT_OPEN_MIN = 9 * 60 + 30;   // 9:30 am
-export const SUPPORT_CLOSE_MIN = 18 * 60 + 30; // 6:30 pm
-
-/** Shown to customers; no weekday names (automated mail never names a day). */
-export const SUPPORT_HOURS_TEXT = '9:30 am to 6:30 pm India time, six days a week';
+import { BUSINESS_HOURS, SUPPORT_HOLIDAYS } from './supportPolicy.js';
+import { isWithinBusinessHours, addBusinessMinutes } from '../utils/businessHours.js';
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
-const ist = (now) => new Date(new Date(now).getTime() + IST_OFFSET_MS);
-const minutesOf = (d) => d.getUTCHours() * 60 + d.getUTCMinutes();
+const clock = (h) => (h === 12 ? '12 noon' : h < 12 ? `${h} am` : `${h - 12} pm`);
 
-/** True while the support team is working. */
-export function isWithinSupportHours(now = new Date()) {
-  const d = ist(now);
-  const m = minutesOf(d);
-  return SUPPORT_DAYS.includes(d.getUTCDay()) && m >= SUPPORT_OPEN_MIN && m < SUPPORT_CLOSE_MIN;
-}
+/** Shown to customers. No weekday names: automated mail never names a day. */
+export const SUPPORT_HOURS_TEXT =
+  `${clock(BUSINESS_HOURS.startHour)} to ${clock(BUSINESS_HOURS.endHour)} India time, ` +
+  `${BUSINESS_HOURS.workingDays.length === 6 ? 'six days a week' : `${BUSINESS_HOURS.workingDays.length} days a week`}`;
+
+/** True while the support team is working (holidays count as closed). */
+export const isWithinSupportHours = (now = new Date(), holidays = SUPPORT_HOLIDAYS) =>
+  isWithinBusinessHours(now, holidays);
 
 /**
- * The India day ('YYYY-MM-DD') the team next opens, as seen from `now`. Every
- * moment of one closed stretch maps to the same day — Saturday 7 pm, Sunday noon
- * and Monday 8 am all give Monday — so it names "this night" for the once-only key.
- * During opening hours it is today.
+ * The India day ('YYYY-MM-DD') support next opens, seen from `now`; today while
+ * open. Every moment of one closed stretch — Saturday 7 pm, Sunday noon, Monday
+ * 8 am, a holiday — gives the same day, so it names "this night" for the
+ * once-only key.
  */
-export function nextOpeningDay(now = new Date()) {
-  let d = ist(now);
-  if (SUPPORT_DAYS.includes(d.getUTCDay()) && minutesOf(d) < SUPPORT_CLOSE_MIN) {
-    return d.toISOString().slice(0, 10);
-  }
-  for (let i = 1; i <= 7; i += 1) {
-    d = new Date(d.getTime() + DAY_MS);
-    if (SUPPORT_DAYS.includes(d.getUTCDay())) return d.toISOString().slice(0, 10);
-  }
-  return d.toISOString().slice(0, 10); // unreachable with a non-empty SUPPORT_DAYS
+export function nextOpeningDay(now = new Date(), holidays = SUPPORT_HOLIDAYS) {
+  const opening = addBusinessMinutes(now, 0, holidays); // snaps to the next opening
+  return new Date(opening.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 /** Once-only key for "the after-hours note for this closed stretch". */
-export const afterHoursKey = (now = new Date()) => `after-hours:${nextOpeningDay(now)}`;
+export const afterHoursKey = (now = new Date(), holidays = SUPPORT_HOLIDAYS) =>
+  `after-hours:${nextOpeningDay(now, holidays)}`;
 
-export default { SUPPORT_DAYS, SUPPORT_OPEN_MIN, SUPPORT_CLOSE_MIN, SUPPORT_HOURS_TEXT, isWithinSupportHours, nextOpeningDay, afterHoursKey };
+export default { SUPPORT_HOURS_TEXT, isWithinSupportHours, nextOpeningDay, afterHoursKey };

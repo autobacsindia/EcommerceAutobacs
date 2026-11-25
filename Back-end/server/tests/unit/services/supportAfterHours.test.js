@@ -1,6 +1,6 @@
 /**
  * After-hours auto-reply on support email ("Nothing Extra", 2026-11-23).
- * Hours: Mon–Sat 9:30 am – 6:30 pm IST. One note per ticket per closed stretch;
+ * Hours: the published support hours, Mon–Sat 10 am – 6 pm IST, plus SUPPORT_HOLIDAYS. One note per ticket per closed stretch;
  * never to auto-replies, no-reply senders or our own address. Email sending is a
  * stub — nothing real is sent.
  */
@@ -22,7 +22,7 @@ jest.unstable_mockModule('../../../repositories/supportTicketRepository.js', () 
 }));
 jest.unstable_mockModule('../../../repositories/supportMessageRepository.js', () => ({ default: { find: mockFindMessages } }));
 
-const { isWithinSupportHours, nextOpeningDay, afterHoursKey } = await import('../../../config/supportHours.js');
+const { isWithinSupportHours, nextOpeningDay, afterHoursKey, SUPPORT_HOURS_TEXT } = await import('../../../config/supportHours.js');
 const { followUpInbound, sendAfterHoursReply, sendAcknowledgement, AFTER_HOURS_LINES, ACK_LINES } =
   await import('../../../services/supportEmailService.js');
 
@@ -59,23 +59,32 @@ beforeEach(() => {
   mockFindMessages.mockResolvedValue([]);
 });
 
-describe('support hours (IST)', () => {
+describe('support hours (IST) — the published BUSINESS_HOURS', () => {
   it.each([
-    ['2026-11-25T09:29:00', false], ['2026-11-25T09:30:00', true], ['2026-11-25T18:29:00', true],
-    ['2026-11-25T18:30:00', false], ['2026-11-28T12:00:00', true], ['2026-11-29T12:00:00', false],
-  ])('%s → open %s', (t, open) => expect(isWithinSupportHours(ist(t))).toBe(open));
+    ['2026-11-25T09:59:00', false], ['2026-11-25T10:00:00', true], ['2026-11-25T17:59:00', true],
+    ['2026-11-25T18:00:00', false], ['2026-11-28T12:00:00', true], ['2026-11-29T12:00:00', false],
+  ])('%s → open %s', (t, open) => expect(isWithinSupportHours(ist(t), [])).toBe(open));
 
-  it('one closed stretch maps to one key: the day we next open', () => {
-    expect(nextOpeningDay(ist('2026-11-25T19:00:00'))).toBe('2026-11-26');
-    expect(nextOpeningDay(ist('2026-11-26T02:00:00'))).toBe('2026-11-26');
-    expect(nextOpeningDay(ist('2026-11-28T19:00:00'))).toBe('2026-11-30'); // Sat night → Mon
-    expect(nextOpeningDay(ist('2026-11-29T12:00:00'))).toBe('2026-11-30'); // Sunday → Mon
-    expect(nextOpeningDay(ist('2026-11-30T08:00:00'))).toBe('2026-11-30');
+  it('a holiday counts as closed', () => {
+    expect(isWithinSupportHours(ist('2026-11-25T12:00:00'), ['2026-11-25'])).toBe(false);
+    expect(nextOpeningDay(ist('2026-11-24T19:00:00'), ['2026-11-25'])).toBe('2026-11-26');
   });
 
-  it('uses India time whatever the server clock zone (UTC instant just after 18:30 IST)', () => {
-    expect(isWithinSupportHours(new Date('2026-11-25T13:00:00Z'))).toBe(false); // 18:30 IST
-    expect(isWithinSupportHours(new Date('2026-11-25T12:59:00Z'))).toBe(true);
+  it('one closed stretch maps to one key: the day we next open', () => {
+    expect(nextOpeningDay(ist('2026-11-25T19:00:00'), [])).toBe('2026-11-26');
+    expect(nextOpeningDay(ist('2026-11-26T02:00:00'), [])).toBe('2026-11-26');
+    expect(nextOpeningDay(ist('2026-11-28T19:00:00'), [])).toBe('2026-11-30'); // Sat night → Mon
+    expect(nextOpeningDay(ist('2026-11-29T12:00:00'), [])).toBe('2026-11-30'); // Sunday → Mon
+    expect(nextOpeningDay(ist('2026-11-30T08:00:00'), [])).toBe('2026-11-30');
+  });
+
+  it('uses India time whatever the server clock zone (12:30 UTC = 18:00 IST)', () => {
+    expect(isWithinSupportHours(new Date('2026-11-25T12:30:00Z'), [])).toBe(false);
+    expect(isWithinSupportHours(new Date('2026-11-25T12:29:00Z'), [])).toBe(true);
+  });
+
+  it('customer text names the hours, no weekday names', () => {
+    expect(SUPPORT_HOURS_TEXT).toBe('10 am to 6 pm India time, six days a week');
   });
 });
 
@@ -98,7 +107,7 @@ describe('followUpInbound', () => {
   it('several mails the same night → still one note; the next night → one more', async () => {
     await followUpInbound(reply(), load, { now: NIGHT });
     await followUpInbound(reply(), load, { now: ist('2026-11-26T03:00:00') });
-    await followUpInbound(reply(), load, { now: ist('2026-11-26T09:00:00') });
+    await followUpInbound(reply(), load, { now: ist('2026-11-26T09:45:00') });
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     await followUpInbound(reply(), load, { now: ist('2026-11-26T20:00:00') });
     expect(mockSendEmail).toHaveBeenCalledTimes(2);
