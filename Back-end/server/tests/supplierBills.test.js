@@ -187,7 +187,6 @@ describe('We owe suppliers (supplier bills)', () => {
         [{ supplierId: s.id, amount: 'abc' }, /in rupees/],
         [{ supplierId: s.id, amount: 20000000 }, /over ₹1 crore/],
         [{ supplierId: s.id, dueDate: '2026-02-30' }, /Pick the day/],
-        [{ supplierId: s.id, dueDate: '' }, /Pick the day/],
         [{ supplierId: s.id, billDate: istDay(2) }, /future/],
         [{ supplierId: s.id, billDate: istDay(-3), dueDate: istDay(-5) }, /before the bill date/],
       ];
@@ -489,6 +488,92 @@ describe('We owe suppliers (supplier bills)', () => {
     });
   });
 
+  describe('only the supplier is required (owner 2026-11-25: amount and due date may come later)', () => {
+    const bare = (s, supplierId, extra = {}) => s.form('/supplier-bills', { supplierId, ...extra }, []);
+
+    it('a bill with just the supplier is saved: amount not known, no due date, never overdue', async () => {
+      const s = await addSupplier();
+      const res = await bare(procurement.session, s.id);
+      expect(res.status).toBe(201);
+      expect(res.body.bill).toMatchObject({
+        billNumber: '', billDate: '', dueDate: '', dueInDays: null, amount: null, amountKnown: false,
+        owed: null, leftToAsk: null, paid: 0, state: 'unpaid', overdue: false, can: { pay: true, edit: true, cancel: true },
+      });
+      const raw = await SupplierBill.findById(res.body.bill.id).lean();
+      expect(raw).toMatchObject({ amountPaise: null, reservedPaise: 0, dueDate: billsService.NO_DUE_DATE });
+      expect((await bare(procurement.session, '')).status).toBe(400);
+    });
+
+    it('Pay is refused until the amount is known; nothing is reserved or raised meanwhile', async () => {
+      const s = await addSupplier();
+      const b = (await bare(procurement.session, s.id)).body.bill;
+      const res = await pay(procurement.session, b.id, { amount: 1000 });
+      expect([res.status, res.body.message]).toEqual([409, expect.stringMatching(/Add the bill amount/)]);
+      expect(await reservedOf(b.id)).toBe(0);
+      expect(await PaymentRequest.countDocuments()).toBe(0);
+      // The repository refuses too, whatever the caller: no amount → nothing can be reserved.
+      await expect(billsService.reserve(b.id, 100)).rejects.toMatchObject({ statusCode: 409 });
+      expect(await reservedOf(b.id)).toBe(0);
+    });
+
+    it('once the amount is added, it pays like any bill and the cap holds (also two payments at once)', async () => {
+      const s = await addSupplier();
+      const b = (await bare(procurement.session, s.id)).body.bill;
+      const set = await procurement.session.formPut(`/supplier-bills/${b.id}`, { rev: b.rev, amount: 5000, dueDate: istDay(7) });
+      expect(set.status).toBe(200);
+      expect(set.body.bill).toMatchObject({ amount: 5000, amountKnown: true, owed: 5000, leftToAsk: 5000, dueDate: istDay(7), dueInDays: 7 });
+      expect((await SupplierBill.findById(b.id).lean()).history.at(-1).note).toMatch(/amount not known → ₹5,000/);
+      expect((await pay(procurement.session, b.id, { amount: 6000 })).status).toBe(409);
+      const [x, y] = await Promise.all([pay(procurement.session, b.id, { amount: 3000 }), pay(procurement.session, b.id, { amount: 3000 })]);
+      expect([x.status, y.status].sort()).toEqual([201, 409]);
+      expect(await reservedOf(b.id)).toBe(300000);
+      // The amount can be corrected but not below what is asked for, and not cleared.
+      const now = await bill(b.id);
+      expect((await procurement.session.formPut(`/supplier-bills/${b.id}`, { rev: now.rev, amount: 2000 })).status).toBe(409);
+      const blank = await procurement.session.formPut(`/supplier-bills/${b.id}`, { rev: now.rev, amount: '', description: 'mats' });
+      expect([blank.status, blank.body.bill.amount]).toEqual([200, 5000]);
+    });
+
+    it('totals leave out bills with no amount (and count them), and undated bills sort last', async () => {
+      const s = await addSupplier();
+      await addBill(procurement.session, { supplierId: s.id, billNumber: 'K1', dueDate: istDay(-2), amount: 4000 }, []);
+      await bare(procurement.session, s.id, { billNumber: 'U1', dueDate: istDay(-1) });
+      await bare(procurement.session, s.id, { billNumber: 'U2' });
+      await addBill(procurement.session, { supplierId: s.id, billNumber: 'K2', dueDate: '', amount: 1000 }, []);
+      const by = (await accounts.session.get('/supplier-bills/by-supplier')).body;
+      expect(by.suppliers).toEqual([{ id: s.id, name: 'RK New Popular', bills: 4, owed: 5000, noAmountBills: 2, overdueBills: 2, overdue: 4000, nextDue: istDay(-2) }]);
+      expect(by.total).toEqual({ owed: 5000, overdue: 4000 });
+      const all = (await accounts.session.get('/supplier-bills')).body;
+      expect(all.summary).toMatchObject({ count: 4, owed: 5000 });
+      expect(all.bills.map((x) => [x.billNumber, x.dueDate, x.owed, x.overdue])).toEqual([
+        ['K1', istDay(-2), 4000, true], ['U1', istDay(-1), null, true], ['U2', '', null, false], ['K2', '', 1000, false],
+      ]);
+      expect((await accounts.session.get('/supplier-bills?due=overdue')).body.bills.map((x) => x.billNumber)).toEqual(['K1', 'U1']);
+      expect((await accounts.session.get('/supplier-bills?due=week')).body.bills).toHaveLength(0);
+    });
+
+    it('the overdue reminder skips undated bills and says when the amount is not known', async () => {
+      const s = await addSupplier();
+      await bare(procurement.session, s.id, { billNumber: 'NODATE', amount: 900 });
+      expect(await billsService.remindOverdue()).toMatchObject({ overdue: 0, posted: false });
+      await bare(procurement.session, s.id, { billNumber: 'LATE', dueDate: istDay(-3) });
+      expect(await billsService.remindOverdue()).toMatchObject({ overdue: 1, posted: true });
+      const msg = await ChatMessage.findOne({ text: /Supplier bills overdue/ }).lean();
+      expect(msg.text).toMatch(/bill LATE .*amount not known yet/);
+      expect(msg.text).not.toMatch(/NODATE/);
+    });
+
+    it('a due date can be cleared, and the bill date check only applies when both are set', async () => {
+      const s = await addSupplier();
+      const b = (await addBill(procurement.session, { supplierId: s.id, billDate: istDay(-3), dueDate: istDay(-1) }, [])).body.bill;
+      expect(b.overdue).toBe(true);
+      const cleared = await procurement.session.formPut(`/supplier-bills/${b.id}`, { rev: b.rev, dueDate: '' });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.bill).toMatchObject({ dueDate: '', overdue: false, dueInDays: null });
+      expect((await SupplierBill.findById(b.id).lean()).history.at(-1).note).toMatch(/→ —/);
+    });
+  });
+
   describe('what we owe, overdue, and the list', () => {
     it('per supplier: owed, overdue and next due; the list filters overdue', async () => {
       const s = await addSupplier();
@@ -503,8 +588,8 @@ describe('We owe suppliers (supplier bills)', () => {
 
       const by = (await accounts.session.get('/supplier-bills/by-supplier')).body;
       expect(by.suppliers).toEqual([
-        { id: s.id, name: 'RK New Popular', bills: 2, owed: 10000, overdueBills: 1, overdue: 3000, nextDue: istDay(-5) },
-        { id: t.id, name: 'Tyre World', bills: 1, owed: 1000, overdueBills: 0, overdue: 0, nextDue: istDay(30) },
+        { id: s.id, name: 'RK New Popular', bills: 2, owed: 10000, noAmountBills: 0, overdueBills: 1, overdue: 3000, nextDue: istDay(-5) },
+        { id: t.id, name: 'Tyre World', bills: 1, owed: 1000, noAmountBills: 0, overdueBills: 0, overdue: 0, nextDue: istDay(30) },
       ]);
       expect(by.total).toEqual({ owed: 11000, overdue: 3000 });
       const overdue = (await accounts.session.get('/supplier-bills?due=overdue')).body;

@@ -99,7 +99,7 @@ export default function SupplierBillsTab({ canAdd }: { canAdd: boolean }) {
       {adding && (
         <BillForm
           onCancel={() => setAdding(false)}
-          onDone={async (b) => { setAdding(false); setNotice(`${b.number} added — ${money(b.amount)} owed to ${b.supplier.name}, due ${day(b.dueDate)}.`); await refresh(); }}
+          onDone={async (b) => { setAdding(false); setNotice(`${b.number} added — ${b.amount == null ? 'amount not known yet' : `${money(b.amount)} owed`} to ${b.supplier.name}, ${b.dueDate ? `due ${day(b.dueDate)}` : 'no due date'}.`); await refresh(); }}
         />
       )}
 
@@ -147,11 +147,11 @@ function OwedSummary({ data, loading, error, picked, onPick }: {
             <li key={s.id}>
               <button type="button" aria-pressed={picked === s.id} onClick={() => onPick({ id: s.id, name: s.name })}
                 className={`flex w-full flex-wrap items-center justify-between gap-2 px-1 py-2 text-left text-sm hover:bg-gray-50 ${picked === s.id ? 'bg-blue-50' : ''}`}>
-                <span className="font-medium text-gray-900">{s.name} <span className="font-normal text-gray-500">· {s.bills} bill{s.bills === 1 ? '' : 's'}</span></span>
+                <span className="font-medium text-gray-900">{s.name} <span className="font-normal text-gray-500">· {s.bills} bill{s.bills === 1 ? '' : 's'}{s.noAmountBills > 0 ? ` (${s.noAmountBills} with amount not known yet)` : ''}</span></span>
                 <span className="flex items-center gap-2">
                   {s.overdue > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{money(s.overdue)} overdue</span>}
                   <span className="font-semibold">{money(s.owed)}</span>
-                  {s.overdue === 0 && <span className="text-xs text-gray-500">next due {day(s.nextDue)}</span>}
+                  {s.overdue === 0 && s.nextDue && <span className="text-xs text-gray-500">next due {day(s.nextDue)}</span>}
                 </span>
               </button>
             </li>
@@ -171,7 +171,7 @@ function BillRow({ bill: b, onChanged, onNotice }: { bill: SupplierBill; onChang
         <div className="min-w-0">
           <p className="font-semibold text-gray-900">{b.supplier.name} <span className="font-normal text-gray-500">· {b.billNumber ? `bill ${b.billNumber}` : 'no bill number yet'} · {b.number}</span></p>
           <p className="text-sm text-gray-600">
-            Due {day(b.dueDate)}
+            {b.dueDate ? `Due ${day(b.dueDate)}` : 'No due date'}
             {due && <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${b.overdue ? 'bg-red-100 text-red-800' : 'bg-amber-50 text-amber-800'}`}>{due}</span>}
             {b.order && <> · for order <EntityLink type="order" id={b.order.id} value={b.order.number} label="Order number" newTab /></>}
           </p>
@@ -179,7 +179,9 @@ function BillRow({ bill: b, onChanged, onNotice }: { bill: SupplierBill; onChang
         </div>
         <div className="text-right text-sm">
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATE_STYLE[b.state]}`}>{b.stateLabel}</span>
-          <p className="mt-1 text-gray-900"><span className="font-semibold">{money(b.owed)}</span> owed of {money(b.amount)}</p>
+          {b.amount == null || b.owed == null
+            ? <p className="mt-1 font-semibold text-amber-800">Amount not known yet</p>
+            : <p className="mt-1 text-gray-900"><span className="font-semibold">{money(b.owed)}</span> owed of {money(b.amount)}</p>}
           {b.paid > 0 && <p className="text-gray-600">{money(b.paid)} paid</p>}
           {b.waiting > 0 && <p className="text-gray-600">{money(b.waiting)} waiting for approval / payment</p>}
         </div>
@@ -193,7 +195,7 @@ function BillRow({ bill: b, onChanged, onNotice }: { bill: SupplierBill; onChang
         {b.can.cancel && <button type="button" className={secondary} onClick={() => setOpen(open === 'cancel' ? '' : 'cancel')}>Cancel bill</button>}
       </div>
       {open === 'pay' && (
-        <PayForm bill={b} onCancel={() => setOpen('')}
+        <PayForm bill={b} onCancel={() => setOpen('')} onBillChanged={onChanged}
           onDone={async (number) => { setOpen(''); onNotice(`${number} sent to accounts for approval.`); await onChanged(); }} />
       )}
       {open === 'edit' && <BillForm bill={b} onCancel={() => setOpen('')} onDone={async () => { setOpen(''); await onChanged(); }} />}
@@ -230,7 +232,56 @@ function BillDetails({ id }: { id: string }) {
   );
 }
 
-function PayForm({ bill, onCancel, onDone }: { bill: SupplierBill; onCancel: () => void; onDone: (number: string) => Promise<void> }) {
+/**
+ * A bill whose amount is not known yet cannot be paid (the server refuses it): Pay
+ * first asks for the bill amount and saves it, then shows the payment form.
+ */
+function PayForm({ bill: start, onCancel, onDone, onBillChanged }: {
+  bill: SupplierBill; onCancel: () => void; onDone: (number: string) => Promise<void>; onBillChanged: () => Promise<unknown>;
+}) {
+  const [bill, setBill] = useState(start);
+  if (bill.amount == null || bill.leftToAsk == null) {
+    return <AmountFirst bill={bill} onCancel={onCancel} onSaved={async (b) => { setBill(b); await onBillChanged(); }} />;
+  }
+  return <PayAmount bill={bill as SupplierBill & { leftToAsk: number }} onCancel={onCancel} onDone={onDone} />;
+}
+
+function AmountFirst({ bill, onCancel, onSaved }: { bill: SupplierBill; onCancel: () => void; onSaved: (b: SupplierBill) => Promise<void> }) {
+  const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!(Number(amount) > 0)) { setError('Type the bill amount in rupees.'); return; }
+    setBusy(true);
+    setError('');
+    try {
+      const { bill: saved } = await editBill(bill.id, { amount, rev: bill.rev }, []);
+      await onSaved(saved);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save the amount. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const id = `amount-${bill.id}`;
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3" aria-label="Add the bill amount">
+      <p className="text-sm text-gray-700">The amount of this bill is not known yet. Type it first — then you can pay all of it, or a part.</p>
+      <div className="max-w-xs">
+        <label htmlFor={`${id}-amount`} className={label}>Bill amount (₹)</label>
+        <input id={`${id}-amount`} className={input} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </div>
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" className={primary} disabled={busy}>{busy ? 'Saving…' : 'Save amount'}</button>
+        <button type="button" className={secondary} onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function PayAmount({ bill, onCancel, onDone }: { bill: SupplierBill & { leftToAsk: number }; onCancel: () => void; onDone: (number: string) => Promise<void> }) {
   const [amount, setAmount] = useState(String(bill.leftToAsk));
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -290,7 +341,7 @@ function BillForm({ bill, onCancel, onDone }: { bill?: SupplierBill; onCancel: (
   const [billNumber, setBillNumber] = useState(bill?.billNumber ?? '');
   const [billDate, setBillDate] = useState(bill?.billDate ?? '');
   const [dueDate, setDueDate] = useState(bill?.dueDate ?? '');
-  const [amount, setAmount] = useState(bill ? String(bill.amount) : '');
+  const [amount, setAmount] = useState(bill?.amount == null ? '' : String(bill.amount));
   const [description, setDescription] = useState(bill?.description ?? '');
   const [order, setOrder] = useState<OrderMatch | null>(bill?.order ? { id: bill.order.id, number: bill.order.number, customer: '', total: null, createdAt: '' } : null);
   const [files, setFiles] = useState<File[]>([]);
@@ -302,8 +353,8 @@ function BillForm({ bill, onCancel, onDone }: { bill?: SupplierBill; onCancel: (
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     if (!editing && !supplier) { setError('Pick the supplier from the list (add them in Suppliers first if they are new).'); return; }
-    if (!dueDate) { setError('Pick the day this bill is due.'); return; }
-    if (!(Number(amount) > 0)) { setError('Type the bill amount in rupees.'); return; }
+    // Only the supplier is required; a typed amount must still be a real one.
+    if (amount.trim() && !(Number(amount) > 0)) { setError('Type the bill amount in rupees (or leave it empty).'); return; }
     setBusy(true);
     setError('');
     try {
@@ -339,15 +390,15 @@ function BillForm({ bill, onCancel, onDone }: { bill?: SupplierBill; onCancel: (
           <input id={`${id}-number`} className={input} value={billNumber} placeholder="As printed — add it later if the bill has not come" onChange={(e) => setBillNumber(e.target.value)} />
         </div>
         <div>
-          <label htmlFor={`${id}-amount`} className={label}>Bill amount (₹)</label>
-          <input id={`${id}-amount`} className={input} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <label htmlFor={`${id}-amount`} className={label}>Bill amount (₹, optional)</label>
+          <input id={`${id}-amount`} className={input} inputMode="decimal" value={amount} placeholder={editing && bill?.amount != null ? '' : 'Add it later if not known'} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div>
           <label htmlFor={`${id}-billdate`} className={label}>Bill date (optional)</label>
           <input id={`${id}-billdate`} type="date" max={today} className={input} value={billDate} onChange={(e) => setBillDate(e.target.value)} />
         </div>
         <div>
-          <label htmlFor={`${id}-due`} className={label}>Pay by (due date)</label>
+          <label htmlFor={`${id}-due`} className={label}>Pay by (due date, optional)</label>
           <input id={`${id}-due`} type="date" className={input} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         </div>
       </div>

@@ -26,7 +26,7 @@ const RK: Supplier = {
 };
 const bill = (over: Partial<SupplierBill> = {}): SupplierBill => ({
   id: 'b1', number: 'SB-0001', supplier: { id: 's9', name: 'RK New Popular' }, billNumber: 'INV-4471', billDate: '2026-11-20',
-  dueDate: '2026-11-20', dueInDays: -5, amount: 26000, paid: 10000, waiting: 0, owed: 16000, leftToAsk: 16000, currency: 'INR',
+  dueDate: '2026-11-20', dueInDays: -5, amount: 26000, amountKnown: true, paid: 10000, waiting: 0, owed: 16000, leftToAsk: 16000, currency: 'INR',
   state: 'part_paid', stateLabel: 'Part paid', overdue: true, description: '40 floor mats', order: null, files: [], payments: [],
   createdByName: 'Priya', createdAt: '', rev: 0, can: { pay: true, edit: true, cancel: false }, ...over,
 });
@@ -43,7 +43,7 @@ beforeEach(() => {
   post.mockReset();
   get.mockImplementation(async (url: string) => {
     if (url === '/supplier-bills/by-supplier') {
-      return { suppliers: [{ id: 's9', name: 'RK New Popular', bills: 2, owed: 23000, overdueBills: 1, overdue: 16000, nextDue: '2026-11-20' }], total: { owed: 23000, overdue: 16000 } };
+      return { suppliers: [{ id: 's9', name: 'RK New Popular', bills: 2, owed: 23000, noAmountBills: 0, overdueBills: 1, overdue: 16000, nextDue: '2026-11-20' }], total: { owed: 23000, overdue: 16000 } };
     }
     if (url.startsWith('/supplier-bills')) return { bills, nextCursor: null, summary: { count: bills.length, capped: false, owed: 23000 } };
     if (url.startsWith('/suppliers')) return { suppliers: [RK], nextAfter: null };
@@ -117,8 +117,8 @@ describe('We owe suppliers', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Add a bill/ }));
     const form = screen.getByRole('form', { name: 'Add a bill' });
     fireEvent.change(within(form).getByLabelText('Bill number (optional)'), { target: { value: 'INV-9001' } });
-    fireEvent.change(within(form).getByLabelText('Bill amount (₹)'), { target: { value: '12000' } });
-    fireEvent.change(within(form).getByLabelText('Pay by (due date)'), { target: { value: '2026-12-10' } });
+    fireEvent.change(within(form).getByLabelText('Bill amount (₹, optional)'), { target: { value: '12000' } });
+    fireEvent.change(within(form).getByLabelText('Pay by (due date, optional)'), { target: { value: '2026-12-10' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }));
     expect(await within(form).findByRole('alert')).toHaveTextContent(/Pick the supplier from the list/);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -141,8 +141,8 @@ describe('We owe suppliers', () => {
     const form = screen.getByRole('form', { name: 'Add a bill' });
     fireEvent.change(within(form).getByLabelText('Supplier'), { target: { value: 'rk' } });
     fireEvent.click(await within(form).findByRole('option', { name: /RK New Popular/ }));
-    fireEvent.change(within(form).getByLabelText('Bill amount (₹)'), { target: { value: '12000' } });
-    fireEvent.change(within(form).getByLabelText('Pay by (due date)'), { target: { value: '2026-12-10' } });
+    fireEvent.change(within(form).getByLabelText('Bill amount (₹, optional)'), { target: { value: '12000' } });
+    fireEvent.change(within(form).getByLabelText('Pay by (due date, optional)'), { target: { value: '2026-12-10' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }));
     expect(await screen.findByRole('status')).toHaveTextContent(/SB-0003 added/);
     expect(screen.queryByText(/Type the supplier's bill number/)).toBeNull();
@@ -154,6 +154,56 @@ describe('We owe suppliers', () => {
     wrap(<SupplierBillsTab canAdd />);
     const row = await screen.findByRole('listitem', { name: 'Bill SB-0001 from RK New Popular' });
     expect(within(row).getByText(/no bill number yet/)).toBeInTheDocument();
+  });
+
+  it('a bill can be added with just the supplier: amount and due date may come later', async () => {
+    wrap(<SupplierBillsTab canAdd />);
+    fireEvent.click(await screen.findByRole('button', { name: /Add a bill/ }));
+    const form = screen.getByRole('form', { name: 'Add a bill' });
+    fireEvent.change(within(form).getByLabelText('Supplier'), { target: { value: 'rk' } });
+    fireEvent.click(await within(form).findByRole('option', { name: /RK New Popular/ }));
+    fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/SB-0003 added/);
+    const body = sent().form;
+    expect([body.get('amount'), body.get('dueDate'), body.get('billNumber')]).toEqual(['', '', '']);
+  });
+
+  it('a typed amount must still be a real one', async () => {
+    wrap(<SupplierBillsTab canAdd />);
+    fireEvent.click(await screen.findByRole('button', { name: /Add a bill/ }));
+    const form = screen.getByRole('form', { name: 'Add a bill' });
+    fireEvent.change(within(form).getByLabelText('Supplier'), { target: { value: 'rk' } });
+    fireEvent.click(await within(form).findByRole('option', { name: /RK New Popular/ }));
+    fireEvent.change(within(form).getByLabelText('Bill amount (₹, optional)'), { target: { value: 'abc' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }));
+    expect(await within(form).findByRole('alert')).toHaveTextContent(/Type the bill amount in rupees/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('a bill with no amount or due date says so; Pay asks for the amount first, then shows the payment', async () => {
+    const unknown = bill({ amount: null, amountKnown: false, owed: null, leftToAsk: null, paid: 0, dueDate: '', dueInDays: null, overdue: false, state: 'unpaid', stateLabel: 'Not paid', rev: 2 });
+    bills = [unknown];
+    wrap(<SupplierBillsTab canAdd />);
+    const row = await screen.findByRole('listitem', { name: 'Bill INV-4471 from RK New Popular' });
+    expect(row).toHaveTextContent('Amount not known yet');
+    expect(row).toHaveTextContent('No due date');
+    expect(within(row).queryByText(/overdue|Due in/)).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Pay' }));
+    expect(within(row).queryByRole('form', { name: 'Pay this bill' })).toBeNull();
+    const step = within(row).getByRole('form', { name: 'Add the bill amount' });
+    fireEvent.click(within(step).getByRole('button', { name: 'Save amount' }));
+    expect(await within(step).findByRole('alert')).toHaveTextContent(/Type the bill amount/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ bill: { ...unknown, amount: 9000, amountKnown: true, owed: 9000, leftToAsk: 9000, rev: 3 } }) });
+    fireEvent.change(within(step).getByLabelText('Bill amount (₹)'), { target: { value: '9000' } });
+    fireEvent.click(within(step).getByRole('button', { name: 'Save amount' }));
+    const pay = await within(row).findByRole('form', { name: 'Pay this bill' });
+    expect(within(pay).getByLabelText('Amount to pay now (₹)')).toHaveValue('9000');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect([url, init.method]).toEqual(['/api/v1/supplier-bills/b1', 'PUT']);
+    const body = init.body as FormData;
+    expect([body.get('amount'), body.get('rev')]).toEqual(['9000', '2']);
+    expect(body.get('dueDate')).toBeNull();
   });
 
   it('cancelling a bill asks why', async () => {

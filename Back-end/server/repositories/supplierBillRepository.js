@@ -36,6 +36,8 @@ const supplierBillRepository = {
       _id: '$supplier',
       name: { $last: '$supplierName' },
       bills: { $sum: 1 },
+      // Bills whose amount is not known yet: counted here, left out of every rupee total.
+      noAmountBills: { $sum: { $cond: [{ $isNumber: '$amountPaise' }, 0, 1] } },
       owedPaise: { $sum: { $subtract: ['$amountPaise', '$paidPaise'] } },
       overdueBills: { $sum: { $cond: [{ $lt: ['$dueDate', today] }, 1, 0] } },
       overduePaise: { $sum: { $cond: [{ $lt: ['$dueDate', today] }, { $subtract: ['$amountPaise', '$paidPaise'] }, 0] } },
@@ -57,7 +59,8 @@ const supplierBillRepository = {
    * bill as it was BEFORE, or null when it would go over (or it is not open).
    */
   reserve: (id, paise) => SupplierBill.findOneAndUpdate(
-    { _id: id, status: 'open', $expr: { $lte: [{ $add: ['$reservedPaise', paise] }, '$amountPaise'] } },
+    // `$type`: a bill whose amount is not known yet (null) can never be reserved against.
+    { _id: id, status: 'open', amountPaise: { $type: 'number' }, $expr: { $lte: [{ $add: ['$reservedPaise', paise] }, '$amountPaise'] } },
     { $inc: { reservedPaise: paise } },
     { new: false },
   ).lean(),

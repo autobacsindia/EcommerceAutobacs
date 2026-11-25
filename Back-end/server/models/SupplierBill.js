@@ -61,10 +61,16 @@ const SupplierBillSchema = new mongoose.Schema(
     billKey: { type: String, maxlength: 60 },
     // 'YYYY-MM-DD' calendar days (no time zone to get wrong).
     billDate: { type: String, default: '' },
+    // Optional (owner, 2026-11-25). No due date is stored as NO_DUE_DATE ('9999-12-31',
+    // services/supplierBillService.js), never '' or missing: it is then never overdue,
+    // never "due this week", sorts after every dated bill, and the existing indexes and
+    // keyset cursor need no special case. The API shows it as ''.
     dueDate: { type: String, required: true },
 
     currency: { type: String, default: 'INR', enum: ['INR'] },
-    amountPaise: { type: Number, required: true, min: 100 },
+    // Optional (owner, 2026-11-25): null until the bill's amount is known. A bill with
+    // no amount cannot be paid (nothing can be reserved against it) and counts in no total.
+    amountPaise: { type: Number, default: null, min: 100 },
     reservedPaise: { type: Number, default: 0, min: 0 },
     paidPaise: { type: Number, default: 0, min: 0 },
     settled: { type: Boolean, default: false },

@@ -69,6 +69,10 @@ const entry = (actor, action, note = '') => ({
 const IST_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
 export const todayIst = (now = new Date()) => IST_DAY.format(now);
 export const dayText = (ymd) => (ymd ? new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' }) : '');
+/** "No due date" as stored (see models/SupplierBill.js): sorts last, never overdue. */
+export const NO_DUE_DATE = '9999-12-31';
+const hasDue = (ymd) => Boolean(ymd) && ymd !== NO_DUE_DATE;
+const dueOut = (ymd) => (hasDue(ymd) ? ymd : '');
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
 export const rupees = (paise) => `₹${fromPaise(paise).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -100,8 +104,12 @@ function realDay(v) {
   return d.toISOString().slice(0, 10) === m[0] ? m[0] : null;
 }
 
-/** The due day: a real calendar day, within a sane range (a past day is allowed — it is already overdue). */
+/**
+ * The due day: optional (NO_DUE_DATE when left empty), else a real calendar day within
+ * a sane range (a past day is allowed — it is already overdue).
+ */
 export function cleanDueDate(v, now = new Date()) {
+  if (!filled(v)) return NO_DUE_DATE;
   const day = realDay(v);
   if (!day) throw fail('Pick the day this bill is due.', 400);
   const today = todayIst(now);
@@ -123,6 +131,7 @@ export function cleanBillDate(v, now = new Date()) {
 
 /** Rupees typed → paise. At least ₹1, at most the ₹1 crore typo guard, at most 2 decimals. */
 export function cleanAmountPaise(v) {
+  if (v != null && typeof v !== 'string' && typeof v !== 'number') throw fail('Type the bill amount in rupees (for example 26000 or 26000.50).', 400);
   const s = String(v ?? '').replace(/[,₹\s]/g, '');
   if (!/^\d+(\.\d{1,2})?$/.test(s)) throw fail('Type the bill amount in rupees (for example 26000 or 26000.50).', 400);
   const n = Number(s);
@@ -204,11 +213,18 @@ export function moneyFrom(bill, requests = []) {
   return { mine, paidPaise, waitingPaise };
 }
 
-/** open (nothing paid) / part_paid / paid / cancelled — plus `overdue` while something is still owed. */
+const amountKnown = (bill) => typeof bill.amountPaise === 'number';
+/** Paid in full: only a bill whose amount is known can be. */
+const settledBy = (bill, paidPaise) => amountKnown(bill) && paidPaise >= bill.amountPaise;
+
+/**
+ * open (nothing paid) / part_paid / paid / cancelled — plus `overdue` while something is
+ * still owed and the bill has a due date that has passed.
+ */
 export function stateOf(bill, paidPaise, today) {
   if (bill.status === 'cancelled') return { state: 'cancelled', overdue: false };
-  if (paidPaise >= bill.amountPaise) return { state: 'paid', overdue: false };
-  return { state: paidPaise > 0 ? 'part_paid' : 'unpaid', overdue: bill.dueDate < today };
+  if (settledBy(bill, paidPaise)) return { state: 'paid', overdue: false };
+  return { state: paidPaise > 0 ? 'part_paid' : 'unpaid', overdue: hasDue(bill.dueDate) && bill.dueDate < today };
 }
 
 export const STATE_LABELS = Object.freeze({ unpaid: 'Not paid', part_paid: 'Part paid', paid: 'Paid', cancelled: 'Cancelled' });
@@ -217,10 +233,12 @@ export function shape(bill, viewer, requests = [], { now = new Date(), withHisto
   const today = todayIst(now);
   const { mine, paidPaise, waitingPaise } = moneyFrom(bill, requests);
   const { state, overdue } = stateOf(bill, paidPaise, today);
-  const owedPaise = bill.status === 'cancelled' ? 0 : Math.max(0, bill.amountPaise - paidPaise);
+  const known = amountKnown(bill);
+  // Unknown amount: what is owed / left is unknown too (null), never a guessed 0.
+  const owedPaise = bill.status === 'cancelled' ? 0 : known ? Math.max(0, bill.amountPaise - paidPaise) : null;
   // What can still be asked for: the bill less everything live (paid + waiting).
-  const leftToAskPaise = bill.status === 'cancelled' ? 0 : Math.max(0, bill.amountPaise - bill.reservedPaise);
-  const dueInDays = daysBetween(today, bill.dueDate);
+  const leftToAskPaise = bill.status === 'cancelled' ? 0 : known ? Math.max(0, bill.amountPaise - bill.reservedPaise) : null;
+  const dueInDays = hasDue(bill.dueDate) ? daysBetween(today, bill.dueDate) : null;
   const canChange = mayChange(viewer) && bill.status === 'open';
   return {
     id: idOf(bill._id),
@@ -228,13 +246,14 @@ export function shape(bill, viewer, requests = [], { now = new Date(), withHisto
     supplier: { id: idOf(bill.supplier), name: bill.supplierName },
     billNumber: bill.billNumber || '',
     billDate: bill.billDate || '',
-    dueDate: bill.dueDate,
+    dueDate: dueOut(bill.dueDate),
     dueInDays,
-    amount: fromPaise(bill.amountPaise),
+    amount: known ? fromPaise(bill.amountPaise) : null,
+    amountKnown: known,
     paid: fromPaise(paidPaise),
     waiting: fromPaise(waitingPaise),
-    owed: fromPaise(owedPaise),
-    leftToAsk: fromPaise(leftToAskPaise),
+    owed: owedPaise == null ? null : fromPaise(owedPaise),
+    leftToAsk: leftToAskPaise == null ? null : fromPaise(leftToAskPaise),
     currency: 'INR',
     state,
     stateLabel: STATE_LABELS[state],
@@ -253,7 +272,8 @@ export function shape(bill, viewer, requests = [], { now = new Date(), withHisto
     rev: bill.rev || 0,
     ...(withHistory ? { history: (bill.history || []).map((h) => ({ at: h.at, byName: h.byName, action: h.action, note: h.note })) } : {}),
     can: {
-      pay: canChange && leftToAskPaise > 0,
+      // With no amount yet, Pay first asks for it (the payment itself is refused until then).
+      pay: canChange && (!known || leftToAskPaise > 0),
       edit: canChange,
       // Only while nothing is asked for or paid on it.
       cancel: canChange && bill.reservedPaise === 0,
@@ -279,7 +299,7 @@ export async function resync(billOrId) {
     if (!bill) return null;
     const requests = await supplierBillRepository.requestsFor([bill._id]);
     const { paidPaise } = moneyFrom(bill, requests);
-    const settled = paidPaise >= bill.amountPaise;
+    const settled = settledBy(bill, paidPaise);
     if (paidPaise === (bill.paidPaise || 0) && settled === Boolean(bill.settled)) return { bill, requests };
     const now = await supplierBillRepository.setPaid(bill._id, paidPaise, settled);
     return { bill: now || bill, requests };
@@ -300,8 +320,8 @@ export async function create(actor, input = {}, uploaded = [], req) {
   const billKey = billNumber ? billKeyOf(billNumber) : null;
   const billDate = cleanBillDate(input.billDate);
   const dueDate = cleanDueDate(input.dueDate);
-  if (billDate && dueDate < billDate) throw fail('The due date cannot be before the bill date.', 400);
-  const amountPaise = cleanAmountPaise(input.amount);
+  if (billDate && hasDue(dueDate) && dueDate < billDate) throw fail('The due date cannot be before the bill date.', 400);
+  const amountPaise = filled(input.amount) ? cleanAmountPaise(input.amount) : null;
   const description = cleanDescription(input.description);
   const link = await orderLink(input.orderId);
   const clientId = cleanClientId(input.clientId);
@@ -323,7 +343,7 @@ export async function create(actor, input = {}, uploaded = [], req) {
       description, ...link, files,
       createdBy: actor._id, createdByName: actor.name || '',
       ...(clientId ? { clientId } : {}),
-      history: [entry(actor, 'added', `${rupees(amountPaise)}, due ${dayText(dueDate)}`)],
+      history: [entry(actor, 'added', `${amountPaise == null ? 'amount not known yet' : rupees(amountPaise)}, ${hasDue(dueDate) ? `due ${dayText(dueDate)}` : 'no due date'}`)],
     });
   } catch (err) {
     await discard(files);
@@ -336,7 +356,7 @@ export async function create(actor, input = {}, uploaded = [], req) {
     }
     throw err;
   }
-  auditLogger.logAction(req, 'CREATE', 'SupplierBill', doc._id, { supplierId: idOf(s._id), amountPaise, dueDate, billNumber: billNumber || null, role: roleOf(actor) });
+  auditLogger.logAction(req, 'CREATE', 'SupplierBill', doc._id, { supplierId: idOf(s._id), amountPaise, dueDate: dueOut(dueDate) || null, billNumber: billNumber || null, role: roleOf(actor) });
   return shape(doc, actor);
 }
 
@@ -377,14 +397,16 @@ export async function update(actor, id, input = {}, uploaded = [], req) {
   }
   if (input.dueDate != null) {
     const dueDate = cleanDueDate(input.dueDate);
-    if (dueDate !== b0.dueDate) { set.dueDate = dueDate; said.push(`due ${dayText(b0.dueDate)} → ${dayText(dueDate)}`); }
+    if (dueDate !== b0.dueDate) { set.dueDate = dueDate; said.push(`due ${dayText(dueOut(b0.dueDate)) || '—'} → ${dayText(dueOut(dueDate)) || '—'}`); }
   }
   const billDate = set.billDate ?? b0.billDate;
-  if (billDate && (set.dueDate ?? b0.dueDate) < billDate) throw fail('The due date cannot be before the bill date.', 400);
-  let amountPaise = b0.amountPaise;
+  const dueNow = set.dueDate ?? b0.dueDate;
+  if (billDate && hasDue(dueNow) && dueNow < billDate) throw fail('The due date cannot be before the bill date.', 400);
+  // Empty means "unchanged": an amount, once known, is corrected, never removed.
+  let amountPaise = amountKnown(b0) ? b0.amountPaise : null;
   if (input.amount != null && input.amount !== '') {
     amountPaise = cleanAmountPaise(input.amount);
-    if (amountPaise !== b0.amountPaise) { set.amountPaise = amountPaise; said.push(`amount ${rupees(b0.amountPaise)} → ${rupees(amountPaise)}`); }
+    if (amountPaise !== b0.amountPaise) { set.amountPaise = amountPaise; said.push(`amount ${amountKnown(b0) ? rupees(b0.amountPaise) : 'not known'} → ${rupees(amountPaise)}`); }
   }
   if (input.description != null) {
     const description = cleanDescription(input.description);
@@ -402,8 +424,9 @@ export async function update(actor, id, input = {}, uploaded = [], req) {
   let b;
   try {
     b = await supplierBillRepository.updateIf(b0._id,
-      // Same version, still open, and the new amount still covers everything asked for.
-      { rev: b0.rev || 0, status: 'open', reservedPaise: { $lte: amountPaise } },
+      // Same version, still open, and the new amount still covers everything asked for
+      // (with no amount, nothing can have been reserved: it must still be 0).
+      { rev: b0.rev || 0, status: 'open', reservedPaise: amountPaise == null ? 0 : { $lte: amountPaise } },
       {
         $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}), $inc: { rev: 1 },
         $push: { history: entry(actor, 'changed', said.join('; ')), ...(stored.length ? { files: { $each: stored } } : {}) },
@@ -419,7 +442,7 @@ export async function update(actor, id, input = {}, uploaded = [], req) {
   if (!b) {
     await discard(stored);
     const now = await supplierBillRepository.findById(b0._id);
-    if (now && now.status === 'open' && (now.rev || 0) === (b0.rev || 0) && now.reservedPaise > amountPaise) {
+    if (amountPaise != null && now && now.status === 'open' && (now.rev || 0) === (b0.rev || 0) && now.reservedPaise > amountPaise) {
       throw fail(`${rupees(now.reservedPaise)} is already asked for or paid on this bill — the amount cannot be less than that.`, 409);
     }
     throw fail(MOVED, 409);
@@ -491,7 +514,8 @@ export async function bySupplier(actor, now = new Date()) {
   const rows = await supplierBillRepository.owedBySupplier(todayIst(now), SUPPLIER_CAP);
   const suppliers = rows.map((r) => ({
     id: idOf(r._id), name: r.name, bills: r.bills,
-    owed: fromPaise(r.owedPaise), overdueBills: r.overdueBills, overdue: fromPaise(r.overduePaise), nextDue: r.nextDue,
+    owed: fromPaise(r.owedPaise), noAmountBills: r.noAmountBills || 0,
+    overdueBills: r.overdueBills, overdue: fromPaise(r.overduePaise), nextDue: dueOut(r.nextDue),
   }));
   return {
     suppliers,
@@ -526,6 +550,7 @@ export async function getFile(actor, id, fileId) {
 export async function billForPayment(id) {
   const bill = await loadBill(id);
   if (bill.status !== 'open') throw fail('This bill was cancelled.', 409);
+  if (!amountKnown(bill)) throw fail(`Add the bill amount to ${bill.number} first (Edit the bill), then pay it.`, 409);
   if (bill.reservedPaise >= bill.amountPaise) throw fail(`The whole ${rupees(bill.amountPaise)} of this bill is already asked for or paid.`, 409);
   return bill;
 }
@@ -536,6 +561,7 @@ export async function reserve(id, paise) {
   if (before) return before;
   const now = await supplierBillRepository.findById(id);
   if (!now || now.status !== 'open') throw fail('This bill was cancelled.', 409);
+  if (!amountKnown(now)) throw fail(`Add the bill amount to ${now.number} first (Edit the bill), then pay it.`, 409);
   const left = Math.max(0, now.amountPaise - now.reservedPaise);
   throw fail(left
     ? `That is more than is left on the bill. Only ${rupees(left)} of ${rupees(now.amountPaise)} is left to pay.`
@@ -566,7 +592,8 @@ export async function remindOverdue(now = new Date()) {
   const shown = bills.slice(0, OVERDUE_CAP);
   const lines = shown.map((b) => {
     const late = daysBetween(b.dueDate, today);
-    return `• ${b.supplierName} — ${billLabel(b)} (${b.number}): ${rupees(b.amountPaise - (b.paidPaise || 0))} owed, due ${dayText(b.dueDate)} (${late} day${late === 1 ? '' : 's'} late)`;
+    const owed = amountKnown(b) ? `${rupees(b.amountPaise - (b.paidPaise || 0))} owed` : 'amount not known yet';
+    return `• ${b.supplierName} — ${billLabel(b)} (${b.number}): ${owed}, due ${dayText(b.dueDate)} (${late} day${late === 1 ? '' : 's'} late)`;
   });
   const more = bills.length > OVERDUE_CAP ? `\n…and more — see Payments → We owe suppliers.` : '';
   await tellChat(`supplier-bills-overdue-${today}`,
@@ -574,4 +601,4 @@ export async function remindOverdue(now = new Date()) {
   return { day: today, overdue: bills.length, posted: true };
 }
 
-export const _test = { billKeyOf, cleanAmountPaise, cleanDueDate, cleanBillDate, stateOf, moneyFrom, listQuery };
+export const _test = { hasDue, billKeyOf, cleanAmountPaise, cleanDueDate, cleanBillDate, stateOf, moneyFrom, listQuery };
