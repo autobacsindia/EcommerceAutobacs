@@ -166,10 +166,10 @@ function BillRow({ bill: b, onChanged, onNotice }: { bill: SupplierBill; onChang
   const [open, setOpen] = useState<'' | 'pay' | 'edit' | 'cancel' | 'details'>('');
   const due = dueText(b);
   return (
-    <li className={`rounded-xl border bg-white p-3 ${b.overdue ? 'border-red-300' : 'border-gray-200'}`} aria-label={`Bill ${b.billNumber} from ${b.supplier.name}`}>
+    <li className={`rounded-xl border bg-white p-3 ${b.overdue ? 'border-red-300' : 'border-gray-200'}`} aria-label={`${b.billNumber ? `Bill ${b.billNumber}` : `Bill ${b.number}`} from ${b.supplier.name}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-semibold text-gray-900">{b.supplier.name} <span className="font-normal text-gray-500">· bill {b.billNumber} · {b.number}</span></p>
+          <p className="font-semibold text-gray-900">{b.supplier.name} <span className="font-normal text-gray-500">· {b.billNumber ? `bill ${b.billNumber}` : 'no bill number yet'} · {b.number}</span></p>
           <p className="text-sm text-gray-600">
             Due {day(b.dueDate)}
             {due && <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${b.overdue ? 'bg-red-100 text-red-800' : 'bg-amber-50 text-amber-800'}`}>{due}</span>}
@@ -267,7 +267,7 @@ function PayForm({ bill, onCancel, onDone }: { bill: SupplierBill; onCancel: () 
         </div>
         <div>
           <label htmlFor={`${id}-note`} className={label}>Note for accounts (optional)</label>
-          <input id={`${id}-note`} className={input} value={description} placeholder={`Bill ${bill.billNumber} (${bill.number})`} onChange={(e) => setDescription(e.target.value)} />
+          <input id={`${id}-note`} className={input} value={description} placeholder={bill.billNumber ? `Bill ${bill.billNumber} (${bill.number})` : `Supplier bill ${bill.number}`} onChange={(e) => setDescription(e.target.value)} />
         </div>
       </div>
       <div>
@@ -302,7 +302,6 @@ function BillForm({ bill, onCancel, onDone }: { bill?: SupplierBill; onCancel: (
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     if (!editing && !supplier) { setError('Pick the supplier from the list (add them in Suppliers first if they are new).'); return; }
-    if (!billNumber.trim()) { setError("Type the supplier's bill number."); return; }
     if (!dueDate) { setError('Pick the day this bill is due.'); return; }
     if (!(Number(amount) > 0)) { setError('Type the bill amount in rupees.'); return; }
     setBusy(true);
@@ -336,8 +335,8 @@ function BillForm({ bill, onCancel, onDone }: { bill?: SupplierBill; onCancel: (
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor={`${id}-number`} className={label}>Bill number</label>
-          <input id={`${id}-number`} className={input} value={billNumber} placeholder="As printed on the bill" onChange={(e) => setBillNumber(e.target.value)} />
+          <label htmlFor={`${id}-number`} className={label}>Bill number (optional)</label>
+          <input id={`${id}-number`} className={input} value={billNumber} placeholder="As printed — add it later if the bill has not come" onChange={(e) => setBillNumber(e.target.value)} />
         </div>
         <div>
           <label htmlFor={`${id}-amount`} className={label}>Bill amount (₹)</label>

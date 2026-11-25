@@ -77,14 +77,20 @@ export const rupees = (paise) => `₹${fromPaise(paise).toLocaleString('en-IN', 
 /** 'INV 4471' and 'inv-4471' are the same bill: case, spaces and separators folded. */
 export const billKeyOf = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[\s\-_/.#:]+/g, '');
 
+/** The bill number as printed, or '' for none (it is optional: the bill may come later). */
 function cleanBillNumber(v) {
+  if (v != null && typeof v !== 'string') throw fail('The bill number must be text.', 400);
   // eslint-disable-next-line no-control-regex
   const s = String(v ?? '').normalize('NFKC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!s) throw fail("Type the supplier's bill number (as printed on the bill).", 400);
+  if (!s) return '';
   if (s.length > BILL_NUMBER_MAX) throw fail(`Keep the bill number under ${BILL_NUMBER_MAX} characters.`, 400);
-  if (!billKeyOf(s)) throw fail("Type the supplier's bill number (as printed on the bill).", 400);
+  if (!billKeyOf(s)) throw fail('The bill number needs a letter or a digit (or leave it empty).', 400);
   return s;
 }
+/** The number fields to store: both present, or both absent (never '' — see the model). */
+const numberFields = (billNumber) => (billNumber ? { billNumber, billKey: billKeyOf(billNumber) } : {});
+/** "bill INV-4471" or "bill (no number yet)". */
+export const billLabel = (b) => (b.billNumber ? `bill ${b.billNumber}` : 'bill (no number yet)');
 
 const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
 function realDay(v) {
@@ -220,7 +226,7 @@ export function shape(bill, viewer, requests = [], { now = new Date(), withHisto
     id: idOf(bill._id),
     number: bill.number,
     supplier: { id: idOf(bill.supplier), name: bill.supplierName },
-    billNumber: bill.billNumber,
+    billNumber: bill.billNumber || '',
     billDate: bill.billDate || '',
     dueDate: bill.dueDate,
     dueInDays,
@@ -285,13 +291,13 @@ export async function resync(billOrId) {
 
 // ── Add / change / cancel ────────────────────────────────────────────────────
 
-const ALREADY = (b) => `${b.supplierName}'s bill ${b.billNumber} is already added (${b.number}).`;
+const ALREADY = (b) => `${b.supplierName}'s ${billLabel(b)} is already added (${b.number}).`;
 
 export async function create(actor, input = {}, uploaded = [], req) {
   if (!mayChange(actor)) throw fail('Only procurement adds supplier bills.', 403);
   const s = await savedSupplier(input.supplierId);
   const billNumber = cleanBillNumber(input.billNumber);
-  const billKey = billKeyOf(billNumber);
+  const billKey = billNumber ? billKeyOf(billNumber) : null;
   const billDate = cleanBillDate(input.billDate);
   const dueDate = cleanDueDate(input.dueDate);
   if (billDate && dueDate < billDate) throw fail('The due date cannot be before the bill date.', 400);
@@ -303,7 +309,8 @@ export async function create(actor, input = {}, uploaded = [], req) {
     const seen = await supplierBillRepository.findByClientId(actor._id, clientId);
     if (seen) return shape(seen, actor);
   }
-  const dup = await supplierBillRepository.findOpenByKey(s._id, billKey);
+  // Only a numbered bill can be a duplicate; bills with no number are told apart by their SB number.
+  const dup = billKey && await supplierBillRepository.findOpenByKey(s._id, billKey);
   if (dup) throw fail(ALREADY(dup), 409);
 
   const files = await storeBills(uploaded, actor);
@@ -312,7 +319,7 @@ export async function create(actor, input = {}, uploaded = [], req) {
     doc = await supplierBillRepository.create({
       number: `SB-${String(await counterRepository.next('supplier_bill')).padStart(4, '0')}`,
       supplier: s._id, supplierName: s.name,
-      billNumber, billKey, billDate, dueDate, currency: 'INR', amountPaise,
+      ...numberFields(billNumber), billDate, dueDate, currency: 'INR', amountPaise,
       description, ...link, files,
       createdBy: actor._id, createdByName: actor.name || '',
       ...(clientId ? { clientId } : {}),
@@ -324,12 +331,12 @@ export async function create(actor, input = {}, uploaded = [], req) {
       // The same submit twice at the same moment, or the same bill added by two people.
       const seen = clientId && await supplierBillRepository.findByClientId(actor._id, clientId);
       if (seen) return shape(seen, actor);
-      const other = await supplierBillRepository.findOpenByKey(s._id, billKey);
+      const other = billKey && await supplierBillRepository.findOpenByKey(s._id, billKey);
       if (other) throw fail(ALREADY(other), 409);
     }
     throw err;
   }
-  auditLogger.logAction(req, 'CREATE', 'SupplierBill', doc._id, { supplierId: idOf(s._id), amountPaise, dueDate, billNumber, role: roleOf(actor) });
+  auditLogger.logAction(req, 'CREATE', 'SupplierBill', doc._id, { supplierId: idOf(s._id), amountPaise, dueDate, billNumber: billNumber || null, role: roleOf(actor) });
   return shape(doc, actor);
 }
 
@@ -349,10 +356,20 @@ export async function update(actor, id, input = {}, uploaded = [], req) {
     throw fail('The supplier on a bill cannot change — cancel this bill and add it again under the right supplier.', 400);
   }
   const set = {};
+  const unset = {};
   const said = [];
   if (input.billNumber != null) {
     const billNumber = cleanBillNumber(input.billNumber);
-    if (billNumber !== b0.billNumber) { set.billNumber = billNumber; set.billKey = billKeyOf(billNumber); said.push(`bill no. ${b0.billNumber} → ${billNumber}`); }
+    if (billNumber !== (b0.billNumber || '')) {
+      if (billNumber) {
+        Object.assign(set, numberFields(billNumber));
+        // Told up front; the unique index still decides a race.
+        const other = await supplierBillRepository.findOpenByKey(b0.supplier, set.billKey);
+        if (other && idOf(other._id) !== idOf(b0._id)) throw fail(ALREADY(other), 409);
+      }
+      else Object.assign(unset, { billNumber: '', billKey: '' });
+      said.push(`bill no. ${b0.billNumber || '—'} → ${billNumber || '—'}`);
+    }
   }
   if (input.billDate != null) {
     const billDate = cleanBillDate(input.billDate);
@@ -388,13 +405,13 @@ export async function update(actor, id, input = {}, uploaded = [], req) {
       // Same version, still open, and the new amount still covers everything asked for.
       { rev: b0.rev || 0, status: 'open', reservedPaise: { $lte: amountPaise } },
       {
-        $set: set, $inc: { rev: 1 },
+        $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}), $inc: { rev: 1 },
         $push: { history: entry(actor, 'changed', said.join('; ')), ...(stored.length ? { files: { $each: stored } } : {}) },
       });
   } catch (err) {
     await discard(stored);
     if (err?.code === 11000) {
-      const other = await supplierBillRepository.findOpenByKey(b0.supplier, set.billKey);
+      const other = set.billKey && await supplierBillRepository.findOpenByKey(b0.supplier, set.billKey);
       throw fail(other ? ALREADY(other) : MOVED, 409);
     }
     throw err;
@@ -549,7 +566,7 @@ export async function remindOverdue(now = new Date()) {
   const shown = bills.slice(0, OVERDUE_CAP);
   const lines = shown.map((b) => {
     const late = daysBetween(b.dueDate, today);
-    return `• ${b.supplierName} — bill ${b.billNumber} (${b.number}): ${rupees(b.amountPaise - (b.paidPaise || 0))} owed, due ${dayText(b.dueDate)} (${late} day${late === 1 ? '' : 's'} late)`;
+    return `• ${b.supplierName} — ${billLabel(b)} (${b.number}): ${rupees(b.amountPaise - (b.paidPaise || 0))} owed, due ${dayText(b.dueDate)} (${late} day${late === 1 ? '' : 's'} late)`;
   });
   const more = bills.length > OVERDUE_CAP ? `\n…and more — see Payments → We owe suppliers.` : '';
   await tellChat(`supplier-bills-overdue-${today}`,

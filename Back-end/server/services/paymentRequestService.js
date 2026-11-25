@@ -814,8 +814,8 @@ async function createStockSupplierRequest(actor, input, uploaded, req) {
     if (filled(input.currency) && String(input.currency).trim().toUpperCase() !== BASE_CURRENCY) throw fail('Supplier bills are paid in rupees.', 400);
     // Whatever the browser sent, the payment goes to the bill's supplier.
     input = { ...input, supplierId: idOf(bill.supplier), saveSupplier: undefined, payee: undefined, currency: BASE_CURRENCY, foreignAmount: undefined };
-    if (!filled(input.description)) input.description = `Bill ${bill.billNumber} (${bill.number})`;
-    if (!filled(input.reference)) input.reference = bill.billNumber;
+    if (!filled(input.description)) input.description = bill.billNumber ? `Bill ${bill.billNumber} (${bill.number})` : `Supplier bill ${bill.number}`;
+    if (!filled(input.reference)) input.reference = bill.billNumber || bill.number;
   }
   if (!input.supplierId && !truthy(input.saveSupplier)) {
     throw fail('Pick the supplier from the list (or save them as a new supplier), so the payment shows under that supplier.', 400);
@@ -864,7 +864,7 @@ async function createStockSupplierRequest(actor, input, uploaded, req) {
       ...(clientId ? { clientId } : {}),
       ...(bill ? { supplierBill: bill._id } : {}),
       history: [entry(actor, 'submitted', bill
-        ? `for ${bill.supplierName}'s bill ${bill.billNumber} (${bill.number}): ${bills.rupees(billPaise)} of ${bills.rupees(bill.amountPaise)}`
+        ? `for ${bill.supplierName}'s ${bills.billLabel(bill)} (${bill.number}): ${bills.rupees(billPaise)} of ${bills.rupees(bill.amountPaise)}`
         : 'not for one order (stock / several orders)')],
     });
   } catch (err) {
