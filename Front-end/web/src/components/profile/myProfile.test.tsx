@@ -118,6 +118,22 @@ describe('StaffProfileForm', () => {
     expect(screen.getByRole('link', { name: /change password/i })).toHaveAttribute('href', '/team/password');
   });
 
+  it('a long bio is sent whole; over 1,000 characters it says so and will not save', async () => {
+    put.mockImplementation(() => Promise.resolve({ user: ME }));
+    wrap(<StaffProfileForm />);
+    const bioBox = await screen.findByPlaceholderText(/What you look after/);
+    expect(bioBox).not.toHaveAttribute('maxLength');
+    const long = 'I look after Chennai sales leads and the Creta range. '.repeat(14).trim(); // ~750, past the old 200
+    fireEvent.change(bioBox, { target: { value: long } });
+    fireEvent.click(screen.getByRole('button', { name: /save profile/i }));
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0][1].profile.bio).toBe(long);
+
+    fireEvent.change(bioBox, { target: { value: 'x'.repeat(1001) } });
+    expect(screen.getByRole('alert')).toHaveTextContent(/Too long by 1 character \(the limit is 1,000\)/);
+    expect(screen.getByRole('button', { name: /save profile/i })).toBeDisabled();
+  });
+
   it('saves only the allowed fields — never email, role or team', async () => {
     put.mockImplementation((_url: string, body: { name: string }) =>
       Promise.resolve({ user: { ...ME, name: body.name, profile: { ...ME.profile, jobTitle: 'Sales Executive' } } }));

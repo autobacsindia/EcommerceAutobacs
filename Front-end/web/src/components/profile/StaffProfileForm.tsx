@@ -14,6 +14,11 @@ import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys, profileKeys } from '@/hooks/queries/keys';
 import PhotoEditor from './PhotoEditor';
+import { isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
+
+/** = Back-end/server/utils/profileUpdate.js LIMITS.bio */
+const BIO_MAX = 1000;
 
 export type MyProfile = {
   name: string;
@@ -153,8 +158,9 @@ export default function StaffProfileForm({ passwordHref }: { passwordHref?: stri
             <input className={input} value={form.ecPhone} onChange={set('ecPhone')} inputMode="tel" maxLength={16} placeholder="98400 12345" />
           </label>
           <label className="block sm:col-span-2">
-            {label('Short bio', `(optional · ${form.bio.length}/200)`)}
-            <textarea className={input} rows={3} value={form.bio} onChange={set('bio')} maxLength={200} placeholder="What you look after, e.g. Chennai sales leads." />
+            {label('Short bio', '(optional)')}
+            <textarea className={input} rows={3} value={form.bio} onChange={set('bio')} placeholder="What you look after, e.g. Chennai sales leads." />
+            <TextLimitNote value={form.bio.trim()} max={BIO_MAX} />
           </label>
 
           {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p>}
@@ -164,7 +170,7 @@ export default function StaffProfileForm({ passwordHref }: { passwordHref?: stri
             {passwordHref && !user?.username ? (
               <Link href={passwordHref} className="text-sm font-medium text-emerald-700 hover:underline">Change password</Link>
             ) : <span />}
-            <button type="submit" disabled={busy} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50">
+            <button type="submit" disabled={busy || isOverLimit(form.bio.trim(), BIO_MAX)} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50">
               {busy ? 'Saving…' : 'Save profile'}
             </button>
           </div>

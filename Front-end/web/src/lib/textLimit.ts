@@ -8,6 +8,12 @@
  * number, so this is only ever about telling the person early.
  */
 
+/**
+ * Staff notes and reasons (lead follow-ups, "why late", a leaver's reason,
+ * written training answers). = STAFF_NOTE_MAX in Back-end/server/config/staffTextLimits.js.
+ */
+export const STAFF_NOTE_MAX = 5000;
+
 /** Show the counter once the text reaches this share of the limit. */
 export const NEAR_LIMIT_SHARE = 0.8;
 

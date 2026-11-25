@@ -13,6 +13,15 @@
  */
 export const STAFF_LONG_TEXT_MAX = 20000;
 
+/**
+ * Staff notes and reasons outside Tasks/Projects — lead follow-up notes, a Meta
+ * lead's "why late" / question / answer, a leaver's reason, written training
+ * answers. 5,000 characters is about two typed pages: far more than anyone
+ * writes in a note, still a firm cap against an accidental huge paste.
+ * Mirrored by STAFF_NOTE_MAX in Front-end/web/src/lib/textLimit.ts.
+ */
+export const STAFF_NOTE_MAX = 5000;
+
 /** The one message shown when the cap is hit. */
 export const longTextTooLong = (what) =>
   `${what} is too long (over ${STAFF_LONG_TEXT_MAX.toLocaleString('en-IN')} characters) — please split it into two.`;

@@ -45,7 +45,9 @@ export const META_LEAD_SHEET_JOB = 'write-meta-lead-sheet';
 const PANEL_ORDER = Object.keys(PANEL_COLUMNS);
 // The sheet-owned core fields a panel edit may also write back, by editedFields name.
 const CORE_FIELDS = ['name', 'phone', 'email', 'product', 'campaign', 'salesPerson', 'status', 'followUp1', 'followUp2'];
-const CELL_MAX = 2000;
+// A Google Sheets cell holds 50,000 characters; notes are capped at 5,000
+// (STAFF_NOTE_MAX), so nothing a person writes is clipped here.
+const CELL_MAX = 20000;
 const WINDOW_MS = 10_000;
 
 export const sheetWriteEnabled = () => !!process.env.META_LEADS_SHEET_ID

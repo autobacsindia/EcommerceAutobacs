@@ -3,6 +3,7 @@
  * services can import them without tripping the repository-layer lint rule
  * (no direct `models/` imports outside repositories/).
  */
+import { STAFF_NOTE_MAX } from './staffTextLimits.js';
 
 export const SOURCE_TYPES = [
   'consultation',
@@ -47,7 +48,7 @@ export const FOLLOW_UP_STATUSES = Object.freeze({
   other: 'Others',
 });
 export const FOLLOW_UP_STATUS_KEYS = Object.keys(FOLLOW_UP_STATUSES);
-export const FOLLOW_UP_NOTE_MAX = 500;
+export const FOLLOW_UP_NOTE_MAX = STAFF_NOTE_MAX; // was 500 — people ran out of room
 
 // Active (workable) statuses — a live lead a rep can still move. The pool/nurture
 // counts, the re-score sweep, and the stale-follow-up sweep all operate on these;
@@ -128,6 +129,6 @@ export const META_LEAD_ESCALATE_MANAGERS_MIN = 24 * 60; // overdue this long →
 export const META_LEAD_FIRST_FOLLOW_UP_MIN = 60; // office minutes after taking a lead
 export const META_LEAD_NEXT_MAX_DAYS = 60; // furthest a next follow-up may be set
 export const META_LEAD_REASON_MIN = 5; // characters: "ok" is not a reason
-export const META_LEAD_REASON_MAX = 500;
+export const META_LEAD_REASON_MAX = STAFF_NOTE_MAX; // was 500
 // These close the lead: no next follow-up is asked for.
 export const FOLLOW_UP_CLOSING = Object.freeze(['converted', 'not_interested']);

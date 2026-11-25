@@ -21,6 +21,7 @@ import userRepository from '../repositories/userRepository.js';
 import { TRAINING_STAGES } from '../models/StaffTraining.js';
 import { STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { sendToUsers } from './pushService.js';
+import { STAFF_NOTE_MAX } from '../config/staffTextLimits.js';
 
 export const PASS_MARK = 80;
 export const ATTEMPTS_ALLOWED = 3;
@@ -31,7 +32,7 @@ const OPTIONS_MIN = 2;
 const OPTIONS_MAX = 6;
 const TEXT_MAX = 500;
 const OPTION_MAX = 200;
-const WRITTEN_ANSWER_MAX = 2000;
+const WRITTEN_ANSWER_MAX = STAFF_NOTE_MAX; // was 2,000, and silently cut
 const LESSON_OPTIONS_MAX = 200;
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -454,10 +455,14 @@ const scoreOf = (questions) => {
 
 function applyAnswers(attempt, answers) {
   const given = answers && typeof answers === 'object' && !Array.isArray(answers) ? answers : {};
-  return attempt.questions.map((q) => {
+  return attempt.questions.map((q, i) => {
     const raw = given[q.qid];
     if (q.type === 'written') {
-      const answer = typeof raw === 'string' ? raw.trim().slice(0, WRITTEN_ANSWER_MAX) : '';
+      const answer = typeof raw === 'string' ? raw.trim() : '';
+      // Refused, never cut: a shortened answer would be marked on words the person did not finish.
+      if (answer.length > WRITTEN_ANSWER_MAX) {
+        throw fail(`Your answer to question ${i + 1} is too long (max ${WRITTEN_ANSWER_MAX.toLocaleString('en-IN')} characters).`, 400);
+      }
       // Left blank is simply wrong; nothing for the head to read.
       return { ...q, answer, right: answer ? null : false };
     }

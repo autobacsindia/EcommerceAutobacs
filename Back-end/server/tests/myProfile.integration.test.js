@@ -199,10 +199,18 @@ describe('PUT /profile — what it refuses', () => {
     expect(res.body.message).toMatch(message);
   });
 
+  it('a long bio (past the old 200) is saved whole', async () => {
+    const { token } = await signIn('staff', { staff: { team: 'sales' } });
+    const bio = 'I look after Chennai sales leads and the Creta and Seltos accessory range. '.repeat(10).trim(); // ~750
+    await put(token, { profile: { bio } }).expect(200);
+    const res = await put(token, { profile: { bio } }).expect(200);
+    expect(JSON.stringify(res.body)).toContain(bio);
+  });
+
   it.each([
     [{ dateOfBirth: '2026-02-31' }, /not a real date/],
     [{ dateOfBirth: '2999-01-01' }, /in the past/],
-    [{ bio: 'x'.repeat(201) }, /at most 200/],
+    [{ bio: 'x'.repeat(1001) }, /at most 1000/],
     [{ emergencyContact: { name: 'Ravi' } }, /both a name and a phone/],
   ])('rejects bad staff input %j', async (profile, message) => {
     const { token } = await signIn('staff', { staff: { team: 'sales' } });

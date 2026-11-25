@@ -12,6 +12,8 @@ import {
   TIME_NOTE_MAX, TIME_PAST_DAYS, durationProblem, formatClock, formatDueDay, formatDuration, minutesText, newClientId, parseDuration, todayIST,
   type RunningTimer, type Task, type TaskTimePage, type TimeEntry, type TimerState,
 } from './types';
+import { isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 /*
  * Time on tasks (phase 6b). Nothing here is optimistic: a timer shows as
@@ -246,12 +248,13 @@ function TimeForm({ taskId, entry, onDone }: { taskId: string; entry?: TimeEntry
         </label>
         <label className="flex min-w-40 flex-1 flex-col gap-1 text-xs font-medium text-gray-600">
           Note (optional)
-          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={TIME_NOTE_MAX} placeholder="What was it for?" className={input} />
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="What was it for?" className={input} />
+          <TextLimitNote value={note.trim()} max={TIME_NOTE_MAX} />
         </label>
       </div>
       {problem && <p role="alert" className="text-sm text-red-700">{problem}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={save.isPending} className="tk-face rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold hover:bg-blue-700 disabled:opacity-60">
+        <button type="submit" disabled={save.isPending || isOverLimit(note.trim(), TIME_NOTE_MAX)} className="tk-face rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold hover:bg-blue-700 disabled:opacity-60">
           {save.isPending ? 'Saving…' : entry ? 'Save' : 'Add time'}
         </button>
         <button type="button" onClick={onDone} className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100">Cancel</button>

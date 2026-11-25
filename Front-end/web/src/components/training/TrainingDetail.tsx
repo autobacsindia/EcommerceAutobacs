@@ -9,6 +9,8 @@ import { formatDay } from '@/components/lessons/types';
 import { StatusPill } from './TrainingHome';
 import { useAssignment, useAssignmentAction, useMarkTest, useStartTest, useSubmitTest } from './hooks';
 import { STAGES, field, primaryButton, quietButton, type Assignment, type Attempt, type OpenAttempt } from './types';
+import { STAFF_NOTE_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 const failed = (fallback: string) => (e: unknown) => toast.error(errorMessage(e, fallback));
 
@@ -21,6 +23,7 @@ function Paper({ assignmentId, attempt }: { assignmentId: string; attempt: OpenA
     if (!window.confirm(`${warning}Hand in your test? This uses attempt ${attempt.number}.`)) return;
     submit.mutate({ attemptId: attempt.id, answers }, { onError: failed('Your test could not be handed in. Your answers are still here, so please try again.') });
   };
+  const tooLong = attempt.questions.some((q) => q.type === 'written' && isOverLimit(String(answers[q.id] ?? '').trim(), STAFF_NOTE_MAX));
   return (
     <section className="mt-6">
       <h2 className="mb-1 font-semibold text-gray-900">Test: attempt {attempt.number}</h2>
@@ -30,7 +33,10 @@ function Paper({ assignmentId, attempt }: { assignmentId: string; attempt: OpenA
           <li key={q.id} className="rounded-lg border border-gray-200 bg-white p-3">
             <p className="mb-2 text-sm font-medium text-gray-900">{n + 1}. {q.text}</p>
             {q.type === 'written' ? (
-              <textarea aria-label={`Answer to question ${n + 1}`} className={field} rows={3} maxLength={2000} value={String(answers[q.id] ?? '')} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} />
+              <>
+                <textarea aria-label={`Answer to question ${n + 1}`} className={field} rows={3} value={String(answers[q.id] ?? '')} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} />
+                <TextLimitNote value={String(answers[q.id] ?? '').trim()} max={STAFF_NOTE_MAX} />
+              </>
             ) : q.options.map((o, i) => (
               <label key={o} className="flex items-center gap-2 py-1 text-sm text-gray-900">
                 <input type="radio" name={q.id} checked={answers[q.id] === i} onChange={() => setAnswers((a) => ({ ...a, [q.id]: i }))} />{o}
@@ -39,7 +45,7 @@ function Paper({ assignmentId, attempt }: { assignmentId: string; attempt: OpenA
           </li>
         ))}
       </ol>
-      <button type="button" disabled={submit.isPending} onClick={handIn} className={`${primaryButton} mt-3`}>{submit.isPending ? 'Handing in…' : 'Hand in'}</button>
+      <button type="button" disabled={submit.isPending || tooLong} onClick={handIn} className={`${primaryButton} mt-3`}>{submit.isPending ? 'Handing in…' : 'Hand in'}</button>
     </section>
   );
 }

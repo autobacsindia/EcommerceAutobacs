@@ -27,12 +27,13 @@ import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { cleanRichTextWithin } from '../utils/richText.js';
 import { sendToUsers } from './pushService.js';
 import { todayIST } from './staffTaskService.js';
+import { STAFF_NOTE_MAX } from '../config/staffTextLimits.js';
 
 const PAGE_SIZE = 24;
 const MINE_MAX = 20;
 const BELL_MAX = 200;
 const REMIND_DAYS = 3;
-const REASON_MAX = 1000;
+const REASON_MAX = STAFF_NOTE_MAX; // was 1,000
 const NOTE_MAX = 20000;
 const LAST_DAY_BACK = 60;
 const LAST_DAY_AHEAD = 365;
