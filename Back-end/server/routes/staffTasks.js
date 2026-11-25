@@ -98,6 +98,7 @@ import {
   decideDueApproval,
   askNewDate,
   decideNewDate,
+  acceptTask,
 } from '../services/staffTaskService.js';
 import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
 import { attachmentSizeGuard } from '../middleware/uploadMiddleware.js';
@@ -363,6 +364,11 @@ router.patch('/:id', validateTaskUpdate, validateRequest, asyncHandler(async (re
 // @route  POST /staff/tasks/:id/due-approval { rev, decision: approve|reject, note? } — a manager decides a far due date
 router.post('/:id/due-approval', validateDueApproval, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, task: await decideDueApproval(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/tasks/:id/accept { rev } — the person given it takes it on at its date
+router.post('/:id/accept', asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await acceptTask(req.user, req.params.id, req.body, req) });
 }));
 
 // @route  POST /staff/tasks/:id/new-date { rev, reason, note, dueOn, dueTime? } — the person doing it asks for a new date (late, or early)

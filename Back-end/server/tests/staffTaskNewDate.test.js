@@ -203,6 +203,8 @@ describe('missing again', () => {
 describe('asking early', () => {
   it('is not a miss, and is allowed twice per task', async () => {
     let t = await make(arun, { assigneeId: String(bala._id), dueOn: day(1) });
+    // Accepted first: before that, asking is "can't make this date" (staffTaskAccept.test.js).
+    t = await tasks.acceptTask(bala, t.id, { rev: t.rev }, req);
     t = await decide(arun, await ask(bala, t, { dueOn: day(2) }), 'approve');
     expect(t).toMatchObject({ misses: 0, danger: false });
     expect(t.dateMoves[0]).toMatchObject({ late: false, how: 'request' });

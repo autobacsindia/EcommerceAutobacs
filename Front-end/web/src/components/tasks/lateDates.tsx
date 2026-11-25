@@ -51,7 +51,7 @@ function useSaved(task: Task) {
 }
 
 /** A small mark on a row: ⚠ missed twice or more, or a new date waiting for approval. */
-export function LateMark({ task }: { task: Pick<Task, 'bucket' | 'danger' | 'misses' | 'lateRequest'> }) {
+export function LateMark({ task }: { task: Pick<Task, 'bucket' | 'danger' | 'misses' | 'lateRequest'> & Partial<Pick<Task, 'needsAccept' | 'notAccepted'>> }) {
   if (task.bucket !== 'open') return null;
   if (task.danger) {
     return (
@@ -67,11 +67,62 @@ export function LateMark({ task }: { task: Pick<Task, 'bucket' | 'danger' | 'mis
       </span>
     );
   }
+  if (task.needsAccept) {
+    return <span className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">New — accept it</span>;
+  }
+  if (task.notAccepted?.length) {
+    return (
+      <span title={`Not accepted yet: ${task.notAccepted.map((p) => p.name).join(', ')}`} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-700">
+        Not accepted yet
+      </span>
+    );
+  }
   return null;
 }
 
-/** "Why is it late, and when will it be done?" — or, before the deadline, "I need more time". */
-function AskForm({ task, late, onCancel }: { task: Task; late: boolean; onCancel?: () => void }) {
+/** "Arun gave you this task — due Thu 5 PM." Accept, or say you can't make the date. */
+function AcceptBar({ task }: { task: Task }) {
+  const { saved, reload } = useSaved(task);
+  const [cant, setCant] = useState(false);
+  const lr = task.lateRequest;
+  const take = useMutation({
+    mutationFn: () => apiClient.post<{ task: Task }>(`/staff/tasks/${encodeURIComponent(task.id)}/accept`, { rev: task.rev }),
+    onSuccess: (res) => { toast.success('Accepted — it’s yours'); return saved(res.task); },
+    onError: (e) => { toast.error(errorMessage(e, 'Could not accept it.')); void reload(); },
+  });
+  return (
+    <div role="region" aria-label="Accept this task" className="space-y-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-950">
+      <p className="font-semibold">
+        {task.createdBy.name || 'Someone'} gave you this task{task.dueOn ? ` — due ${due(task.dueOn, task.dueTime)}` : ''}. Can you do it by then?
+      </p>
+      {lr?.status === 'rejected' && lr.atStart && (
+        <p>{lr.decidedBy?.name || 'Your manager'} did not approve {due(lr.dueOn, lr.dueTime)}: “{lr.decisionNote}”</p>
+      )}
+      {cant && task.can.askNewDate ? (
+        <div className="rounded-md bg-white p-2 text-gray-900"><AskForm task={task} kind="start" onCancel={() => setCant(false)} /></div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={take.isPending} onClick={() => take.mutate()} className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            {take.isPending && <Loader2 aria-hidden className="h-4 w-4 animate-spin" />} Accept
+          </button>
+          {task.dueOn && task.can.askNewDate && (
+            <button type="button" onClick={() => setCant(true)} className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-sm font-medium text-blue-900 hover:bg-blue-100">Can’t make this date</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type AskKind = 'late' | 'early' | 'start';
+const ASK_TEXT: Record<AskKind, { form: string; why: string }> = {
+  late: { form: 'Why is this late', why: 'Why wasn’t it done on time?' },
+  early: { form: 'Ask for more time', why: 'Why do you need more time?' },
+  start: { form: 'Can’t make this date', why: 'Why can’t you make this date?' },
+};
+
+/** "Why is it late, and when will it be done?" — or "I need more time", or "I can't make this date". */
+function AskForm({ task, kind, onCancel }: { task: Task; kind: AskKind; onCancel?: () => void }) {
   const { saved, reload } = useSaved(task);
   const [reason, setReason] = useState<LateReason | ''>('');
   const [note, setNote] = useState('');
@@ -94,9 +145,9 @@ function AskForm({ task, late, onCancel }: { task: Task; late: boolean; onCancel
   const id = (x: string) => `${x}-${task.id}`;
   const field = 'w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900';
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (ready) ask.mutate(); }} className="space-y-2" aria-label={late ? 'Why is this late' : 'Ask for more time'}>
+    <form onSubmit={(e) => { e.preventDefault(); if (ready) ask.mutate(); }} className="space-y-2" aria-label={ASK_TEXT[kind].form}>
       <div>
-        <label htmlFor={id('reason')} className="block text-sm font-medium">{late ? 'Why wasn’t it done on time?' : 'Why do you need more time?'}</label>
+        <label htmlFor={id('reason')} className="block text-sm font-medium">{ASK_TEXT[kind].why}</label>
         <select id={id('reason')} value={reason} onChange={(e) => setReason(e.target.value as LateReason)} className={field}>
           <option value="">Pick a reason…</option>
           {LATE_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -187,8 +238,11 @@ function DecideForm({ task }: { task: Task }) {
 /** On the task page: late / asked / decided, and the forms for whoever may act. */
 export function NewDatePanel({ task }: { task: Task }) {
   const [early, setEarly] = useState(false);
-  if (task.bucket !== 'open' || !task.dueOn) return null;
+  if (task.bucket !== 'open') return null;
   const lr = task.lateRequest;
+  // Not late yet, not answered yet, nothing waiting: take it on (or not).
+  if (task.can.accept && !task.overdue) return <AcceptBar task={task} />;
+  if (!task.dueOn) return null;
   const misses = task.misses ?? 0;
 
   if (lr?.status === 'pending') {
@@ -197,7 +251,7 @@ export function NewDatePanel({ task }: { task: Task }) {
         <p className="flex items-start gap-2">
           <CalendarClock aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>{lr.late ? 'Late — new date asked for' : 'More time asked for'}:</strong> {lr.requestedBy.name || 'Someone'} asks for {due(lr.dueOn, lr.dueTime)}.
+            <strong>{lr.late ? 'Late — new date asked for' : lr.atStart ? 'Can’t make this date' : 'More time asked for'}:</strong> {lr.requestedBy.name || 'Someone'} asks for {due(lr.dueOn, lr.dueTime)}.
             {' '}<span className="block">{lr.reasonLabel}: “{lr.note}”</span>
             {!task.can.decideNewDate && <span className="block text-amber-800">Waiting for {task.createdBy.name || 'whoever gave it'} to approve.</span>}
           </span>
@@ -220,7 +274,7 @@ export function NewDatePanel({ task }: { task: Task }) {
           <p>{lr.decidedBy?.name || 'Your manager'} did not approve {due(lr.dueOn, lr.dueTime)}: “{lr.decisionNote}”</p>
         )}
         {task.can.askNewDate ? (
-          <div className={`rounded-md p-2 ${dark ? 'bg-white text-gray-900' : ''}`}><AskForm task={task} late /></div>
+          <div className={`rounded-md p-2 ${dark ? 'bg-white text-gray-900' : ''}`}><AskForm task={task} kind="late" /></div>
         ) : (
           <p>Waiting for {task.assignees.map((p) => p.name).join(', ') || 'the person doing it'} to give a reason and a new date.</p>
         )}
@@ -230,6 +284,9 @@ export function NewDatePanel({ task }: { task: Task }) {
 
   return (
     <>
+      {!!task.notAccepted?.length && !task.needsAccept && (
+        <p className="text-sm text-gray-600">Not accepted yet by {task.notAccepted.map((p) => p.name).join(', ')}.</p>
+      )}
       {lr?.status === 'approved' && lr.decidedAt && (
         <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           <CalendarCheck aria-hidden className="h-4 w-4 shrink-0" />
@@ -237,7 +294,7 @@ export function NewDatePanel({ task }: { task: Task }) {
         </p>
       )}
       {task.can.askNewDate && (early ? (
-        <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900"><AskForm task={task} late={false} onCancel={() => setEarly(false)} /></div>
+        <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900"><AskForm task={task} kind="early" onCancel={() => setEarly(false)} /></div>
       ) : (
         <button type="button" onClick={() => setEarly(true)} className="self-start text-sm font-medium text-blue-700 hover:underline">
           Need more time? Ask before it’s late

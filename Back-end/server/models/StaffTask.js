@@ -108,6 +108,12 @@ const PersonSchema = new mongoose.Schema(
      * Not stored for followers (following never lets a head see a task).
      */
     team: { type: String, default: undefined },
+    /**
+     * Did they take the task on at its date? `null` = given by someone else and not
+     * answered yet (Accept, or "can't make this date"); a Date = accepted (giving
+     * it to yourself counts). Absent on tasks given before this existed: nothing asked.
+     */
+    acceptedAt: { type: Date, default: undefined },
   },
   { _id: false },
 );
@@ -159,6 +165,8 @@ const LateRequestSchema = new mongoose.Schema(
     status: { type: String, enum: ['pending', 'approved', 'rejected'], required: true },
     /** Asked after the deadline had passed (a miss), not before it. */
     late: { type: Boolean, required: true },
+    /** "I can't make this date", asked before accepting the task: not a miss, not an early ask. */
+    atStart: { type: Boolean, default: undefined },
     reason: { type: String, enum: Object.keys(LATE_REASONS), required: true },
     note: { type: String, required: true, maxlength: 500 },
     /** The deadline when it was asked ('YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'). */
@@ -190,8 +198,8 @@ const DateMoveSchema = new mongoose.Schema(
     toDue: { type: String, required: true },
     /** The old deadline had already passed: this move was a miss. */
     late: { type: Boolean, required: true },
-    /** 'request' (asked and approved) or 'edit' (whoever gave it changed it). */
-    how: { type: String, enum: ['request', 'edit'], required: true },
+    /** 'request' (asked and approved), 'start' (asked before accepting it) or 'edit' (whoever gave it changed it). */
+    how: { type: String, enum: ['request', 'start', 'edit'], required: true },
     reason: { type: String, default: '' },
     note: { type: String, default: '', maxlength: 500 },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

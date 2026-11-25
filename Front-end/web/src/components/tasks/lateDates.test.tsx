@@ -171,3 +171,49 @@ describe('the late-tasks pop-up', () => {
     expect(screen.queryByRole('alert', { name: 'Late tasks' })).toBeNull();
   });
 });
+
+describe('taking a task on', () => {
+  const given = (over: Partial<Task> = {}) => task({
+    dueOn: inDays(2), dueTime: '17:00', overdue: false, misses: 0, needsReason: false, needsAccept: true,
+    notAccepted: [{ id: 'u2', name: 'Arun' }], can: { ...can, askNewDate: true, accept: true }, ...over,
+  });
+
+  it('Accept takes it on at its date', async () => {
+    post.mockResolvedValue({ task: given({ needsAccept: false, notAccepted: [], can: { ...can, askNewDate: true, accept: false } }) });
+    wrap(<NewDatePanel task={given()} />);
+    expect(screen.getByRole('region', { name: 'Accept this task' })).toHaveTextContent(/^Priya gave you this task — due .*\. Can you do it by then\?/);
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/t1/accept', { rev: 3 }));
+  });
+
+  it('"Can’t make this date" asks why and for a date they can make', async () => {
+    post.mockResolvedValue({ task: given({ lateRequest: asked({ late: false, atStart: true }), can: { ...can, accept: false } }) });
+    wrap(<NewDatePanel task={given()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Can’t make this date' }));
+    fireEvent.change(screen.getByLabelText('Why can’t you make this date?'), { target: { value: 'more_work' } });
+    fireEvent.change(screen.getByLabelText('What happened?'), { target: { value: 'On the Hilux job till Friday' } });
+    fireEvent.change(screen.getByLabelText('New date'), { target: { value: inDays(4) } });
+    fireEvent.click(screen.getByRole('button', { name: /send for approval/i }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/t1/new-date', expect.objectContaining({ reason: 'more_work', dueOn: inDays(4) })));
+  });
+
+  it('a refused date shows why, and asks again', () => {
+    wrap(<NewDatePanel task={given({ lateRequest: asked({ late: false, atStart: true, status: 'rejected', decidedBy: { id: 'u1', name: 'Priya' }, decisionNote: 'Needed Thursday' }) })} />);
+    expect(screen.getByRole('region', { name: 'Accept this task' })).toHaveTextContent('Priya did not approve');
+  });
+
+  it('whoever gave it sees who has not accepted; the request reads "Can’t make this date"', () => {
+    const { unmount } = wrap(<NewDatePanel task={given({ needsAccept: false, can: { ...can } })} />);
+    expect(screen.getByText('Not accepted yet by Arun.')).toBeInTheDocument();
+    unmount();
+    wrap(<NewDatePanel task={given({ needsAccept: false, lateRequest: asked({ late: false, atStart: true }), can: { ...can, decideNewDate: true } })} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/^Can’t make this date: Arun asks for/);
+  });
+
+  it('the row mark: "New — accept it" for them, "Not accepted yet" for others', () => {
+    const { rerender } = render(<LateMark task={given()} />);
+    expect(screen.getByText('New — accept it')).toBeInTheDocument();
+    rerender(<LateMark task={given({ needsAccept: false })} />);
+    expect(screen.getByText('Not accepted yet')).toBeInTheDocument();
+  });
+});
