@@ -58,10 +58,16 @@ export const TEAM_EXPENSE_CATEGORIES = Object.freeze({
     c('epf', 'EPF', true),
     others,
   ]),
-  // Fuel / Food / Travel were typed amounts until 2026-11-21; they are now
-  // Reimbursement sub-types (old records keep their names via LEGACY_LABELS).
+  // Fuel / Food / Travel stay as typed-amount options beside Reimbursement
+  // (owner, 2026-11-25: #593 had folded them into Reimbursement only, and the
+  // team lost options it uses). A fuel claim worked out by km is Reimbursement →
+  // Fuel; a fuel bill paid as it is stays "Fuel". tests/teamExpenseCategories
+  // pins this list so it cannot shrink silently again.
   operations: Object.freeze([
     reimbursement,
+    c('fuel', 'Fuel'),
+    c('food', 'Food'),
+    c('travel', 'Travel'),
     others,
   ]),
   marketing: Object.freeze([
