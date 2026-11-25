@@ -103,6 +103,8 @@ const isActiveStaff = (u) => u?.role === 'staff' && u.staff?.active === true;
 const onTeam = (u, team) => isActiveStaff(u) && u.staff.team === team;
 const isAccounts = (u) => onTeam(u, STAFF_TEAMS.ACCOUNTS);
 const seesAll = (u) => isAdmin(u) || isAccounts(u);
+/** "Pay a supplier" not for one order: the admin, or any active staff member who raises expenses. */
+const mayPaySupplierStock = (u) => isAdmin(u) || (isActiveStaff(u) && EXPENSE_TEAMS.includes(u.staff.team));
 const roleOf = (u) => (isAdmin(u) ? 'admin' : u?.staff?.team || '');
 
 /**
@@ -804,6 +806,8 @@ const cleanClientId = (raw) => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(
  * is what keeps it under "Supplier payments — by supplier". "What was bought" is
  * required, since there are no item names. No order, items, deal or supplier
  * credit (those belong to an order's payment). Idempotent on `clientId`.
+ * Raised by anyone who raises expenses (2026-11-25), and kept with their team.
+ * A bill we owe (supplierBillId) is procurement's — checked by the caller.
  */
 async function createStockSupplierRequest(actor, input, uploaded, req) {
   if (filled(input.dealId) || filled(input.partId)) throw fail('A supplier deal or part is paid from its order.', 400);
@@ -850,7 +854,9 @@ async function createStockSupplierRequest(actor, input, uploaded, req) {
       number: await nextNumber(),
       kind: 'supplier',
       status: 'submitted',
-      team: STAFF_TEAMS.PROCUREMENT,
+      // The raiser's team, so they (and their team head) see it like their expenses;
+      // accounts and the admin see every team's. The admin's go under procurement.
+      team: isAdmin(actor) ? STAFF_TEAMS.PROCUREMENT : actor.staff.team,
       requestedBy: actor._id,
       requestedByName: actor.name || '',
       ...money,
@@ -888,10 +894,17 @@ async function createStockSupplierRequest(actor, input, uploaded, req) {
  * and who closed the sale onto the request.
  */
 export async function createSupplierRequest(actor, input, uploaded, req) {
+  // "Pay a supplier" (no order): anyone who raises expenses (owner, 2026-11-25, "ok do
+  // this for all") — goods bought from a supplier go under that supplier, not in as
+  // a plain expense. Paying an order's items, or a bill we owe, stays procurement's.
+  if (!filled(input.orderId) && !filled(input.supplierBillId)) {
+    if (!mayPaySupplierStock(actor)) throw fail('Only active staff raise supplier payments.', 403);
+    return createStockSupplierRequest(actor, input, uploaded, req);
+  }
   if (!isAdmin(actor) && !onTeam(actor, STAFF_TEAMS.PROCUREMENT)) {
     throw fail('Only procurement raises supplier payments.', 403);
   }
-  // Stock, or several orders' goods on one bill: no single order's item to pay for.
+  // A bill we owe (supplierBillService): no single order's item to pay for.
   if (!filled(input.orderId)) return createStockSupplierRequest(actor, input, uploaded, req);
   const order = await orderRepository.findForWorkflow(input.orderId);
   const view = order && workflowView(order);
@@ -1136,7 +1149,9 @@ async function supplierPayee(actor, input, req) {
   }
   const payee = cleanPayee(input.payee);
   if (truthy(input.saveSupplier)) {
-    const saved = await suppliers.create(actor, { name: payee.name, phone: payee.phone, payment: payee }, req);
+    // Anyone raising the payment may save a new supplier here; the duplicate check
+    // (same name, or same phone) points them at the saved one instead.
+    const saved = await suppliers.createFromPayment(actor, { name: payee.name, phone: payee.phone, payment: payee }, req);
     return { payee, supplierId: saved.id, bankNotice: null };
   }
   return { payee, supplierId: null, bankNotice: null };

@@ -6,7 +6,9 @@
  * supplier and could not be paid in one transfer.
  *
  * What must hold:
- *   - only procurement / the admin raise one; the supplier must be a SAVED one
+ *   - anyone who raises expenses raises one (owner, 2026-11-25: "ok do this for all"),
+ *     and it sits with their team; paying an order's items or a bill we owe stays
+ *     procurement's. The supplier must be a SAVED one
  *     (picked, or saved now) — a typed-only payee is refused, and saves nothing
  *   - the saved supplier's details are copied; the client's payee is ignored
  *   - "what was bought" is required; no deal / part / supplier credit without an order
@@ -15,6 +17,8 @@
  *     pays them all in one transfer
  *   - an edit cannot unlink it from its saved supplier; decline → edit → resubmit works
  *   - paying it singly works (no order to move)
+ *   - everyone can pick a saved supplier (name start only, no contact details), and
+ *     "save as a new supplier" is refused when the name or phone is already saved
  */
 
 import bcrypt from 'bcryptjs';
@@ -135,12 +139,14 @@ describe('Supplier payment not for one order (stock)', () => {
   });
   afterEach(async () => { stored.clear(); await dbHandler.clearDatabase(); });
 
-  let admin, accounts, procurement, ops;
+  let admin, accounts, procurement, ops, sales, hr;
   beforeEach(async () => {
     admin = await makeUser('Owner', 'admin');
     accounts = await makeUser('Anu', 'staff', staff('accounts'));
     procurement = await makeUser('Priya', 'staff', staff('procurement'));
     ops = await makeUser('Omar', 'staff', staff('operations'));
+    sales = await makeUser('Sana', 'staff', staff('sales'));
+    hr = await makeUser('Hari', 'staff', staff('hr'));
   });
 
   const RK = { ...ARB, name: 'RK New Popular', gstin: '' };
@@ -211,11 +217,100 @@ describe('Supplier payment not for one order (stock)', () => {
     expect(await PaymentRequest.countDocuments()).toBe(0);
   });
 
-  it('only procurement and the admin raise one', async () => {
+  it('every team that raises expenses raises one; it sits with their team', async () => {
     const s = await addSupplier();
-    expect((await stock(ops.session, { supplierId: s.id })).status).toBe(403);
-    expect((await stock(accounts.session, { supplierId: s.id })).status).toBe(403);
-    expect((await stock(admin.session, { supplierId: s.id })).status).toBe(201);
+    for (const [who, team] of [[sales, 'sales'], [hr, 'hr'], [ops, 'operations'], [accounts, 'accounts'], [procurement, 'procurement'], [admin, 'procurement']]) {
+      const res = await stock(who.session, { supplierId: s.id, payee: OTHER_BANK });
+      expect([team, res.status]).toEqual([team, 201]);
+      const raw = await PaymentRequest.findById(res.body.request.id).lean();
+      expect([team, raw.team, raw.kind, String(raw.supplier)]).toEqual([team, team, 'supplier', s.id]);
+      // The saved supplier's account, whoever raised it and whatever they sent.
+      expect(raw.payee).toMatchObject({ name: 'RK New Popular', accountNumber: '123456789012' });
+    }
+  });
+
+  it('a sales one: they see it, accounts approves, the admin pays it with the supplier\'s other bills', async () => {
+    const s = await addSupplier();
+    const mine = (await stock(sales.session, { supplierId: s.id, amount: 3000, clientId: 'sales-form-0001' })).body.request;
+    // A double submit is still one request.
+    expect((await stock(sales.session, { supplierId: s.id, amount: 3000, clientId: 'sales-form-0001' })).body.request.id).toBe(mine.id);
+    const theirs = (await stock(procurement.session, { supplierId: s.id, amount: 7000 })).body.request;
+    expect((await sales.session.get(`/payment-requests/${mine.id}`)).status).toBe(200);
+    // Another team's stays theirs, as with expenses.
+    expect((await sales.session.get(`/payment-requests/${theirs.id}`)).status).toBe(404);
+    // The raiser corrects it before approval, like any request.
+    expect((await sales.session.formPut(`/payment-requests/${mine.id}`, { reason: 'bill corrected', amount: 3200 })).status).toBe(200);
+    for (const id of [mine.id, theirs.id]) expect((await accounts.session.post(`/payment-requests/${id}/approve`)).status).toBe(200);
+    const groups = (await admin.session.get('/payment-requests/to-pay/suppliers')).body.groups;
+    expect(groups.map((g) => [g.count, g.total])).toEqual([[2, 10200]]);
+    expect((await payBatch(admin.session, [mine.id, theirs.id], 10200)).status).toBe(200);
+    expect((await PaymentRequest.find({ status: 'paid' }).lean()).length).toBe(2);
+  });
+
+  it('outside procurement: no paying an order\'s items or a bill we owe; inactive staff and customers refused', async () => {
+    const s = await addSupplier();
+    const order = await paidOrder();
+    const item = String(order.items[0]._id);
+    await wf.setStock(procurement.user, String(order._id), item, { stock: 'in_stock' }, req);
+    const forOrder = await sales.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [item], amount: 1500, supplierId: s.id });
+    expect(forOrder.status).toBe(403);
+    const bill = await stock(sales.session, { supplierBillId: String(new mongoose.Types.ObjectId()), supplierId: s.id });
+    expect(bill.status).toBe(403);
+    const gone = await makeUser('Gita', 'staff', { team: 'sales', isHead: false, active: false });
+    expect((await stock(gone.session, { supplierId: s.id })).status).toBeGreaterThanOrEqual(401);
+    const shopper = await makeUser('Cust', 'customer');
+    expect((await stock(shopper.session, { supplierId: s.id })).status).toBeGreaterThanOrEqual(401);
+    expect(await PaymentRequest.countDocuments()).toBe(0);
+  });
+
+  it('everyone picks from saved suppliers by name start — without contact details or the account number', async () => {
+    await addSupplier();
+    const found = await sales.session.get('/suppliers?prefix=rk%20new&status=active');
+    expect(found.status).toBe(200);
+    expect(found.body.suppliers).toHaveLength(1);
+    const [r] = found.body.suppliers;
+    expect(r).toMatchObject({ name: 'RK New Popular', phone: '9800000001', contactPerson: '', address: '', gstin: '', can: { edit: false, revealAccount: false } });
+    expect(r.payment).toMatchObject({ method: 'bank', accountNumber: '', ifsc: 'HDFC0001234' });
+    expect(r.payment.accountMasked).toMatch(/9012$/);
+    // No prefix: nothing (the directory is procurement's and accounts').
+    expect((await sales.session.get('/suppliers?q=HDFC')).body.suppliers).toEqual([]);
+    expect((await sales.session.get('/suppliers?status=active')).body.suppliers).toEqual([]);
+    // …nor its other doors.
+    const id = (await Supplier.findOne().lean())._id;
+    expect((await sales.session.get(`/suppliers/${id}`)).status).toBe(403);
+    expect((await sales.session.post(`/suppliers/${id}/account-number`)).status).toBe(403);
+    expect((await sales.session.post('/suppliers', { ...RK, name: 'Another One' })).status).toBe(403);
+    expect((await sales.session.put(`/suppliers/${id}`, { ...RK, name: 'Renamed' })).status).toBe(403);
+    // Procurement and accounts still get the full directory.
+    expect((await procurement.session.get('/suppliers?status=active')).body.suppliers[0].gstin).toBe('');
+    expect((await accounts.session.get('/suppliers?q=HDFC')).body.suppliers).toHaveLength(1);
+  });
+
+  it('sales saves a new supplier from the payment; the same name or phone again is refused and points at the saved one', async () => {
+    const pay = { method: 'upi', upiId: 'shahfab@okaxis', phone: '+91 98111 22233' };
+    const res = await stock(sales.session, { payee: { ...pay, name: 'Shah Fabrications' }, saveSupplier: 'true' });
+    expect(res.status).toBe(201);
+    const saved = await Supplier.findOne({ name: 'Shah Fabrications' }).lean();
+    expect(res.body.request.supplier).toEqual({ id: String(saved._id) });
+    expect(saved.createdByName).toBe('Sana');
+
+    const sameName = await stock(sales.session, { payee: { ...pay, name: '  shah   FABRICATIONS ', phone: '' }, saveSupplier: 'true' });
+    expect(sameName.status).toBe(409);
+    expect(sameName.body.message).toMatch(/“Shah Fabrications” is already saved with this name .*pick it from the list/);
+    const samePhone = await stock(hr.session, { payee: { ...pay, name: 'Shah Fab Works', phone: '9811122233' }, saveSupplier: 'true' });
+    expect(samePhone.status).toBe(409);
+    expect(samePhone.body.message).toMatch(/“Shah Fabrications” is already saved with this phone number/);
+    expect(await Supplier.countDocuments()).toBe(1);
+    expect(await PaymentRequest.countDocuments()).toBe(1);
+    expect(stored.size).toBe(1);
+
+    // An inactive one says so (procurement reactivates it).
+    await procurement.session.post(`/suppliers/${saved._id}/active`, { active: false });
+    const off = await stock(sales.session, { payee: { ...pay, name: 'Shah Fabrications' }, saveSupplier: 'true' });
+    expect(off.status).toBe(409);
+    expect(off.body.message).toMatch(/inactive — ask procurement/);
+    // A different supplier with no phone is fine.
+    expect((await stock(sales.session, { payee: { method: 'upi', upiId: 'kumar@okaxis', name: 'Kumar Tyres' }, saveSupplier: 'true' })).status).toBe(201);
   });
 
   it('an unknown or inactive supplier is refused', async () => {

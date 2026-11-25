@@ -5,6 +5,12 @@
  * ── WHO DOES WHAT (enforced here; the UI only reflects it) ──────────────────────
  *   add / edit / deactivate    procurement (and admin)
  *   see                        procurement, accounts, admin
+ *   pick (payment form)        any active staff member: active suppliers by name
+ *                              start only, with what the picker shows — no contact,
+ *                              GST, address, notes or supplier credit (owner,
+ *                              2026-11-25: everyone raises "Pay a supplier")
+ *   save a new one from a      any active staff member, refused when the name or the
+ *   payment (createFromPayment)  phone is already saved, so it is picked instead
  *   full account number        procurement and admin (to check and edit it);
  *                              accounts with "Show number" (POST /:id/account-number),
  *                              logged in the audit log each time (owner, 2026-11-19).
@@ -40,6 +46,9 @@ const isAdmin = (u) => u?.role === 'admin';
 const onTeam = (u, team) => u?.role === 'staff' && u.staff?.active === true && u.staff.team === team;
 export const mayEditSuppliers = (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT);
 const maySeeSuppliers = (u) => mayEditSuppliers(u) || onTeam(u, STAFF_TEAMS.ACCOUNTS);
+const isActiveStaff = (u) => u?.role === 'staff' && u.staff?.active === true;
+/** The payment form's picker and "Save as a new supplier" — everyone who raises a supplier payment. */
+const mayPickSuppliers = (u) => maySeeSuppliers(u) || isActiveStaff(u);
 /** Who may see a supplier's full account number (accounts only by asking — revealAccount). */
 export const mayRevealAccount = maySeeSuppliers;
 
@@ -122,9 +131,39 @@ export function shape(s, viewer) {
 const duplicate = (err) => err?.code === 11000;
 const DUPLICATE = 'A supplier with this name is already saved — pick it from the list, or add something to tell them apart (e.g. the city).';
 
+/** The last ten digits of a phone number ('' when it has fewer than ten). */
+export const phoneKeyOf = (phone) => {
+  const digits = String(phone || '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : '';
+};
+
+/**
+ * "Save as a new supplier" on a payment, for whoever raises it. A supplier saved
+ * twice splits their payments across two names and breaks the one-transfer batch,
+ * so this refuses when one is already saved with the same name (any case or
+ * spacing — nameKey) or the same phone (last ten digits), naming it so it is
+ * picked from the list instead. Procurement fixes or merges details in Suppliers.
+ */
+export async function createFromPayment(actor, input, req) {
+  if (!mayPickSuppliers(actor)) throw fail('Not authorized.', 403);
+  const clean = cleanSupplier(input);
+  const phoneKey = phoneKeyOf(clean.phone);
+  const same = await supplierRepository.findByNameKey(clean.nameKey)
+    || (phoneKey ? await supplierRepository.findByPhoneKey(phoneKey) : null);
+  if (same) {
+    const how = same.nameKey === clean.nameKey ? 'this name' : 'this phone number';
+    const off = same.active === false ? ' (marked inactive — ask procurement to reactivate it)' : '';
+    throw fail(`“${same.name}” is already saved with ${how}${off} — pick it from the list instead of saving a new supplier.`, 409);
+  }
+  return insert(actor, clean, req);
+}
+
 export async function create(actor, input, req) {
   if (!mayEditSuppliers(actor)) throw fail('Only procurement (or an admin) adds suppliers.', 403);
-  const clean = cleanSupplier(input);
+  return insert(actor, cleanSupplier(input), req);
+}
+
+async function insert(actor, clean, req) {
   try {
     const doc = await supplierRepository.create({ ...clean, active: true, createdByName: actor.name || '', updatedByName: actor.name || '' });
     auditLogger.logAction(req, 'CREATE', 'Supplier', doc._id, { name: doc.name });
@@ -238,7 +277,7 @@ export function supplierQuery(f = {}, now = Date.now()) {
  * cursor from the last page. The first page says how many match.
  */
 export async function list(actor, params = {}) {
-  if (!maySeeSuppliers(actor)) throw fail('Not authorized.', 403);
+  if (!maySeeSuppliers(actor)) return pickerList(actor, params);
   const f = plainQuery(params);
   const sortName = SUPPLIER_SORTS[f.sort] ? f.sort : 'name';
   const { items, nextCursor, ...page } = await keysetPage({
@@ -249,6 +288,29 @@ export async function list(actor, params = {}) {
   const { balancesForSuppliers } = await import('./supplierLedgerService.js');
   const owed = await balancesForSuppliers(items.map((s) => s._id));
   return { ...page, suppliers: items.map((s) => ({ ...shape(s, actor), credit: owed.get(String(s._id)) || [] })), nextAfter: nextCursor };
+}
+
+/**
+ * The payment form's picker for staff outside procurement / accounts: active
+ * suppliers whose name starts with `prefix` (nothing without one), by name, one
+ * short page — no search over bank fields, no contact details, no credit.
+ */
+async function pickerList(actor, params) {
+  if (!mayPickSuppliers(actor)) throw fail('Not authorized.', 403);
+  const f = plainQuery(params);
+  if (!nameKeyOf(f.prefix)) return { suppliers: [], nextAfter: null };
+  const items = await supplierRepository.page(supplierQuery({ prefix: f.prefix }), { sort: { nameKey: 1 }, limit: PICKER_SIZE });
+  return { suppliers: items.map((s) => pickShape(s)), nextAfter: null };
+}
+const PICKER_SIZE = 10;
+
+/** What the picker shows to check the payee — the masked account, never the number. */
+function pickShape(s) {
+  const full = shape(s, null);
+  return {
+    ...full, contactPerson: '', email: '', gstin: '', address: '', notes: '', credit: [],
+    can: { edit: false, revealAccount: false },
+  };
 }
 
 /**

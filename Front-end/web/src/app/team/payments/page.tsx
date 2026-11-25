@@ -20,8 +20,9 @@ import { useListParams } from '@/lib/hooks/useListParams';
 /**
  * Payments in the team panel.
  *   every team  — raise expenses (each team's own options, from the server) and follow them
- *   procurement — also raises supplier payments: from each order's item, or here
- *                 ("Pay a supplier") for stock / one bill for several orders
+ *   every team  — also "Pay a supplier": goods bought from a supplier, not for one
+ *                 order, so they go under that supplier instead of in as an expense
+ *   procurement — also pays suppliers from each order's item, and the bills we owe
  *   accounts    — approves or declines everything, and sees every team;
  *                 the admin then pays
  * and, on its own tab, Subscriptions & dues: each team's tools and bills,
@@ -40,7 +41,7 @@ function TeamPayments() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const team = user?.staff?.team;
-  // Which form is open: an expense, or (procurement) a supplier payment not for one order.
+  // Which form is open: an expense, or a supplier payment not for one order.
   const [adding, setAddingMode] = useState<false | 'expense' | 'supplier'>(false);
   const setAdding = (open: boolean) => { setAddingMode(open ? 'expense' : false); setDraft(undefined); };
   // What an expense form carried over when switched to a supplier payment.
@@ -53,8 +54,10 @@ function TeamPayments() {
   */
   const raisesExpenses = !!team;
   const isAccounts = team === 'accounts';
-  // Procurement pays suppliers (the server allows procurement and the admin only).
-  const paysSuppliers = team === 'procurement';
+  // "Pay a supplier" (not for one order): everyone who raises expenses (owner,
+  // 2026-11-25) — the server allows the same. Bills we owe stay procurement's.
+  const paysSuppliers = raisesExpenses;
+  const paysBills = team === 'procurement';
   const { values } = useListParams({ tab: 'requests' });
   const router = useRouter();
   const pathname = usePathname();
@@ -125,7 +128,7 @@ function TeamPayments() {
         />
       )}
 
-      {tab === 'owe' && <SupplierBillsTab canAdd={paysSuppliers} />}
+      {tab === 'owe' && <SupplierBillsTab canAdd={paysBills} />}
       {tab === 'credit' && <SupplierCreditTab />}
       {tab === 'reimb' && <ReimbursementReport canSetRate={false} />}
 
