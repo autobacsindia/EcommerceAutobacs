@@ -23,7 +23,7 @@ import FestivalOffer from '../models/FestivalOffer.js';
 import DeliveryFeeConfig from '../models/DeliveryFeeConfig.js';
 import RemotePin from '../models/RemotePin.js';
 import PinLocation from '../models/PinLocation.js';
-import { setBlackFridayGateForTests, resetCategoryIndexForTests } from '../services/deliveryFeeService.js';
+import { setBlackFridayGateForTests, resetCategoryIndexForTests, offerChoice, OFFER_AUTO } from '../services/deliveryFeeService.js';
 import Category from '../models/Category.js';
 import pricingService, { toPublicQuote } from '../services/pricingService.js';
 import orderService from '../services/orderService.js';
@@ -365,6 +365,59 @@ describe('order creation (authoritative)', () => {
     await expect(orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], ADDRESS, { applyDeliveryFeeOffer: true }))
       .rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/Black Friday offer has ended/) });
     expect(await Order.countDocuments({ user: user._id })).toBe(before);
+  });
+
+  // "₹0 delivery means ₹0" (Nothing Extra, 2026-11-23): cards and the hero promise ₹0
+  // delivery to everyone while the offer is live, so a client that sends no choice
+  // (mobile app, old tab, API) must not be charged the fees.
+  it('offer live, client sends NO choice → the server applies it: ₹0 fees charged', async () => {
+    const p = await seedProduct(5000);
+    await feesOn();
+    await bfOfferOn();
+    const user = await seedUser();
+    const order = await orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], ADDRESS, {});
+    const stored = await Order.findById(order._id).lean();
+    expect(stored.shippingCost).toBe(0);
+    expect(stored.totalAmount).toBe(5000);
+    expect(stored.deliveryFees).toMatchObject({ charged: 0, offer: { applied: true } });
+    expect(stored.deliveryFees.offer.saving).toBeGreaterThan(0);
+  });
+
+  it('offer live but the customer explicitly removed it (false) → fees charged, as they saw', async () => {
+    const p = await seedProduct(5000);
+    await feesOn();
+    await bfOfferOn();
+    const user = await seedUser();
+    const order = await orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], ADDRESS, { applyDeliveryFeeOffer: false });
+    expect(order.shippingCost).toBeGreaterThan(0);
+  });
+
+  it('offer ended and the client sent no choice → fees charged, no 409 (nothing was promised)', async () => {
+    const p = await seedProduct(5000);
+    await feesOn();
+    await bfOfferOn({ endsAt: new Date(Date.now() - 1000) });
+    const user = await seedUser();
+    const order = await orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], ADDRESS, {});
+    expect(order.shippingCost).toBeGreaterThan(0);
+    const stored = await Order.findById(order._id).lean();
+    expect(stored.deliveryFees.offer).toMatchObject({ applied: false });
+  });
+
+  it('quote with the "auto" choice matches what the order then charges (preview = charge)', async () => {
+    const p = await seedProduct(5000);
+    await feesOn();
+    await bfOfferOn();
+    const user = await seedUser();
+    const preview = await quote(p, { deliveryPin: ADDRESS.postalCode, applyDeliveryFeeOffer: OFFER_AUTO });
+    const order = await orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], ADDRESS, {});
+    expect(preview.deliveryFees.offer.applied).toBe(true);
+    expect(order.totalAmount).toBe(preview.totalAmount);
+  });
+
+  it('offerChoice: only real booleans are a choice; anything else is "auto"', () => {
+    expect(offerChoice(true)).toBe(true);
+    expect(offerChoice(false)).toBe(false);
+    for (const v of [undefined, null, 'true', 'false', 0, 1]) expect(offerChoice(v)).toBe(OFFER_AUTO);
   });
 
   it('the remote-area fee follows the order\'s own shipping PIN', async () => {

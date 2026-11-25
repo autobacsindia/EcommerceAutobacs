@@ -1,5 +1,6 @@
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import pricingService, { toPublicQuote } from '../services/pricingService.js';
+import { offerChoice } from '../services/deliveryFeeService.js';
 import { extractAffiliateRef } from '../utils/affiliateAttribution.js';
 
 // @desc    Live price breakdown for a cart, with optional coupon + karma redemption.
@@ -17,7 +18,8 @@ export const getCheckoutQuote = asyncHandler(async (req, res) => {
     couponCode,
     redeemKarmaPoints,
     deliveryPin,
-    applyDeliveryFeeOffer: applyDeliveryFeeOffer === true,
+    // Absent → a live ₹0-delivery offer applies by itself; false = the customer removed it.
+    applyDeliveryFeeOffer: offerChoice(applyDeliveryFeeOffer),
     userId: req.user?.id || req.user?._id?.toString() || null,
     /*
       The `ab_ref` cookie, read server-side. Used ONLY to compute the advisory

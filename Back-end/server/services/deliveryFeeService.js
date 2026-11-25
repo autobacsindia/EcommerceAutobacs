@@ -156,6 +156,22 @@ export async function getCategoryIndex(now = Date.now()) {
 export function resetCategoryIndexForTests() { categoryIndexCache = { at: 0, index: null }; }
 
 /**
+ * "₹0 delivery means ₹0" (Nothing Extra, 2026-11-23). The cards, hero and strip
+ * promise ₹0 delivery to everyone while the offer is live, so the server applies it
+ * unless the customer explicitly removed it — a client that sends nothing (the
+ * mobile app, an old tab, any API caller) must not be charged fees we advertised
+ * as waived.
+ */
+export const OFFER_AUTO = 'auto';
+
+/** The request's `applyDeliveryFeeOffer` → true | false | OFFER_AUTO (absent / not a boolean). */
+export function offerChoice(raw) {
+  if (raw === true) return true;
+  if (raw === false) return false;
+  return OFFER_AUTO;
+}
+
+/**
  * The fee block for one quote, or null while fees are switched off (today's
  * "paid on delivery" behaviour — nothing is charged, nothing shown).
  *
@@ -168,7 +184,7 @@ export function resetCategoryIndexForTests() { categoryIndexCache = { at: 0, ind
  *                                   (each carries `quantity` and `shipping`)
  * @param {number} args.goodsPaise   goods amount the customer pays (after discounts)
  * @param {string} [args.pin]        delivery PIN
- * @param {boolean} [args.applyOffer] the customer tapped "Apply Black Friday offer"
+ * @param {boolean|'auto'} [args.applyOffer] true = customer applied it, false = removed it, 'auto' = apply if live
  * @param {Date}   [args.now]
  * @param {object} [args.session]
  */
@@ -177,7 +193,10 @@ export async function quoteDeliveryFees({ orderItems, goodsPaise, pin = null, ap
   if (!card.chargeAtCheckout) return null;
 
   const cleanPin = normalizePin(pin);
-  const requested = Boolean(applyOffer);
+  // `requested` = the customer explicitly asked (an ended offer is then a 409 at order
+  // time); OFFER_AUTO = the client said nothing, so a live offer applies by itself.
+  const requested = applyOffer === true;
+  const wants = requested || applyOffer === OFFER_AUTO;
   const offerLive = await isFeeOfferLiveForPricing(now, session);
   const offerBlock = (savingPaise, hasPin) => {
     let error = null;
@@ -188,7 +207,7 @@ export async function quoteDeliveryFees({ orderItems, goodsPaise, pin = null, ap
       available: offerLive,
       requested,
       // Never applied without a PIN: no fees are priced yet, so there is nothing to waive.
-      applied: requested && offerLive && hasPin,
+      applied: wants && offerLive && hasPin,
       savingPaise,
       saving: fromPaise(savingPaise),
       error,
@@ -225,7 +244,7 @@ export async function quoteDeliveryFees({ orderItems, goodsPaise, pin = null, ap
     classBoxes: boxes,
   });
 
-  const applied = requested && offerLive;
+  const applied = wants && offerLive;
   return {
     needsPin: false,
     pin: cleanPin,
