@@ -182,6 +182,12 @@ export const adminKeys = {
     [...adminKeys.resource(resource), normalizeParams(params)] as const,
   /** Header counters (pending orders / revenue) — polled, shared by every admin screen. */
   stats: () => [...adminKeys.all, 'stats'] as const,
+  /** Company revenue page (panel + Zoho) and its held-back invoice list. */
+  companyRevenueAll: () => [...adminKeys.all, 'company-revenue'] as const,
+  companyRevenue: (period: string) => [...adminKeys.companyRevenueAll(), period] as const,
+  companySales: (period: string, source: string) => [...adminKeys.companyRevenueAll(), 'sales', period, source] as const,
+  zohoInvoicesAll: () => [...adminKeys.all, 'zoho-invoices'] as const,
+  zohoInvoices: (state: string) => [...adminKeys.zohoInvoicesAll(), state] as const,
   /** GTM head + leads an order can be credited to ("Sold by"). */
   sellers: () => [...adminKeys.all, 'sellers'] as const,
 };

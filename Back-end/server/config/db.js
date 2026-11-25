@@ -718,6 +718,16 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ PastSale indexes confirmed');
 
+    // Zoho Books invoices (models/ZohoInvoice.js) — same names as the schema.
+    // The unique id is what makes re-importing the same export a no-op.
+    await db.collection('zohoinvoices').createIndex({ zohoInvoiceId: 1 }, { unique: true, name: 'zoho_invoice_id', background: true });
+    await db.collection('zohoinvoices').createIndex({ invoiceDate: 1, 'match.state': 1 }, { name: 'zoho_invoice_date_state', background: true });
+    await db.collection('zohoinvoices').createIndex({ 'match.state': 1, invoiceDate: -1, _id: -1 }, { name: 'zoho_invoice_state_recent', background: true });
+    await db.collection('zohoinvoices').createIndex({ invoiceNumber: 1 }, { name: 'zoho_invoice_number', background: true });
+    await db.collection('zohocreditnotes').createIndex({ zohoCreditNoteId: 1 }, { unique: true, name: 'zoho_credit_note_id', background: true });
+    await db.collection('zohocreditnotes').createIndex({ invoiceNumber: 1 }, { name: 'zoho_credit_note_invoice', background: true });
+    console.log('✓ ZohoInvoice / ZohoCreditNote indexes confirmed');
+
     // Personal order pins (models/OrderPin.js) — same names as the schema.
     await db.collection('orderpins').createIndex({ user: 1, order: 1 }, { unique: true, name: 'order_pin_user_order', background: true });
     await db.collection('orderpins').createIndex({ user: 1, pinnedAt: -1 }, { name: 'order_pin_user_recent', background: true });

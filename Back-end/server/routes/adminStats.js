@@ -22,6 +22,7 @@ import { currentFiscalYear } from '../utils/storeTime.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 import cacheService from '../services/cacheService.js';
 import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
+import { companyHeaderFigures } from '../services/companyRevenueService.js';
 
 const router = express.Router();
 
@@ -47,6 +48,7 @@ async function computeStats() {
     extraRevenue,
     totalProducts,
     totalUsers,
+    company,
   ] = await Promise.all([
     // Real orders only — abandoned checkouts (awaiting_payment) are CRM leads, not orders.
     // Lifetime, unlike revenue: this one is a catalogue-size figure, not a performance one.
@@ -69,6 +71,10 @@ async function computeStats() {
     Product.countDocuments({ isActive: true }).maxTimeMS(QUERY_TIMEOUTS.listing),
 
     User.countDocuments().maxTimeMS(QUERY_TIMEOUTS.listing),
+
+    // Whole-company revenue (panel + Zoho-only invoices, each sale once) and
+    // sales (with the delivered split) — see services/companyRevenueService.js.
+    companyHeaderFigures(),
   ]);
 
   return {
@@ -78,6 +84,8 @@ async function computeStats() {
     totalRevenue: Math.round(((revenueRows[0]?.total || 0) + extraRevenue) * 100) / 100,
     totalProducts,
     totalUsers,
+    companyRevenue: company.companyRevenue,
+    sales: company.sales,
     // The window revenue covers, so the UI can label the tile honestly ("Revenue
     // (FY 26-27)") instead of implying a lifetime total, and deep-link the same range.
     revenuePeriod: { label: fy.label, startDate: fy.startDate },

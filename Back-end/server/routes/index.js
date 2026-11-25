@@ -88,6 +88,7 @@ import redisMonitorRoutes from './redisMonitor.js';
 import securityRoutes from './security.js';
 import csrfTokenRoutes from './csrfToken.js';
 import adminStatsRoutes from './adminStats.js';
+import adminRevenueRoutes from './adminRevenue.js';
 import adminTeamActivityRoutes from './adminTeamActivity.js';
 import adminOverviewRoutes from './adminOverview.js';
 import adminSlipTemplateRoutes from './adminSlipTemplates.js';
@@ -261,6 +262,7 @@ apiRouter.use('/partner', partnerRoutes);
 apiRouter.use('/push', pushRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/admin', adminStatsRoutes);
+apiRouter.use('/admin', adminRevenueRoutes);
 
 // ============================================================================
 // CONTACT DOMAIN
