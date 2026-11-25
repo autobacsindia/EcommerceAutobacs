@@ -307,8 +307,9 @@ describe('the Approve dates list: far dates and new dates asked for (one $or)', 
       expect(planText(ex)).not.toContain('staff_task_all');
       // ~60 of 3,000 open tasks wait (30 far dates, 30 new dates). Reading a few keys per
       // waiting task is fine; reading anywhere near the open tasks is the regression.
+      // The admin reads each waiting task once per $or branch (~2 each), hence 200 not 100.
       expect(s.keys).toBeLessThan(200);
-      expect(s.docs).toBeLessThan(100);
+      expect(s.docs).toBeLessThan(200);
     });
   }
 
