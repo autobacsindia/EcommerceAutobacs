@@ -49,6 +49,8 @@ export const PRIVATE_PREFIXES = [
   'tasks',
   // Invoices on the tools / subscriptions list (services/subscriptionDueService.js).
   'subscription-dues',
+  // Bills on "We owe suppliers" (services/supplierBillService.js).
+  'supplier-bills',
   // Training lessons: PDFs, videos, slides (services/staffLessonService.js), one folder per lesson.
   'autobacs/lessons',
   // Photos on procurement's supplier price enquiries (services/supplierEnquiryService.js).

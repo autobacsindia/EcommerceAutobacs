@@ -17,6 +17,7 @@ import { postStuckDigests } from './chatStuckDigest.js';
 import { sweepCalls } from './chatCallService.js';
 import { sendOverdueReport } from './overdueReportService.js';
 import { runDailyReminders, reminderCron } from './projectReminderService.js';
+import { remindOverdue as remindOverdueSupplierBills } from './supplierBillService.js';
 import { postEtaReminders } from './parcelEtaReminders.js';
 import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
 import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthService.js';
@@ -78,6 +79,7 @@ class CronService {
     this.scheduleChatStuckDigest();
     this.scheduleOverdueReport();
     this.scheduleProjectReminders();
+    this.scheduleSupplierBillReminders();
     this.scheduleEtaReminders();
     this.schedulePushCleanup();
     this.scheduleIncentives();
@@ -432,6 +434,30 @@ class CronService {
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Project reminders scheduled: "${schedule}"`);
     }
+  }
+
+  /**
+   * "We owe suppliers": one team-chat message a day (10:00 IST, or
+   * SUPPLIER_BILL_REMINDER_CRON) listing supplier bills past due and not fully
+   * paid. Posted once per day by construction (the chat key is the day), so the
+   * lock only saves a second replica the work.
+   */
+  scheduleSupplierBillReminders() {
+    const schedule = process.env.SUPPLIER_BILL_REMINDER_CRON || '0 10 * * 1-6';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid SUPPLIER_BILL_REMINDER_CRON "${schedule}" — supplier bill reminders NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:supplierBillReminders', 10 * 60, () =>
+        remindOverdueSupplierBills()
+          .then((r) => console.log(`[CronService] Supplier bills ${r.day}: ${r.overdue} overdue${r.posted ? ', reminder posted' : ''}`))
+          .catch((err) => console.error('[CronService] Supplier bill reminders failed:', err.message))
+      ),
+      { scheduled: true, timezone: 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({ name: 'supplierBillReminders', task, schedule, description: 'Team chat: supplier bills past due and not fully paid' });
+    if (process.env.NODE_ENV !== 'test') console.log(`[CronService] Supplier bill reminders scheduled: "${schedule}"`);
   }
 
   /**

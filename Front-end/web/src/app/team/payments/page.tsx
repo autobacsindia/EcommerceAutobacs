@@ -11,6 +11,7 @@ import { paymentKeys } from '@/components/payments/api';
 import SubscriptionList from '@/components/payments/subscriptions/SubscriptionList';
 import ReimbursementReport from '@/components/payments/ReimbursementReport';
 import SupplierCreditTab from '@/components/payments/SupplierCredit';
+import SupplierBillsTab from '@/components/payments/SupplierBills';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import { useListParams } from '@/lib/hooks/useListParams';
 
@@ -59,15 +60,16 @@ function TeamPayments() {
   const pathname = usePathname();
   // Supplier credit (what suppliers owe us): accounts approves, procurement proposes.
   const seesCredit = isAccounts || team === 'procurement';
-  const tab = values.tab === 'subs' ? 'subs' : values.tab === 'credit' && seesCredit ? 'credit' : values.tab === 'reimb' && isAccounts ? 'reimb' : 'requests';
+  const tab = values.tab === 'subs' ? 'subs' : values.tab === 'credit' && seesCredit ? 'credit' : values.tab === 'owe' && seesCredit ? 'owe' : values.tab === 'reimb' && isAccounts ? 'reimb' : 'requests';
   // Each tab has its own search and filters; switching starts the other one clean.
-  const show = (t: 'requests' | 'subs' | 'credit' | 'reimb') => router.replace(`${pathname}${t === 'requests' ? '' : `?tab=${t}`}`, { scroll: false });
+  const show = (t: 'requests' | 'subs' | 'credit' | 'owe' | 'reimb') => router.replace(`${pathname}${t === 'requests' ? '' : `?tab=${t}`}`, { scroll: false });
   const tabs = [
     ['requests', 'Requests'], ['subs', 'Subscriptions & dues'],
-    ...(seesCredit ? [['credit', 'Supplier credit']] : []),
+    // What we owe suppliers (bills we pay later) beside what suppliers owe us.
+    ...(seesCredit ? [['owe', 'We owe suppliers'], ['credit', 'Supplier credit']] : []),
     // Accounts sees each month's reimbursements per person and per task (the admin also sets the fuel rate).
     ...(isAccounts ? [['reimb', 'Reimbursements']] : []),
-  ] as ['requests' | 'subs' | 'credit' | 'reimb', string][];
+  ] as ['requests' | 'subs' | 'credit' | 'owe' | 'reimb', string][];
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -79,6 +81,8 @@ function TeamPayments() {
               ? 'Tools, subscriptions and bills, and when each is next due.'
               : tab === 'reimb'
               ? 'Each month’s reimbursements: what each person claimed and was paid, and what each task cost.'
+              : tab === 'owe'
+              ? 'Supplier bills we pay later: what we owe each supplier, when it is due, and what is overdue.'
               : tab === 'credit'
               ? 'What suppliers owe us — refunds for cancelled orders, less what they paid back or we used on their next payment.'
               : isAccounts
@@ -121,6 +125,7 @@ function TeamPayments() {
         />
       )}
 
+      {tab === 'owe' && <SupplierBillsTab canAdd={paysSuppliers} />}
       {tab === 'credit' && <SupplierCreditTab />}
       {tab === 'reimb' && <ReimbursementReport canSetRate={false} />}
 

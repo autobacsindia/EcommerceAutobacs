@@ -132,7 +132,8 @@
     "rewrite-asset-urls": "node --import=dotenv/config scripts/rewrite-asset-urls.js",
     "audit-vehicle-candidates": "node scripts/audit-vehicle-candidates.js",
     "backtest-incentives": "node scripts/backtest-incentives.js",
-    "create-hr-indexes": "node scripts/create-hr-indexes.js"
+    "create-hr-indexes": "node scripts/create-hr-indexes.js",
+    "create-supplier-bill-indexes": "node scripts/create-supplier-bill-indexes.js"
   },
   "engines": {
     "node": ">=20.9.0"
