@@ -252,7 +252,7 @@ describe('Affiliate API', () => {
       ['a missing name', { ...APPLICATION, name: '' }],
       ['a malformed email', { ...APPLICATION, email: 'not-an-email' }],
       ['a javascript: website', { ...APPLICATION, website: 'javascript:alert(1)' }],
-      ['an over-long pitch', { ...APPLICATION, pitch: 'x'.repeat(2001) }],
+      ['an over-long pitch', { ...APPLICATION, pitch: 'x'.repeat(5001) }], // cap 5,000 (was 2,000)
       ['a missing PAN', { ...APPLICATION, panNumber: '' }],
       ['a malformed PAN', { ...APPLICATION, panNumber: 'ABC123' }],
       ['a missing account number', { ...APPLICATION, accountNumber: '' }],

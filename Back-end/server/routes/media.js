@@ -15,6 +15,7 @@ import { articleTags, pressTags } from "../utils/nextTags.js";
 import cacheService from "../services/cacheService.js";
 import { CACHE_VERSION } from "../services/cache/config.js";
 import { invalidateCache } from "../middleware/cacheMiddleware.js";
+import { CUSTOMER_TEXT_MAX } from "../config/publicTextLimits.js";
 
 const router = express.Router();
 
@@ -329,6 +330,11 @@ router.post("/articles/:slug/comments", asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: "Name, email, and comment are required" });
   }
 
+  if (typeof comment !== "string" || comment.trim().length > CUSTOMER_TEXT_MAX) {
+    // Refused, never shortened: a cut comment says something the person did not finish saying.
+    return res.status(400).json({ success: false, message: `Your comment is too long — please keep it under ${CUSTOMER_TEXT_MAX.toLocaleString("en-IN")} characters.` });
+  }
+
   const article = await articleRepository.findOne({ slug: req.params.slug, status: "published" });
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
 
@@ -336,7 +342,7 @@ router.post("/articles/:slug/comments", asyncHandler(async (req, res) => {
     article: article._id,
     name:    name.trim().slice(0, 100),
     email:   email.trim().toLowerCase().slice(0, 200),
-    comment: comment.trim().slice(0, 2000),
+    comment: comment.trim(),
     parent:  parent || null,
   });
 

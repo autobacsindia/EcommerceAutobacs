@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ThumbsUp, BadgeCheck } from 'lucide-react';
 import StarRating from './StarRating';
 import EnhancedImage from '@/components/layout/EnhancedImage';
@@ -21,6 +21,9 @@ interface ReviewItemProps {
   onHelpful?: (reviewId: string) => void;
 }
 
+/** Past this many characters a review shows six lines and a "Read more". */
+export const REVIEW_FOLD_AT = 600;
+
 const ReviewItem: React.FC<ReviewItemProps> = ({
   id,
   user,
@@ -33,6 +36,9 @@ const ReviewItem: React.FC<ReviewItemProps> = ({
   createdAt,
   onHelpful,
 }) => {
+  // Reviews may run to 5,000 characters; a long one opens on request so the list stays easy to scan.
+  const long = comment.length > REVIEW_FOLD_AT;
+  const [open, setOpen] = useState(false);
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString(undefined, {
       year: 'numeric',
@@ -63,7 +69,12 @@ const ReviewItem: React.FC<ReviewItemProps> = ({
       <div className="mt-3 space-y-2">
         <StarRating rating={rating} size="small" />
         {title && <h4 className="font-semibold text-ink">{title}</h4>}
-        <p className="whitespace-pre-line text-sm leading-relaxed text-ink/80">{comment}</p>
+        <p className={`whitespace-pre-line text-sm leading-relaxed text-ink/80 ${long && !open ? 'line-clamp-6' : ''}`}>{comment}</p>
+        {long && (
+          <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="text-sm font-medium text-gold hover:underline">
+            {open ? 'Show less' : 'Read more'}
+          </button>
+        )}
 
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-1">

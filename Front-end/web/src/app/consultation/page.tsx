@@ -10,6 +10,8 @@ import apiClient from '@/lib/api';
 import { capture } from '@/lib/analytics';
 import { pushToGtm } from '@/lib/gtm';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
+import { CUSTOMER_TEXT_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 /**
  * Book a consultation — one short form, right in the hero.
@@ -243,7 +245,8 @@ export default function ConsultationPage() {
                 <label htmlFor="c-notes" className={labelClass}>What are you looking for?</label>
                 <textarea id="c-notes" rows={4} value={form.notes} onChange={(e) => set('notes', e.target.value)}
                   placeholder="e.g. Lift kit and LED lights for off-road trips, budget around ₹1.5 lakh"
-                  maxLength={2000} className={`${inputClass} resize-none`} />
+                  className={`${inputClass} resize-none`} />
+                <TextLimitNote value={form.notes.trim()} max={CUSTOMER_TEXT_MAX} />
               </div>
             </div>
 
@@ -255,7 +258,7 @@ export default function ConsultationPage() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || isOverLimit(form.notes.trim(), CUSTOMER_TEXT_MAX)}
               className="group mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-gold py-4 font-display text-[15px] font-bold text-white shadow-[0_10px_30px_-8px_rgba(201,168,112,0.6)] transition hover:brightness-110 disabled:opacity-60"
             >
               {submitting

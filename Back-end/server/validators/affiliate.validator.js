@@ -16,6 +16,7 @@ import {
   COMMISSION_STATUSES,
   PAYOUT_METHODS,
 } from '../config/affiliate.js';
+import { CUSTOMER_TEXT_MAX } from '../config/publicTextLimits.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
 
@@ -54,7 +55,7 @@ export const validateAffiliateApplication = [
     .isURL({ protocols: ['http', 'https'], require_protocol: true })
     .withMessage('Include the full link, starting with https://'),
   body('pitch').optional({ values: 'falsy' })
-    .trim().isLength({ max: 2000 }).withMessage('Please keep this under 2000 characters'),
+    .trim().isLength({ max: CUSTOMER_TEXT_MAX }).withMessage(`Please keep this under ${CUSTOMER_TEXT_MAX.toLocaleString('en-IN')} characters`),
 
   // ── Tax identity ───────────────────────────────────────────────────────────
   // Mandatory: TDS applies once annual commission passes the threshold, and the rate

@@ -4,6 +4,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { enqueueNotification } from "../queue/queues.js";
 import leadSyncService from "../services/leadSyncService.js";
+import { CUSTOMER_TEXT_MAX } from "../config/publicTextLimits.js";
 
 const router = express.Router();
 
@@ -21,6 +22,20 @@ router.post("/", asyncHandler(async (req, res) => {
     return res.status(400).json({
       success: false,
       message: "Name, WhatsApp number, email, city, and vehicle make/model are required.",
+    });
+  }
+
+  // Public form: every typed field has a firm cap (the browser box matches it).
+  // Over the cap is refused with a clear message, never shortened.
+  const tooLong = [["name", name, 100], ["city", city, 80], ["car", makeModel, 100], ["notes", notes, CUSTOMER_TEXT_MAX]]
+    .find(([, v, max]) => v != null && (typeof v !== "string" || v.length > max));
+  if (tooLong) {
+    const [label, value, max] = tooLong;
+    return res.status(400).json({
+      success: false,
+      message: typeof value !== "string"
+        ? `The ${label} must be text.`
+        : `The ${label} is too long — please keep it under ${max.toLocaleString("en-IN")} characters.`,
     });
   }
 

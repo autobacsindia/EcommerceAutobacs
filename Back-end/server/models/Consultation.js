@@ -17,7 +17,7 @@ const ConsultationSchema = new mongoose.Schema(
     mode:          { type: String, default: "In-Person" },// In-Person / Online
     preferredDate: { type: Date },
     preferredTime: { type: String, default: "" },
-    notes:         { type: String, default: "" },
+    notes:         { type: String, default: "", maxlength: 5000 }, // = CUSTOMER_TEXT_MAX
     status: {
       type: String,
       enum: ["new", "contacted", "completed", "cancelled"],

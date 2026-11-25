@@ -3,9 +3,9 @@
  *
  * Two different jobs, so two different limits:
  *
- *  • CUSTOMER_COMMENT_MAX — what a shopper may submit. 1000 characters is
- *    plenty for a genuine opinion and keeps the review cards on the product
- *    page a readable length.
+ *  • CUSTOMER_COMMENT_MAX — what a shopper may submit: the shared public cap
+ *    (config/publicTextLimits.js, 5,000). Raised from 1,000 so a detailed
+ *    review is never refused; the product page shortens long cards on display.
  *
  *  • ADMIN_COMMENT_MAX — what staff may enter. Higher, because the real use is
  *    bringing a customer's existing review across from Google, and those run
@@ -16,5 +16,7 @@
  * customer limit is enforced on the public routes. Both live here so raising
  * one can never silently raise the other.
  */
-export const CUSTOMER_COMMENT_MAX = 1000;
-export const ADMIN_COMMENT_MAX = 2000;
+import { CUSTOMER_TEXT_MAX } from './publicTextLimits.js';
+
+export const CUSTOMER_COMMENT_MAX = CUSTOMER_TEXT_MAX;
+export const ADMIN_COMMENT_MAX = 10000;

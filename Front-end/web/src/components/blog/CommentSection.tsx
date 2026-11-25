@@ -2,6 +2,8 @@
 import { articleSlugForApi } from '@/lib/articleSlug';
 import { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
+import { CUSTOMER_TEXT_MAX, isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
 
 interface Comment {
   _id: string;
@@ -244,6 +246,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
               placeholder="Share your thoughts…"
               className={`${inputClass} resize-y`}
             />
+            <TextLimitNote value={form.comment.trim()} max={CUSTOMER_TEXT_MAX} />
           </div>
 
           {submitError && <p className="text-red-600 text-sm">{submitError}</p>}
@@ -255,7 +258,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || isOverLimit(form.comment.trim(), CUSTOMER_TEXT_MAX)}
             className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="h-4 w-4" />
