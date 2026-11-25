@@ -907,6 +907,15 @@ export async function ensureCriticalIndexes() {
       { 'dueApproval.status': 1, teams: 1, rank: 1, _id: 1 },
       { partialFilterExpression: { 'dueApproval.status': 'pending' }, name: 'staff_task_due_approval', background: true }
     );
+    // New dates asked for, waiting for whoever gave the task / a head / the admin (partial: only those).
+    await db.collection('stafftasks').createIndex(
+      { 'lateRequest.status': 1, createdBy: 1, rank: 1, _id: 1 },
+      { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_giver', background: true }
+    );
+    await db.collection('stafftasks').createIndex(
+      { 'lateRequest.status': 1, teams: 1, rank: 1, _id: 1 },
+      { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_team', background: true }
+    );
     await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
     await db.collection('stafftaskcomments').createIndex({ assignedTo: 1, resolvedAt: 1, _id: -1 }, { name: 'staff_task_comment_assigned', background: true });
     await db.collection('stafftaskcomments').createIndex(

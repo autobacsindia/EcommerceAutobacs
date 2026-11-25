@@ -10,6 +10,7 @@ import { useAssignees } from './TaskForm';
 import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
 import { DueApprovalBadge, DueRuleHint } from './dueRules';
+import { LateMark } from './lateDates';
 import { dueRequired, useAskDue } from './DuePrompt';
 import TaskMenu from './TaskMenu';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
@@ -55,6 +56,7 @@ export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task
   return (
     <>
       {t.bucket === 'open' && <DueApprovalBadge task={t} />}
+      <LateMark task={t} />
       {t.parent && (
         <Chip title={`A sub-task of ${t.parent.code} ${t.parent.title}`}>
           <CornerLeftUp aria-hidden className="h-3 w-3 shrink-0" /><span className="max-w-[11rem] truncate">in {t.parent.code} {t.parent.title}</span>

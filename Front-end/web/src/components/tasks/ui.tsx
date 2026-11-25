@@ -148,9 +148,12 @@ export function DueTimeSelect({ value, onChange, className = '', disabled = fals
 }
 
 /** The due date as a pill: red when late, amber today, otherwise quiet — or nothing. */
-export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'dueTime' | 'overdue' | 'dueToday' | 'bucket'>; empty?: ReactNode }) {
+export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'dueTime' | 'overdue' | 'dueToday' | 'bucket'> & Partial<Pick<Task, 'danger'>>; empty?: ReactNode }) {
   if (!t.dueOn) return <>{empty}</>;
-  const tone = t.overdue
+  // Missed twice or more: dark red (lateDates.tsx).
+  const tone = t.overdue && t.danger
+    ? 'bg-red-900 text-white'
+    : t.overdue
     ? 'bg-red-100 text-red-800'
     : t.dueToday ? 'bg-amber-100 text-amber-800' : 'border border-gray-200 text-gray-600';
   return (

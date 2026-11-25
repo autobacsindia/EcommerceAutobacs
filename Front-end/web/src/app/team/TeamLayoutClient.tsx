@@ -17,6 +17,7 @@ import { MARKETING_AREAS } from './marketingAreas';
 import CallProvider from '@/components/calls/CallProvider';
 import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
 import NewWorkPopup from '@/components/notifications/NewWorkPopup';
+import { LateTasksPrompt } from '@/components/tasks/lateDates';
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -208,6 +209,7 @@ export default function TeamLayoutClient({
         {children}
         <ProjectReminderPopup tasksHref="/team/tasks" />
         <NewWorkPopup />
+        <LateTasksPrompt base="/team/tasks" />
       </PanelShell>
     </CallProvider>
   );

@@ -122,9 +122,23 @@ export type Task = {
     time?: boolean;
     /** Approve or refuse the due date it waits on (a head of its team or the admin — never whoever asked). */
     approveDue?: boolean;
+    /** Ask for a new date (the people doing it: late, or early). */
+    askNewDate?: boolean;
+    /** Approve or refuse a new date someone asked for (whoever gave it, a head, the admin — never whoever asked). */
+    decideNewDate?: boolean;
   };
   /** Set only when the due date needed a manager's approval (more than 9 days away). */
   dueApproval?: DueApproval | null;
+  /** Times its deadline has passed before it was done, this one included when it is late now. */
+  misses?: number;
+  /** Missed twice or more: dark red, with a danger sign. */
+  danger?: boolean;
+  /** Late, the viewer is doing it, and no new date is asked for yet: the panel asks them why. */
+  needsReason?: boolean;
+  /** The last "I need a new date", while it waits and once decided. */
+  lateRequest?: LateRequest | null;
+  /** The task page only: every time its deadline moved, newest first. */
+  dateMoves?: DateMove[];
   /** In its maker's private Personal list: nobody else can see it. */
   personal?: boolean;
   /** How long it should take, in whole minutes; null when not planned. */
@@ -227,6 +241,49 @@ export type DueApproval = {
   note: string;
 };
 
+/** Why a task is late — the same list as the server's (models/StaffTask.js LATE_REASONS). */
+export const LATE_REASONS = [
+  { value: 'waiting_on_someone', label: 'Waiting on someone else' },
+  { value: 'more_work', label: 'Too much other work' },
+  { value: 'needed_info', label: 'Needed more information' },
+  { value: 'outside_delay', label: 'Customer, supplier or courier delay' },
+  { value: 'forgot', label: 'Forgot or missed it' },
+  { value: 'other', label: 'Other' },
+] as const;
+export type LateReason = (typeof LATE_REASONS)[number]['value'];
+
+export type LateRequest = {
+  status: 'pending' | 'approved' | 'rejected';
+  /** Asked after the deadline had passed. */
+  late: boolean;
+  reason: LateReason;
+  reasonLabel: string;
+  note: string;
+  /** The deadline when it was asked: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'. */
+  fromDue: string;
+  dueOn: string;
+  dueTime: string | null;
+  requestedBy: Person;
+  requestedAt: string | null;
+  decidedBy: Person | null;
+  decidedAt: string | null;
+  /** The date given — the approver's own when they picked another. */
+  approvedDue: string;
+  decisionNote: string;
+};
+
+export type DateMove = {
+  at: string;
+  fromDue: string;
+  toDue: string;
+  /** The old deadline had already passed: a miss. */
+  late: boolean;
+  how: 'request' | 'edit';
+  reason: string;
+  note: string;
+  by: string;
+};
+
 /** The admin's due-date rules (GET /staff/tasks/rules). */
 export type TaskRules = {
   approvalAfterDays: number;
@@ -236,7 +293,7 @@ export type TaskRules = {
 };
 
 /** One line in the Inbox (GET /staff/tasks/inbox). */
-export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided' | 'project_added';
+export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided' | 'late_requested' | 'late_decided' | 'project_added';
 export type InboxItem = {
   id: string;
   kind: InboxKind;

@@ -27,6 +27,7 @@ import { TaskMoney } from './TaskMoney';
 import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import { DueApprovalPanel } from './dueRules';
+import { NewDatePanel } from './lateDates';
 import { dueRequired, useAskDue } from './DuePrompt';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
@@ -678,6 +679,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
 
       <WaitingWarning task={task} onOpen={onOpen} />
       <DueApprovalPanel task={task} />
+      <NewDatePanel task={task} />
       {task.personal && (
         <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500"><Lock aria-hidden className="h-3.5 w-3.5" /> Private — only you can see this task.</p>
       )}

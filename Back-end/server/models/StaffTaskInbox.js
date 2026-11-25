@@ -18,7 +18,7 @@ import mongoose from 'mongoose';
  * days after they were written: this is a feed of what happened, not the record
  * of it (that is the task's own history), so nothing of value is lost.
  */
-export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask', 'comment_assigned', 'comment_resolved', 'approval_requested', 'approval_decided', 'project_added', 'followup_due', 'followup_escalated']);
+export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask', 'comment_assigned', 'comment_resolved', 'approval_requested', 'approval_decided', 'late_requested', 'late_decided', 'project_added', 'followup_due', 'followup_escalated']);
 /** Kinds about a whole project, not one task: they carry `project`, not `task`/`number`. */
 export const PROJECT_INBOX_KINDS = Object.freeze(['project_added']);
 /**

@@ -273,3 +273,49 @@ describe('due dates waiting for approval (services/taskDueRules.js)', () => {
     expect(stats(ex).keys).toBeLessThan(30);
   });
 });
+
+describe('the Approve dates list: far dates and new dates asked for (one $or)', () => {
+  // The real query (services/staffTaskService.js approvalsOr): each branch must
+  // ride its own partial index, so the list reads the few waiting tasks and never
+  // walks every open one — the $or is where a planner would fall back to a scan.
+  let approvalsOr;
+  const actor = (role, staff) => ({ _id: people[0], role, ...(staff && { staff: { active: true, ...staff } }) });
+  beforeAll(async () => { ({ approvalsOr } = await import('../services/staffTaskService.js')); });
+  beforeEach(async () => {
+    const open = await StaffTask.find({ bucket: 'open' }).select('_id').limit(4000).lean();
+    const far = open.filter((_, i) => i % 100 === 0);
+    const asked = open.filter((_, i) => i % 100 === 50);
+    await StaffTask.updateMany({ _id: { $in: far.map((t) => t._id) } }, {
+      $set: { dueApproval: { status: 'pending', dueOn: TODAY, requestedBy: people[1], requestedAt: new Date() } },
+    });
+    await StaffTask.updateMany({ _id: { $in: asked.map((t) => t._id) } }, {
+      $set: { lateRequest: { status: 'pending', late: true, reason: 'other', note: 'late', fromDue: TODAY, dueOn: ymd(2), requestedBy: people[2], requestedAt: new Date() } },
+    });
+  });
+  const explainFor = (u) => listExplain({ bucket: 'open', $or: approvalsOr(u) });
+  const planText = (ex) => JSON.stringify(ex.queryPlanner.winningPlan);
+
+  for (const [who, u] of [
+    ['a member (tasks they gave)', () => actor('staff', { team: 'sales' })],
+    ['a head (their team + tasks they gave)', () => actor('staff', { team: 'procurement', isHead: true })],
+    ['the admin (everyone)', () => actor('admin')],
+  ]) {
+    it(`${who}: only the waiting tasks' keys, never a scan`, async () => {
+      const ex = await explainFor(u());
+      const s = stats(ex);
+      expect(planText(ex)).not.toContain('COLLSCAN');
+      expect(planText(ex)).not.toContain('staff_task_all');
+      // ~60 of 3,000 open tasks wait (30 far dates, 30 new dates). Reading a few keys per
+      // waiting task is fine; reading anywhere near the open tasks is the regression.
+      expect(s.keys).toBeLessThan(200);
+      expect(s.docs).toBeLessThan(100);
+    });
+  }
+
+  it('the new-date branches use the new partial indexes', async () => {
+    const plan = planText(await explainFor(actor('staff', { team: 'procurement', isHead: true })));
+    expect(plan).toContain('staff_task_new_date_giver');
+    expect(plan).toContain('staff_task_new_date_team');
+    expect(plan).toContain('staff_task_due_approval');
+  });
+});

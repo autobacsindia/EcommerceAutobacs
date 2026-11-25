@@ -136,6 +136,71 @@ const DueApprovalSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/**
+ * Why a task is (or will be) late — the person doing it picks one and says what
+ * happened (services/staffTaskService.js askNewDate). Plain words, shown as is.
+ */
+export const LATE_REASONS = Object.freeze({
+  waiting_on_someone: 'Waiting on someone else',
+  more_work: 'Too much other work',
+  needed_info: 'Needed more information',
+  outside_delay: 'Customer, supplier or courier delay',
+  forgot: 'Forgot or missed it',
+  other: 'Other',
+});
+
+/**
+ * "I need a new date": asked by someone doing the task, decided by whoever gave
+ * it (or a head / the admin). Asked after the deadline (`late`), the task stays
+ * red until it is decided. One at a time; a new ask replaces a decided one.
+ */
+const LateRequestSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], required: true },
+    /** Asked after the deadline had passed (a miss), not before it. */
+    late: { type: Boolean, required: true },
+    reason: { type: String, enum: Object.keys(LATE_REASONS), required: true },
+    note: { type: String, required: true, maxlength: 500 },
+    /** The deadline when it was asked ('YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'). */
+    fromDue: { type: String, required: true },
+    /** The date asked for. */
+    dueOn: { type: String, required: true },
+    dueTime: { type: String, default: null },
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    requestedByName: { type: String, default: '' },
+    requestedAt: { type: Date, required: true },
+    decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    decidedByName: { type: String, default: '' },
+    decidedAt: { type: Date, default: null },
+    /** The date the approver gave — theirs when they picked a different one. */
+    approvedDue: { type: String, default: '' },
+    decisionNote: { type: String, default: '', maxlength: 500 },
+  },
+  { _id: false },
+);
+
+/**
+ * Every time an open task's deadline moved — kept so the on-time record can't be
+ * wiped by moving the date. Append-only, newest last, capped (DATE_MOVES_CAP).
+ */
+const DateMoveSchema = new mongoose.Schema(
+  {
+    at: { type: Date, required: true },
+    fromDue: { type: String, required: true },
+    toDue: { type: String, required: true },
+    /** The old deadline had already passed: this move was a miss. */
+    late: { type: Boolean, required: true },
+    /** 'request' (asked and approved) or 'edit' (whoever gave it changed it). */
+    how: { type: String, enum: ['request', 'edit'], required: true },
+    reason: { type: String, default: '' },
+    note: { type: String, default: '', maxlength: 500 },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    byName: { type: String, default: '' },
+  },
+  { _id: false },
+);
+export const DATE_MOVES_CAP = 30;
+
 export const TASK_STATUSES = Object.freeze(['todo', 'in_progress', 'waiting', 'done']);
 /** What anyone may pick. 'waiting' stays in TASK_STATUSES only so old rows still validate. */
 export const TASK_PICKABLE_STATUSES = Object.freeze(['todo', 'in_progress', 'done']);
@@ -280,6 +345,11 @@ const StaffTaskSchema = new mongoose.Schema(
     },
     /** Set only for a date that needed a manager's approval (DueApprovalSchema above). */
     dueApproval: { type: DueApprovalSchema, default: undefined },
+    /** "I need a new date" (LateRequestSchema above). */
+    lateRequest: { type: LateRequestSchema, default: undefined },
+    /** Times this task's deadline passed before it was done (each late date move adds one). */
+    misses: { type: Number, default: undefined, min: 0 },
+    dateMoves: { type: [DateMoveSchema], default: undefined },
     /** How long it should take, in whole minutes (null: not planned). */
     estimateMinutes: { type: Number, default: null, min: 1, max: 60000 },
     bucket: { type: String, enum: TASK_BUCKETS, default: 'open', required: true },
@@ -364,6 +434,15 @@ StaffTaskSchema.index(
 StaffTaskSchema.index(
   { 'dueApproval.status': 1, teams: 1, rank: 1, _id: 1 },
   { partialFilterExpression: { 'dueApproval.status': 'pending' }, name: 'staff_task_due_approval' },
+);
+// New dates waiting for whoever gave the task, or for a team's head / the admin (partial: only those).
+StaffTaskSchema.index(
+  { 'lateRequest.status': 1, createdBy: 1, rank: 1, _id: 1 },
+  { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_giver' },
+);
+StaffTaskSchema.index(
+  { 'lateRequest.status': 1, teams: 1, rank: 1, _id: 1 },
+  { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_team' },
 );
 // `$type`, not `$ne`/`$exists: true` on null — MongoDB rejects `$ne` in a partialFilterExpression.
 StaffTaskSchema.index(

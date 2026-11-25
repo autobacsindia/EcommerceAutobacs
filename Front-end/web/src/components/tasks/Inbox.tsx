@@ -104,6 +104,8 @@ const KIND: Record<InboxKind, { icon: typeof AtSign; tone: string; say: (code: s
   comment_resolved: { icon: CircleCheck, tone: 'bg-emerald-100 text-emerald-700', say: (c) => `resolved a comment on ${c}`, quote: true },
   approval_requested: { icon: CalendarClock, tone: 'bg-amber-100 text-amber-700', say: (c) => `asks you to approve the due date of ${c}`, quote: false },
   approval_decided: { icon: CalendarCheck, tone: 'bg-blue-100 text-blue-700', say: (c) => `decided the due date of ${c}`, quote: false },
+  late_requested: { icon: CalendarClock, tone: 'bg-red-100 text-red-700', say: (c) => `asks for a new date on ${c}`, quote: false },
+  late_decided: { icon: CalendarCheck, tone: 'bg-blue-100 text-blue-700', say: (c) => `decided the new date of ${c}`, quote: false },
   project_added: { icon: FolderKanban, tone: 'bg-blue-100 text-blue-700', say: (c) => `added you to ${c}`, quote: false },
 };
 
