@@ -55,6 +55,7 @@ import {
 } from '../utils/listQuery.js';
 import * as suppliers from './supplierService.js';
 import * as deals from './supplierDealService.js';
+import * as bills from './supplierBillService.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
 import { partForRequest, requestPartReplaced } from '../utils/supplierParts.js';
 import * as credit from './supplierLedgerService.js';
@@ -132,7 +133,7 @@ const mayHold = (u) => mayDecide(u) || mayPay(u);
   end with exactly one of them landing (update + approve compare-and-set on it).
 */
 const EDITABLE = Object.freeze(['submitted', 'on_hold', 'declined']);
-const resubmittable = (r) => r.status !== 'declined' || r.kind === 'expense' || (!r.deal && !r.credit?.amount);
+const resubmittable = (r) => r.status !== 'declined' || r.kind === 'expense' || (!r.deal && !r.supplierBill && !r.credit?.amount);
 // A subscription / due expense ("Mark paid") is not edited here: its money follows the
 // item's own rules, and a declined one reopens the cycle to be marked paid again —
 // resending it as well could pay that cycle twice.
@@ -573,6 +574,8 @@ export function shape(r, viewer) {
     subscription: subscriptionOf(r),
     // One part of a made-to-order deal (advance / part / balance), or ''.
     dealId: r.deal ? idOf(r.deal) : null,
+    // The supplier bill this pays (all or part of), from "We owe suppliers".
+    supplierBillId: r.supplierBill ? idOf(r.supplierBill) : null,
     part: r.part || '',
     partLabel: deals.PART_LABELS[r.part] || '',
     itemNames: r.itemNames || [],
@@ -805,12 +808,21 @@ const cleanClientId = (raw) => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(
 async function createStockSupplierRequest(actor, input, uploaded, req) {
   if (filled(input.dealId) || filled(input.partId)) throw fail('A supplier deal or part is paid from its order.', 400);
   if (Number(input.creditToUse) > 0) throw fail('Supplier credit is used on a payment raised from an order.', 400);
+  // "Pay" on a bill we owe (supplierBillService): the bill's supplier, in rupees, within what is left on it.
+  const bill = filled(input.supplierBillId) ? await bills.billForPayment(input.supplierBillId) : null;
+  if (bill) {
+    if (filled(input.currency) && String(input.currency).trim().toUpperCase() !== BASE_CURRENCY) throw fail('Supplier bills are paid in rupees.', 400);
+    // Whatever the browser sent, the payment goes to the bill's supplier.
+    input = { ...input, supplierId: idOf(bill.supplier), saveSupplier: undefined, payee: undefined, currency: BASE_CURRENCY, foreignAmount: undefined };
+    if (!filled(input.description)) input.description = `Bill ${bill.billNumber} (${bill.number})`;
+    if (!filled(input.reference)) input.reference = bill.billNumber;
+  }
   if (!input.supplierId && !truthy(input.saveSupplier)) {
     throw fail('Pick the supplier from the list (or save them as a new supplier), so the payment shows under that supplier.', 400);
   }
   const description = cleanDetails(input.description);
   if (description.replace(/[^a-z]/gi, '').length < 3) throw fail('Say what was bought (for example "20 floor mats, bill 4471").', 400);
-  const money = supplierMoney(input, null);
+  const money = supplierMoney(input, bill ? { currency: BASE_CURRENCY } : null);
   const extra = await otherLinks(actor, input);
   const clientId = cleanClientId(input.clientId);
   if (clientId) {
@@ -822,7 +834,16 @@ async function createStockSupplierRequest(actor, input, uploaded, req) {
   if (!input.supplierId) requireUpiOrQr(cleanPayee(input.payee), kinds);
   const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
   requireUpiOrQr(payee, kinds);
-  const stored = await storeFiles(files, kinds, actor);
+  // The bill's share is taken before anything is saved, and given back if the save fails.
+  const billPaise = bill ? toPaise(money.amount) : 0;
+  if (bill) await bills.reserve(bill._id, billPaise);
+  let stored;
+  try {
+    stored = await storeFiles(files, kinds, actor);
+  } catch (err) {
+    if (bill) await bills.release(bill._id, billPaise, 'files failed');
+    throw err;
+  }
   let doc;
   try {
     doc = await paymentRequestRepository.create({
@@ -841,9 +862,13 @@ async function createStockSupplierRequest(actor, input, uploaded, req) {
       bankNotice,
       files: stored,
       ...(clientId ? { clientId } : {}),
-      history: [entry(actor, 'submitted', 'not for one order (stock / several orders)')],
+      ...(bill ? { supplierBill: bill._id } : {}),
+      history: [entry(actor, 'submitted', bill
+        ? `for ${bill.supplierName}'s bill ${bill.billNumber} (${bill.number}): ${bills.rupees(billPaise)} of ${bills.rupees(bill.amountPaise)}`
+        : 'not for one order (stock / several orders)')],
     });
   } catch (err) {
+    if (bill) await bills.release(bill._id, billPaise, 'request failed to save');
     await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     // The same submit twice at the same moment: the unique index kept one.
     if (err?.code === 11000 && clientId) {
@@ -852,7 +877,7 @@ async function createStockSupplierRequest(actor, input, uploaded, req) {
     }
     throw err;
   }
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', stock: true, amount: money.amount, currency: money.currency, foreignAmount: money.foreignAmount, supplierId: idOf(supplierId) });
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', stock: true, amount: money.amount, currency: money.currency, foreignAmount: money.foreignAmount, supplierId: idOf(supplierId), ...(bill ? { supplierBillId: idOf(bill._id) } : {}) });
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${plainLine(description)}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
@@ -1123,6 +1148,11 @@ async function followOnOrder(r, actor, outcome) {
   if (r.deal && outcome !== 'paid') await deals.release(r.deal, toPaise(deals.unitsOf(r)), `${r.number} ${outcome}`);
   // …and any supplier credit it used goes back to the supplier's balance (once).
   if (r.credit?.amount && outcome !== 'paid') await credit.restoreCredit(r, `${r.number} ${outcome}`);
+  // A supplier bill's payment: a declined / cancelled one gives its share back; paid or not, the bill's paid figure follows.
+  if (r.supplierBill) {
+    if (outcome !== 'paid') await bills.release(r.supplierBill, toPaise(r.amount), `${r.number} ${outcome}`);
+    await bills.resync(r.supplierBill);
+  }
   if (r.kind !== 'supplier' || !r.order) return;
   try {
     const wf = await import('./teamWorkflowService.js');
@@ -1441,7 +1471,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
         : 'A paid or cancelled payment cannot be edited.', 403);
     }
     if (fromSubscription(r0)) throw fail('A subscription payment is not edited here — ask accounts to decline it, then mark it paid again with the right details.', 409);
-    if (!resubmittable(r0)) throw fail('A declined deal part or a payment that used supplier credit cannot be sent again — raise a new payment instead.', 409);
+    if (!resubmittable(r0)) throw fail('A declined deal part, supplier bill payment or payment that used supplier credit cannot be sent again — raise a new payment instead.', 409);
     throw fail('Only whoever raised it, or the admin, can edit it.', 403);
   }
   // A double-submitted edit (same form key): the answer the first one got.
@@ -1467,7 +1497,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   const claim = isExpense && nextCategory === REIMBURSEMENT ? await claimMoney(input, r0) : null;
   const billMoney = claim ? claim.money : isExpense
     ? cleanMoney(r0.team, input, { amount: r0.amount, ...before })
-    : supplierMoney(input, r0.deal || creditPaise ? { currency: before.currency } : null, { amount: billAmount, ...billBefore });
+    : supplierMoney(input, r0.deal || r0.supplierBill || creditPaise ? { currency: before.currency } : null, { amount: billAmount, ...billBefore });
   const money = creditPaise ? { ...netOfCredit(billMoney, creditPaise), credit: r0.credit } : billMoney;
   // An unchanged foreign bill keeps its stored rupees/rate (cleanMoney), not a recomputed net.
   if (creditPaise && money.currency !== BASE_CURRENCY && billMoney.foreignAmount === billBefore.foreignAmount) {
@@ -1505,6 +1535,9 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   // A payment not for one order is found under its supplier only through the saved link.
   if (r0.kind === 'supplier' && !r0.order && !supplier) {
     throw fail('Pick the supplier from the list — a payment not for one order must be linked to a saved supplier.', 400);
+  }
+  if (r0.supplierBill && idOf(supplier) !== idOf(r0.supplier)) {
+    throw fail(`${r0.number} pays a supplier bill, so the supplier cannot change. Cancel it and raise the payment from the right bill instead.`, 409);
   }
   if (creditPaise && idOf(supplier) !== idOf(r0.supplier)) {
     throw fail(`${r0.number} uses ${deals.moneyOf(creditPaise, before.currency)} of ${r0.payee?.name || 'this supplier'}'s credit, so the supplier cannot change. Cancel it and raise a new payment instead.`, 409);
@@ -1567,7 +1600,20 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
     const now = await deals.dealForPayment(r0.deal, r0.order);
     part = deals.partFor({ ...now, reservedPaise: now.reservedPaise - wasUnits }, nowUnits);
   }
-  const undoLock = async () => { if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`); };
+  // A supplier bill's payment: the same, on what is left of the bill (rupees).
+  const billDelta = r0.supplierBill ? toPaise(money.amount) - toPaise(r0.amount) : 0;
+  if (billDelta > 0) {
+    try {
+      await bills.reserve(r0.supplierBill, billDelta);
+    } catch (err) {
+      if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`);
+      throw err;
+    }
+  }
+  const undoLock = async () => {
+    if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`);
+    if (billDelta > 0) await bills.release(r0.supplierBill, billDelta, `${r0.number} edit not saved`);
+  };
 
   let stored = [];
   try {
@@ -1620,6 +1666,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   }
   // A smaller amount gives its share back only once the edit has landed.
   if (delta < 0) await deals.release(r0.deal, -delta, `${r0.number} edited`);
+  if (billDelta < 0) await bills.release(r0.supplierBill, -billDelta, `${r0.number} edited`);
   // Only now, with no request pointing at them any more, delete the removed files.
   await Promise.all(removing.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
   if (resubmitSupplier) {

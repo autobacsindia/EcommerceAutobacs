@@ -95,6 +95,8 @@ export type PaymentRequest = {
   };
   /** One part of a supplier deal: its currency is the deal's and cannot change. */
   dealId?: string | null;
+  /** The supplier bill this pays (all or part of), from "We owe suppliers". */
+  supplierBillId?: string | null;
   /** Advance / Part payment / Balance / Full payment — '' for a one-off payment. */
   part?: '' | 'advance' | 'part' | 'balance' | 'full';
   partLabel?: string;

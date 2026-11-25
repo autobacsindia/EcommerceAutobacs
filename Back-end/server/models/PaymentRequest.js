@@ -251,6 +251,9 @@ const PaymentRequestSchema = new mongoose.Schema(
     // agreed total) or 'full' (the whole agreed total in one payment). Worked out by the server from the deal, never sent by the client.
     deal: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierDeal', default: null },
     part: { type: String, enum: ['advance', 'part', 'balance', 'full', ''], default: '' },
+    // A payment (all or part) of a bill we owe a supplier (models/SupplierBill.js,
+    // "We owe suppliers"). Set by the server from the bill; the bill's lock moves with it.
+    supplierBill: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierBill', default: null },
 
     files: { type: [FileSchema], default: [] },
 
@@ -361,6 +364,12 @@ PaymentRequestSchema.index(
 PaymentRequestSchema.index(
   { deal: 1, createdAt: 1 },
   { name: 'payment_request_deal', partialFilterExpression: { deal: { $type: 'objectId' } } }
+);
+
+// A supplier bill's payments (supplierBillService: paid / waiting / left).
+PaymentRequestSchema.index(
+  { supplierBill: 1, createdAt: 1 },
+  { name: 'payment_request_supplier_bill', partialFilterExpression: { supplierBill: { $type: 'objectId' } } }
 );
 
 // One expense per marked cycle: a retried "Mark paid" can never raise a second one.
