@@ -9,7 +9,7 @@ import campaignMemberRepository from '../repositories/campaignMemberRepository.j
 import karmaLedgerRepository from '../repositories/karmaLedgerRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import pricingService from './pricingService.js';
-import deliveryFeeService, { OFFER_ERROR } from './deliveryFeeService.js';
+import deliveryFeeService, { OFFER_ERROR, offerChoice } from './deliveryFeeService.js';
 import { toPaise } from '../utils/money.js';
 import { resolveAttribution } from './affiliateAttributionService.js';
 import AppError from '../utils/AppError.js';
@@ -134,7 +134,9 @@ class OrderService {
     // shipping address being saved on this order, so the remote-area fee always
     // matches where the parcel actually goes.
     const deliveryPin = shippingAddress?.postalCode ? String(shippingAddress.postalCode) : null;
-    const applyDeliveryFeeOffer = orderData.applyDeliveryFeeOffer === true;
+    // true = customer applied it, false = removed it, absent = a live offer applies
+    // by itself ("₹0 delivery means ₹0" for every client, not just the web checkout).
+    const applyDeliveryFeeOffer = offerChoice(orderData.applyDeliveryFeeOffer);
     const couponCode = orderData.couponCode ? String(orderData.couponCode).trim().toUpperCase() : null;
     const redeemKarmaPoints = Math.max(0, parseInt(orderData.redeemKarmaPoints, 10) || 0);
 
