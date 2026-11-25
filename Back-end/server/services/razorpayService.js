@@ -156,7 +156,7 @@ class RazorpayService {
    *   `notes.orderId` first, which never changes.
    * @returns {Promise<{id:string, shortUrl:string}>}
    */
-  async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1, part = null, extra = null } = {}) {
+  async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1, part = null, extra = null, ttlSeconds = 48 * 60 * 60 } = {}) {
     // An internal `.invalid` address (phone-only customer, staff account) has no
     // mailbox — never hand it to Razorpay to email. The link then goes by SMS.
     if (isInternalEmail(email)) email = undefined;
@@ -202,7 +202,7 @@ class RazorpayService {
           ...(part ? { partRef: String(part.ref) } : {}),
           ...(extra ? { extraChargeId: extra.id } : {}),
         },
-        expire_by: Math.floor(Date.now() / 1000) + 48 * 60 * 60, // 48h
+        expire_by: Math.floor(Date.now() / 1000) + ttlSeconds, // 48h unless the caller says (pay-after-dispatch: days)
       });
 
       return { id: link.id, shortUrl: link.short_url };
@@ -228,6 +228,22 @@ class RazorpayService {
    * @param {string} linkId
    * @returns {Promise<{status: string}>}
    */
+  /**
+   * Ask Razorpay to send a live payment link to the customer again ('sms' | 'email').
+   * Razorpay sends it; nothing is charged. Throws on failure (callers log and move on).
+   */
+  async notifyPaymentLink(linkId, medium) {
+    const Razorpay = await import('razorpay');
+    const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
+    try {
+      await instance.paymentLink.notifyBy(linkId, medium);
+      return { sent: true };
+    } catch (error) {
+      const desc = error?.error?.description || error?.description || error?.message || String(error);
+      throw new Error(`Failed to re-send payment link: ${desc}`);
+    }
+  }
+
   async cancelPaymentLink(linkId) {
     const Razorpay = await import('razorpay');
     const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
@@ -359,11 +375,14 @@ class RazorpayService {
 
       // True when this capture is an EXTRA charge on an already-paid order.
       let duplicateCapture = false;
+      // True when this paid a "Ship before payment" order (already with the teams / shipped).
+      let paidLater = false;
 
       await session.withTransaction(async () => {
         // Reset per-attempt: withTransaction re-runs this callback on a WriteConflict.
         createdHere = false;
         duplicateCapture = false;
+        paidLater = false;
 
         const order = await orderRepository.findById(orderId, [], session);
         if (!order) {
@@ -478,6 +497,7 @@ class RazorpayService {
         }
 
         paymentId = paymentRecord._id;
+        paidLater = !!order.payLater?.approvedAt;
         createdHere = true;
       });
 
@@ -496,7 +516,7 @@ class RazorpayService {
 
       // Post-commit side effects, only by the delivery that created the payment so
       // duplicate webhooks never double-send (see _afterOrderPaid).
-      if (createdHere) this._afterOrderPaid(orderId);
+      if (createdHere) this._afterOrderPaid(orderId, { paidLater });
 
       return {
         success: true,
@@ -781,7 +801,15 @@ class RazorpayService {
     }
   }
 
-  _afterOrderPaid(orderId) {
+  /**
+   * @param {string} orderId
+   * @param {{ paidLater?: boolean }} [opts] paidLater: a "Ship before payment" order
+   *   has just been paid. It is already with the teams (often delivered), so the
+   *   "new paid order — check stock" alerts and the "order confirmed" WhatsApp would
+   *   be wrong; accounts and the seller get a "payment received" alert instead.
+   *   The invoice, affiliate and Meta steps are the same as any paid order.
+   */
+  _afterOrderPaid(orderId, { paidLater = false } = {}) {
     // ── Order confirmation + invoice email (best-effort, post-commit) ─────────
     // Enqueued only after the transaction commits so a rolled-back payment never
     // emails an invoice, and only by the delivery that actually created the payment
@@ -794,12 +822,19 @@ class RazorpayService {
         .catch((err) =>
           console.error(`[Queue] Failed to enqueue send-order-invoice for ${orderId}:`, err.message)
         );
+      if (paidLater) {
+        queue
+          .add('send-staff-pay-later-paid-alert', { orderId })
+          .catch((err) =>
+            console.error(`[Queue] Failed to enqueue send-staff-pay-later-paid-alert for ${orderId}:`, err.message)
+          );
+      }
       // WhatsApp "order confirmed" beside the invoice email — same create-once gate.
-      enqueueOrderWhatsApp(orderId, 'confirmed');
+      if (!paidLater) enqueueOrderWhatsApp(orderId, 'confirmed');
 
       // Tell the support inbox there is a paid order to fulfil. Same
       // create-once gate as the invoice, so a duplicate webhook can't re-alert.
-      queue
+      if (!paidLater) queue
         .add('send-admin-order-placed-alert', { orderId })
         .catch((err) =>
           console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
@@ -808,7 +843,7 @@ class RazorpayService {
       // Every paid order now enters the team workflow (website or sales panel):
       // tell the Accounts, Procurement and Operations heads, and the sales person
       // on their own orders. Same create-once gate, so a webhook retry can't re-alert.
-      queue
+      if (!paidLater) queue
         .add('send-staff-sales-paid-alert', { orderId })
         .catch((err) =>
           console.error(`[Queue] Failed to enqueue send-staff-sales-paid-alert for ${orderId}:`, err.message)

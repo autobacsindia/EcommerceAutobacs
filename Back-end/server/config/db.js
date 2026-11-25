@@ -647,6 +647,13 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Spin-to-Win indexes confirmed');
 
+    // "Ship before payment" orders (models/Order.js payLater): accounts list, limit sum,
+    // hourly chase. Partial on a $type (never $ne), so only those few orders are indexed.
+    await db.collection('orders').createIndex(
+      { paymentStatus: 1, 'payLater.approvedAt': -1, _id: -1 },
+      { name: 'order_pay_later', partialFilterExpression: { 'payLater.approvedAt': { $type: 'date' } }, background: true }
+    );
+
     // Extra charges on paid orders (models/OrderExtraCharge.js has the reasons).
     const extraCharges = db.collection('order_extra_charges');
     await extraCharges.createIndex({ order: 1, sequence: 1 }, { unique: true, name: 'extra_charge_order_sequence', background: true });

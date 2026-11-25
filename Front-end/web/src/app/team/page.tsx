@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark, Contact, Megaphone, Coins } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark, Contact, Megaphone, Coins, Hourglass } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MARKETING_AREAS } from './marketingAreas';
@@ -61,6 +61,7 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
         { href: '/team/refunds', title: 'Refunds', text: 'Cancelled orders to approve, and returned items to pay back.', icon: Wallet },
         { href: '/team/bank-transfers', title: 'Bank transfers', text: 'A customer paid by bank transfer: check the bank, then confirm (the order is paid) or reject.', icon: Landmark },
         { href: '/team/extra-charges', title: 'Extra charges', text: 'An extra amount GTM agreed with a customer on a paid order: approve or reject it.', icon: Coins },
+        { href: '/team/pay-later', title: 'Shipped – payment due', text: 'Orders the admin let ship before payment. See who still owes, and who is late.', icon: Hourglass },
         PAID, DELIVERED,
       ];
     case 'operations':

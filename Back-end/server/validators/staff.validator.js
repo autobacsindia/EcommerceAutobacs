@@ -190,6 +190,16 @@ export const validateExtraChargeList = [
   query('cursor').optional().isString().isLength({ max: 500 }),
 ];
 
+export const validatePayLaterList = [
+  query('view').optional().isIn(['due', 'paid']),
+  query('cursor').optional().isString().isLength({ max: 500 }),
+];
+
+export const validatePayLaterApprove = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  body('reason').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Write why (3–300 characters).'),
+];
+
 export const validateOrderIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid order id'),
 ];
