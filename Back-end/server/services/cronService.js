@@ -25,6 +25,8 @@ import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthSer
 import { runFollowUpSweep } from './followUp/sweep.js';
 import { loadFollowUpConfig } from '../config/followUp.js';
 import { isOfficeTime } from './followUp/officeClock.js';
+import { runTaskAlertSweep } from './taskAlertService.js';
+import { loadTaskAlertConfig } from '../config/taskAlerts.js';
 
 class CronService {
   constructor() {
@@ -86,6 +88,7 @@ class CronService {
     this.scheduleIncentives();
     this.scheduleCallSweep();
     this.scheduleFollowUpSweep();
+    this.scheduleTaskAlerts();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -495,6 +498,35 @@ class CronService {
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Follow-up sweep scheduled: "${schedule}" (mode ${loadFollowUpConfig().mode})`);
     }
+  }
+
+  /**
+   * Task deadline alerts (services/taskAlertService.js): every 5 minutes, office
+   * time only. TASK_ALERTS_MODE off | shadow | live (default live — a level more
+   * than a day old is claimed silently, so the first run does not fire a burst).
+   * Lock-guarded, and each level is claimed on the task, so a double run sends once.
+   */
+  scheduleTaskAlerts() {
+    const schedule = process.env.TASK_ALERTS_CRON || '*/5 * * * *';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid TASK_ALERTS_CRON "${schedule}" — task deadline alerts NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () => {
+      const cfg = loadTaskAlertConfig();
+      if (cfg.mode === 'off' || !isOfficeTime(new Date(), cfg.office)) return undefined;
+      return this.withDistributedLock('cron:lock:taskAlerts', 4 * 60 + 30, () =>
+        runTaskAlertSweep().catch(err =>
+          console.error('[CronService] Task deadline alerts failed:', err.message)
+        )
+      );
+    }, { scheduled: true, timezone: 'Asia/Kolkata' });
+    this.scheduledTasks.push({
+      name: 'taskAlerts',
+      task,
+      schedule,
+      description: 'Task deadlines: "X left", late, then heads and admins (office time)',
+    });
   }
 
   scheduleChatStuckDigest() {

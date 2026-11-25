@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AtSign, CalendarCheck, CalendarClock, CheckCheck, Circle, CircleCheck, FolderKanban, Lock, MessageSquare, Network, RefreshCw, UserPlus, X } from 'lucide-react';
+import { AlarmClock, AtSign, CalendarCheck, CalendarClock, CheckCheck, Circle, CircleCheck, FolderKanban, Lock, MessageSquare, Network, RefreshCw, TriangleAlert, UserPlus, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { notificationKeys, taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -106,6 +106,10 @@ const KIND: Record<InboxKind, { icon: typeof AtSign; tone: string; say: (code: s
   approval_decided: { icon: CalendarCheck, tone: 'bg-blue-100 text-blue-700', say: (c) => `decided the due date of ${c}`, quote: false },
   late_requested: { icon: CalendarClock, tone: 'bg-red-100 text-red-700', say: (c) => `asks for a new date on ${c}`, quote: false },
   late_decided: { icon: CalendarCheck, tone: 'bg-blue-100 text-blue-700', say: (c) => `decided the new date of ${c}`, quote: false },
+  // Deadline alerts come from the system (no person): "Deadline · T-7 is due soon".
+  due_soon: { icon: AlarmClock, tone: 'bg-amber-100 text-amber-700', say: (c) => `${c} is due soon`, quote: false },
+  due_late: { icon: AlarmClock, tone: 'bg-red-100 text-red-700', say: (c) => `${c} is late`, quote: false },
+  due_escalated: { icon: TriangleAlert, tone: 'bg-red-100 text-red-700', say: (c) => `${c} is late, with no new date asked`, quote: false },
   project_added: { icon: FolderKanban, tone: 'bg-blue-100 text-blue-700', say: (c) => `added you to ${c}`, quote: false },
 };
 
@@ -140,7 +144,7 @@ function InboxLine({ item, active, onOpen, onOpenProject, onState }: {
   // A project line reads like a task line: the project's name where the task's code and title go.
   const task = item.task ?? { id: item.project?.id ?? '', code: item.project?.name ?? 'a project', title: item.project?.name ?? '' };
   const isProject = !item.task;
-  const who = item.by?.name || 'Someone';
+  const who = item.by?.name || (item.kind.startsWith('due_') ? 'Deadline' : 'Someone');
   const detail = detailOf(item);
   const body = (
     <>

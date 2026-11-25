@@ -350,6 +350,23 @@ const StaffTaskSchema = new mongoose.Schema(
     /** Times this task's deadline passed before it was done (each late date move adds one). */
     misses: { type: Number, default: undefined, min: 0 },
     dateMoves: { type: [DateMoveSchema], default: undefined },
+    /**
+     * Deadline alerts already sent (services/taskAlertService.js writes it, nothing else).
+     * `due` is the deadline they belong to ("2026-11-25 17:00"); each level holds when it
+     * was claimed. A new date means a new `due`, so the ladder starts again. Claimed
+     * with a compare-and-set, so a second sweep or a replica never sends twice.
+     */
+    alerts: {
+      type: new mongoose.Schema({
+        due: { type: String, required: true },
+        today: { type: Date, default: null },
+        soon: { type: Date, default: null },
+        late: { type: Date, default: null },
+        head: { type: Date, default: null },
+        admin: { type: Date, default: null },
+      }, { _id: false }),
+      default: undefined,
+    },
     /** How long it should take, in whole minutes (null: not planned). */
     estimateMinutes: { type: Number, default: null, min: 1, max: 60000 },
     bucket: { type: String, enum: TASK_BUCKETS, default: 'open', required: true },
@@ -443,6 +460,11 @@ StaffTaskSchema.index(
 StaffTaskSchema.index(
   { 'lateRequest.status': 1, teams: 1, rank: 1, _id: 1 },
   { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_team' },
+);
+// The deadline sweep: open tasks due in a few-day window (partial: open and dated only).
+StaffTaskSchema.index(
+  { dueOn: 1, _id: 1 },
+  { partialFilterExpression: { bucket: 'open', dueOn: { $type: 'string' } }, name: 'staff_task_due_sweep' },
 );
 // `$type`, not `$ne`/`$exists: true` on null — MongoDB rejects `$ne` in a partialFilterExpression.
 StaffTaskSchema.index(
