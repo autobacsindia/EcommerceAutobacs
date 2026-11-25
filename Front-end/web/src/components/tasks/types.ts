@@ -126,6 +126,8 @@ export type Task = {
     askNewDate?: boolean;
     /** Approve or refuse a new date someone asked for (whoever gave it, a head, the admin — never whoever asked). */
     decideNewDate?: boolean;
+    /** Take on a task someone gave you, at its date. */
+    accept?: boolean;
   };
   /** Set only when the due date needed a manager's approval (more than 9 days away). */
   dueApproval?: DueApproval | null;
@@ -135,6 +137,10 @@ export type Task = {
   danger?: boolean;
   /** Late, the viewer is doing it, and no new date is asked for yet: the panel asks them why. */
   needsReason?: boolean;
+  /** Given to the viewer by someone else and not answered yet: Accept, or "can't make this date". */
+  needsAccept?: boolean;
+  /** Everyone on it who has not accepted yet. */
+  notAccepted?: Person[];
   /** The last "I need a new date", while it waits and once decided. */
   lateRequest?: LateRequest | null;
   /** The task page only: every time its deadline moved, newest first. */
@@ -270,6 +276,8 @@ export type LateRequest = {
   /** The date given — the approver's own when they picked another. */
   approvedDue: string;
   decisionNote: string;
+  /** "I can't make this date", asked before accepting the task. */
+  atStart?: boolean;
 };
 
 export type DateMove = {
@@ -278,7 +286,7 @@ export type DateMove = {
   toDue: string;
   /** The old deadline had already passed: a miss. */
   late: boolean;
-  how: 'request' | 'edit';
+  how: 'request' | 'start' | 'edit';
   reason: string;
   note: string;
   by: string;
