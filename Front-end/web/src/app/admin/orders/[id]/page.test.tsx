@@ -37,6 +37,7 @@ jest.mock('lucide-react', () => ({
 jest.mock('@/components/admin/OrderOverview', () => ({ __esModule: true, default: () => <div data-testid="order-overview" /> }));
 jest.mock('@/components/orderRating/PanelOrderRating', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/payments/extras/OrderExtraCharges', () => ({ __esModule: true, default: () => <div data-testid="order-extras" /> }));
+jest.mock('@/components/payments/payLater/OrderPayLater', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/orders/AdminOrderJourney', () => ({
   __esModule: true,
   default: ({ orderId }: { orderId: string }) => <div data-testid="order-journey">{orderId}</div>,

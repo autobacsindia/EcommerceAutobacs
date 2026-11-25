@@ -8,6 +8,7 @@ import { runScheduledMetaLeadSync } from './metaLeadSync.js';
 import { runScheduledSheetWrite } from './metaLeadSheetWriter.js';
 import { runDeadlineSweep } from './metaLeadDeadlineService.js';
 import { reconcileStuckPayments, reconcileSalesLinks } from './paymentReconciliationService.js';
+import { sweepPayLater } from './payLaterService.js';
 import { recomputeSalesScores } from './salesScoreService.js';
 import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
 import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '../queue/queues.js';
@@ -771,6 +772,9 @@ class CronService {
           // GTM payment links (parts + older single links) in the same locked run.
           .then(() => reconcileSalesLinks())
           .catch(err => console.error('[CronService] Sales link reconciliation failed:', err.message))
+          // "Ship before payment": missed captures, links after dispatch, overdue chasing.
+          .then(() => sweepPayLater())
+          .catch(err => console.error('[CronService] Pay-later sweep failed:', err.message))
       )
     );
     this.scheduledTasks.push({

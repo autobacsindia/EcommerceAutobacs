@@ -60,6 +60,9 @@ import {
   emailAdminCareersAlert,
   emailAdminOrderPlacedAlert,
   emailStaffSalesPaidAlert,
+  emailStaffPayLaterApprovedAlert,
+  emailStaffPayLaterPaidAlert,
+  emailPayLaterOverdueAlert,
   emailTeamShippedAlert,
   emailTeamOutOfStockAlert,
   emailTeamRefundRequestedAlert,
@@ -201,6 +204,11 @@ const handlers = {
     const { orderId } = job.data;
     await emailStaffSalesPaidAlert(orderId);
   },
+
+  // "Ship before payment" (services/payLaterService.js). Senders never throw.
+  'send-staff-pay-later-approved-alert': async (job) => { await emailStaffPayLaterApprovedAlert(job.data.orderId); },
+  'send-staff-pay-later-paid-alert': async (job) => { await emailStaffPayLaterPaidAlert(job.data.orderId); },
+  'send-pay-later-overdue-alert': async (job) => { await emailPayLaterOverdueAlert(job.data); },
 
   // Team workflow alerts. Each sender never throws (per-recipient errors are logged),
   // so a flaky inbox cannot make BullMQ re-send to everyone else.
