@@ -12,6 +12,19 @@ const supplierRepository = {
   create: async (doc) => (await Supplier.create(doc)).toObject(),
   findById: (id, { account = false } = {}) => withAccount(Supplier.findById(id), account).lean(),
 
+  /** The supplier saved under this name key (unique index supplier_name). */
+  findByNameKey: (nameKey) => Supplier.findOne({ nameKey }).select('name nameKey active').lean(),
+
+  /**
+   * A supplier whose phone ends in these ten digits, whatever the spacing or +91.
+   * No index: suppliers are a few hundred rows, and this runs only when someone
+   * saves a new supplier from a payment.
+   */
+  findByPhoneKey: (last10) => {
+    const pattern = `${String(last10).replace(/\D/g, '').split('').join('\\D*')}\\D*$`;
+    return Supplier.findOne({ phone: { $regex: pattern } }).select('name nameKey active').lean();
+  },
+
   /** Name, WhatsApp number and active flag of several suppliers (supplier enquiries). */
   findContacts: (ids) => Supplier.find({ _id: { $in: ids } }).select('name phone active').lean(),
 

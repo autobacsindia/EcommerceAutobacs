@@ -178,7 +178,7 @@ describe('Supplier directory and one-transfer payments', () => {
       expect((await procurement.session.post('/suppliers', { ...ARB, name: 'Longer Co', notes: `<p>${'x'.repeat(1001)}</p>` })).status).toBe(400);
     });
 
-    it('accounts views with the number masked and cannot edit; other teams see nothing', async () => {
+    it('accounts views with the number masked and cannot edit; other teams only pick', async () => {
       const s = await addSupplier();
       const seen = (await accounts.session.get('/suppliers')).body.suppliers[0];
       expect(seen.payment.accountNumber).toBe('');
@@ -186,7 +186,9 @@ describe('Supplier directory and one-transfer payments', () => {
       expect(seen.can.edit).toBe(false);
       expect((await accounts.session.post('/suppliers', { ...ARB, name: 'X Co' })).status).toBe(403);
       expect((await accounts.session.post(`/suppliers/${s.id}/active`, { active: false })).status).toBe(403);
-      expect((await ops.session.get('/suppliers')).status).toBe(403);
+      // Other teams: only the payment form's picker (a name start), never the directory.
+      expect((await ops.session.get('/suppliers')).body.suppliers).toEqual([]);
+      expect((await ops.session.get(`/suppliers/${s.id}`)).status).toBe(403);
       expect((await admin.session.post('/suppliers', { ...ARB, name: 'Admin Co' })).status).toBe(201);
     });
 

@@ -2,11 +2,13 @@
  * "Pay a supplier" — a supplier payment not for one order (stock, or one bill for
  * several orders), and the steer from a Product / Import purchase expense to it.
  * Owner, 2026-11-24: PR-0144/0145/0146 were raised as expenses with the supplier
- * typed as text, so they never showed under the supplier.
+ * typed as text, so they never showed under the supplier. Owner, 2026-11-25 ("ok
+ * do this for all"): every team that raises expenses gets "Pay a supplier".
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PaymentRequestForm from './PaymentRequestForm';
+import TeamPaymentsPage from '@/app/team/payments/page';
 import type { ExpenseOptions } from './api';
 import type { Supplier } from './suppliers';
 
@@ -17,6 +19,17 @@ jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: { get: (...a: unknown[]) => get(...a), post: jest.fn(), put: jest.fn() },
 }));
+// The payments page: who is signed in, and its other parts kept out of the way.
+let mockTeam = 'procurement';
+jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { role: 'staff', staff: { team: mockTeam, active: true } } }) }));
+jest.mock('next/navigation', () => ({ useRouter: () => ({ replace: jest.fn() }), usePathname: () => '/team/payments', useSearchParams: () => new URLSearchParams() }));
+let mockTab = 'requests';
+jest.mock('@/lib/hooks/useListParams', () => ({ useListParams: () => ({ values: { tab: mockTab } }) }));
+jest.mock('./PaymentRequestList', () => ({ __esModule: true, default: () => null }));
+jest.mock('./subscriptions/SubscriptionList', () => ({ __esModule: true, default: () => null }));
+jest.mock('./ReimbursementReport', () => ({ __esModule: true, default: () => null }));
+jest.mock('./SupplierCredit', () => ({ __esModule: true, default: () => null }));
+jest.mock('./SupplierBills', () => ({ __esModule: true, default: ({ canAdd }: { canAdd: boolean }) => <p>bills canAdd={String(canAdd)}</p> }));
 jest.mock('@/lib/http/tokenManager', () => ({
   tokenManager: { ensureCsrfToken: jest.fn().mockResolvedValue(undefined), getHeaders: () => ({ 'Content-Type': 'application/json', 'X-XSRF-TOKEN': 't' }) },
 }));
@@ -145,5 +158,61 @@ describe('an expense for goods steers to a supplier payment', () => {
     wrap(<PaymentRequestForm onDone={jest.fn()} />);
     await choose('product_purchase');
     expect(screen.queryByRole('button', { name: 'Switch to supplier payment' })).toBeNull();
+  });
+});
+
+describe('every team raises "Pay a supplier" (owner, 2026-11-25)', () => {
+  afterEach(() => { mockTeam = 'procurement'; });
+
+  it.each(['sales', 'hr', 'operations', 'marketing', 'developer', 'accounts', 'procurement'])('%s sees the button, and it opens the supplier form', async (team) => {
+    mockTeam = team;
+    wrap(<TeamPaymentsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Pay a supplier/ }));
+    expect(await screen.findByRole('heading', { name: 'Pay a supplier' })).toBeInTheDocument();
+  });
+
+  it('the goods steer is offered on the page for any team whose list has goods', async () => {
+    mockTeam = 'sales';
+    wrap(<TeamPaymentsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /New expense/ }));
+    fireEvent.change(await screen.findByRole('combobox', { name: 'What for' }), { target: { value: 'product_purchase' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to supplier payment' }));
+    expect(await screen.findByRole('heading', { name: 'Pay a supplier' })).toBeInTheDocument();
+  });
+
+  it('a sales user sends a picked supplier by id, like procurement', async () => {
+    mockTeam = 'sales';
+    wrap(<PaymentRequestForm stock onDone={jest.fn()} />);
+    await pickRk();
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '3000' } });
+    fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Seat covers for the showroom' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const { url, form } = sent();
+    expect(url).toBe('/api/v1/payment-requests/supplier');
+    expect(form.get('supplierId')).toBe('s9');
+  });
+
+  it('a supplier already saved (same name or phone): the server\'s answer says which one to pick', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ message: '“Shah Fabrications” is already saved with this phone number — pick it from the list instead of saving a new supplier.' }) });
+    wrap(<PaymentRequestForm stock onDone={jest.fn()} />);
+    fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'Shah Fab Works' } });
+    fireEvent.change(screen.getByLabelText('UPI ID'), { target: { value: 'shah@okaxis' } });
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Brackets' } });
+    fireEvent.click(screen.getByLabelText('Save as a new supplier for next time'));
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/“Shah Fabrications” is already saved .*pick it from the list/);
+  });
+
+  it('bills we owe are still added by procurement only', async () => {
+    mockTab = 'owe';
+    for (const [team, can] of [['procurement', 'true'], ['accounts', 'false']]) {
+      mockTeam = team;
+      const { unmount } = wrap(<TeamPaymentsPage />);
+      expect(await screen.findByText(`bills canAdd=${can}`)).toBeInTheDocument();
+      unmount();
+    }
+    mockTab = 'requests';
   });
 });
