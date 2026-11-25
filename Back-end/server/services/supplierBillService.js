@@ -205,11 +205,15 @@ async function tellChat(key, message) {
 const LIVE = (r) => r.status !== 'declined' && r.status !== 'cancelled';
 const WAITING_LABEL = { submitted: 'Waiting for accounts', approved: 'Approved — waiting to be paid', on_hold: 'On hold' };
 
+/** What one payment pays of a bill (rupees, in paise): what is transferred + supplier credit used on it. */
+const billPaiseOf = (r) => toPaise(Number(r.amount) || 0) + toPaise(Number(r.credit?.amount) || 0);
+
 /** What has been paid / is waiting on a bill, from its requests (paise). */
 export function moneyFrom(bill, requests = []) {
   const mine = requests.filter((r) => idOf(r.supplierBill) === idOf(bill._id));
-  const paidPaise = mine.filter((r) => r.status === 'paid').reduce((s, r) => s + toPaise(r.amount), 0);
-  const waitingPaise = mine.filter((r) => LIVE(r) && r.status !== 'paid').reduce((s, r) => s + toPaise(r.amount), 0);
+  // Supplier credit used on a payment settles the bill too: the money moved + the credit.
+  const paidPaise = mine.filter((r) => r.status === 'paid').reduce((s, r) => s + billPaiseOf(r), 0);
+  const waitingPaise = mine.filter((r) => LIVE(r) && r.status !== 'paid').reduce((s, r) => s + billPaiseOf(r), 0);
   return { mine, paidPaise, waitingPaise };
 }
 
@@ -264,7 +268,9 @@ export function shape(bill, viewer, requests = [], { now = new Date(), withHisto
     payments: mine.map((r) => ({
       id: idOf(r._id), number: r.number, status: r.status,
       statusLabel: r.status === 'paid' ? 'Paid' : r.status === 'declined' ? 'Declined' : r.status === 'cancelled' ? 'Cancelled' : WAITING_LABEL[r.status] || r.status,
-      amount: Number(r.amount) || 0, raisedBy: r.requestedByName || '', createdAt: r.createdAt,
+      amount: Number(r.amount) || 0,
+      // Supplier credit used on it: the bill share = amount + this.
+      credit: Number(r.credit?.amount) || 0, raisedBy: r.requestedByName || '', createdAt: r.createdAt,
       paidAt: r.payment?.transactionAt || r.payment?.paidAt || null,
     })),
     createdByName: bill.createdByName || '',

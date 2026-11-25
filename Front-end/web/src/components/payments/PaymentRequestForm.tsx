@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import {
-  errorMessage, getExpenseOptions, getRequest, money, paymentKeys, postForm, REIMBURSEMENT, type OrderMatch, type PaymentRequest,
+  creditPreview, errorMessage, getExpenseOptions, getRequest, money, paymentKeys, postForm, REIMBURSEMENT, type OrderMatch, type PaymentRequest,
 } from './api';
 import ReimbursementFields, { claimPayload, claimProblem, emptyClaim, TaskPicker, type ClaimDraft, type PickedTask } from './ReimbursementFields';
 import OrderPicker from './OrderPicker';
@@ -109,8 +109,8 @@ export default function PaymentRequestForm({
   const [qr, setQr] = useState<File[]>([]);
   const [picked, setPicked] = useState<Supplier | null>(null);
   const [saveSupplier, setSaveSupplier] = useState(false);
-  // Supplier credit to take off this bill (what the picked supplier owes us, same currency).
-  const [creditToUse, setCreditToUse] = useState('');
+  // "Use supplier credit": take what the picked supplier owes us (same currency) off this bill.
+  const [useCredit, setUseCredit] = useState(false);
   // Optional: the project ("PRJ-0007") and any other ID this cost belongs to. The server checks the project exists.
   const [projectCode, setProjectCode] = useState('');
   const [reference, setReference] = useState(initial?.reference ?? '');
@@ -148,9 +148,12 @@ export default function PaymentRequestForm({
   const chooseCurrency = !deal && !reimbursing && Boolean(options && options.currencies.length > 1);
   const unit = foreign ? currency : '₹';
   const codeKind: BankCodeKind = codeChoice ?? (foreign ? 'swift' : 'ifsc');
-  // What the picked supplier owes us in this bill's currency (the server re-checks under a lock).
-  const available = supplier && picked ? (picked.credit || []).find((b) => b.currency === currency && b.owed > 0) : undefined;
-  const creditNum = available && Number(creditToUse) > 0 ? Number(creditToUse) : 0;
+  // What the picked supplier owes us in this bill's currency — on any supplier payment
+  // (an order's item, "Pay a supplier", a bill we owe). Only procurement / accounts /
+  // admin get credit figures from the server, so only they see the tick.
+  const available = paysSupplier && picked ? (picked.credit || []).find((b) => b.currency === currency && b.owed > 0) : undefined;
+  // A preview only: the server works out the credit itself (min(balance, bill)) and re-checks it under a lock.
+  const preview = available && useCredit ? creditPreview(available.owed, Number(amount)) : null;
 
   /** A reimbursement is in rupees, and is paid to the person: fill their last UPI / bank once, if "Pay to" is still empty. */
   function prefillPayee() {
@@ -245,7 +248,7 @@ export default function PaymentRequestForm({
     if (!supplier) form.append('clientId', clientId.current);
     // A saved supplier is sent by id: the server copies its details itself.
     if (picked) form.append('supplierId', picked.id);
-    if (picked && creditNum > 0) form.append('creditToUse', String(creditNum));
+    if (picked && available && useCredit) form.append('useCredit', 'true');
     if (!picked) form.append('payee', JSON.stringify(method === 'upi'
       ? { name: payee.name.trim(), method, upiId: payee.upiId.trim(), phone: payee.phone.trim() }
       : method === 'card'
@@ -453,24 +456,24 @@ export default function PaymentRequestForm({
       {paysSupplier && picked && (
         <div>
           <span className={label}>Saved supplier</span>
-          <SupplierPicker picked={picked} onPick={(p) => { setPicked(p); setCreditToUse(''); }} />
+          <SupplierPicker picked={picked} onPick={(p) => { setPicked(p); setUseCredit(false); }} />
           {available && (
             <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" aria-label="Supplier credit">
-              <p>{picked.name} owes us <strong>{available.owedText}</strong>. Use some of it on this bill?</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-emerald-800" htmlFor="pr-credit">Credit to use ({unit})</label>
-                <input id="pr-credit" className={`${input} max-w-[10rem]`} inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={creditToUse}
-                  onChange={(e) => setCreditToUse(e.target.value)} placeholder="0" />
-                <button type="button" className="text-xs font-medium text-emerald-800 hover:underline"
-                  onClick={() => setCreditToUse(String(Math.max(0, Math.min(available.owed, Number(amount) > 0 ? Math.round(Number(amount) * 100 - 1) / 100 : available.owed))))}>
-                  Use as much as possible
-                </button>
-              </div>
-              {creditNum > 0 && Number(amount) > 0 && (
-                <p className="mt-2">
-                  Bill {money(Number(amount), currency)} − credit {money(creditNum, currency)} = <strong>transfer {money(Math.round((Number(amount) - creditNum) * 100) / 100, currency)}</strong>
-                </p>
+              <p>{picked.name} owes us <strong>{available.owedText}</strong> (supplier credit).</p>
+              <label className="mt-2 flex items-center gap-2 font-medium">
+                <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} />
+                Use supplier credit on this payment
+              </label>
+              {preview && (
+                <div className="mt-2 space-y-0.5" aria-label="Credit sum">
+                  <p>Bill {money(preview.bill, currency)} − credit {money(preview.used, currency)} = <strong>{preview.toPay > 0 ? `pay ${money(preview.toPay, currency)}` : 'nothing to pay'}</strong></p>
+                  <p className="text-xs text-emerald-800">
+                    Credit left for next time: {money(preview.left, currency)}.
+                    {preview.toPay === 0 && ' Credit pays the whole bill — no money is transferred. Accounts approves it and it closes as paid.'}
+                  </p>
+                </div>
               )}
+              {useCredit && !preview && <p className="mt-2 text-xs text-emerald-800">Enter the bill amount to see what is left to pay.</p>}
             </div>
           )}
         </div>

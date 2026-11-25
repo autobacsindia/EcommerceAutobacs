@@ -87,7 +87,7 @@ const supplierBillRepository = {
   // `$type` repeats the partial index's filter so the planner can use payment_request_supplier_bill
   // (an `$in` alone does not prove it, and the plan would scan every payment request).
   requestsFor: (billIds) => PaymentRequest.find({ supplierBill: { $in: billIds, $type: 'objectId' } })
-    .select('number status amount currency supplierBill requestedByName createdAt payment.paidAt payment.transactionAt')
+    .select('number status amount currency credit supplierBill requestedByName createdAt payment.paidAt payment.transactionAt')
     .sort({ createdAt: 1 })
     .lean(),
 };

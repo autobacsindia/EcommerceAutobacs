@@ -143,7 +143,11 @@ function TeamPayments() {
           onCancel={() => setAdding(false)}
           onDone={(r) => {
             setAdding(false);
-            setNotice(`${r.number} sent for approval. You will see it move here and in team chat.`);
+            setNotice(r.status === 'paid'
+              ? `${r.number} is paid fully from supplier credit — nothing to transfer. It is recorded under Paid.`
+              : r.paidByCredit
+              ? `${r.number} sent to accounts. Supplier credit pays all of it, so nothing is transferred — approving it closes it.`
+              : `${r.number} sent for approval. You will see it move here and in team chat.`);
             qc.invalidateQueries({ queryKey: [...paymentKeys.all, 'list'] });
           }}
         />

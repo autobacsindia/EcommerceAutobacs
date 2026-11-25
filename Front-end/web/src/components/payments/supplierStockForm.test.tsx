@@ -92,7 +92,7 @@ describe('Pay a supplier (not for one order)', () => {
     expect(form.get('amount')).toBe('12000');
     expect(form.get('reference')).toBe('INV-4471');
     expect(String(form.get('clientId'))).toMatch(/.{8,}/);
-    for (const k of ['orderId', 'itemIds', 'category', 'payee', 'creditToUse']) expect(form.get(k)).toBeNull();
+    for (const k of ['orderId', 'itemIds', 'category', 'payee', 'creditToUse', 'useCredit']) expect(form.get(k)).toBeNull();
   });
 
   it('a supplier typed by hand needs "Save as a new supplier" — nothing is sent until then', async () => {

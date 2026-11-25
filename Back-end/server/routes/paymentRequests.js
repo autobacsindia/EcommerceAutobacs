@@ -154,6 +154,12 @@ router.put('/:id', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequ
   res.json({ success: true, request: await pr.update(req.user, req.params.id, body, req.files || {}, req) });
 }));
 
+// POST /payment-requests/:id/credit — { useCredit: true } | { creditToUse: number (0 removes) }, rev?, reason?
+//   Supplier credit on a waiting supplier payment (procurement on their own; accounts, admin on any).
+router.post('/:id/credit', asyncHandler(async (req, res) => {
+  res.json({ success: true, request: await pr.setCredit(req.user, req.params.id, req.body, req) });
+}));
+
 router.post('/:id/approve', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.approve(req.user, req.params.id, req.body, req) });
 }));

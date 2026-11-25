@@ -213,7 +213,8 @@ describe('Supplier payment not for one order (stock)', () => {
     const fake = String(new mongoose.Types.ObjectId());
     expect((await stock(procurement.session, { supplierId: s.id, dealId: fake })).status).toBe(400);
     expect((await stock(procurement.session, { supplierId: s.id, partId: fake })).status).toBe(400);
-    expect((await stock(procurement.session, { supplierId: s.id, creditToUse: 500 })).status).toBe(400);
+    // Supplier credit IS allowed here since 2026-11-25 — but only what the supplier owes (none here).
+    expect((await stock(procurement.session, { supplierId: s.id, creditToUse: 500 })).status).toBe(409);
     expect(await PaymentRequest.countDocuments()).toBe(0);
   });
 

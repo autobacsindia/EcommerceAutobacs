@@ -14,7 +14,7 @@ export const payLine = (s: Supplier) => (s.payment.method === 'none'
 /**
  * Saved suppliers whose name starts with what is being typed, shown right under
  * the name box (so typing the name IS the search). Empty until something is
- * typed; hidden once the typed text exactly matches the only result. Silent on
+ * typed. Silent on
  * error — the box still works as plain text.
  */
 export function SupplierSuggestions({ query, onPick, label = 'Saved suppliers' }: {
@@ -31,8 +31,10 @@ export function SupplierSuggestions({ query, onPick, label = 'Saved suppliers' }
     staleTime: 30_000,
   });
   const rows = (results.data?.suppliers ?? []).slice(0, 8);
+  // Shown even when the name typed matches a saved supplier exactly: hiding it then left
+  // no way to pick that supplier (the payment was refused, or went out with no supplier
+  // link and no credit) — the "supplier selecting is not working" bug, 2026-11-25.
   if (!q || !rows.length) return null;
-  if (rows.length === 1 && rows[0].name.toLowerCase() === q.toLowerCase()) return null;
   return (
     <ul role="listbox" aria-label={label} className="mt-1 max-h-56 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-blue-200 bg-white shadow-sm">
       {rows.map((s) => (
