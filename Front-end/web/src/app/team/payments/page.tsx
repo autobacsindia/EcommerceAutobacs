@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import PaymentRequestForm from '@/components/payments/PaymentRequestForm';
+import PaymentRequestForm, { type StockDraft } from '@/components/payments/PaymentRequestForm';
 import PaymentRequestList from '@/components/payments/PaymentRequestList';
 import { paymentKeys } from '@/components/payments/api';
 import SubscriptionList from '@/components/payments/subscriptions/SubscriptionList';
@@ -19,7 +19,8 @@ import { useListParams } from '@/lib/hooks/useListParams';
 /**
  * Payments in the team panel.
  *   every team  — raise expenses (each team's own options, from the server) and follow them
- *   procurement — also follows supplier payments (raised from each order)
+ *   procurement — also raises supplier payments: from each order's item, or here
+ *                 ("Pay a supplier") for stock / one bill for several orders
  *   accounts    — approves or declines everything, and sees every team;
  *                 the admin then pays
  * and, on its own tab, Subscriptions & dues: each team's tools and bills,
@@ -38,7 +39,11 @@ function TeamPayments() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const team = user?.staff?.team;
-  const [adding, setAdding] = useState(false);
+  // Which form is open: an expense, or (procurement) a supplier payment not for one order.
+  const [adding, setAddingMode] = useState<false | 'expense' | 'supplier'>(false);
+  const setAdding = (open: boolean) => { setAddingMode(open ? 'expense' : false); setDraft(undefined); };
+  // What an expense form carried over when switched to a supplier payment.
+  const [draft, setDraft] = useState<StockDraft | undefined>(undefined);
   const [notice, setNotice] = useState('');
   /*
     Any active staff member may claim an expense — the API is the authority
@@ -47,6 +52,8 @@ function TeamPayments() {
   */
   const raisesExpenses = !!team;
   const isAccounts = team === 'accounts';
+  // Procurement pays suppliers (the server allows procurement and the admin only).
+  const paysSuppliers = team === 'procurement';
   const { values } = useListParams({ tab: 'requests' });
   const router = useRouter();
   const pathname = usePathname();
@@ -80,9 +87,19 @@ function TeamPayments() {
           </p>
         </div>
         {tab === 'requests' && raisesExpenses && !adding && (
-          <button type="button" onClick={() => { setAdding(true); setNotice(''); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-            <Plus className="h-4 w-4" /> New expense
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {paysSuppliers && (
+              <button type="button" onClick={() => { setAddingMode('supplier'); setDraft(undefined); setNotice(''); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                <Plus className="h-4 w-4" /> Pay a supplier
+              </button>
+            )}
+            <button type="button" onClick={() => { setAdding(true); setNotice(''); }}
+              className={paysSuppliers
+                ? 'inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50'
+                : 'inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700'}>
+              <Plus className="h-4 w-4" /> New expense
+            </button>
+          </div>
         )}
       </div>
 
@@ -110,6 +127,11 @@ function TeamPayments() {
       {tab === 'requests' && notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
       {tab === 'requests' && adding && (
         <PaymentRequestForm
+          // A new form (fresh one-time submit key) when switching between the two.
+          key={String(adding)}
+          stock={adding === 'supplier'}
+          initial={adding === 'supplier' ? draft : undefined}
+          onSwitchToSupplier={paysSuppliers ? (d) => { setDraft(d); setAddingMode('supplier'); } : undefined}
           onCancel={() => setAdding(false)}
           onDone={(r) => {
             setAdding(false);

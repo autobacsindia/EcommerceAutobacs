@@ -321,6 +321,8 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               )}
               <ProjectLinkRows key={`${r.id}-${r.project?.code ?? ''}-${r.task?.code ?? ''}-${r.reference ?? ''}`} r={r} onSaved={done} />
               <Row k="Items" v={r.itemNames.join(', ')} />
+              {/* A supplier payment not raised from an order (Payments → Pay a supplier). */}
+              <Row k="For" v={r.kind === 'supplier' && !r.order ? 'Stock / not for one order' : null} />
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.alternatePhone && `Alt: ${r.customer.alternatePhone}`, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />
               {r.description && (

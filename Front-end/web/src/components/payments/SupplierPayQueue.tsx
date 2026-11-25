@@ -119,7 +119,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                       {r.bankNotice && <span className="mt-1 flex items-center gap-1 text-xs text-amber-700"><AlertTriangle className="h-3 w-3" /> Bank details changed recently</span>}</td>
                     <td className="p-3">
                       {r.order?.number && <EntityLink type="order" id={r.order.id} value={r.order.number} label="Order number" />}
-                      {r.order?.number ? ' · ' : ''}{r.itemNames.join(', ')}{r.deal && <DealLine d={r.deal} />}
+                      {r.order?.number ? ' · ' : ''}{r.itemNames.length ? r.itemNames.join(', ') : 'Stock / not for one order'}{r.deal && <DealLine d={r.deal} />}
                     </td>
                     <td className="p-3">{r.customer?.name}</td>
                     <td className="p-3">
