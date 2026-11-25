@@ -264,11 +264,14 @@ describe('Reimbursements: fuel by km, food / transport / others, task links', ()
       expect((await claim(gone, fuel(10))).status).toBe(403);
     });
 
-    test('operations no longer offers the old typed Fuel; an old one still edits', async () => {
+    test('operations keeps typed Fuel / Food / Travel beside Reimbursement (owner, 2026-11-25); an old one still edits', async () => {
       const opts = (await ops.session.get('/payment-requests/expense-options')).body.options;
-      expect(opts.categories.map((c) => c.value)).toEqual(['reimbursement', 'other']);
+      expect(opts.categories.map((c) => c.value)).toEqual(['reimbursement', 'fuel', 'food', 'travel', 'other']);
       expect(opts.reimbursement).toMatchObject({ fuelRatePerKm: 15, maxKm: 1000, billRequiredAbove: 200 });
-      expect((await claim(ops, { category: 'fuel', amount: 500 })).status).toBe(400);
+      const typed = await claim(ops, { category: 'fuel', amount: 500, description: 'Diesel bill' });
+      expect(typed.status).toBe(201);
+      expect(typed.body.request).toMatchObject({ category: 'fuel', amount: 500 });
+      expect(typed.body.request.reimbursement ?? null).toBeNull();
 
       const { insertedId } = await PaymentRequest.collection.insertOne({
         number: 'PR-9001', kind: 'expense', status: 'submitted', team: 'operations',

@@ -147,8 +147,32 @@ describe('Expense options per team, and foreign-currency bills', () => {
       expect(cfg.categoryLabel('mystery')).toBe('mystery');
       // A value off the team's list (an old record) keeps the old "details required" rule.
       expect(cfg.noteRequiredFor('procurement', 'fuel')).toBe(true);
-      expect(cfg.noteRequiredFor('operations', 'fuel')).toBe(true); // operations' old Fuel is off its list now (reimbursements replaced it)
+      expect(cfg.noteRequiredFor('operations', 'fuel')).toBe(false); // back on operations' list (owner, 2026-11-25)
       expect(cfg.noteRequiredFor('operations', 'reimbursement')).toBe(false);
+    });
+  });
+
+  describe('no team silently loses an option (owner, 2026-11-25)', () => {
+    // #593 folded operations' Fuel / Food / Travel into Reimbursement and the team
+    // was left with two choices. Any option removed from a list must be removed
+    // here too, on purpose.
+    const EXPECTED = {
+      procurement: ['reimbursement', 'product_purchase', 'import_purchase', 'forwarder_cha', 'dispatch', 'other'],
+      accounts: ['reimbursement', 'gst', 'salary', 'epf', 'other'],
+      operations: ['reimbursement', 'fuel', 'food', 'travel', 'other'],
+      marketing: ['reimbursement', 'meta_ads', 'google_ads', 'claude', 'tools', 'other'],
+      developer: ['reimbursement', 'hosting', 'domains', 'software', 'ai_tools', 'other'],
+      hr: ['reimbursement', 'recruitment', 'training', 'staff_welfare', 'other'],
+      sales: ['reimbursement', 'customer_travel', 'customer_food', 'samples', 'courier', 'other'],
+    };
+    it.each(Object.entries(EXPECTED))('%s keeps its full list', (team, values) => {
+      expect(cfg.categoriesFor(team).map((x) => x.value)).toEqual(values);
+    });
+    it('every team list is pinned here', () => {
+      expect(Object.keys(cfg.TEAM_EXPENSE_CATEGORIES).sort()).toEqual(Object.keys(EXPECTED).sort());
+    });
+    it('Reimbursement still offers Fuel (km × rate), Food, Transportation, Others', () => {
+      expect(cfg.REIMBURSEMENT_TYPES.map((t) => t.value)).toEqual(['fuel', 'food', 'transport', 'other']);
     });
   });
 
@@ -156,7 +180,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
     it('gives each person their own team’s options; every team gets every currency', async () => {
       const opsRes = await ops.session.get('/payment-requests/expense-options');
       expect(opsRes.status).toBe(200);
-      expect(opsRes.body.options.categories.map((c) => c.value)).toEqual(['reimbursement', 'other']);
+      expect(opsRes.body.options.categories.map((c) => c.value)).toEqual(['reimbursement', 'fuel', 'food', 'travel', 'other']);
       // Every team pays in any currency on the list (owner, 2026-11-05), rupees first.
       expect(opsRes.body.options.currencies[0]).toEqual({ code: 'INR', label: 'Indian rupee (₹)' });
       expect(opsRes.body.options.currencies.map((c) => c.code)).toEqual(expect.arrayContaining(['THB', 'USD']));
