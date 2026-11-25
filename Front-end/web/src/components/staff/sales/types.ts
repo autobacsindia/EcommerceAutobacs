@@ -2,6 +2,33 @@
 import type { LineStage } from '@/components/staff/work/types';
 import type { PayLaterState } from '@/components/payments/payLater/api';
 
+/** B2B / B2C on a GTM quotation or order (Back-end utils/salesType.js shapeSalesType). */
+export type SalesTypeCheck = {
+  status: 'pending' | 'approved';
+  type: 'b2b' | 'b2c' | null;
+  byName: string | null;
+  role: 'accounts' | 'admin' | null;
+  at: string | null;
+  note: string;
+};
+export type SalesTypeInfo = {
+  type: 'b2b' | 'b2c';
+  label: 'B2B' | 'B2C';
+  /** Server-written, e.g. "Retail order — offer applied: 10% off (Black Friday)." */
+  reason: string;
+  shipBeforePayment: 'allowed' | 'needs_check' | 'not_b2c';
+  company: { legalName: string; gstin: string } | null;
+  /** Accounts' check; null on orders made before it existed. */
+  check: SalesTypeCheck | null;
+};
+/** The quotation's buyer, for the form (enterprise = B2B). */
+export type QuotationBuyer = {
+  type: 'individual' | 'enterprise';
+  legalName: string;
+  gstin: string;
+  billingAddress: { addressLine1?: string; addressLine2?: string; city?: string; postalCode?: string } | null;
+};
+
 export type SalesOrderItem = {
   /** Catalogue product (null for a custom item) — for the "open on the website" link. */
   productId?: string | null;
@@ -111,6 +138,7 @@ export type SalesOrder = {
   linkState: 'active' | 'expired' | null;
   /** "Ship before payment" (admin-approved): null on an ordinary order. */
   payLater?: PayLaterState | null;
+  salesType?: SalesTypeInfo | null;
   paymentLinkUrl: string | null;
   paymentLinkExpiresAt: string | null;
   razorpayPaymentId: string | null;
@@ -172,6 +200,8 @@ export type EditAfterAccept = {
 };
 
 export type Quotation = {
+  buyer?: QuotationBuyer;
+  salesType?: SalesTypeInfo;
   id: string;
   /** "QT-7F3A91C2", or "QT-7F3A91C2-v2" from the second version. */
   number: string;

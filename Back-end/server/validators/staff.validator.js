@@ -200,6 +200,17 @@ export const validatePayLaterApprove = [
   body('reason').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Write why (3–300 characters).'),
 ];
 
+// B2B / B2C check (services/salesTypeService.js)
+export const validateSalesTypeList = [
+  query('view').optional().isIn(['check', 'b2b_unpaid']),
+  query('cursor').optional().isString().isLength({ max: 500 }),
+];
+
+export const validateSalesTypeApprove = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  body('note').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Write a short note (3–300 characters).'),
+];
+
 export const validateOrderIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid order id'),
 ];

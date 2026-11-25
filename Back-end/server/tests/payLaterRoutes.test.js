@@ -54,6 +54,9 @@ describe('Ship before payment routes', () => {
     customer = await make('customer', undefined);
     order = await Order.create({
       user: customer.user._id, source: 'offline', salesUser: seller.user._id,
+      // B2B, approved by accounts: the only orders that can ship before payment.
+      buyer: { type: 'enterprise', legalName: 'ABC Motors Pvt Ltd', gstin: '27AAPFU0939F1ZV', stateCode: '27' },
+      buyerTypeCheck: { status: 'approved', type: 'b2b', note: 'GSTIN checked' },
       items: [{ custom: true, name: 'Seat covers', price: 8000, quantity: 1 }], subtotal: 8000, totalAmount: 8000,
       shippingAddress: { fullName: 'R', phone: '9', addressLine1: '1', city: 'P', state: 'MH', postalCode: '411001' },
       status: 'awaiting_payment', paymentStatus: 'pending',
@@ -66,8 +69,8 @@ describe('Ship before payment routes', () => {
     expect((await request(app).get(`${BASE}/staff/pay-later`)).status).toBe(401);
   });
 
-  it('403 for anyone but the admin on approve; the order is untouched', async () => {
-    for (const who of [seller, accounts]) {
+  it('403 for a seller on approve; the order is untouched', async () => {
+    for (const who of [seller]) {
       const r = await who.session.post(url(), { reason: 'Pays after tracking' });
       expect(r.status).toBe(403);
     }
@@ -97,6 +100,24 @@ describe('Ship before payment routes', () => {
     expect(list.body.summary.owed).toBe(8000);
     expect((await seller.session.get('/staff/pay-later')).status).toBe(403);
     expect((await accounts.session.get('/staff/pay-later?view=nope')).status).toBe(400);
+  });
+
+  it('B2B / B2C check: seller 403, accounts approves with a note, list for accounts', async () => {
+    await Order.updateOne({ _id: order._id }, { $set: { buyerTypeCheck: { status: 'pending', type: 'b2b' } } });
+    const check = `/staff/orders/${order._id}/sales-type-check`;
+    expect((await request(app).get(`${BASE}/staff/sales-type-checks`)).status).toBe(401);
+    expect((await seller.session.post(check, { note: 'GSTIN checked' })).status).toBe(403);
+    expect((await accounts.session.post(check, {})).status).toBe(400);
+    expect((await seller.session.get('/staff/sales-type-checks')).status).toBe(403);
+    const list = await accounts.session.get('/staff/sales-type-checks?view=check');
+    expect(list.status).toBe(200);
+    expect(list.body.orders.map((o) => o.salesType.label)).toEqual(['B2B']);
+    // Not approved yet → ship before payment refused, for accounts too.
+    expect((await accounts.session.post(url(), { reason: 'Regular dealer' })).status).toBe(409);
+    const r = await accounts.session.post(check, { note: 'GSTIN checked' });
+    expect(r.status).toBe(200);
+    expect(r.body.order.salesType.check).toMatchObject({ status: 'approved', note: 'GSTIN checked' });
+    expect((await accounts.session.post(url(), { reason: 'Regular dealer' })).status).toBe(200);
   });
 
   it('a ₹70,250 order gets the button and can be approved (no amount limit — owner 2026-11-25)', async () => {

@@ -145,7 +145,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/delivery-fees', label: 'Delivery fees', icon: Truck },
       { href: '/admin/bank-transfers', label: 'Bank transfers', icon: Landmark },
       { href: '/admin/extra-charges', label: 'Extra charges', icon: Coins },
-      { href: '/admin/pay-later', label: 'Shipped – payment due', icon: Hourglass },
+      { href: '/admin/pay-later', label: 'B2B / B2C · Pay later', icon: Hourglass },
       // GTM discounts above 10% waiting for approval (the GTM head approves them too).
       { href: '/admin/discount-approvals', label: 'Discount approvals', icon: ShieldCheck },
       { href: '/admin/workflows', label: 'Workflows', icon: Zap },

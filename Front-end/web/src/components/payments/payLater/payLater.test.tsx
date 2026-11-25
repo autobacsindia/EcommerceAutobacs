@@ -87,6 +87,7 @@ describe('PayLaterList', () => {
     get.mockResolvedValue({ orders: [ROW(), ROW({ id: 'o2', orderNumber: '#CD34', payLater: STATE({ label: 'Shipped – payment overdue', overdueDays: 2 }) })],
       nextCursor: null, summary: { owed: 16000, count: 2, overdue: 1, dueDays: 3 } });
     show(<PayLaterList />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Shipped – not paid yet' }));
     expect(await screen.findByText('₹16,000')).toBeInTheDocument();
     expect(screen.getByText('Shipped – payment overdue')).toBeInTheDocument();
     expect(screen.getByText(/2 days late/)).toBeInTheDocument();

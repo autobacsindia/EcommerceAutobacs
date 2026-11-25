@@ -33,6 +33,7 @@ import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
+import { shapeSalesType } from '../utils/salesType.js';
 import { readListFilters, orderQueryFor, withCustomerIds } from '../utils/orderListFilters.js';
 import { and, findEachBranch, isObjectId, keysetPage, plainQuery } from '../utils/listQuery.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
@@ -137,7 +138,7 @@ async function findHinted(query, options, hint) {
 
 const LIST_SELECT = 'orderNumber createdAt paidAt listDate status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
   + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
-  + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount payLater';
+  + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount payLater buyer buyerTypeCheck';
 
 /**
  * keysetPage's read `q` with the pinned orders left out, keeping `query` as
@@ -203,6 +204,8 @@ function shape(o) {
     linkState: linkState(o),
     // "Ship before payment" (services/payLaterService.js): null on an ordinary order.
     payLater: shapePayLater(o),
+    // B2B / B2C badge + reason + accounts' check (utils/salesType.js); sales-panel orders only.
+    salesType: o.salesUser ? shapeSalesType(o) : null,
     paymentLinkUrl: linkState(o) === 'active' ? o.paymentLinkUrl : null,
     paymentLinkExpiresAt: o.paymentLinkExpiresAt || null,
     razorpayPaymentId: payment?.gatewayPaymentId || null,

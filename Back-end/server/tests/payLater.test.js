@@ -60,8 +60,14 @@ const staff = (name, team, extra = {}) => { n += 1; return User.create({ name, e
 let seller; let head; let accounts; let admin; let customer;
 let links;
 
+// Ship before payment is B2B only, once accounts approved the type (utils/salesType.js).
+const B2B = {
+  buyer: { type: 'enterprise', legalName: 'ABC Motors Pvt Ltd', gstin: '27AAPFU0939F1ZV', stateCode: '27' },
+  buyerTypeCheck: { status: 'approved', type: 'b2b', byName: 'Acc', role: 'accounts', at: new Date(), note: 'GSTIN checked' },
+};
 async function unpaidOrder(over = {}) {
   return Order.create({
+    ...B2B,
     user: customer._id, salesUser: seller._id, source: 'offline',
     items: [{ custom: true, name: 'Seat covers', quantity: 1, price: over.totalAmount ?? 8000 }],
     subtotal: over.totalAmount ?? 8000, totalAmount: 8000, shippingAddress: ADDRESS,
@@ -184,9 +190,9 @@ describe('approve', () => {
     expect(saved.statusHistory.filter((h) => h.reason === 'pay_later_approved')).toHaveLength(1);
   });
 
-  it('only the admin', async () => {
+  it('only the admin or accounts (owner 2026-11-25)', async () => {
     const o = await unpaidOrder();
-    for (const who of [accounts, head, seller]) await expectFail(approve(o, who), 403);
+    for (const who of [head, seller]) await expectFail(approve(o, who), 403);
     expect((await Order.findById(o._id).lean()).status).toBe('awaiting_payment');
   });
 
@@ -263,7 +269,8 @@ describe('approve', () => {
   it('the option endpoint says why not', async () => {
     expect(await svc.payLaterOptionFor(admin, String((await unpaidOrder())._id))).toMatchObject({ canApprove: true });
     expect(await svc.payLaterOptionFor(admin, String((await unpaidOrder({ salesUser: undefined }))._id))).toMatchObject({ canApprove: false, why: expect.stringMatching(/sales panel/) });
-    await expectFail(svc.payLaterOptionFor(accounts, String((await unpaidOrder())._id)), 403);
+    expect(await svc.payLaterOptionFor(accounts, String((await unpaidOrder())._id))).toMatchObject({ canApprove: true });
+    await expectFail(svc.payLaterOptionFor(seller, String((await unpaidOrder())._id)), 403);
   });
 
   it('an unpaid order still cannot be moved on by hand (no regression)', async () => {

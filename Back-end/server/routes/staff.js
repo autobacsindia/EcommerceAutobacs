@@ -1,5 +1,6 @@
 import * as extraCharges from '../services/orderExtraChargeService.js';
 import * as payLater from '../services/payLaterService.js';
+import * as salesType from '../services/salesTypeService.js';
 import * as supplierParts from '../services/supplierPartsService.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
@@ -32,6 +33,8 @@ import {
   validateExtraChargeList,
   validatePayLaterList,
   validatePayLaterApprove,
+  validateSalesTypeList,
+  validateSalesTypeApprove,
   validateSetSeller, validateCreditProofFile,
   validateOrderIdParam,
   validateSalesOrder,
@@ -564,14 +567,26 @@ router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRe
   res.json({ success: true, transfer: await rejectBankTransfer(req.user, req.params.id, req.body, req) });
 }));
 
-// ── Ship before payment (scope enforced in payLaterService: approve = admin) ─
+// ── B2B / B2C check (scope enforced in salesTypeService: approve = accounts, admin) ─
+
+// @route  GET /staff/sales-type-checks?view=check|b2b_unpaid&cursor= — accounts, admin, GTM head
+router.get('/sales-type-checks', validateSalesTypeList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await salesType.listSalesTypeChecks(req.user, req.query)) });
+}));
+
+// @route  POST /staff/orders/:id/sales-type-check { note } — accounts, admin: approve B2B / B2C
+router.post('/orders/:id/sales-type-check', validateSalesTypeApprove, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await salesType.approveSalesType(req.user, req.params.id, { note: req.body.note }, req)) });
+}));
+
+// ── Ship before payment (scope enforced in payLaterService: approve = admin, accounts; B2B only) ─
 
 // @route  GET /staff/orders/:id/pay-later — can the admin turn it on here, or its state
 router.get('/orders/:id/pay-later', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await payLater.payLaterOptionFor(req.user, req.params.id)) });
 }));
 
-// @route  POST /staff/orders/:id/pay-later { reason } — admin: ship before payment
+// @route  POST /staff/orders/:id/pay-later { reason } — admin / accounts: ship a B2B order before payment
 router.post('/orders/:id/pay-later', validatePayLaterApprove, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await payLater.approvePayLater(req.user, req.params.id, { reason: req.body.reason }, req)) });
 }));

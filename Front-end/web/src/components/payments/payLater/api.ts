@@ -1,4 +1,5 @@
 import { staffKeys } from '@/hooks/queries/keys';
+import type { SalesTypeInfo } from '@/components/staff/sales/types';
 
 /** The pay-later block the server puts on an order (Back-end utils/payLater.js shapePayLater). */
 export interface PayLaterState {
@@ -40,6 +41,8 @@ export interface PayLaterSummary {
 }
 
 export interface PayLaterOption {
+  /** B2B / B2C + accounts' check; null on a website order. */
+  salesType?: SalesTypeInfo | null;
   canApprove: boolean;
   why?: string | null;
   approved?: PayLaterRow;
@@ -51,6 +54,26 @@ export const payLaterKeys = {
   all: [...staffKeys.all, 'pay-later'] as const,
   list: (view: string) => [...payLaterKeys.all, 'list', view] as const,
   option: (orderId: string) => [...payLaterKeys.all, 'option', orderId] as const,
+};
+
+/** One row of the B2B / B2C lists (services/salesTypeService.js shapeRow). */
+export interface SalesTypeRow {
+  id: string;
+  orderNumber: string;
+  createdAt: string;
+  status: string;
+  paymentStatus: string;
+  amount: number;
+  customer: { name: string; phone: string; city: string };
+  salesPerson: string;
+  bankTransferPending: boolean;
+  salesType: SalesTypeInfo;
+  payLater: PayLaterState | null;
+}
+
+export const salesTypeKeys = {
+  all: [...staffKeys.all, 'sales-type'] as const,
+  list: (view: string) => [...salesTypeKeys.all, 'list', view] as const,
 };
 
 export const LINK_BLOCKED_TEXT: Record<string, string> = {

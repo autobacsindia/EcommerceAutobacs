@@ -61,7 +61,7 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
         { href: '/team/refunds', title: 'Refunds', text: 'Cancelled orders to approve, and returned items to pay back.', icon: Wallet },
         { href: '/team/bank-transfers', title: 'Bank transfers', text: 'A customer paid by bank transfer: check the bank, then confirm (the order is paid) or reject.', icon: Landmark },
         { href: '/team/extra-charges', title: 'Extra charges', text: 'An extra amount GTM agreed with a customer on a paid order: approve or reject it.', icon: Coins },
-        { href: '/team/pay-later', title: 'Shipped – payment due', text: 'Orders the admin let ship before payment. See who still owes, and who is late.', icon: Hourglass },
+        { href: '/team/pay-later', title: 'B2B / B2C · Pay later', text: 'Approve GTM orders as B2B or B2C with a note, let B2B orders ship before payment, and see who still owes.', icon: Hourglass },
         PAID, DELIVERED,
       ];
     case 'operations':

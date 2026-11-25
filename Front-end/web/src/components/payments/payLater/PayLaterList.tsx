@@ -8,17 +8,22 @@ import { formatDateIST } from '@/lib/datetime';
 import { rupees } from '@/components/staff/sales/types';
 import { payLaterKeys, type PayLaterRow, type PayLaterSummary } from './api';
 import PayLaterBadge from './PayLaterBadge';
+import SalesTypeChecks from './SalesTypeChecks';
 
 const TABS = [
-  { value: 'due', label: 'Not paid yet' },
+  { value: 'check', label: 'B2B / B2C to approve' },
+  { value: 'b2b_unpaid', label: 'B2B not paid — ship before payment' },
+  { value: 'due', label: 'Shipped – not paid yet' },
   { value: 'paid', label: 'Paid after dispatch' },
 ];
 type Page = { orders: PayLaterRow[]; nextCursor?: string | null; summary?: PayLaterSummary };
 
-/** Orders the admin let ship before payment. Keyset-paged by the server; the sum is the server's. */
+/** B2B / B2C approvals, and orders let ship before payment. Keyset-paged by the server; the sum is the server's. */
 export default function PayLaterList({ orderHref }: { orderHref?: (id: string) => string }) {
-  const [view, setView] = useState('due');
+  const [view, setView] = useState('check');
+  const typeView = view === 'check' || view === 'b2b_unpaid';
   const list = useInfiniteQuery({
+    enabled: !typeView,
     queryKey: payLaterKeys.list(view),
     initialPageParam: '',
     queryFn: async ({ pageParam }) => (await apiClient.get(`/staff/pay-later?view=${view}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`)) as unknown as Page,
@@ -36,6 +41,9 @@ export default function PayLaterList({ orderHref }: { orderHref?: (id: string) =
         ))}
       </div>
 
+      {typeView && <SalesTypeChecks view={view as 'check' | 'b2b_unpaid'} orderHref={orderHref} />}
+
+      {!typeView && <>
       {view === 'due' && summary && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Totals">
           <div className="rounded-lg bg-white p-3 shadow-sm"><p className="text-xs text-gray-500">Customers owe</p><p className="text-lg font-bold">{rupees(summary.owed)}</p></div>
@@ -72,6 +80,7 @@ export default function PayLaterList({ orderHref }: { orderHref?: (id: string) =
         ))}
       </ul>
       {list.hasNextPage && <button type="button" onClick={() => list.fetchNextPage()} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold">Load more</button>}
+      </>}
     </div>
   );
 }

@@ -104,7 +104,7 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   // Extra amounts on paid orders: GTM asks, accounts approves.
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/extra-charges', label: 'Extra charges', icon: Coins });
   // Orders the admin let ship before payment: accounts follows the money, the GTM head the customers.
-  if (team === 'accounts' || (team === 'sales' && isHead)) nav.push({ href: '/team/pay-later', label: 'Payment due', icon: Hourglass });
+  if (team === 'accounts' || (team === 'sales' && isHead)) nav.push({ href: '/team/pay-later', label: 'B2B / B2C · Pay later', icon: Hourglass });
   // Sales made before the website: GTM enters its own, accounts corrects and deletes.
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/past-sales', label: 'Past sales', icon: History });
   nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
