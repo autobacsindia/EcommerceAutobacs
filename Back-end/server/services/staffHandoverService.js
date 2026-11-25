@@ -7,6 +7,7 @@
  * leads and quotations earn the new person the credit; the moves log keeps who
  * started each one.
  *
+ * Anyone who can see the record can read the list (getWork); only an admin moves it.
  * Nothing moves until a manager presses the button. Each item moves on its own, so
  * one failure never stops the rest. Running again picks up only what is left, and
  * what has moved is no longer theirs, so it cannot move twice.
@@ -19,7 +20,7 @@ import userRepository from '../repositories/userRepository.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import { OPEN_LEAD_STATUSES } from '../config/leadConstants.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
-import { canManageDeparture, canSeeDeparture } from './staffDepartureService.js';
+import { canManageDeparture, canSeeAllWork, canSeeDeparture } from './staffDepartureService.js';
 import { peopleOf, updateTask } from './staffTaskService.js';
 import { reassignLead } from './teamLeadService.js';
 
@@ -76,21 +77,50 @@ const shapeMove = (m) => ({
   id: String(m._id), kind: m.kind, label: m.label, fromName: m.fromName, toName: m.toName, byName: m.byName, state: m.state, error: m.error, at: m.at,
 });
 
+/**
+ * Read-only for everyone who can see the record. Teammates get the open tasks and
+ * lessons only: leads, quotations and orders name customers, so those stay with
+ * the manager, the person's head, the person leaving and the replacement.
+ */
 export async function getWork(actor, id) {
-  const d = await loadManaged(actor, id);
-  return view(d);
+  const d = await departures.findById(id);
+  if (!d || !canSeeDeparture(actor, d)) throw fail('Not found.', 404);
+  if (canManageDeparture(actor, d)) return view(d);
+  const all = canSeeAllWork(actor, d);
+  const [rep, tasks, lessons, moves] = await Promise.all([
+    all ? salesRepRepository.findByUser(d.user) : null,
+    repo.openTasks(d.user, PER_KIND),
+    repo.ownedLessons(d.user, PER_KIND),
+    repo.movesOf(d._id, MOVES_SHOWN),
+  ]);
+  const [leads, quotations, orders] = all ? await Promise.all([
+    rep ? repo.openLeads(rep._id, OPEN_LEAD_STATUSES, PER_KIND) : [],
+    repo.openQuotations(d.user, PER_KIND),
+    repo.unfinishedOrders(d.user, ORDERS_SHOWN),
+  ]) : [[], [], []];
+  return {
+    ...shapeWork({ tasks, leads, quotations, lessons, orders }),
+    goesTo: d.successor ? { id: String(d.successor), name: d.successorName } : null,
+    canStart: false,
+    // Customer names sit in lead and quotation labels.
+    moves: moves.filter((m) => all || m.kind === 'task' || m.kind === 'lesson').map(shapeMove),
+  };
 }
+
+const shapeWork = (work) => ({
+  work: {
+    tasks: list('task', work.tasks),
+    leads: list('lead', work.leads),
+    quotations: list('quotation', work.quotations),
+    lessons: list('lesson', work.lessons),
+    orders: work.orders.map((o) => ({ id: String(o._id), label: `Order ending ${String(o._id).slice(-6).toUpperCase()}`, status: o.status })),
+  },
+});
 
 async function view(d) {
   const [work, to, moves] = await Promise.all([workOf(d), recipientFor(d), repo.movesOf(d._id, MOVES_SHOWN)]);
   return {
-    work: {
-      tasks: list('task', work.tasks),
-      leads: list('lead', work.leads),
-      quotations: list('quotation', work.quotations),
-      lessons: list('lesson', work.lessons),
-      orders: work.orders.map((o) => ({ id: String(o._id), label: `Order ending ${String(o._id).slice(-6).toUpperCase()}`, status: o.status })),
-    },
+    ...shapeWork(work),
     goesTo: to ? { id: String(to._id), name: to.name || '' } : null,
     canStart: d.status !== 'cancelled',
     moves: moves.map(shapeMove),

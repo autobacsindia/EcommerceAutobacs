@@ -20,6 +20,8 @@ const StaffDepartureSchema = new mongoose.Schema(
     successor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     successorName: { type: String, default: '' },
     note: { type: String, default: '' },
+    // Main responsibilities, for the team (sanitised rich text, like note).
+    responsibilities: { type: String, default: '' },
     noteByName: { type: String, default: '' },
     noteAt: { type: Date, default: null },
     status: { type: String, enum: DEPARTURE_STATUSES, default: 'open' },

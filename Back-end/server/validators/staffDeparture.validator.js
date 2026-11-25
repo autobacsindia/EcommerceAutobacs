@@ -19,5 +19,6 @@ export const validateDepartureUpdate = [
   body('lastDay').optional().isString(),
   body('reason').optional().isString(),
   body('note').optional().isString(),
+  body('responsibilities').optional().isString(),
   body('successorId').optional({ nullable: true }).custom(blankOrId).withMessage('Choose who takes over'),
 ];

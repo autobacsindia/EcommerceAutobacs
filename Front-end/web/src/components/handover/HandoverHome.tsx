@@ -83,19 +83,20 @@ export default function HandoverHome({ base }: { base: string }) {
   const teams = (meta.data?.teams ?? []).map((t) => t.key);
   const isManager = teams.length > 0;
   const mine = useMyHandovers();
-  const pages = useDeparturePages(isManager);
+  // Everyone sees their own team's handovers; admins see every team.
+  const pages = useDeparturePages(true);
   const [adding, setAdding] = useState(false);
   const canRecord = pages.data?.pages[0]?.canRecord === true;
   const rows = pages.data?.pages.flatMap((p) => p.departures) ?? [];
   const myRows = mine.data ?? [];
-  const nothing = mine.isSuccess && !myRows.length && (!isManager || (pages.isSuccess && !rows.length));
+  const nothing = mine.isSuccess && !myRows.length && pages.isSuccess && !rows.length;
 
   return (
     <div className="max-w-4xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Handover</h1>
-          <p className="mt-1 text-sm text-gray-600">When someone leaves, this keeps their last day and handover note together.</p>
+          <p className="mt-1 text-sm text-gray-600">When someone on your team leaves, see their last day, main responsibilities, open work and handover note here.</p>
         </div>
         {canRecord && !adding && <button type="button" onClick={() => setAdding(true)} className={primaryButton}>Record a resignation</button>}
       </div>
@@ -116,7 +117,7 @@ export default function HandoverHome({ base }: { base: string }) {
       )}
       {rows.length > 0 && (
         <section className="space-y-3">
-          <h2 className="font-semibold text-gray-900">People leaving</h2>
+          <h2 className="font-semibold text-gray-900">{isManager ? 'People leaving' : 'Leaving your team'}</h2>
           {rows.map((d) => <Row key={d.id} d={d} base={base} title={d.user.name} />)}
         </section>
       )}

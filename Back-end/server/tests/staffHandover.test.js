@@ -122,11 +122,44 @@ describe('Start handover', () => {
     expect(await taskPeople(t.id)).toEqual([leaver.id]);
   });
 
-  test.each([['the team head', () => head, 403], ['the person leaving', () => leaver, 403], ['the replacement', () => next, 403], ['a teammate', () => peer, 404]])('%s cannot see or start it', async (_n, who, code) => {
+  test.each([['the team head', () => head], ['the person leaving', () => leaver], ['the replacement', () => next]])('%s sees all their work but cannot start it', async (_n, who) => {
+    await give([leaver.id]);
     const d = await record();
-    expect((await who().s.get(`/${d.id}/work`)).status).toBe(code);
-    expect((await who().s.post(`/${d.id}/handover`)).status).toBe(code);
+    const r = await who().s.get(`/${d.id}/work`);
+    expect(r.status).toBe(200);
+    expect(r.body.work.tasks).toHaveLength(1);
+    expect(r.body.work.leads).toHaveLength(1);
+    expect(r.body.work.quotations).toHaveLength(1);
+    expect(r.body.canStart).toBe(false);
+    expect((await who().s.post(`/${d.id}/handover`)).status).toBe(403);
     expect((await SalesQuotation.findById(q.open).lean()).salesUser.toString()).toBe(leaver.id);
+  });
+
+  test('a teammate sees open tasks and lessons, never customers, and cannot start it', async () => {
+    await give([leaver.id]);
+    await StaffLesson.create({ title: 'How we quote', audience: 'sales', owner: leaver.user._id, createdBy: leaver.user._id, lastCheckedAt: new Date() });
+    const d = await record();
+    await admin.s.post(`/${d.id}/handover`);
+    await give([leaver.id], { title: 'Second call' });
+    const r = await peer.s.get(`/${d.id}/work`);
+    expect(r.status).toBe(200);
+    expect(r.body.work.tasks.map((t) => t.label)).toEqual([expect.stringContaining('Second call')]);
+    expect(r.body.work).toMatchObject({ leads: [], quotations: [], orders: [] });
+    expect(r.body.canStart).toBe(false);
+    // The moves log names customers on lead and quotation lines.
+    expect(r.body.moves.map((m) => m.kind).sort()).toEqual(['lesson', 'task']);
+    expect(JSON.stringify(r.body)).not.toContain('Ravi');
+    expect(JSON.stringify(r.body)).not.toContain('Lead a');
+    expect((await peer.s.post(`/${d.id}/handover`)).status).toBe(403);
+  });
+
+  test('another team gets 404 for the work, and so does a teammate once it is cancelled', async () => {
+    const other = await makeUser('Other', 'staff', { team: 'procurement', active: true });
+    const d = await record();
+    expect((await other.s.get(`/${d.id}/work`)).status).toBe(404);
+    expect((await other.s.post(`/${d.id}/handover`)).status).toBe(404);
+    expect((await admin.s.post(`/${d.id}/cancel`)).status).toBe(200);
+    expect((await peer.s.get(`/${d.id}/work`)).status).toBe(404);
   });
 
   test('open work moves and finished work stays', async () => {

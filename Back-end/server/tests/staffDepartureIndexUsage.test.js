@@ -34,6 +34,7 @@ afterAll(async () => { await dbHandler.closeDatabase(); });
 test.each([
   ['admin', {}],
   ['head', { team: 'marketing', wasHead: false }],
+  ['teammate', { team: 'marketing', wasHead: { $in: [false, true] }, status: { $in: ['open', 'left'] } }],
 ])('list: %s reads about one page', async (_n, filter) => {
   const s = stats(await StaffDeparture.find(filter).sort({ _id: -1 }).limit(PAGE).explain('executionStats'));
   console.log('list', _n, s.keys, s.docs);

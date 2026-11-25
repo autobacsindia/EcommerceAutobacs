@@ -8,10 +8,13 @@
  *   read a record, including the reason
  *            admin, and the head of the person's team (read-only, to plan cover).
  *            Not another head's record.
- *   write the handover note
+ *   write the handover note and main responsibilities
  *            admin and the person leaving.
- *   read the handover note
- *            the named replacement. Never the reason.
+ *   read the note, responsibilities and their open work
+ *            the named replacement, and everyone else on the person's team
+ *            (owner decision 2026-11-25: the team must see what is being handed
+ *            over). Never the reason. Teammates never see a cancelled record:
+ *            the person is staying, so it is nobody else's business.
  * Someone who may not see a record gets 404, so its existence does not leak.
  *
  * This never changes access or moves work. Removing access stays the existing
@@ -34,6 +37,7 @@ const BELL_MAX = 200;
 const REMIND_DAYS = 3;
 const REASON_MAX = 1000;
 const NOTE_MAX = 20000;
+const RESPONSIBILITIES_MAX = 20000;
 const LAST_DAY_BACK = 60;
 const LAST_DAY_AHEAD = 365;
 
@@ -51,8 +55,12 @@ const isTeamHeadOf = (u, d) => isHead(u) && u.staff.team === d.team && !d.wasHea
 export const canManageDeparture = canManage;
 const isLeaver = (u, d) => same(u._id, d.user);
 const isSuccessor = (u, d) => same(u._id, d.successor);
-const canSee = (u, d) => canManage(u, d) || isTeamHeadOf(u, d) || isLeaver(u, d) || isSuccessor(u, d);
+/** Anyone else on the person's team, heads included, while the record is not cancelled. */
+const isTeammate = (u, d) => isActiveStaff(u) && u.staff.team === d.team && !same(u._id, d.user) && d.status !== 'cancelled';
+const canSee = (u, d) => canManage(u, d) || isTeamHeadOf(u, d) || isLeaver(u, d) || isSuccessor(u, d) || isTeammate(u, d);
 export const canSeeDeparture = canSee;
+/** Sees all their open work, customers included. Teammates see only tasks and lessons. */
+export const canSeeAllWork = (u, d) => canManage(u, d) || isTeamHeadOf(u, d) || isLeaver(u, d) || isSuccessor(u, d);
 const canWriteNote = (u, d) => d.status === 'open' && (canManage(u, d) || isLeaver(u, d));
 
 const dayMs = 86400000;
@@ -71,9 +79,9 @@ function cleanReason(raw) {
   if (s.length > REASON_MAX) throw fail(`Keep the reason under ${REASON_MAX} characters.`, 400);
   return s;
 }
-function cleanNote(raw) {
-  const { value, tooLong } = cleanRichTextWithin(raw, NOTE_MAX);
-  if (tooLong) throw fail(`Keep the handover note under ${NOTE_MAX} characters.`, 400);
+function cleanNote(raw, max = NOTE_MAX, what = 'the handover note') {
+  const { value, tooLong } = cleanRichTextWithin(raw, max);
+  if (tooLong) throw fail(`Keep ${what} under ${max} characters.`, 400);
   return value;
 }
 
@@ -111,7 +119,7 @@ function shape(d, viewer, { full = false, today = todayIST(), left = false } = {
     rev: d.rev,
     createdAt: d.createdAt,
     ...(privateView ? { reason: d.reason || '', createdByName: d.createdByName } : {}),
-    ...(full ? { note: d.note || '', noteByName: d.noteByName, noteAt: d.noteAt } : {}),
+    ...(full ? { note: d.note || '', noteByName: d.noteByName, noteAt: d.noteAt, responsibilities: d.responsibilities || '' } : {}),
     can: { manage: manage && status === 'open', writeNote: canWriteNote(viewer, live), handover: manage && status !== 'cancelled' },
   };
 }
@@ -156,9 +164,14 @@ export async function recordDeparture(actor, input, req) {
   return shape(created, actor, { full: true });
 }
 
+/**
+ * Admin: everyone. Staff: their own team, never cancelled ones. A leaving head is
+ * listed for the team too (the reason stays admin-only, see shape).
+ * `wasHead: {$in}` keeps the staff_departure_team index usable for the _id sort.
+ */
 export async function listDepartures(actor, { cursor } = {}) {
-  if (!isAdmin(actor) && !isHead(actor)) throw fail('Only team heads and admins can see this.', 403);
-  const filter = isAdmin(actor) ? {} : { team: actor.staff.team, wasHead: false };
+  if (!inPanel(actor)) throw fail('Not available.', 403);
+  const filter = isAdmin(actor) ? {} : { team: actor.staff.team, wasHead: { $in: [false, true] }, status: { $in: ['open', 'left'] } };
   const rows = await repo.page(filter, { before: decodeCursor(cursor), limit: PAGE_SIZE + 1 });
   const more = rows.length > PAGE_SIZE;
   const page = (more ? rows.slice(0, PAGE_SIZE) : rows).filter((d) => !same(d.user, actor._id));
@@ -199,14 +212,16 @@ export async function updateDeparture(actor, id, input, req) {
     if (input.reason !== undefined) set.reason = cleanReason(input.reason);
     if (input.successorId !== undefined) Object.assign(set, await loadSuccessor(d.user, input.successorId));
   }
-  if (input.note !== undefined) {
+  if (input.note !== undefined || input.responsibilities !== undefined) {
     if (!canWriteNote(actor, d)) throw fail('You cannot change this note.', 403);
-    Object.assign(set, { note: cleanNote(input.note), noteByName: actor.name || '', noteAt: new Date() });
+    if (input.note !== undefined) set.note = cleanNote(input.note);
+    if (input.responsibilities !== undefined) set.responsibilities = cleanNote(input.responsibilities, RESPONSIBILITIES_MAX, 'the responsibilities');
+    Object.assign(set, { noteByName: actor.name || '', noteAt: new Date() });
   }
   if (!Object.keys(set).length) return shape(d, actor, { full: true });
   const updated = await repo.updateIfRev(d._id, input.rev, set);
   if (!updated) throw fail('This changed while you were editing. Reload and try again.', 409);
-  auditLogger.logAction(req, 'UPDATE', 'StaffDeparture', d._id, { fields: Object.keys(set).filter((k) => k !== 'reason' && k !== 'note') });
+  auditLogger.logAction(req, 'UPDATE', 'StaffDeparture', d._id, { fields: Object.keys(set).filter((k) => !['reason', 'note', 'responsibilities'].includes(k)) });
   if (updated.successor && !same(updated.successor, d.successor)) await tellSuccessor(updated);
   return shape(updated, actor, { full: true });
 }

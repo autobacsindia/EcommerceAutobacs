@@ -4,8 +4,9 @@
  * What must hold:
  *   - only an admin records, edits or cancels; a head is refused and can only read
  *   - the reason reaches only admin and the person's head (admin only for a head)
- *   - the person leaving and the replacement see the record but never the reason
- *   - another team, and anyone unrelated, gets 404
+ *   - the person leaving, the replacement and the rest of the team see the record,
+ *     the note and the responsibilities, but never the reason
+ *   - teammates never see a cancelled record; another team gets 404
  *   - recording this leaves access untouched
  *   - one open record per person, even when two arrive together
  *   - a stale edit is refused; a note is sanitised
@@ -103,14 +104,59 @@ describe('Departures', () => {
     expect(JSON.stringify(mine.body)).not.toContain('Moving city');
   });
 
-  test.each([['a teammate', () => peer], ['another team', () => outsider], ['another head', () => otherHead]])('%s gets 404', async (_n, who) => {
+  test.each([['another team', () => outsider], ['another head', () => otherHead]])('%s gets 404', async (_n, who) => {
     const d = await record();
     expect((await who().s.get(`/${d.id}`)).status).toBe(404);
+    expect((await who().s.get('')).body.departures).toHaveLength(0);
   });
 
-  test('members cannot list or record', async () => {
-    expect((await peer.s.get('')).status).toBe(403);
+  test('a teammate sees the record, note and responsibilities, never the reason, and changes nothing', async () => {
+    const d = await record();
+    const w = await leaver.s.patch(`/${d.id}`, { rev: d.rev, note: '<p>Call Ravi</p>', responsibilities: '<p>Supplier payments every Friday</p>' });
+    expect(w.status).toBe(200);
+    const r = await peer.s.get(`/${d.id}`);
+    expect(r.status).toBe(200);
+    expect(r.body.departure).toMatchObject({ note: '<p>Call Ravi</p>', responsibilities: '<p>Supplier payments every Friday</p>', successor: { id: next.id } });
+    expect(r.body.departure.can).toEqual({ manage: false, writeNote: false, handover: false });
+    expect(JSON.stringify(r.body)).not.toContain('Moving city');
+    const list = await peer.s.get('');
+    expect(list.status).toBe(200);
+    expect(list.body.canRecord).toBe(false);
+    expect(list.body.departures.map((x) => x.id)).toEqual([d.id]);
+    expect(JSON.stringify(list.body)).not.toContain('Moving city');
+    const rev = w.body.departure.rev;
+    expect((await peer.s.patch(`/${d.id}`, { rev, responsibilities: 'x' })).status).toBe(403);
+    expect((await peer.s.patch(`/${d.id}`, { rev, note: 'x' })).status).toBe(403);
+    expect((await peer.s.patch(`/${d.id}`, { rev, lastDay: inDays(1) })).status).toBe(403);
+    expect((await peer.s.post(`/${d.id}/cancel`)).status).toBe(403);
     expect((await peer.s.post('', { userId: leaver.id, lastDay: inDays(5) })).status).toBe(403);
+    expect((await StaffDeparture.findById(d.id).lean()).rev).toBe(rev);
+  });
+
+  test('teammates lose sight of a cancelled record; admin keeps it', async () => {
+    const d = await record();
+    expect((await admin.s.post(`/${d.id}/cancel`)).status).toBe(200);
+    expect((await peer.s.get(`/${d.id}`)).status).toBe(404);
+    expect((await peer.s.get('')).body.departures).toHaveLength(0);
+    expect((await head.s.get(`/${d.id}`)).status).toBe(200);
+    expect((await admin.s.get('')).body.departures).toHaveLength(1);
+  });
+
+  test('responsibilities are sanitised and bounded', async () => {
+    const d = await record();
+    const r = await leaver.s.patch(`/${d.id}`, { rev: d.rev, responsibilities: '<p>Stock count</p><script>x()</script>' });
+    expect(r.body.departure.responsibilities).toContain('Stock count');
+    expect(r.body.departure.responsibilities).not.toContain('script');
+    expect((await leaver.s.patch(`/${d.id}`, { rev: r.body.departure.rev, responsibilities: `<p>${'a'.repeat(20001)}</p>` })).status).toBe(400);
+  });
+
+  test('the list holds only my team\'s records and no notes', async () => {
+    await record();
+    await admin.s.post('', { userId: outsider.id, lastDay: inDays(5) });
+    const list = await peer.s.get('');
+    expect(list.body.departures.map((x) => x.user.id)).toEqual([leaver.id]);
+    expect(list.body.departures[0].note).toBeUndefined();
+    expect(list.body.departures[0].responsibilities).toBeUndefined();
   });
 
   test('a team head can read their team but is refused every change, even by direct call', async () => {
@@ -138,12 +184,17 @@ describe('Departures', () => {
     expect((await admin.s.get('')).body.canRecord).toBe(true);
   });
 
-  test('a leaving head is visible to admin only, including the same-team head and the list', async () => {
+  test('a leaving head: the team sees the handover, only admin sees the reason', async () => {
     const d = (await admin.s.post('', { userId: head.id, lastDay: inDays(5), reason: 'Private' })).body.departure;
     const second = await makeUser('SecondHead', 'staff', procurement({ isHead: true }));
-    expect((await second.s.get(`/${d.id}`)).status).toBe(404);
-    expect((await second.s.get('')).body.departures).toHaveLength(0);
+    for (const who of [second, peer]) {
+      const r = await who.s.get(`/${d.id}`);
+      expect(r.status).toBe(200);
+      expect(JSON.stringify(r.body)).not.toContain('Private');
+      expect((await who.s.get('')).body.departures).toHaveLength(1);
+    }
     expect(JSON.stringify((await head.s.get(`/${d.id}`)).body)).not.toContain('Private');
+    expect((await admin.s.get(`/${d.id}`)).body.departure.reason).toBe('Private');
   });
 
   test('recording leaves access alone', async () => {

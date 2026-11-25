@@ -5,6 +5,7 @@
  *   - saving sends the rev; a failed note save keeps the text
  *   - "They are staying" confirms first
  *   - a member gets no record button; empty and hidden states say so
+ *   - teammates read the responsibilities, note and open work, with no Start button
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -29,7 +30,8 @@ const record = (over: Partial<Departure> = {}): Departure => ({
 });
 const wrap = (ui: React.ReactElement) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
 const show = (d: Departure) => {
-  get.mockImplementation((u: string) => Promise.resolve(u.endsWith('training/meta') ? { teams: [{ key: 'procurement', label: 'Procurement' }] } : u.endsWith('lessons/meta') ? { people: [] } : { departure: d }));
+  get.mockImplementation((u: string) => Promise.resolve(u.endsWith('/work') ? { work: { tasks: [], leads: [], quotations: [], lessons: [], orders: [] }, goesTo: null, canStart: false, moves: [] }
+    : u.endsWith('training/meta') ? { teams: [{ key: 'procurement', label: 'Procurement' }] } : u.endsWith('lessons/meta') ? { people: [] } : { departure: d }));
   wrap(<HandoverDetail id="D1" base="/team/handover" />);
 };
 const manager = { manage: true, writeNote: true, handover: true };
@@ -50,8 +52,24 @@ describe('record page', () => {
     fireEvent.change(await screen.findByLabelText('Handover note'), { target: { value: 'New note' } });
     patch.mockResolvedValue({ departure: record({ note: 'New note', rev: 4 }) });
     fireEvent.click(screen.getByText('Save note'));
-    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/departures/D1', { rev: 3, note: 'New note' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/departures/D1', { rev: 3, note: 'New note', responsibilities: '' }));
     expect(screen.queryByText('They are staying')).not.toBeInTheDocument();
+  });
+
+  test('the person leaving writes their main responsibilities', async () => {
+    show(record({ responsibilities: 'Old', can: { manage: false, writeNote: true } }));
+    fireEvent.change(await screen.findByLabelText('Main responsibilities'), { target: { value: 'Pay suppliers on Friday' } });
+    patch.mockResolvedValue({ departure: record({ responsibilities: 'Pay suppliers on Friday', rev: 4 }) });
+    fireEvent.click(screen.getByText('Save note'));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/departures/D1', { rev: 3, note: 'Call Ravi', responsibilities: 'Pay suppliers on Friday' }));
+  });
+
+  test('a teammate reads the responsibilities and note, with no editor', async () => {
+    show(record({ responsibilities: 'Pay suppliers on Friday' }));
+    expect(await screen.findByText('Pay suppliers on Friday')).toBeInTheDocument();
+    expect(screen.getByText('Call Ravi')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Main responsibilities')).not.toBeInTheDocument();
+    expect(screen.queryByText('Save note')).not.toBeInTheDocument();
   });
 
   test('a failed note save keeps the text', async () => {
@@ -133,8 +151,17 @@ describe('Start handover', () => {
     expect(screen.queryByText('Start handover')).not.toBeInTheDocument();
   });
 
-  test('someone who is not a manager gets no panel', async () => {
-    show(record());
+  test('a teammate sees the open work but no Start button', async () => {
+    get.mockImplementation((u: string) => Promise.resolve(u.endsWith('/work') ? { work: { ...empty, ...oneTask }, goesTo: meena, canStart: false, moves: [] }
+      : u.endsWith('training/meta') ? { teams: [] } : u.endsWith('lessons/meta') ? { people: [] } : { departure: record() }));
+    wrap(<HandoverDetail id="D1" base="/team/handover" />);
+    expect(await screen.findByText('T-1 Call')).toBeInTheDocument();
+    expect(screen.getByText('Meena is taking this over.')).toBeInTheDocument();
+    expect(screen.queryByText('Start handover')).not.toBeInTheDocument();
+  });
+
+  test('a cancelled record shows no work', async () => {
+    show(record({ status: 'cancelled' }));
     await screen.findByText('Call Ravi');
     expect(get.mock.calls.some(([u]) => String(u).endsWith('/work'))).toBe(false);
   });
@@ -164,6 +191,14 @@ describe('home', () => {
     fireEvent.click(await screen.findByText('Record a resignation'));
     expect(screen.getByLabelText('Who is leaving')).toBeInTheDocument();
     expect(screen.getByText('Save')).toBeDisabled();
+  });
+
+  test('a member sees who is leaving their team', async () => {
+    route([], [], [record()]);
+    wrap(<HandoverHome base="/team/handover" />);
+    expect(await screen.findByText('Leaving your team')).toBeInTheDocument();
+    expect(screen.getByText('Arun')).toBeInTheDocument();
+    expect(screen.queryByText('Record a resignation')).not.toBeInTheDocument();
   });
 
   test('a head sees their team but gets no record button', async () => {

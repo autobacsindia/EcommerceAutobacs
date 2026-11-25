@@ -45,7 +45,7 @@ export function useRecordDeparture() {
 export function useUpdateDeparture(id: string) {
   const apply = useApply();
   return useMutation({
-    mutationFn: (body: { rev: number; lastDay?: string; reason?: string; successorId?: string; note?: string }) => apiClient.patch<{ departure: Departure }>(`${BASE}/${id}`, body).then((r) => r.departure),
+    mutationFn: (body: { rev: number; lastDay?: string; reason?: string; successorId?: string; note?: string; responsibilities?: string }) => apiClient.patch<{ departure: Departure }>(`${BASE}/${id}`, body).then((r) => r.departure),
     onSuccess: apply,
   });
 }
