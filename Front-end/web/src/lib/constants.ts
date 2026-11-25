@@ -224,6 +224,7 @@ export const API_ENDPOINTS = {
   PRODUCT_FESTIVAL_OFFER_EXCEPTIONS: '/products/admin/festival-offer-exceptions',
   DELIVERY_FEES_PUBLIC: '/delivery-fees/public',          // public: fees on? + Black Friday offer (display only)
   DELIVERY_FEES_CARD_WAIVERS: '/delivery-fees/card-waivers',  // public: per-product fees the Black Friday offer waives (cards, display only)
+  DELIVERY_ESTIMATES: '/delivery-fees/estimates',  // public: delivery window per product (PDP + cards, display only)
   DELIVERY_FEES_ADMIN: '/delivery-fees/admin',            // admin rate card
   DELIVERY_FEES_REMOTE_PINS: '/delivery-fees/admin/remote-pins',
   DELIVERY_FEES_REMOTE_PINS_REMOVE: '/delivery-fees/admin/remote-pins/remove',

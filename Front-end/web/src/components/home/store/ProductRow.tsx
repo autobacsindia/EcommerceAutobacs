@@ -5,6 +5,7 @@ import Link from 'next/link';
 import ProductTile from './ProductTile';
 import type { StoreProduct } from './storeData';
 import { useCardFeeWaivers } from '@/hooks/queries/useCardFeeWaivers';
+import { useDeliveryEstimates } from '@/hooks/queries/useDeliveryEstimates';
 
 /**
  * A titled, sideways-scrolling shelf of products with "See all" and arrow buttons.
@@ -35,6 +36,7 @@ export default function ProductRow({
   const [atEnd, setAtEnd] = useState(false);
   // Black Friday ₹0-delivery figures for the whole shelf, one request (server-computed).
   const fee = useCardFeeWaivers(products.filter((p) => !p.variable).map((p) => p.id));
+  const delivery = useDeliveryEstimates(products.map((p) => p.id));
 
   useEffect(() => {
     const t = trackRef.current;
@@ -79,6 +81,7 @@ export default function ProductRow({
                 p={p}
                 badge={p.salesRank && p.salesRank <= rankBadges ? `#${p.salesRank} Best seller` : undefined}
                 feeWaiver={p.variable ? null : fee.waivers?.products[p.id] ?? null}
+                deliveryEstimate={delivery.estimates?.[p.id] ?? null}
               />
             </div>
           ))}

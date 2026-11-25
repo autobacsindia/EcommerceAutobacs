@@ -75,7 +75,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     faqs: [
       {
         question: 'What are your shipping options and delivery times?',
-        answer: 'We deliver across India through trusted courier partners such as Delhivery. Standard delivery usually takes 3–5 business days after dispatch. Parts we order in from a supplier can take a little longer, and we keep you updated.',
+        answer: 'We deliver across India through trusted courier partners such as Delhivery. General delivery is 7–10 days, up to 15 days for heavy goods. We keep you updated throughout.',
         links: [{ label: 'Shipping & delivery', href: '/shipping' }],
       },
       {

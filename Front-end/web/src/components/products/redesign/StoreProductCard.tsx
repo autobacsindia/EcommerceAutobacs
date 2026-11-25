@@ -23,6 +23,8 @@ import {
 import type { CardFeeWaiver } from '@/hooks/queries/useCardFeeWaivers';
 import { ZeroDeliveryRibbon, zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryRibbon';
 import { useFestival } from '@/components/festival/FestivalThemeContext';
+import DeliveryEstimate from '@/components/products/delivery/DeliveryEstimate';
+import type { DeliveryWindow } from '@/lib/deliveryWindow';
 
 /**
  * Storefront product card — white tile in the home page's style. Self-contained client island —
@@ -38,6 +40,7 @@ export default function StoreProductCard({
   className,
   priority = false,
   feeWaiver,
+  deliveryEstimate,
 }: {
   product: Product;
   featured?: boolean;
@@ -63,6 +66,11 @@ export default function StoreProductCard({
    * fees into the red "Save ₹X+" badge. null/undefined = the plain card.
    */
   feeWaiver?: CardFeeWaiver | null;
+  /**
+   * Delivery window (server's, batch-fetched by the grid via `useDeliveryEstimates`).
+   * The line's space is reserved either way; nothing shows for a sold-out item.
+   */
+  deliveryEstimate?: DeliveryWindow | null;
 }) {
   const router = useRouter();
   const url = productUrl(product);
@@ -347,6 +355,7 @@ export default function StoreProductCard({
             {isVariable ? <SlidersHorizontal className="h-4 w-4" /> : backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
           </button>
         </div>
+        <DeliveryEstimate window={outOfStock ? null : deliveryEstimate} className="mt-2" />
       </div>
     </>
   );

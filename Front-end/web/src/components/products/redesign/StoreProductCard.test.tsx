@@ -345,3 +345,20 @@ describe('Black Friday ₹0 delivery (owner, 2026-11-20)', () => {
     expect(screen.getByRole('button', { name: 'Add to cart' })).toBeInTheDocument();
   });
 });
+
+describe('StoreProductCard — delivery estimate (Nothing Extra)', () => {
+  it('shows the server window on the card', () => {
+    render(<StoreProductCard product={makeProduct()} deliveryEstimate={{ minDays: 10, maxDays: 15, heavy: true }} />);
+    expect(screen.getByTestId('delivery-estimate')).toHaveTextContent('10–15 days delivery');
+  });
+
+  it('sold out: no estimate, but the line keeps its space', () => {
+    render(<StoreProductCard product={makeProduct({ stock: 'out' })} deliveryEstimate={{ minDays: 7, maxDays: 10, heavy: false }} />);
+    expect(screen.getByTestId('delivery-estimate')).toBeEmptyDOMElement();
+  });
+
+  it('no estimate yet: reserved, empty line', () => {
+    render(<StoreProductCard product={makeProduct()} />);
+    expect(screen.getByTestId('delivery-estimate')).toBeEmptyDOMElement();
+  });
+});

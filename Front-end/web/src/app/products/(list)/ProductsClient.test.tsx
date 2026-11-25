@@ -15,6 +15,10 @@ import ProductsClient from './ProductsClient';
 import apiClient from '@/lib/api';
 import { trackViewItemList } from '@/lib/analytics';
 import type { ProductsData } from '@/lib/productQuery';
+jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
+  useDeliveryEstimates: () => ({ estimates: null, pending: false }),
+}));
+
 
 jest.mock('@/lib/api', () => {
   const actual = jest.requireActual('@/lib/api');
