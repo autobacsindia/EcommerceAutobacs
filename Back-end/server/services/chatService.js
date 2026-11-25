@@ -82,13 +82,32 @@ export const DEFAULT_SPACES = Object.freeze([
 ]);
 
 /**
+ * System spaces shown under a different name than the one stored. The
+ * whole-company space is stored as 'company' (key and name) but reads "Team
+ * Report" — as written, no '#'. Renaming here, not in the database, keeps the
+ * key, links and history untouched.
+ */
+export const SPACE_DISPLAY_NAMES = Object.freeze({ company: 'Team Report' });
+
+/**
  * What a space is called on screen. A team space is named after its team's
  * label, so the 'sales' team's space reads #gtm — without renaming the stored
  * channel, which existing links and history point at.
  */
-const spaceDisplayName = (c) => (c.system && typeof c.key === 'string' && c.key.startsWith('team:')
-  ? (STAFF_TEAM_LABELS[c.team] || c.name).toLowerCase()
-  : c.name);
+export const spaceDisplayName = (c) => {
+  if (!c.system || typeof c.key !== 'string') return c.name;
+  if (SPACE_DISPLAY_NAMES[c.key]) return SPACE_DISPLAY_NAMES[c.key];
+  return c.key.startsWith('team:') ? (STAFF_TEAM_LABELS[c.team] || c.name).toLowerCase() : c.name;
+};
+
+/** A space as named in emails and alerts: "Team Report" as written, a one-word name as #name. */
+const spaceLabel = (c) => {
+  const n = spaceDisplayName(c) || 'chat';
+  return /\s/.test(n) ? n : `#${n}`;
+};
+
+/** How a space name is typed into createSpace: lowercase, '#' dropped, spaces → '-'. */
+const spaceSlug = (name) => cleanText(name).toLowerCase().replace(/^#/, '').replace(/\s+/g, '-').slice(0, 60);
 
 /** "Procurement & Accounts": both teams of a team-to-team conversation, `first` leading. */
 export function pairName(teams = [], first = null) {
@@ -741,7 +760,7 @@ export async function sendMessage(user, channelId, {
   const [people, teams] = await resolveMentions(channel, mentions, mentionTeams);
   const all = mentionAll === true;
   if (all && !mayMentionAll(user, channel)) {
-    throw fail('Only admins and team heads can @all in #company', 403);
+    throw fail('Only admins and team heads can @all in Team Report', 403);
   }
   const refs = await resolveOrderRefs(orderIds);
   const attachments = hasFiles ? await uploadChatAttachments(files, { channelId: idOf(channel) }) : [];
@@ -816,7 +835,7 @@ function notifyMentions(channel, sender, message, people, teams, all = false) {
     const users = (await userRepository.findContactsByIds(offline)).filter((u) => u.email);
     const where = channel.kind === 'dm'
       ? ((channel.members || []).length > 2 ? 'a group conversation' : 'a direct message')
-      : `#${channel.name}`;
+      : spaceLabel(channel);
     const link = `${(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/team/chat?c=${idOf(channel)}`;
     const preview = message.text.slice(0, 300) || '(shared a file)';
     await Promise.all(users.map((u) => emailHandler.sendEmail({
@@ -1002,7 +1021,7 @@ async function pushForMessage(channel, {
     const where = channel.kind === 'dm'
       ? ((channel.members || []).length > 2 ? 'Group' : '')
       : channel.audience === 'teams' ? pairName(channel.teams || [])
-        : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
+        : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : spaceLabel(channel));
     const body = (text || (attachments.length ? '📎 Shared a file' : '')).replace(/\s+/g, ' ').slice(0, 200);
     await sendToUsers(
       // An order update opens that space's Order updates tab, a thread reply
@@ -1364,10 +1383,15 @@ function cleanSpaceDescription(raw) {
 
 export async function createSpace(user, { name, description, memberIds } = {}) {
   if (!canCreateSpace(user)) throw fail('Only admins and team heads can create spaces', 403);
-  const cleanName = cleanText(name).toLowerCase().replace(/^#/, '').replace(/\s+/g, '-').slice(0, 60);
+  const cleanName = spaceSlug(name);
   if (cleanName.length < 2) throw fail('Space name must be at least 2 characters', 400);
 
-  const reserved = new Set([...DEFAULT_SPACES.map((s) => s.name), ...STAFF_TEAM_VALUES.map((t) => STAFF_TEAM_LABELS[t].toLowerCase()), 'company']);
+  const reserved = new Set([
+    ...DEFAULT_SPACES.map((s) => s.name),
+    ...STAFF_TEAM_VALUES.map((t) => STAFF_TEAM_LABELS[t].toLowerCase()),
+    ...Object.values(SPACE_DISPLAY_NAMES).map(spaceSlug), // "Team Report" → 'team-report'
+    'company',
+  ]);
   if (reserved.has(cleanName)) throw fail('That name is already used by a default space', 409);
   const clash = await chatRepository.spaceNameTaken(cleanName);
   if (clash) throw fail('A space with that name already exists', 409);
