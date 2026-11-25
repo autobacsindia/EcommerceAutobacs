@@ -285,6 +285,7 @@ export const handoverKeys = {
   mine: () => [...handoverKeys.all, 'mine'] as const,
   one: (id: string) => [...handoverKeys.all, 'one', id] as const,
   work: (id: string) => [...handoverKeys.all, 'work', id] as const,
+  people: () => [...handoverKeys.all, 'people'] as const,
 };
 
 export const pastMemberKeys = {

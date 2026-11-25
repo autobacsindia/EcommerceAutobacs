@@ -7,7 +7,7 @@
  * leads and quotations earn the new person the credit; the moves log keeps who
  * started each one.
  *
- * Anyone who can see the record can read the list (getWork); only an admin moves it.
+ * Anyone who can see the record can read the list (getWork); only HR or an admin moves it.
  * Nothing moves until a manager presses the button. Each item moves on its own, so
  * one failure never stops the rest. Running again picks up only what is left, and
  * what has moved is no longer theirs, so it cannot move twice.
@@ -37,7 +37,7 @@ const sells = (u) => u?.staff?.team === STAFF_TEAMS.SALES && canSell(u);
 async function loadManaged(actor, id) {
   const d = await departures.findById(id);
   if (!d || !canSeeDeparture(actor, d)) throw fail('Not found.', 404);
-  if (!canManageDeparture(actor, d)) throw fail('Only an admin can do this.', 403);
+  if (!canManageDeparture(actor, d)) throw fail('Only HR or an admin can do this.', 403);
   return d;
 }
 
@@ -136,6 +136,11 @@ export async function startHandover(actor, id, req) {
   const now = new Date();
   if (!await repo.lock(d._id, now, new Date(now.getTime() + LOCK_MS))) throw fail('This handover is already running.', 409);
   const tally = { moved: 0, failed: 0 };
+  // loadManaged has decided this person (admin or HR) may hand this over. The task
+  // and lead services check their own, narrower rules (HR cannot edit a sales task),
+  // so the moves run with admin rights under the same id and name: audit rows and
+  // the moves log still say who pressed Start.
+  const mover = actor.role === 'admin' ? actor : { _id: actor._id, name: actor.name, email: actor.email, role: 'admin' };
   try {
     const work = await workOf(d);
     const lessonOwner = work.lessons.length ? (await teamHead(d)) ?? actor : null;
@@ -159,12 +164,12 @@ export async function startHandover(actor, id, req) {
     for (const t of work.tasks) {
       // Others on a shared task stay on it.
       const assigneeIds = [...new Set([...peopleOf(t).map((p) => String(p.user)).filter((x) => x !== String(d.user)), String(to._id)])];
-      await one('task', t, to, () => updateTask(actor, t._id, { rev: t.rev, assigneeIds }, req));
+      await one('task', t, to, () => updateTask(mover, t._id, { rev: t.rev, assigneeIds }, req));
     }
     for (const l of work.leads) {
       await one('lead', l, to, async () => {
         refuseUnlessSeller();
-        const { outcome } = await reassignLead(actor, l._id, String(to._id));
+        const { outcome } = await reassignLead(mover, l._id, String(to._id));
         if (outcome !== 'reassigned' && outcome !== 'unchanged') throw fail('This lead changed just now.', 409);
       });
     }

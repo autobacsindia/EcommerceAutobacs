@@ -10,6 +10,7 @@ export const validateDepartureList = [query('cursor').optional().isString().isLe
 export const validateDepartureCreate = [
   body('userId').custom(isObjectId).withMessage('Choose who is leaving'),
   body('lastDay').isString().withMessage('Choose a last day'),
+  body('resignedOn').isString().withMessage('Choose the resignation date'),
   body('reason').optional().isString(),
   body('successorId').optional({ nullable: true }).custom(blankOrId).withMessage('Choose who takes over'),
 ];
@@ -17,6 +18,7 @@ export const validateDepartureUpdate = [
   ...validateDepartureId,
   body('rev').isInt({ min: 0 }).withMessage('Reload and try again'),
   body('lastDay').optional().isString(),
+  body('resignedOn').optional().isString(),
   body('reason').optional().isString(),
   body('note').optional().isString(),
   body('responsibilities').optional().isString(),

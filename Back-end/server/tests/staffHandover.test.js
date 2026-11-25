@@ -83,6 +83,7 @@ describe('Start handover', () => {
   const req = { headers: {}, get: () => '', ip: '127.0.0.1', user: {} };
   let admin; let head; let leaver; let next; let peer; let rep; let q; let openLead; let closedLead;
   const lastDay = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+  const resigned = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
   const quote = (user, status, number) => ({
     number, status, salesUser: user, customer: { name: 'Ravi', phone: '9876543210' }, shippingAddress: {}, items: [], subtotal: 100, totalAmount: 100,
@@ -105,7 +106,7 @@ describe('Start handover', () => {
 
   const give = (who, over = {}) => tasks.createTask(admin.user, { dueOn: DUE, title: 'Call the supplier', assigneeIds: who, ...over }, req).then((r) => r.task ?? r);
   const record = async (over = {}) => {
-    const r = await admin.s.post('', { userId: leaver.id, lastDay, successorId: next.id, ...over });
+    const r = await admin.s.post('', { resignedOn: resigned, userId: leaver.id, lastDay, successorId: next.id, ...over });
     expect(r.status).toBe(201);
     return r.body.departure;
   };
@@ -160,6 +161,22 @@ describe('Start handover', () => {
     expect((await other.s.post(`/${d.id}/handover`)).status).toBe(404);
     expect((await admin.s.post(`/${d.id}/cancel`)).status).toBe(200);
     expect((await peer.s.get(`/${d.id}/work`)).status).toBe(404);
+  });
+
+  test('HR can start the handover: open tasks, leads and quotations move to the replacement', async () => {
+    const hr = await makeUser('Hema', 'staff', { team: 'hr', active: true });
+    const t = await give([leaver.id]);
+    const d = await record();
+    const w = await hr.s.get(`/${d.id}/work`);
+    expect(w.body.canStart).toBe(true);
+    const r = await hr.s.post(`/${d.id}/handover`);
+    expect(r.status).toBe(200);
+    expect(r.body.result).toEqual({ moved: 3, failed: 0 });
+    expect(await taskPeople(t.id)).toEqual([next.id]);
+    expect(String((await SalesQuotation.findById(q.open).lean()).salesUser)).toBe(next.id);
+    // HR is still not an admin anywhere else.
+    expect((await User.findById(hr.id).lean()).role).toBe('staff');
+    expect(r.body.moves.find((m) => m.kind === 'task').byName).toBe('Hema');
   });
 
   test('open work moves and finished work stays', async () => {
@@ -221,7 +238,7 @@ describe('Start handover', () => {
   test('a failure leaves the rest moved, is listed, and pressing again finishes', async () => {
     const t = await give([leaver.id]);
     const nonSeller = await makeUser('Buyer', 'staff', { team: 'procurement', active: true });
-    const d = (await admin.s.post('', { userId: leaver.id, lastDay, successorId: nonSeller.id })).body.departure;
+    const d = (await admin.s.post('', { resignedOn: resigned, userId: leaver.id, lastDay, successorId: nonSeller.id })).body.departure;
     const first = await admin.s.post(`/${d.id}/handover`);
     expect(first.body.result).toEqual({ moved: 1, failed: 2 });
     expect(await taskPeople(t.id)).toEqual([nonSeller.id]);

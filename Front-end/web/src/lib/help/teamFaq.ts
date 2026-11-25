@@ -235,7 +235,7 @@ export const TEAM_HELP: TeamHelpSection[] = [
       },
       {
         question: 'What is the Handover page?',
-        answer: 'When someone resigns, an admin records the last day and who takes over. The person leaving writes their main responsibilities and a handover note. Everyone on their team can read these and see their open tasks. The head and the person taking over also see their open leads, quotations and orders. Only an admin moves the work across, with Start handover. The reason for leaving is private to the head and admins. Recording it does not remove anyone\'s access.',
+        answer: 'When someone resigns, HR or an admin records the resignation date, the last working day and who takes over. The person leaving writes their main responsibilities and a handover note. Everyone on their team can read these and see their open tasks. The head and the person taking over also see their open leads, quotations and orders. HR or an admin moves the work across, with Start handover. If they withdraw, HR or an admin cancels it. The reason for leaving is private to HR, admins and the head. Recording it does not remove anyone\'s access.',
         links: [{ label: 'Handover', href: '/team/handover' }],
       },
       {

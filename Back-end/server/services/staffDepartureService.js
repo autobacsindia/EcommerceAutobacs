@@ -2,12 +2,12 @@
  * Someone is leaving: last day, private reason, replacement, handover note.
  *
  * Who may do what:
- *   record, edit, cancel, start the handover
- *            admin only (canManage is the one place to widen this, for example
- *            when an HR role exists). Team heads do not.
- *   read a record, including the reason
- *            admin, and the head of the person's team (read-only, to plan cover).
- *            Not another head's record.
+ *   record, edit, cancel (they withdrew), start the handover
+ *            admin and HR (an active member of the HR team), never for their own
+ *            record. canManage is the one place this is decided. Team heads do not.
+ *   read a record, including the reason and resignation date
+ *            admin, HR, and the head of the person's team (read-only, to plan
+ *            cover). Not another head's record.
  *   write the handover note and main responsibilities
  *            admin and the person leaving.
  *   read the note, responsibilities and their open work
@@ -16,6 +16,9 @@
  *            over). Never the reason. Teammates never see a cancelled record:
  *            the person is staying, so it is nobody else's business.
  * Someone who may not see a record gets 404, so its existence does not leak.
+ * Recording the same resignation twice (a double click, a retry) returns the
+ * first record; a different one for the same person is a 409.
+ * Who recorded and who cancelled are kept on the record and in the audit log.
  *
  * This never changes access or moves work. Removing access stays the existing
  * button (staffService.deactivateMember). A record notices that happened when it
@@ -26,7 +29,7 @@ import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import repo from '../repositories/staffDepartureRepository.js';
 import userRepository from '../repositories/userRepository.js';
-import { STAFF_TEAM_LABELS } from '../config/staff.js';
+import { STAFF_TEAMS, STAFF_TEAM_LABELS } from '../config/staff.js';
 import { cleanRichTextWithin } from '../utils/richText.js';
 import { sendToUsers } from './pushService.js';
 import { todayIST } from './staffTaskService.js';
@@ -40,6 +43,7 @@ const NOTE_MAX = 20000;
 const RESPONSIBILITIES_MAX = 20000;
 const LAST_DAY_BACK = 60;
 const LAST_DAY_AHEAD = 365;
+const RESIGNED_BACK = 365;
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const same = (a, b) => !!a && !!b && String(a) === String(b);
@@ -47,9 +51,12 @@ const isAdmin = (u) => u?.role === 'admin';
 const isActiveStaff = (u) => u?.role === 'staff' && u.staff?.active === true;
 const isHead = (u) => isActiveStaff(u) && u.staff.isHead === true;
 const inPanel = (u) => isAdmin(u) || isActiveStaff(u);
+const isHr = (u) => isActiveStaff(u) && u.staff.team === STAFF_TEAMS.HR;
+/** May record resignations at all: admin or HR. */
+const mayRecord = (u) => isAdmin(u) || isHr(u);
 
 /** Managing is decided from the person leaving: their team and whether they are a head. */
-const canManage = (u, d) => !same(u._id, d.user) && isAdmin(u);
+const canManage = (u, d) => !same(u._id, d.user) && mayRecord(u);
 /** The person's own team head: sees it to plan cover, changes nothing. */
 const isTeamHeadOf = (u, d) => isHead(u) && u.staff.team === d.team && !d.wasHead && !same(u._id, d.user);
 export const canManageDeparture = canManage;
@@ -72,6 +79,16 @@ function cleanLastDay(raw, today = todayIST()) {
   const t = Date.parse(`${s}T00:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== s) throw fail('Choose a valid last day.', 400);
   if (s < addDays(today, -LAST_DAY_BACK) || s > addDays(today, LAST_DAY_AHEAD)) throw fail('That last day is too far from today.', 400);
+  return s;
+}
+/** The day they handed in notice: not in the future, within a year, and not after the last day. */
+function cleanResignedOn(raw, lastDay, today = todayIST()) {
+  const s = String(raw ?? '');
+  const t = Date.parse(`${s}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== s) throw fail('Choose a valid resignation date.', 400);
+  if (s > today) throw fail('The resignation date cannot be in the future.', 400);
+  if (s < addDays(today, -RESIGNED_BACK)) throw fail('That resignation date is too far back.', 400);
+  if (lastDay && lastDay < s) throw fail('The last day cannot be before the resignation date.', 400);
   return s;
 }
 function cleanReason(raw) {
@@ -113,12 +130,16 @@ function shape(d, viewer, { full = false, today = todayIST(), left = false } = {
     team: d.team,
     teamLabel: STAFF_TEAM_LABELS[d.team] || d.team,
     lastDay: d.lastDay,
+    resignedOn: d.resignedOn || '',
     daysLeft: daysBetween(today, d.lastDay),
     status,
     successor: d.successor ? { id: String(d.successor), name: d.successorName } : null,
     rev: d.rev,
     createdAt: d.createdAt,
-    ...(privateView ? { reason: d.reason || '', createdByName: d.createdByName } : {}),
+    ...(privateView ? {
+      reason: d.reason || '', createdByName: d.createdByName,
+      ...(d.cancelledAt ? { cancelledByName: d.cancelledByName, cancelledAt: d.cancelledAt } : {}),
+    } : {}),
     ...(full ? { note: d.note || '', noteByName: d.noteByName, noteAt: d.noteAt, responsibilities: d.responsibilities || '' } : {}),
     can: { manage: manage && status === 'open', writeNote: canWriteNote(viewer, live), handover: manage && status !== 'cancelled' },
   };
@@ -142,26 +163,52 @@ async function tellSuccessor(d) {
   }
 }
 
+const sameRecord = (d, x) => d.lastDay === x.lastDay && (d.resignedOn || '') === x.resignedOn
+  && String(d.successor ?? '') === String(x.successor ?? '') && (d.reason || '') === x.reason;
+
+/**
+ * Records a resignation. Returns { departure, created }: created is false when
+ * the very same resignation was already open (a retry), so it is only made once.
+ */
 export async function recordDeparture(actor, input, req) {
-  if (!isAdmin(actor)) throw fail('Only an admin can record a resignation.', 403);
+  if (!mayRecord(actor)) throw fail('Only HR or an admin can record a resignation.', 403);
+  if (same(actor._id, input.userId)) throw fail('Someone else must record your own resignation.', 403);
   const target = await userRepository.findById(input.userId);
   if (!isActiveStaff(target)) throw fail('Staff member not found.', 404);
   const lastDay = cleanLastDay(input.lastDay);
+  const resignedOn = cleanResignedOn(input.resignedOn, lastDay);
+  const reason = cleanReason(input.reason);
   const who = await loadSuccessor(target._id, input.successorId);
+  const want = { lastDay, resignedOn, reason, successor: who.successor };
+  const replay = async () => {
+    const open = await repo.findOpenByUser(target._id);
+    if (open && sameRecord(open, want)) return { departure: shape(open, actor, { full: true }), created: false };
+    throw fail('A resignation is already recorded for this person. Open it to change it.', 409);
+  };
+  if (await repo.findOpenByUser(target._id)) return replay();
   let created;
   try {
     created = await repo.create({
       user: target._id, userName: target.name || '', team: target.staff.team, wasHead: target.staff.isHead === true,
-      lastDay, reason: cleanReason(input.reason), ...who, createdBy: actor._id, createdByName: actor.name || '',
+      lastDay, resignedOn, reason, ...who, createdBy: actor._id, createdByName: actor.name || '',
     });
   } catch (err) {
-    if (err?.code === 11000) throw fail('A resignation is already recorded for this person.', 409);
+    // Two saves at once: the unique open-record index lets one through.
+    if (err?.code === 11000) return replay();
     throw err;
   }
   // The reason stays out of the log: the log has a wider audience than the record.
-  auditLogger.logAction(req, 'CREATE', 'StaffDeparture', created._id, { user: String(target._id), lastDay });
+  auditLogger.logAction(req, 'CREATE', 'StaffDeparture', created._id, { user: String(target._id), lastDay, resignedOn });
   if (created.successor) await tellSuccessor(created);
-  return shape(created, actor, { full: true });
+  return { departure: shape(created, actor, { full: true }), created: true };
+}
+
+/** Who HR or an admin can record as leaving: every active staff member but themself. */
+export async function recordablePeople(actor) {
+  if (!mayRecord(actor)) throw fail('Only HR or an admin can do this.', 403);
+  const people = await userRepository.findActiveStaff();
+  return people.filter((p) => !same(p._id, actor._id))
+    .map((p) => ({ id: String(p._id), name: p.name || '', team: p.staff?.team || '', teamLabel: STAFF_TEAM_LABELS[p.staff?.team] || p.staff?.team || '' }));
 }
 
 /**
@@ -171,14 +218,14 @@ export async function recordDeparture(actor, input, req) {
  */
 export async function listDepartures(actor, { cursor } = {}) {
   if (!inPanel(actor)) throw fail('Not available.', 403);
-  const filter = isAdmin(actor) ? {} : { team: actor.staff.team, wasHead: { $in: [false, true] }, status: { $in: ['open', 'left'] } };
+  const filter = mayRecord(actor) ? {} : { team: actor.staff.team, wasHead: { $in: [false, true] }, status: { $in: ['open', 'left'] } };
   const rows = await repo.page(filter, { before: decodeCursor(cursor), limit: PAGE_SIZE + 1 });
   const more = rows.length > PAGE_SIZE;
   const page = (more ? rows.slice(0, PAGE_SIZE) : rows).filter((d) => !same(d.user, actor._id));
   const gone = await closeLeft(page);
   return {
     departures: page.map((d) => shape(d, actor, { left: gone.has(String(d._id)) })),
-    canRecord: isAdmin(actor),
+    canRecord: mayRecord(actor),
     nextCursor: more ? Buffer.from(String(rows[PAGE_SIZE - 1]._id)).toString('base64url') : null,
   };
 }
@@ -206,9 +253,12 @@ export async function getDeparture(actor, id) {
 export async function updateDeparture(actor, id, input, req) {
   const d = await load(actor, id);
   const set = {};
-  if (['lastDay', 'reason', 'successorId'].some((k) => input[k] !== undefined)) {
-    if (!canManage(actor, d)) throw fail('Only an admin can change this.', 403);
+  if (['lastDay', 'resignedOn', 'reason', 'successorId'].some((k) => input[k] !== undefined)) {
+    if (!canManage(actor, d)) throw fail('Only HR or an admin can change this.', 403);
     if (input.lastDay !== undefined) set.lastDay = cleanLastDay(input.lastDay);
+    if (input.resignedOn !== undefined || (set.lastDay && d.resignedOn)) {
+      set.resignedOn = cleanResignedOn(input.resignedOn ?? d.resignedOn, set.lastDay ?? d.lastDay);
+    }
     if (input.reason !== undefined) set.reason = cleanReason(input.reason);
     if (input.successorId !== undefined) Object.assign(set, await loadSuccessor(d.user, input.successorId));
   }
@@ -228,8 +278,8 @@ export async function updateDeparture(actor, id, input, req) {
 
 export async function cancelDeparture(actor, id, req) {
   const d = await load(actor, id);
-  if (!canManage(actor, d)) throw fail('Only an admin can change this.', 403);
-  const updated = await repo.cancel(d._id);
+  if (!canManage(actor, d)) throw fail('Only HR or an admin can change this.', 403);
+  const updated = await repo.cancel(d._id, actor);
   if (!updated) throw fail('This is already closed.', 409);
   auditLogger.logAction(req, 'UPDATE', 'StaffDeparture', d._id, { change: 'cancelled' });
   return shape(updated, actor, { full: true });
@@ -237,9 +287,9 @@ export async function cancelDeparture(actor, id, req) {
 
 /** Last days within 3 days or past, whose access is still on. Never breaks the bell. */
 export async function countLastDaysForBell(user) {
-  if (!isAdmin(user) && !isHead(user)) return 0;
+  if (!mayRecord(user) && !isHead(user)) return 0;
   try {
-    const filter = isAdmin(user) ? {} : { team: user.staff.team, wasHead: false };
+    const filter = mayRecord(user) ? {} : { team: user.staff.team, wasHead: false };
     const rows = (await repo.dueBy(filter, addDays(todayIST(), REMIND_DAYS), BELL_MAX)).map((d) => ({ ...d, status: 'open' }));
     const gone = await closeLeft(rows);
     return rows.filter((d) => !gone.has(String(d._id)) && !same(d.user, user._id)).length;

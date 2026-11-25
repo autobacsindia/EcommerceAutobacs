@@ -59,3 +59,10 @@ test.each([
   expect(s.plan).not.toContain('COLLSCAN');
   expect(s.docs).toBeLessThanOrEqual(due);
 });
+
+test('record: finding someone\'s open record reads one row', async () => {
+  const s = stats(await StaffDeparture.findOne({ active: true, user: people[50] }).explain('executionStats'));
+  console.log('open by user', s.keys, s.docs);
+  expect(s.plan).not.toContain('COLLSCAN');
+  expect(s.docs).toBeLessThanOrEqual(1);
+});
