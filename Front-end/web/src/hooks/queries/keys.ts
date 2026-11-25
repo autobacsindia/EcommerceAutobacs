@@ -320,6 +320,8 @@ export const taskKeys = {
   summary: () => [...taskKeys.all, 'summary'] as const,
   /** The admin's due-date rules (how far ahead each priority may be due). */
   rules: () => [...taskKeys.all, 'rules'] as const,
+  /** Your late tasks still waiting for a reason (the "why is this late?" pop-up). */
+  lateMine: () => [...taskKeys.all, 'late-mine'] as const,
   /** The Inbox: what happened on your tasks. `state` is 'all' or 'unread'. */
   inboxes: () => [...taskKeys.all, 'inbox'] as const,
   inbox: (state: string) => [...taskKeys.inboxes(), state] as const,

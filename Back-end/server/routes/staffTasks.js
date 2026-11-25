@@ -44,6 +44,8 @@ import {
   validateJobTemplateId,
   validateJobTemplateSave,
   validateDueApproval,
+  validateAskNewDate,
+  validateDecideNewDate,
   validateTaskRules,
 } from '../validators/staffTask.validator.js';
 import { readTaskRules, updateTaskRules } from '../services/taskDueRules.js';
@@ -94,6 +96,8 @@ import {
   listSubtasks,
   subtaskFromStep,
   decideDueApproval,
+  askNewDate,
+  decideNewDate,
 } from '../services/staffTaskService.js';
 import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
 import { attachmentSizeGuard } from '../middleware/uploadMiddleware.js';
@@ -359,6 +363,16 @@ router.patch('/:id', validateTaskUpdate, validateRequest, asyncHandler(async (re
 // @route  POST /staff/tasks/:id/due-approval { rev, decision: approve|reject, note? } — a manager decides a far due date
 router.post('/:id/due-approval', validateDueApproval, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, task: await decideDueApproval(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/tasks/:id/new-date { rev, reason, note, dueOn, dueTime? } — the person doing it asks for a new date (late, or early)
+router.post('/:id/new-date', validateAskNewDate, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await askNewDate(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/tasks/:id/new-date/decision { rev, decision, note?, dueOn?, dueTime? } — whoever gave it decides
+router.post('/:id/new-date/decision', validateDecideNewDate, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await decideNewDate(req.user, req.params.id, req.body, req) });
 }));
 
 // @route  POST /staff/tasks/:id/checklist { text, clientId? } — add a step

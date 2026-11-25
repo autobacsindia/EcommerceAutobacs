@@ -51,6 +51,7 @@ function BoardCard({ t, base, column, columns, onOpen, onMove, onMoveTo, moving,
       tabIndex={0}
       aria-label={`Open ${t.code}: ${t.title}`}
       data-late={late || undefined}
+      data-danger={(late && t.danger) || undefined}
       data-dragging={dragging || undefined}
       // `relative` keeps the card's hidden bits (screen-reader labels, the invisible
       // date picker) inside the card. Without it they are placed against the board row,

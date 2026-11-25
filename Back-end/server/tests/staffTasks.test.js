@@ -730,7 +730,7 @@ describe('list rows (what the database sends for a page)', () => {
     const full = await tasks.getTask(procA, t.id);
     // timeSeconds: list rows only — the task window reads its time from GET /:id/time.
     const listOnly = ['summary', 'timeSeconds', 'waitingOn'];
-    const pageOnly = ['description', 'checklistItems', 'history', 'siblings', 'files'];
+    const pageOnly = ['description', 'checklistItems', 'history', 'dateMoves', 'siblings', 'files'];
     for (const key of Object.keys(full).filter((k) => !pageOnly.includes(k))) expect(row[key]).toEqual(full[key]);
     expect(Object.keys(row).filter((k) => !listOnly.includes(k)).sort())
       .toEqual(Object.keys(full).filter((k) => !pageOnly.includes(k)).sort());

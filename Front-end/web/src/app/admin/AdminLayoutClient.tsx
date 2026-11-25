@@ -20,6 +20,7 @@ import { splitMore } from '@/components/panel/navMore';
 import CallProvider from '@/components/calls/CallProvider';
 import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
 import NewWorkPopup from '@/components/notifications/NewWorkPopup';
+import { LateTasksPrompt } from '@/components/tasks/lateDates';
 
 interface NavItem {
   href: string;
@@ -332,6 +333,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         {children}
         <ProjectReminderPopup tasksHref="/admin/tasks" />
         <NewWorkPopup />
+        <LateTasksPrompt base="/admin/tasks" />
       </PanelShell>
     </CallProvider>
   );

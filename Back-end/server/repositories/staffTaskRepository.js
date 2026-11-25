@@ -17,7 +17,7 @@ const HISTORY_CAP = 100;
 export const LIST_PROJECTION = Object.freeze({
   number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, dueTime: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
-  order: 1, group: 1, groupSize: 1, list: 1, project: 1, projectList: 1, stage: 1, repeat: 1, repeatOf: 1, repeatNext: 1, stageName: 1, personal: 1, estimateMinutes: 1, dueApproval: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
+  order: 1, group: 1, groupSize: 1, list: 1, project: 1, projectList: 1, stage: 1, repeat: 1, repeatOf: 1, repeatNext: 1, stageName: 1, personal: 1, estimateMinutes: 1, dueApproval: 1, lateRequest: 1, misses: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
   checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
   checklistDone: { $size: { $filter: { input: { $ifNull: ['$checklist', []] }, cond: '$$this.done' } } },
@@ -86,9 +86,14 @@ const staffTaskRepository = {
    * Apply a change only if nobody changed the task since `rev` was read
    * (compare-and-set). Returns the new task, or null when it moved on.
    */
-  updateIfRev: (id, rev, set, entries) => StaffTask.findOneAndUpdate(
+  /** `more.push` / `more.inc`: other arrays to append to and counters to add to, in the same write. */
+  updateIfRev: (id, rev, set, entries, more = {}) => StaffTask.findOneAndUpdate(
     { _id: id, rev },
-    { $set: set, $inc: { rev: 1 }, $push: { history: { $each: entries, $slice: -HISTORY_CAP } } },
+    {
+      $set: set,
+      $inc: { rev: 1, ...more.inc },
+      $push: { history: { $each: entries, $slice: -HISTORY_CAP }, ...more.push },
+    },
     { new: true },
   ).lean(),
 

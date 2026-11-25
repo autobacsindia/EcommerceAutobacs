@@ -439,6 +439,28 @@ describe('Staff task routes', () => {
     expect((await head.session.get('/staff/tasks/projects/job-templates')).body.templates).toEqual([]);
   });
 
+  it('a late task over HTTP: the member asks for a new date, whoever gave it decides', async () => {
+    const made = (await head.session.post('/staff/tasks', { title: 'Send quote to RK', assigneeId: String(member.user._id), dueOn: inDays(1) })).body.task;
+    // Time passes: the deadline is yesterday.
+    await StaffTask.updateOne({ _id: made.id }, { $set: { dueOn: inDays(-1), rank: inDays(-1) } });
+    const late = (await member.session.get(`/staff/tasks/${made.id}`)).body.task;
+    expect(late).toMatchObject({ overdue: true, needsReason: true, misses: 1 });
+    expect((await member.session.patch(`/staff/tasks/${made.id}`, { rev: late.rev, dueOn: inDays(2) })).status).toBe(403);
+    const ask = (body) => member.session.post(`/staff/tasks/${made.id}/new-date`, { rev: late.rev, reason: 'needed_info', note: 'Waiting for RK’s car model', dueOn: inDays(2), ...body });
+    expect((await ask({ dueOn: 'tomorrow' })).status).toBe(400);
+    expect((await ask({ dueTime: '25:00' })).status).toBe(400);
+    expect((await ask({ reason: '' })).status).toBe(400);
+    const asked = await ask({});
+    expect(asked.status).toBe(200);
+    expect(asked.body.task.lateRequest).toMatchObject({ status: 'pending', late: true });
+    const decide = (who, body) => who.session.post(`/staff/tasks/${made.id}/new-date/decision`, { rev: asked.body.task.rev, ...body });
+    expect((await decide(head, { decision: 'maybe' })).status).toBe(400);
+    expect((await decide(member, { decision: 'approve' })).status).toBe(403);
+    const ok = await decide(head, { decision: 'approve' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.task).toMatchObject({ dueOn: inDays(2), overdue: false, misses: 1 });
+  });
+
   it('due dates over HTTP: required, limited by priority, approved by the head; the admin sets the rules', async () => {
     const owner = await makeUser('Owner', 'admin');
     // No date is fine in To Do; starting under way it is not.
@@ -449,7 +471,7 @@ describe('Staff task routes', () => {
     expect(far.dueApproval).toMatchObject({ status: 'pending' });
     // The head's list and count.
     expect((await head.session.get('/staff/tasks?view=approvals')).body.tasks.map((t) => t.id)).toEqual([far.id]);
-    expect((await member.session.get('/staff/tasks?view=approvals')).status).toBe(403);
+    expect((await member.session.get('/staff/tasks?view=approvals')).body.tasks).toEqual([]);
     // Shape checks, then who may decide.
     expect((await head.session.post(`/staff/tasks/${far.id}/due-approval`, { rev: far.rev, decision: 'maybe' })).status).toBe(400);
     expect((await head.session.post(`/staff/tasks/${far.id}/due-approval`, { decision: 'approve' })).status).toBe(400);

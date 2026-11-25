@@ -22,6 +22,7 @@ jest.mock('@/hooks/queries/useNotifications', () => ({ useWaitingWork: () => ({ 
 // Calls have their own tests (components/calls); here they are just a pass-through wrapper.
 jest.mock('@/components/tasks/ProjectReminderPopup', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/notifications/NewWorkPopup', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/components/tasks/lateDates', () => ({ LateTasksPrompt: () => null }));
 jest.mock('@/components/calls/CallProvider', () => ({ __esModule: true, default: ({ children }: { children: React.ReactNode }) => children }));
 jest.mock('@/components/incentives/ChampionBanner', () => ({ __esModule: true, default: () => null }));
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a> }));
