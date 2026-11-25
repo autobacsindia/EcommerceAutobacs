@@ -5,6 +5,7 @@ import type { Product as StoreProduct } from '@/lib/types';
 import { ProductGridSkeleton } from '@/components/skeletons/ProductCardSkeleton';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useCardFeeWaivers } from '@/hooks/queries/useCardFeeWaivers';
+import { useDeliveryEstimates } from '@/hooks/queries/useDeliveryEstimates';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import StoreProductCard from './redesign/StoreProductCard';
 
@@ -56,6 +57,7 @@ export default function ProductGrid({ products, loading }: ProductGridProps) {
   // per card. Hooks run unconditionally, ahead of the loading early-return.
   const { data: campaignData } = useCampaignProductRates(products.map((p) => p._id));
   const fee = useCardFeeWaivers(products.map((p) => p._id));
+  const delivery = useDeliveryEstimates(products.map((p) => p._id));
   const badgeVisible = useCampaignBadgeVisible();
 
   if (loading) {
@@ -72,6 +74,7 @@ export default function ProductGrid({ products, loading }: ProductGridProps) {
           featured={product.isFeatured}
           campaignRate={badgeVisible ? campaignData?.rates?.[product._id] : null}
           feeWaiver={fee.waivers?.products[product._id] ?? null}
+          deliveryEstimate={delivery.estimates?.[product._id] ?? null}
         />
       ))}
     </div>

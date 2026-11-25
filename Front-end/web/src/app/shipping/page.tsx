@@ -32,9 +32,9 @@ export default function ShippingPage() {
             <div className="bg-obsidian border border-hairline rounded-lg p-6 flex items-start gap-4">
               <Clock className="h-8 w-8 text-gold shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-display text-ink tracking-[-0.01em] mb-1">Fast Delivery</h3>
+                <h3 className="font-display text-ink tracking-[-0.01em] mb-1">Delivery Time</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">
-                  Our standard delivery takes 3–5 business days.{' '}
+                  General delivery is 7–10 days, up to 15 days for heavy goods. We keep you updated throughout.{' '}
                   {chargeAtCheckout
                     ? 'Delivery fees (shipping, packing, handling and the like) are listed one by one in your cart and at checkout, and paid with your order — the courier collects nothing.'
                     : 'Shipping charges are extra and paid on delivery, by cash or GPay / UPI.'}
@@ -71,7 +71,7 @@ export default function ShippingPage() {
                         {
                           name: 'Standard Shipping',
                           sub: 'Courier partners such as Delhivery',
-                          time: '3–5 business days',
+                          time: '7–10 days (heavy goods up to 15 days)',
                           cost: chargeAtCheckout
                             ? ['Itemised delivery fees, shown before you pay', 'Based on parcel size, weight and PIN code']
                             : ['Extra — paid on delivery', 'Cash or GPay / UPI to the courier'],

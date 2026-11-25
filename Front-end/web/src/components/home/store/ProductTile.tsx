@@ -11,6 +11,8 @@ import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import type { CardFeeWaiver } from '@/hooks/queries/useCardFeeWaivers';
 import { ZeroDeliveryRibbon, zeroDeliverySaveLabel } from '@/components/products/ZeroDeliveryRibbon';
 import { useFestival } from '@/components/festival/FestivalThemeContext';
+import DeliveryEstimate from '@/components/products/delivery/DeliveryEstimate';
+import type { DeliveryWindow } from '@/lib/deliveryWindow';
 
 /** Five stars, filled to the rating (rounded to the half). */
 export function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
@@ -31,12 +33,14 @@ export function Stars({ rating, size = 14 }: { rating: number; size?: number }) 
  * catalogue's own numbers through CurrencyContext like the rest of the store.
  */
 export default function ProductTile({
-  p, badge, feeWaiver = null,
+  p, badge, feeWaiver = null, deliveryEstimate = null,
 }: {
   p: StoreProduct;
   badge?: string;
   /** Black Friday: what the offer waives on this product (server figures, per shelf). */
   feeWaiver?: CardFeeWaiver | null;
+  /** Delivery window (server's, batch-fetched by the row). Space reserved either way. */
+  deliveryEstimate?: DeliveryWindow | null;
 }) {
   const { formatPrice } = useCurrency();
   const off = discountPct(p);
@@ -83,6 +87,7 @@ export default function ProductTile({
           )}
         </div>
         <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" mrp={off > 0 ? p.originalPrice : null} />
+        <DeliveryEstimate window={p.stock === 'out' ? null : deliveryEstimate} className="mt-1" />
         {/* Black Friday: no "by Brand" line — only some deals have a brand, so it made
             the tiles in a row uneven (owner, 2026-11-20). Back after the festival. */}
         {p.brand && !blackFriday && <div className="st-brand">by {p.brand}</div>}

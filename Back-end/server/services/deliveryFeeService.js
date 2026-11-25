@@ -140,7 +140,7 @@ export function normalizePin(raw) {
 // keeps ~250 rows off every quote. A failed load degrades to "no category signal".
 const CATEGORY_INDEX_TTL_MS = 5 * 60 * 1000;
 let categoryIndexCache = { at: 0, index: null };
-async function getCategoryIndex(now = Date.now()) {
+export async function getCategoryIndex(now = Date.now()) {
   if (categoryIndexCache.index && now - categoryIndexCache.at < CATEGORY_INDEX_TTL_MS) return categoryIndexCache.index;
   try {
     const rows = await deliveryFeeRepository.findCategoryRefs();

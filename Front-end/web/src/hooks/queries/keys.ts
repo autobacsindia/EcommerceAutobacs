@@ -445,6 +445,8 @@ export const deliveryFeeKeys = {
   remotePins: (prefix: string) => ['delivery-fees', 'remote-pins', prefix] as const,
   /** Product cards' Black Friday fee waiver, per sorted id list. */
   cardWaivers: (ids: string[]) => ['delivery-fees', 'card-waivers', [...ids].sort().join(',')] as const,
+  /** Delivery window per product (PDP + cards), per sorted id list. */
+  estimates: (ids: string[]) => ['delivery-fees', 'estimates', [...ids].sort().join(',')] as const,
 };
 
 /** Shoppable reels (`/reels/*`, `/admin/reels/*`) — the staff review queue by status tab. */

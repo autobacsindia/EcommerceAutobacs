@@ -4,6 +4,10 @@ import '@testing-library/jest-dom';
 import BuyBox, { type BuyBoxProduct } from './BuyBox';
 import { FestivalOfferProvider } from '@/components/festival/FestivalOfferContext';
 import type { PublicFestivalOffer } from '@/lib/festival/festivalOffer';
+jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
+  useDeliveryEstimates: () => ({ estimates: null, pending: false }),
+}));
+
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('next/link', () => ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>);
