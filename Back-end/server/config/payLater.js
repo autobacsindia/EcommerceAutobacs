@@ -1,19 +1,16 @@
 /**
- * "Ship before payment" (pay after dispatch) — the owner's limits, 2026-11-24.
+ * "Ship before payment" (pay after dispatch) — the owner's rules, 2026-11-24.
+ * No amount limit (owner 2026-11-25: "no dont need the limit of amount").
  *
  * A rare customer will only pay once they have the tracking details. The admin
  * may let ONE unpaid sales-panel order ship first; the customer then pays a
  * Razorpay link (or a bank transfer accounts confirms). Payment is still only
  * ever confirmed by the verified webhook or by accounts — never by hand.
  *
- * These are the business limits. They are read by services/payLaterService.js,
- * which is the only place that enforces them.
+ * These settings are read by services/payLaterService.js, which is the only place
+ * that enforces the rules.
  */
 export const PAY_LATER = Object.freeze({
-  /** Most one order may be, in rupees. */
-  MAX_ORDER_RUPEES: 25000,
-  /** Most that may be shipped-and-unpaid at one time, across every customer, in rupees. */
-  MAX_OUTSTANDING_RUPEES: 100000,
   /** Days after dispatch before the order counts as overdue. */
   DUE_DAYS: 3,
   /** How long each payment link stays payable. Re-issued when it runs out. */

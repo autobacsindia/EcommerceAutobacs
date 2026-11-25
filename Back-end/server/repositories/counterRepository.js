@@ -19,15 +19,6 @@ class CounterRepository extends BaseRepository {
     return Counter.next(name);
   }
 
-  /**
-   * Bump a counter INSIDE a transaction. Two transactions that both bump the same
-   * counter write-conflict, so one retries and sees what the other committed — the
-   * way to make a "read a sum, then write" check safe against a twin running at the
-   * same moment (services/payLaterService.js: the outstanding limit).
-   */
-  async bumpInSession(name, session) {
-    await Counter.updateOne({ _id: name }, { $inc: { seq: 1 } }, { upsert: true, session });
-  }
 }
 
 export default new CounterRepository();

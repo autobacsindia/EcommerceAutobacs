@@ -29,7 +29,7 @@ beforeEach(() => { get.mockReset(); post.mockReset(); });
 
 describe('OrderPayLater', () => {
   it('admin can turn it on with a reason; sends only the reason', async () => {
-    get.mockResolvedValue({ canApprove: true, perOrderLimit: 25000, dueDays: 3, owed: 10000, limit: 100000 });
+    get.mockResolvedValue({ canApprove: true, dueDays: 3, owed: 10000 });
     post.mockResolvedValue({ order: ROW() });
     show(<OrderPayLater orderId="o1" />);
     fireEvent.click(await screen.findByRole('button', { name: /Ship before payment/ }));
@@ -42,9 +42,16 @@ describe('OrderPayLater', () => {
     expect(post).toHaveBeenCalledTimes(1);
   });
 
+  it('offers the button on a big order and mentions no amount limit (owner removed it)', async () => {
+    get.mockResolvedValue({ canApprove: true, dueDays: 3, owed: 250000 });
+    show(<OrderPayLater orderId="o1" />);
+    expect(await screen.findByRole('button', { name: /Ship before payment/ })).toBeInTheDocument();
+    expect(screen.queryByText(/limit/i)).toBeNull();
+  });
+
   it('shows the server error, keeps the form', async () => {
-    get.mockResolvedValue({ canApprove: true, perOrderLimit: 25000, dueDays: 3 });
-    post.mockRejectedValue({ response: { data: { message: 'Customers already owe ₹95,000' } } });
+    get.mockResolvedValue({ canApprove: true, dueDays: 3 });
+    post.mockRejectedValue({ response: { data: { message: 'This order was paid or changed just now. Reload it.' } } });
     show(<OrderPayLater orderId="o1" />);
     fireEvent.click(await screen.findByRole('button', { name: /Ship before payment/ }));
     fireEvent.change(screen.getByLabelText(/Why can this customer/), { target: { value: 'Regular dealer' } });
@@ -53,21 +60,21 @@ describe('OrderPayLater', () => {
   });
 
   it('says why not, and offers no button', async () => {
-    get.mockResolvedValue({ canApprove: false, why: 'Over the ₹25,000 limit for one order.', perOrderLimit: 25000, dueDays: 3 });
+    get.mockResolvedValue({ canApprove: false, why: 'The customer has not paid overdue order #AB12.', dueDays: 3 });
     show(<OrderPayLater orderId="o1" />);
-    expect(await screen.findByText(/Over the ₹25,000 limit/)).toBeInTheDocument();
+    expect(await screen.findByText(/has not paid overdue order/)).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('renders nothing on a paid order', async () => {
-    get.mockResolvedValue({ canApprove: false, why: null, perOrderLimit: 25000, dueDays: 3 });
+    get.mockResolvedValue({ canApprove: false, why: null, dueDays: 3 });
     const { container } = show(<OrderPayLater orderId="o1" />);
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(container.querySelector('section')).toBeNull();
   });
 
   it('once on: shows the state, never "paid"', async () => {
-    get.mockResolvedValue({ canApprove: false, approved: ROW(), perOrderLimit: 25000, dueDays: 3 });
+    get.mockResolvedValue({ canApprove: false, approved: ROW(), dueDays: 3 });
     show(<OrderPayLater orderId="o1" />);
     expect(await screen.findByText('Shipped – payment due')).toBeInTheDocument();
     expect(screen.getByText(/Regular dealer/)).toBeInTheDocument();
@@ -78,7 +85,7 @@ describe('OrderPayLater', () => {
 describe('PayLaterList', () => {
   it('shows the server totals and each order', async () => {
     get.mockResolvedValue({ orders: [ROW(), ROW({ id: 'o2', orderNumber: '#CD34', payLater: STATE({ label: 'Shipped – payment overdue', overdueDays: 2 }) })],
-      nextCursor: null, summary: { owed: 16000, count: 2, overdue: 1, limit: 100000, perOrderLimit: 25000, dueDays: 3 } });
+      nextCursor: null, summary: { owed: 16000, count: 2, overdue: 1, dueDays: 3 } });
     show(<PayLaterList />);
     expect(await screen.findByText('₹16,000')).toBeInTheDocument();
     expect(screen.getByText('Shipped – payment overdue')).toBeInTheDocument();

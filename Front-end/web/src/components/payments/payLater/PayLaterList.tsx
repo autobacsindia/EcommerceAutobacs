@@ -38,7 +38,7 @@ export default function PayLaterList({ orderHref }: { orderHref?: (id: string) =
 
       {view === 'due' && summary && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Totals">
-          <div className="rounded-lg bg-white p-3 shadow-sm"><p className="text-xs text-gray-500">Customers owe</p><p className="text-lg font-bold">{rupees(summary.owed)}</p><p className="text-xs text-gray-500">of {rupees(summary.limit)} limit</p></div>
+          <div className="rounded-lg bg-white p-3 shadow-sm"><p className="text-xs text-gray-500">Customers owe</p><p className="text-lg font-bold">{rupees(summary.owed)}</p></div>
           <div className="rounded-lg bg-white p-3 shadow-sm"><p className="text-xs text-gray-500">Orders not paid</p><p className="text-lg font-bold">{summary.count}</p></div>
           <div className={`rounded-lg p-3 shadow-sm ${summary.overdue ? 'bg-red-50' : 'bg-white'}`}><p className="text-xs text-gray-500">Overdue (more than {summary.dueDays} days after dispatch)</p><p className={`text-lg font-bold ${summary.overdue ? 'text-red-700' : ''}`}>{summary.overdue}</p></div>
         </div>
