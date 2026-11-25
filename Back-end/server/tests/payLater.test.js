@@ -3,9 +3,9 @@
  * calls are doubles; no real link, SMS or payment is ever made.
  *
  * The invariants:
- *   - only the admin turns it on, only on an unpaid single-payment sales order,
- *     within ₹25,000 an order and ₹1,00,000 owed in total — even when two
- *     approvals race — and never for a customer with an overdue unpaid order
+ *   - only the admin turns it on, with a reason, only on an unpaid single-payment
+ *     sales order, with NO amount limit (owner removed it 2026-11-25), and never
+ *     for a customer with an overdue unpaid order
  *   - turning it on never marks the order paid; it sends the order to the teams
  *   - only a paid order or an approved pay-later order can be shipped
  *   - dispatch sends ONE payment link, and the due date runs from dispatch
@@ -203,40 +203,33 @@ describe('approve', () => {
     expect(razorpayService.cancelPaymentLink).not.toHaveBeenCalled();
   });
 
-  it('per-order limit is ₹25,000 (exactly ₹25,000 is fine)', async () => {
-    await expectFail(approve(await unpaidOrder({ totalAmount: 25000.01 })), 409, /25,000/);
-    await expect(approve(await unpaidOrder({ totalAmount: 25000 }))).resolves.toMatchObject({ alreadyApproved: false });
+  it('no amount limit: a ₹70,250 order is approved (regression, owner 2026-11-25)', async () => {
+    const big = await unpaidOrder({ totalAmount: 70250 });
+    expect(await svc.payLaterOptionFor(admin, String(big._id))).toMatchObject({ canApprove: true });
+    await expect(approve(big)).resolves.toMatchObject({ alreadyApproved: false });
+    expect(await Order.findById(big._id).lean()).toMatchObject({ status: 'processing', paymentStatus: 'pending' });
   });
 
-  it('total owed limit is ₹1,00,000', async () => {
-    for (let i = 0; i < 4; i += 1) await approve(await unpaidOrder({ totalAmount: 22000 })); // 88,000 owed
-    const refused = await unpaidOrder({ totalAmount: 15000 });
-    razorpayService.cancelPaymentLink.mockClear();
-    await expectFail(approve(refused), 409, /owe/);
-    // Refused before touching the customer's current link.
-    expect(razorpayService.cancelPaymentLink).not.toHaveBeenCalled();
-    expect((await Order.findById(refused._id).lean()).paymentLinkExpiresAt.getTime()).toBeGreaterThan(Date.now());
-    await expect(approve(await unpaidOrder({ totalAmount: 12000 }))).resolves.toBeTruthy(); // exactly 1,00,000
-    // A paid one frees its share.
-    const one = await Order.findOne({ totalAmount: 22000 });
-    await Order.updateOne({ _id: one._id }, { $set: { paymentStatus: 'paid' } });
-    await expect(approve(await unpaidOrder({ totalAmount: 20000 }))).resolves.toBeTruthy();
+  it('several large orders for the same customer are all approved while none is overdue', async () => {
+    const orders = [];
+    for (const amount of [70250, 90000, 150000]) orders.push(await unpaidOrder({ totalAmount: amount }));
+    for (const o of orders) await expect(approve(o)).resolves.toMatchObject({ alreadyApproved: false });
+    const approved = await Order.find({ user: customer._id, 'payLater.approvedAt': { $type: 'date' } }).lean();
+    expect(approved).toHaveLength(3);
+    expect(approved.every((o) => o.paymentStatus === 'pending')).toBe(true);
+    const list = await svc.listPayLater(admin, { view: 'due' });
+    expect(list.summary).toMatchObject({ owed: 310250, count: 3 });
+    expect(list.summary).not.toHaveProperty('limit');
   });
 
-  it('two approvals at the same moment cannot both go over the limit', async () => {
-    for (let i = 0; i < 4; i += 1) await approve(await unpaidOrder({ totalAmount: 21000 })); // 84,000 owed
-    const [a, b] = await Promise.all([unpaidOrder({ totalAmount: 10000 }), unpaidOrder({ totalAmount: 10000 })]);
-    const results = await Promise.allSettled([approve(a), approve(b)]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.find((r) => r.status === 'rejected').reason.statusCode).toBe(409);
-    // If the loser's old link was already cancelled at Razorpay, it shows as expired, never as live.
-    const loser = results[0].status === 'rejected' ? a : b;
-    const cancelled = razorpayService.cancelPaymentLink.mock.calls.some(([id]) => id === loser.paymentLinkId);
-    const expiresAt = (await Order.findById(loser._id).lean()).paymentLinkExpiresAt.getTime();
-    if (cancelled) expect(expiresAt).toBeLessThanOrEqual(Date.now());
-    else expect(expiresAt).toBeGreaterThan(Date.now());
-    const owed = (await Order.find({ 'payLater.approvedAt': { $type: 'date' } }).lean()).reduce((s, o) => s + o.totalAmount, 0);
-    expect(owed).toBeLessThanOrEqual(PAY_LATER.MAX_OUTSTANDING_RUPEES);
+  it('two approvals at the same moment both succeed, each once', async () => {
+    const [a, b] = await Promise.all([unpaidOrder({ totalAmount: 60000 }), unpaidOrder({ totalAmount: 60000 })]);
+    const results = await Promise.all([approve(a), approve(b)]);
+    expect(results.every((r) => r.alreadyApproved === false)).toBe(true);
+    for (const o of [a, b]) {
+      const saved = await Order.findById(o._id).lean();
+      expect(saved.statusHistory.filter((h) => h.reason === 'pay_later_approved')).toHaveLength(1);
+    }
   });
 
   it('a customer with an overdue unpaid order is blocked', async () => {
@@ -269,7 +262,7 @@ describe('approve', () => {
 
   it('the option endpoint says why not', async () => {
     expect(await svc.payLaterOptionFor(admin, String((await unpaidOrder())._id))).toMatchObject({ canApprove: true });
-    expect(await svc.payLaterOptionFor(admin, String((await unpaidOrder({ totalAmount: 30000 }))._id))).toMatchObject({ canApprove: false, why: expect.stringMatching(/limit/) });
+    expect(await svc.payLaterOptionFor(admin, String((await unpaidOrder({ salesUser: undefined }))._id))).toMatchObject({ canApprove: false, why: expect.stringMatching(/sales panel/) });
     await expectFail(svc.payLaterOptionFor(accounts, String((await unpaidOrder())._id)), 403);
   });
 
@@ -476,7 +469,8 @@ describe('overdue', () => {
 
     const list = await svc.listPayLater(accounts, { view: 'due' });
     expect(list.orders).toHaveLength(2);
-    expect(list.summary).toMatchObject({ owed: 13000, count: 2, limit: 100000 });
+    expect(list.summary).toMatchObject({ owed: 13000, count: 2 });
+    expect(list.summary).not.toHaveProperty('limit');
     await expectFail(svc.listPayLater(seller, {}), 403);
 
     const mine = await listSalesOrders(seller, {});

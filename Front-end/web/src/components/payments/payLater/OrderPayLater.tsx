@@ -15,7 +15,7 @@ const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:
 /**
  * Admin order page: "Ship before payment" for an unpaid sales order — or, once on,
  * where it stands. Renders nothing when it does not apply (paid, website order).
- * The server decides everything (limits, who, when); this only asks and shows.
+ * The server decides everything (who, when, which orders); this only asks and shows.
  */
 export default function OrderPayLater({ orderId, onChanged }: { orderId: string; onChanged?: () => void }) {
   const queryClient = useQueryClient();
@@ -65,8 +65,8 @@ export default function OrderPayLater({ orderId, onChanged }: { orderId: string;
       <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900"><Truck className="h-4 w-4" /> Ship before payment</h2>
       <p className="text-xs text-gray-600">
         For a customer who will only pay after getting the tracking. The order goes to the team now, unpaid. When it is sent,
-        the customer gets a payment link. It is due {data.dueDays} days after dispatch. Up to {rupees(data.perOrderLimit)} an order
-        {typeof data.owed === 'number' && typeof data.limit === 'number' ? `; customers owe ${rupees(data.owed)} of the ${rupees(data.limit)} limit now` : ''}.
+        the customer gets a payment link. It is due {data.dueDays} days after dispatch
+        {typeof data.owed === 'number' && data.owed > 0 ? `. Customers owe ${rupees(data.owed)} on these orders now` : ''}.
       </p>
       {!open ? (
         <button type="button" onClick={() => { setOpen(true); setError(''); }} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-gray-50">

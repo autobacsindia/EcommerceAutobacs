@@ -98,4 +98,18 @@ describe('Ship before payment routes', () => {
     expect((await seller.session.get('/staff/pay-later')).status).toBe(403);
     expect((await accounts.session.get('/staff/pay-later?view=nope')).status).toBe(400);
   });
+
+  it('a ₹70,250 order gets the button and can be approved (no amount limit — owner 2026-11-25)', async () => {
+    await Order.updateOne({ _id: order._id }, { $set: { subtotal: 70250, totalAmount: 70250, 'items.0.price': 70250 } });
+    const admin = await make('admin', undefined);
+    const opt = await admin.session.get(url());
+    expect(opt.status).toBe(200);
+    expect(opt.body).toMatchObject({ canApprove: true });
+    expect(opt.body).not.toHaveProperty('perOrderLimit');
+    expect(opt.body).not.toHaveProperty('limit');
+    expect((await admin.session.post(url(), { reason: 'Pays after tracking' })).status).toBe(200);
+    const list = await accounts.session.get('/staff/pay-later?view=due');
+    expect(list.body.summary.owed).toBe(70250);
+    expect(list.body.summary).not.toHaveProperty('limit');
+  });
 });

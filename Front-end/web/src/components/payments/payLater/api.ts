@@ -36,8 +36,6 @@ export interface PayLaterSummary {
   owed: number;
   count: number;
   overdue: number;
-  limit: number;
-  perOrderLimit: number;
   dueDays: number;
 }
 
@@ -45,10 +43,8 @@ export interface PayLaterOption {
   canApprove: boolean;
   why?: string | null;
   approved?: PayLaterRow;
-  perOrderLimit: number;
   dueDays: number;
   owed?: number;
-  limit?: number;
 }
 
 export const payLaterKeys = {

@@ -13,14 +13,13 @@
  *   5. Past the due date: once per IST day the customer is reminded and the admin +
  *      accounts get one overdue email (sweepPayLater, hourly). The bell counts them.
  *
- * ── LIMITS (config/payLater.js, owner 2026-11-24) ───────────────────────────────
- *   admin only · ≤ ₹25,000 an order · ≤ ₹1,00,000 shipped-and-unpaid in total ·
- *   a customer with an overdue unpaid order cannot get another one.
+ * ── RULES (config/payLater.js, owner 2026-11-24/25) ─────────────────────────────
+ *   admin only · a reason is required · no amount limit (owner removed it
+ *   2026-11-25) · a customer with an overdue unpaid order cannot get another one.
  *
  * ── ONCE ONLY ───────────────────────────────────────────────────────────────────
  *   Approval: a compare-and-set on status `awaiting_payment` + not paid, inside a
- *   transaction that bumps one counter so two approvals at once cannot both pass
- *   the total limit. Link: claimed with a CAS (payLater.linkClaimedAt) and saved
+ *   transaction (status change + clearing the old link together). Link: claimed with a CAS (payLater.linkClaimedAt) and saved
  *   only if still unpaid; a link made for an order paid meanwhile is cancelled.
  *   Chasing: claimed per IST day (payLater.lastChasedOn).
  */
@@ -29,7 +28,6 @@ import * as Sentry from '@sentry/node';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import orderRepository from '../repositories/orderRepository.js';
-import counterRepository from '../repositories/counterRepository.js';
 import razorpayService from './razorpayService.js';
 import orderStatusService from './orderStatusService.js';
 import { retireCurrentLink } from './salesOrderService.js';
@@ -41,7 +39,6 @@ import { publicEmail } from '../utils/customerContact.js';
 import { paise, istDayKey, dueAtFor, dispatchedAtOf, shapePayLater } from '../utils/payLater.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
-const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 
 const isAdmin = (u) => u?.role === 'admin';
@@ -49,10 +46,8 @@ const isActiveStaff = (u) => u?.role === 'staff' && u.staff?.active === true;
 const onTeam = (u, team) => isActiveStaff(u) && u.staff.team === team;
 const isSalesHead = (u) => onTeam(u, STAFF_TEAMS.SALES) && u.staff.isHead === true;
 
-const COUNTER = 'payLaterApprovals';
-const overLimit = (owedPaise, amount) => fail(`Customers already owe ${inr(owedPaise / 100)} on orders shipped before payment. The limit is ${inr(PAY_LATER.MAX_OUTSTANDING_RUPEES)}, so this ${inr(amount)} order cannot be added until some are paid.`, 409);
 const PAGE_SIZE = 25;
-const SWEEP_LIMIT = 200; // far above the ₹1,00,000 limit's worth of orders
+const SWEEP_LIMIT = 200; // per run; the hourly sweep picks up the rest next time
 const DAY_SECONDS = 24 * 60 * 60;
 const MIN_LINK_AGE_MS = 10 * 60 * 1000; // give the webhook time before asking Razorpay
 /** 10:00–19:00 IST: when a reminder SMS and the overdue email may go out. */
@@ -65,13 +60,11 @@ export const inChaseHours = (now = new Date()) => {
 const enqueue = (job, data) => enqueueNotification(job, data);
 
 /** Total shipped-and-unpaid across every customer, in paise (index order_pay_later). */
-async function outstandingPaise(session = null) {
-  const agg = orderRepository.model.aggregate([
+async function outstandingPaise() {
+  const [row] = await orderRepository.model.aggregate([
     { $match: payLaterDueFilter() },
     { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
   ]);
-  if (session) agg.session(session);
-  const [row] = await agg;
   return { paise: paise(row?.total || 0), count: row?.count || 0 };
 }
 
@@ -108,19 +101,11 @@ export async function approvePayLater(actor, orderId, input = {}, req) {
   }
   const total = paise(order.totalAmount);
   if (total < 100) throw fail('This order has no amount to collect.', 409);
-  if (total > paise(PAY_LATER.MAX_ORDER_RUPEES)) {
-    throw fail(`Ship before payment is allowed up to ${inr(PAY_LATER.MAX_ORDER_RUPEES)} an order. This one is ${inr(order.totalAmount)}.`, 409);
-  }
   const now = new Date();
   const overdue = await findOverdueFor(order.user, now);
   if (overdue) {
     throw fail(`This customer has not paid order ${orderNumber(overdue)}, which is overdue. They cannot ship before paying until it is paid.`, 409);
   }
-
-  // Cheap pre-check of the total limit, so a refusal does not cost the customer their
-  // current link. The transaction below re-checks it race-free.
-  const before = await outstandingPaise();
-  if (before.paise + total > paise(PAY_LATER.MAX_OUTSTANDING_RUPEES)) throw overLimit(before.paise, order.totalAmount);
 
   // The customer must not be able to pay the old 48-hour link once this is on: the
   // new link goes out after dispatch. If Razorpay will not cancel it, they may have
@@ -131,11 +116,6 @@ export async function approvePayLater(actor, orderId, input = {}, req) {
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      // Serialise approvals: a twin approval write-conflicts here and retries,
-      // then sees this one in the sum below.
-      await counterRepository.bumpInSession(COUNTER, session);
-      const { paise: owed } = await outstandingPaise(session);
-      if (owed + total > paise(PAY_LATER.MAX_OUTSTANDING_RUPEES)) throw overLimit(owed, order.totalAmount);
       const result = await orderStatusService.updateOrderStatus(String(order._id), 'processing', {
         userId: actor._id,
         isAdmin: true,
@@ -461,8 +441,6 @@ export async function listPayLater(actor, { cursor, view = 'due' } = {}) {
       owed: owed / 100,
       count,
       overdue: await countOverdue(now),
-      limit: PAY_LATER.MAX_OUTSTANDING_RUPEES,
-      perOrderLimit: PAY_LATER.MAX_ORDER_RUPEES,
       dueDays: PAY_LATER.DUE_DAYS,
     };
   }
@@ -479,7 +457,7 @@ export async function payLaterOptionFor(actor, orderId) {
   const order = await orderRepository.findById(orderId);
   if (!order) throw fail('Order not found.', 404);
   const now = new Date();
-  const base = { perOrderLimit: PAY_LATER.MAX_ORDER_RUPEES, dueDays: PAY_LATER.DUE_DAYS };
+  const base = { dueDays: PAY_LATER.DUE_DAYS };
   if (order.payLater?.approvedAt) {
     const populated = await orderRepository.findById(order._id, [{ path: 'user', select: 'name email phone' }, { path: 'salesUser', select: 'name' }]);
     return { ...base, canApprove: false, approved: shapeRow(populated, now) };
@@ -489,12 +467,8 @@ export async function payLaterOptionFor(actor, orderId) {
   if (order.status !== 'awaiting_payment' || !UNPAID_PAYMENT_STATUSES.includes(order.paymentStatus)) return { ...base, canApprove: false, why: null };
   if (order.bankTransferPendingAt) return no('A bank transfer is waiting for accounts.');
   if ((order.paymentParts || []).length) return no('This order is paid in parts.');
-  if (paise(order.totalAmount) > paise(PAY_LATER.MAX_ORDER_RUPEES)) return no(`Over the ${inr(PAY_LATER.MAX_ORDER_RUPEES)} limit for one order.`);
   const overdue = await findOverdueFor(order.user, now);
   if (overdue) return no(`The customer has not paid overdue order ${orderNumber(overdue)}.`);
   const { paise: owed } = await outstandingPaise();
-  if (owed + paise(order.totalAmount) > paise(PAY_LATER.MAX_OUTSTANDING_RUPEES)) {
-    return no(`Customers already owe ${inr(owed / 100)} of the ${inr(PAY_LATER.MAX_OUTSTANDING_RUPEES)} limit.`);
-  }
-  return { ...base, canApprove: true, owed: owed / 100, limit: PAY_LATER.MAX_OUTSTANDING_RUPEES };
+  return { ...base, canApprove: true, owed: owed / 100 };
 }
