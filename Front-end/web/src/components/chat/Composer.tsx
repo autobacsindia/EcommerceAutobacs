@@ -9,6 +9,9 @@ import { STAFF_TEAMS } from '@/lib/staffTeams';
 import EmojiPicker from './EmojiPicker';
 import { CHAT_FILES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, MAX_VIDEO_ATTACHMENT_BYTES, isVideoFile, mb } from '@/lib/attachments';
 import { matchesAccept, namePastedFile } from '@/lib/clipboardFiles';
+import { isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
+import { CHAT_MESSAGE_MAX } from './chatLimits';
 
 /** The server's limits (config/attachments.js): 20 files a message, 10 MB each (40 MB a video), 40 MB together. */
 const MAX_FILES = MAX_ATTACHMENTS;
@@ -204,7 +207,7 @@ export default function Composer({
     const start = el?.selectionStart ?? text.length;
     const end = el?.selectionEnd ?? text.length;
     const next = fn(text, start, end);
-    setText(next.text.slice(0, 4000));
+    setText(next.text);
     requestAnimationFrame(() => {
       el?.focus();
       el?.setSelectionRange(next.start, next.end);
@@ -226,6 +229,8 @@ export default function Composer({
     e?.preventDefault();
     const body = text.trim();
     if (!body && !files.length) return;
+    // Too long: keep every word in the box (the note under it says why).
+    if (isOverLimit(body, CHAT_MESSAGE_MAX)) return;
     onSend({
       text: body,
       clientId: newClientId(),
@@ -287,6 +292,7 @@ export default function Composer({
       )}
 
       {error && <p role="alert" className="mb-2 text-xs text-red-600">{error}</p>}
+      <TextLimitNote value={text.trim()} max={CHAT_MESSAGE_MAX} className="mb-2" />
 
       {quote && (
         <div className="mb-2 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
@@ -504,14 +510,13 @@ export default function Composer({
               }
             }}
             rows={1}
-            maxLength={4000}
             placeholder={placeholder ?? `Message ${channelName}`}
             aria-label={placeholder ?? `Message ${channelName}`}
             className="max-h-40 min-h-[40px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none order-1"
           />
           <button
             type="submit"
-            disabled={!text.trim() && !files.length}
+            disabled={(!text.trim() && !files.length) || isOverLimit(text.trim(), CHAT_MESSAGE_MAX)}
             className="order-4 grid h-9 w-9 shrink-0 place-items-center rounded-full text-blue-600 transition-[background-color,transform] hover:bg-blue-100 active:scale-95 disabled:text-gray-400 disabled:hover:bg-transparent"
             aria-label="Send message"
           >

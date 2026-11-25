@@ -1,4 +1,5 @@
 import { body, param, query } from 'express-validator';
+import { MESSAGE_MAX_LENGTH, SPACE_DESCRIPTION_MAX, messageTooLong } from '../config/chatLimits.js';
 
 const isObjectId = (v) => typeof v === 'string' && /^[a-f0-9]{24}$/i.test(v);
 
@@ -15,7 +16,7 @@ export const validateEditMessage = [
   param('id').custom(isObjectId).withMessage('Invalid message id'),
   body('text').exists().withMessage('Text is required')
     .bail().isString().withMessage('Text must be text')
-    .bail().isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
+    .bail().isLength({ max: MESSAGE_MAX_LENGTH }).withMessage(messageTooLong()),
 ];
 
 /** A reaction: which emoji, and whether it should be on. The service checks it is one emoji. */
@@ -85,7 +86,7 @@ export const validateMessagePage = [
 
 export const validateSendMessage = [
   // A message may be text, files, or both — the service rejects a truly empty one.
-  body('text').optional({ values: 'falsy' }).isString().isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
+  body('text').optional({ values: 'falsy' }).isString().isLength({ max: MESSAGE_MAX_LENGTH }).withMessage(messageTooLong()),
   body('clientId').optional().isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid client id'),
   body('threadRoot').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid thread'),
   body('quoteId').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid quoted message'),
@@ -113,7 +114,8 @@ export const validateMarkRead = [
 
 export const validateCreateSpace = [
   body('name').isString().isLength({ min: 2, max: 60 }).withMessage('Space name must be 2-60 characters'),
-  body('description').optional().isString().isLength({ max: 240 }),
+  body('description').optional().isString().isLength({ max: SPACE_DESCRIPTION_MAX })
+    .withMessage(`The description is too long (max ${SPACE_DESCRIPTION_MAX.toLocaleString('en-IN')} characters).`),
   body('memberIds').optional().isArray({ max: 200 }),
   body('memberIds.*').optional().custom(isObjectId).withMessage('Invalid member id'),
 ];

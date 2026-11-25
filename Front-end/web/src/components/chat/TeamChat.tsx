@@ -47,6 +47,9 @@ import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { setOpenConversation } from '@/lib/chatSound';
 import { plainLine } from './chatFormat';
+import { isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
+import { CHAT_SPACE_DESCRIPTION_MAX } from './chatLimits';
 import { clearTyping, noteTyping, useResetTypingOnUnmount } from '@/lib/chatTyping';
 import './chat.css';
 
@@ -198,9 +201,9 @@ function NewSpaceDialog({ meId, onClose, onCreated }: { meId: string; onClose: (
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            maxLength={240}
             className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-600"
           />
+          <TextLimitNote value={description} max={CHAT_SPACE_DESCRIPTION_MAX} />
         </label>
         <div>
           <span className="mb-1 block text-sm font-medium text-gray-700">Members</span>
@@ -221,7 +224,7 @@ function NewSpaceDialog({ meId, onClose, onCreated }: { meId: string; onClose: (
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"
-          disabled={create.isPending || name.trim().length < 2}
+          disabled={create.isPending || name.trim().length < 2 || isOverLimit(description.trim(), CHAT_SPACE_DESCRIPTION_MAX)}
           className="h-11 w-full rounded-full bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {create.isPending ? 'Creating…' : 'Create space'}
