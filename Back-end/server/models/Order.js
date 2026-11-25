@@ -1536,6 +1536,12 @@ OrderSchema.index(
   { paymentStatus: 1, 'payLater.approvedAt': -1, _id: -1 },
   { partialFilterExpression: { 'payLater.approvedAt': { $type: 'date' } }, name: 'order_pay_later' }
 );
+// Accounts' B2B / B2C check (services/salesTypeService.js): both lists, newest
+// first. Partial, so it holds only GTM orders that carry a check — not every order.
+OrderSchema.index(
+  { 'buyerTypeCheck.status': 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { 'buyerTypeCheck.status': { $exists: true } }, name: 'order_sales_type_check' }
+);
 
 // SINGLE-FIELD indexes for specific lookups
 // Declared retroactively from $indexStats (2026-08-21): these were hand-built in
