@@ -12,6 +12,7 @@ import ProductLink from '@/components/staff/ProductLink';
 import PaymentLinkCard from './PaymentLinkCard';
 import BankTransferForm from './BankTransferForm';
 import PayLaterBadge from '@/components/payments/payLater/PayLaterBadge';
+import SalesTypeBadge from './SalesTypeBadge';
 import { payLaterTone } from '@/components/payments/payLater/api';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { STAGE_TONE } from '@/components/staff/work/types';
@@ -93,6 +94,10 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
           <p className="text-sm font-semibold text-gray-900">
             {order.customer.name} <span className="font-normal text-gray-500">· {order.orderNumber}</span>
             <OrderTypeTag type="purchase" className="ml-2 align-middle" />
+            {order.salesType && (
+              <span className={`ml-2 rounded-full px-2 py-0.5 align-middle text-[11px] font-bold ${order.salesType.type === 'b2b' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'}`}
+                title={order.salesType.reason}>{order.salesType.label}</span>
+            )}
           </p>
           <p className="text-xs text-gray-500">
             {/* The paid date is the date of the sale (and what the list sorts by). */}
@@ -111,6 +116,10 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
         <PinButton orderId={order.id} pinned={!!order.pinned} />
       </div>
       </div>
+
+      {open && order.salesType && (
+        <div className="border-t border-gray-100 px-4 py-3"><SalesTypeBadge info={order.salesType} detail /></div>
+      )}
 
       {open && mode === 'sales' && order.payLater?.due && (
         // Shipped before payment: the link to share again, and "customer paid by bank transfer".

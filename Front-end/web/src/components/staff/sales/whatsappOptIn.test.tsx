@@ -21,6 +21,7 @@ function renderAndFill() {
       <NewSalesOrderForm />
     </QueryClientProvider>,
   );
+  fireEvent.click(screen.getByRole('radio', { name: /B2C — retail/ }));
   fill(/^Name$/, 'Ravi Kumar');
   fill(/Mobile \(WhatsApp\)/, '98765 43210');
   fill(/House \/ street/, '12 MG Road');

@@ -962,7 +962,7 @@ export const emailStaffPayLaterApprovedAlert = async (orderId) => {
 
   const ref = orderRef(order);
   const subject = `Ship before payment: ${ref} — ${inr(order.totalAmount)} NOT paid yet`;
-  const intro = `The admin let this order ship before the customer pays. Procurement: please check stock and ship as usual. `
+  const intro = `${order.payLater.approvedByName || 'The admin'} let this B2B order ship before the customer pays. Procurement: please check stock and ship as usual. `
     + `When it is dispatched the customer gets a payment link; accounts will see it under "Shipped – payment due".`;
   const link = teamPanelLink('/team/pay-later');
   const rows = orderRows(order, [

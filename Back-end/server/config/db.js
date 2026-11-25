@@ -653,6 +653,11 @@ export async function ensureCriticalIndexes() {
       { paymentStatus: 1, 'payLater.approvedAt': -1, _id: -1 },
       { name: 'order_pay_later', partialFilterExpression: { 'payLater.approvedAt': { $type: 'date' } }, background: true }
     );
+    // Accounts' B2B / B2C check lists (models/Order.js buyerTypeCheck). Partial on $exists (never $ne), so only checked orders are indexed.
+    await db.collection('orders').createIndex(
+      { 'buyerTypeCheck.status': 1, createdAt: -1, _id: -1 },
+      { name: 'order_sales_type_check', partialFilterExpression: { 'buyerTypeCheck.status': { $exists: true } }, background: true }
+    );
 
     // Extra charges on paid orders (models/OrderExtraCharge.js has the reasons).
     const extraCharges = db.collection('order_extra_charges');

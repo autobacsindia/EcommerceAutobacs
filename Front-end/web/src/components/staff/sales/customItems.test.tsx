@@ -24,6 +24,7 @@ const renderForm = () => render(
 const fill = (labelText: RegExp, value: string) => fireEvent.change(screen.getByLabelText(labelText), { target: { value } });
 
 function fillCustomer(phone: string) {
+  fireEvent.click(screen.getByRole('radio', { name: /B2C — retail/ }));
   fill(/^Name$/, 'Ravi Kumar');
   fill(/Mobile/, phone);
   fill(/Email/, 'ravi@example.com');

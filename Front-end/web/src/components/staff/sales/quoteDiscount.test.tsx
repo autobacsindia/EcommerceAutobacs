@@ -36,6 +36,7 @@ const wrap = (ui: React.ReactNode) => render(
 const fill = (labelText: RegExp | string, value: string) => fireEvent.change(screen.getByLabelText(labelText), { target: { value } });
 
 function fillCustomer() {
+  fireEvent.click(screen.getByRole('radio', { name: /B2C — retail/ }));
   fill(/^Name$/, 'Rohit Shah');
   fill(/Mobile/, '9876543210');
   fill(/House \/ street/, '12 MG Road');

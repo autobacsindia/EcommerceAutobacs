@@ -3,7 +3,9 @@
  *
  * ── THE FLOW ────────────────────────────────────────────────────────────────────
  *   1. Sales makes the order in the sales panel as usual (unpaid).
- *   2. The ADMIN turns on "Ship before payment" with a reason (approvePayLater).
+ *   2. The ADMIN or ACCOUNTS turns on "Ship before payment" with a reason
+ *      (approvePayLater) — only on a B2B order whose type accounts has approved
+ *      (utils/salesType.js; owner 2026-11-25). Never on a retail (B2C) order.
  *      The order goes to the teams like a paid one; paymentStatus stays `pending`.
  *   3. The first parcel leaves (shipmentService → afterDispatch): the due date is
  *      set (DUE_DAYS later) and a fresh Razorpay link goes to the customer.
@@ -14,7 +16,7 @@
  *      accounts get one overdue email (sweepPayLater, hourly). The bell counts them.
  *
  * ── RULES (config/payLater.js, owner 2026-11-24/25) ─────────────────────────────
- *   admin only · a reason is required · no amount limit (owner removed it
+ *   admin or accounts · B2B only, type approved by accounts · a reason is required · no amount limit (owner removed it
  *   2026-11-25) · a customer with an overdue unpaid order cannot get another one.
  *
  * ── ONCE ONLY ───────────────────────────────────────────────────────────────────
@@ -37,6 +39,7 @@ import { STAFF_TEAMS } from '../config/staff.js';
 import { PAY_LATER, UNPAID_PAYMENT_STATUSES, payLaterDueFilter } from '../config/payLater.js';
 import { publicEmail } from '../utils/customerContact.js';
 import { paise, istDayKey, dueAtFor, dispatchedAtOf, shapePayLater } from '../utils/payLater.js';
+import { payLaterTypeProblem, shapeSalesType } from '../utils/salesType.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -47,6 +50,9 @@ const onTeam = (u, team) => isActiveStaff(u) && u.staff.team === team;
 const isSalesHead = (u) => onTeam(u, STAFF_TEAMS.SALES) && u.staff.isHead === true;
 
 const PAGE_SIZE = 25;
+
+/** Who may turn it on: the admin, and accounts (owner 2026-11-25). */
+const mayApprove = (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.ACCOUNTS);
 const SWEEP_LIMIT = 200; // per run; the hourly sweep picks up the rest next time
 const DAY_SECONDS = 24 * 60 * 60;
 const MIN_LINK_AGE_MS = 10 * 60 * 1000; // give the webhook time before asking Razorpay
@@ -82,7 +88,7 @@ function findOverdueFor(userId, now) {
  * A second click on an approved order returns it unchanged (no second approval).
  */
 export async function approvePayLater(actor, orderId, input = {}, req) {
-  if (!isAdmin(actor)) throw fail('Only the admin can let an order ship before payment.', 403);
+  if (!mayApprove(actor)) throw fail('Only the admin or accounts can let an order ship before payment.', 403);
   if (!mongoose.isValidObjectId(orderId)) throw fail('Order not found.', 404);
   const reason = String(input.reason ?? '').trim().replace(/\s+/g, ' ');
   if (reason.length < PAY_LATER.REASON_MIN) throw fail('Write why this customer may pay after dispatch.', 400);
@@ -95,6 +101,9 @@ export async function approvePayLater(actor, orderId, input = {}, req) {
   if (order.status !== 'awaiting_payment' || !UNPAID_PAYMENT_STATUSES.includes(order.paymentStatus)) {
     throw fail('This order is already paid or closed.', 409);
   }
+  // B2B only, and only once accounts has approved the type (utils/salesType.js).
+  const typeProblem = payLaterTypeProblem(order);
+  if (typeProblem) throw fail(typeProblem, 409);
   if (order.bankTransferPendingAt) throw fail('A bank transfer is waiting for accounts on this order. Wait for them first.', 409);
   if ((order.paymentParts || []).length) {
     throw fail('This order is paid in parts. Ship before payment works only for a single full payment.', 409);
@@ -120,7 +129,7 @@ export async function approvePayLater(actor, orderId, input = {}, req) {
         userId: actor._id,
         isAdmin: true,
         reason: 'pay_later_approved',
-        notes: `Ship before payment, approved by ${actor.name || 'the admin'}: ${reason}`,
+        notes: `Ship before payment, approved by ${actor.name || (isAdmin(actor) ? 'the admin' : 'accounts')}: ${reason}`,
         payLater: { approvedAt: now, approvedBy: actor._id, approvedByName: actor.name || '', reason },
         session,
       });
@@ -452,12 +461,13 @@ export async function listPayLater(actor, { cursor, view = 'due' } = {}) {
  * so the button is never offered on an order the server would refuse anyway.
  */
 export async function payLaterOptionFor(actor, orderId) {
-  if (!isAdmin(actor)) throw fail('Not authorized.', 403);
+  if (!mayApprove(actor)) throw fail('Not authorized.', 403);
   if (!mongoose.isValidObjectId(orderId)) throw fail('Order not found.', 404);
   const order = await orderRepository.findById(orderId);
   if (!order) throw fail('Order not found.', 404);
   const now = new Date();
-  const base = { dueDays: PAY_LATER.DUE_DAYS };
+  // B2B / B2C badge + accounts' check, shown on the order page whatever else applies.
+  const base = { dueDays: PAY_LATER.DUE_DAYS, salesType: order.salesUser ? shapeSalesType(order) : null };
   if (order.payLater?.approvedAt) {
     const populated = await orderRepository.findById(order._id, [{ path: 'user', select: 'name email phone' }, { path: 'salesUser', select: 'name' }]);
     return { ...base, canApprove: false, approved: shapeRow(populated, now) };
@@ -465,6 +475,8 @@ export async function payLaterOptionFor(actor, orderId) {
   const no = (why) => ({ ...base, canApprove: false, why });
   if (!order.salesUser) return no('Only for orders made in the sales panel.');
   if (order.status !== 'awaiting_payment' || !UNPAID_PAYMENT_STATUSES.includes(order.paymentStatus)) return { ...base, canApprove: false, why: null };
+  const typeProblem = payLaterTypeProblem(order);
+  if (typeProblem) return no(typeProblem);
   if (order.bankTransferPendingAt) return no('A bank transfer is waiting for accounts.');
   if ((order.paymentParts || []).length) return no('This order is paid in parts.');
   const overdue = await findOverdueFor(order.user, now);

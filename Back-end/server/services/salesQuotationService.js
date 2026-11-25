@@ -41,6 +41,8 @@ import orderStatusService from './orderStatusService.js';
 import { retireAllParts } from './salesPaymentService.js';
 import { retireCurrentLink } from './salesOrderService.js';
 import { voidForOrder as voidSpinForOrder } from './spinService.js';
+import { resolveBuyer } from './buyerService.js';
+import { b2bOfferProblem, isB2B, pendingCheckFor, shapeSalesType } from '../utils/salesType.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const DAY = 24 * 60 * 60 * 1000;
@@ -112,11 +114,20 @@ function storedDiscount(actor, wanted, amount, previous) {
 
 /** Lines + discount → everything a quotation stores about money. */
 async function priceQuotation(actor, input, previousDiscount = null) {
+  // B2B or B2C (utils/salesType.js). B2B = the enterprise buyer: company name +
+  // a checksum-valid GSTIN, checked here before anything else is priced.
+  const buyer = resolveBuyer(input.buyer);
   const lines = await priceSalesLines(input.items);
   // Validated before anything else happens, so a bad percent changes nothing.
   const wanted = cleanDiscountInput(input.discount);
+  // B2B gets no offers — refused here, whatever the browser sent.
+  if (isB2B({ buyer })) {
+    const problem = b2bOfferProblem({ discount: wanted, lines });
+    if (problem) throw fail(problem, 400);
+  }
   const priced = priceWithDiscount(totalOf(lines), wanted);
   return {
+    buyer,
     lines,
     subtotal: priced.subtotal,
     totalAmount: priced.total,
@@ -210,6 +221,11 @@ export function shapeQuotation(q, { now = Date.now() } = {}) {
     discount: shapeDiscount(q.discount),
     totalAmount: q.totalAmount,
     approval: shapeApproval(q),
+    // B2B / B2C: the form's fields, and the badge + reason (utils/salesType.js).
+    buyer: q.buyer?.type
+      ? { type: q.buyer.type, legalName: q.buyer.legalName || '', gstin: q.buyer.gstin || '', billingAddress: q.buyer.billingAddress || null }
+      : { type: 'individual', legalName: '', gstin: '', billingAddress: null },
+    salesType: shapeSalesType(q),
     notes: q.notes || '',
     validUntil: q.validUntil,
     salesPerson: q.salesUser?.name || null,
@@ -272,7 +288,7 @@ export function acceptedEditState(order) {
 /** New quotation. Lines are priced exactly as a sales order's would be. */
 export async function createQuotation(actor, input, req) {
   if (!canSell(actor)) throw fail('Only the GTM head and GTM leads can create quotations.', 403);
-  const { lines, subtotal, totalAmount: total, discount } = await priceQuotation(actor, input);
+  const { lines, subtotal, totalAmount: total, discount, buyer } = await priceQuotation(actor, input);
   const customer = cleanCustomer(input.customer);
   const rep = await salesRepRepository.findOrCreateForUser(actor);
   const _id = new mongoose.Types.ObjectId();
@@ -287,6 +303,7 @@ export async function createQuotation(actor, input, req) {
     subtotal,
     ...(discount && { discount }),
     totalAmount: total,
+    buyer,
     notes: input.notes ? String(input.notes).slice(0, 1000) : '',
     salesUser: actor._id,
     salesRep: rep._id,
@@ -309,6 +326,7 @@ function editChanges(actor, q, priced, input) {
       items: storeLines(priced.lines),
       subtotal: priced.subtotal,
       totalAmount: priced.totalAmount,
+      buyer: priced.buyer,
       notes: input.notes ? String(input.notes).slice(0, 1000) : '',
       validUntil: new Date(Date.now() + QUOTATION_VALID_DAYS * DAY),
       ...(priced.discount && { discount: priced.discount }),
@@ -521,6 +539,12 @@ export async function acceptQuotation(actor, id, req) {
   // Above 10% off the website price: only with an approval for these exact prices.
   // The lines were just re-priced and matched, so the stored quotation IS the price.
   if (isBlocked(q)) throw fail(NEEDS_APPROVAL('accepted'), 409);
+  // B2B: still no offers on the re-priced lines (a quotation saved before a rule
+  // change, or written around the edit path, cannot become a discounted B2B order).
+  if (isB2B(q)) {
+    const problem = b2bOfferProblem({ discount: q.discount, lines: lineItems });
+    if (problem) throw fail(`${problem} Edit the quotation, then accept it.`, 409);
+  }
   const discountApproval = approvalForOrder(q);
 
   // Claim first, so two "accept" clicks can never create two orders. An approved
@@ -538,7 +562,10 @@ export async function acceptQuotation(actor, id, req) {
   let order;
   try {
     ({ order } = await createOfflineOrderRecord({
-      body: {}, // retail buyer: no GSTIN block from the panel
+      // B2B (enterprise: company + GSTIN, re-validated) or B2C; older quotations = B2C.
+      body: q.buyer?.type ? { buyer: q.buyer } : {},
+      // Accounts checks the type with a note (services/salesTypeService.js).
+      buyerTypeCheck: pendingCheckFor(q),
       email: q.customer.email || phoneOnlyEmailFor(q.customer.phone),
       phone: q.customer.phone,
       alternatePhone: q.customer.alternatePhone || '',

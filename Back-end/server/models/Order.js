@@ -199,6 +199,25 @@ const OrderSchema = new mongoose.Schema({
     default: undefined,
   },
   /*
+    B2B / B2C on a GTM order (utils/salesType.js). The type itself is `buyer.type`
+    (enterprise = B2B), snapshotted from the quotation. This block is ACCOUNTS'
+    check of that type: `pending` on every GTM order made since 2026-11-25, then
+    `approved` with a note (services/salesTypeService.js). Absent on older orders.
+    A B2B order can ship before payment only once this is approved.
+  */
+  buyerTypeCheck: {
+    type: new mongoose.Schema({
+      status: { type: String, enum: ["pending", "approved"], required: true },
+      type: { type: String, enum: ["b2b", "b2c"] },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: String,
+      role: { type: String, enum: ["accounts", "admin"] },
+      at: Date,
+      note: String,
+    }, { _id: false }),
+    default: undefined,
+  },
+  /*
     "Ship before payment" (config/payLater.js, services/payLaterService.js). The admin
     let this unpaid sales order go to the teams and ship; the customer pays after
     dispatch. paymentStatus stays `pending` until the verified webhook (or accounts
@@ -1516,6 +1535,12 @@ OrderSchema.index({ listDate: -1, _id: -1 }, { name: 'order_list_date' });
 OrderSchema.index(
   { paymentStatus: 1, 'payLater.approvedAt': -1, _id: -1 },
   { partialFilterExpression: { 'payLater.approvedAt': { $type: 'date' } }, name: 'order_pay_later' }
+);
+// Accounts' B2B / B2C check (services/salesTypeService.js): both lists, newest
+// first. Partial, so it holds only GTM orders that carry a check — not every order.
+OrderSchema.index(
+  { 'buyerTypeCheck.status': 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { 'buyerTypeCheck.status': { $exists: true } }, name: 'order_sales_type_check' }
 );
 
 // SINGLE-FIELD indexes for specific lookups
