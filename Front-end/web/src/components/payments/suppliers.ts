@@ -62,6 +62,7 @@ export type PayGroup = {
 export const supplierKeys = {
   all: ['suppliers'] as const,
   list: (params: Record<string, string>) => [...supplierKeys.all, 'list', params] as const,
+  one: (id: string) => [...supplierKeys.all, 'one', id] as const,
 };
 
 /** Under paymentKeys.all, so a payment change refreshes the queue too. */

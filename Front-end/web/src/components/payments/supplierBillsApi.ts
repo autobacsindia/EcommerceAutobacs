@@ -12,6 +12,8 @@ export type BillState = 'unpaid' | 'part_paid' | 'paid' | 'cancelled';
 export type BillPayment = {
   id: string; number: string; status: PaymentRequest['status']; statusLabel: string;
   amount: number; raisedBy: string; createdAt: string; paidAt: string | null;
+  /** Supplier credit used on this payment: its share of the bill = amount + credit. */
+  credit?: number;
 };
 
 export type SupplierBill = {
@@ -106,10 +108,12 @@ export const cancelBill = (id: string, reason: string) =>
   apiClient.post<{ bill: SupplierBill }>(`/supplier-bills/${enc(id)}/cancel`, { reason });
 
 /** "Pay": an ordinary supplier payment request for all or part of the bill, sent to accounts. */
-export function payBill(billId: string, fields: { amount: string; description: string; clientId: string }, files: File[]) {
+export function payBill(billId: string, fields: { amount: string; description: string; clientId: string; useCredit?: boolean }, files: File[]) {
   const form = new FormData();
   form.append('supplierBillId', billId);
   form.append('amount', fields.amount);
+  // The tick only: the server works out the credit (min(balance, amount)).
+  if (fields.useCredit) form.append('useCredit', 'true');
   if (fields.description.trim()) form.append('description', fields.description.trim());
   form.append('clientId', fields.clientId);
   for (const f of files) form.append('bill', f);

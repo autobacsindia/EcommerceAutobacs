@@ -8,6 +8,11 @@ import PaymentRequest from '../models/PaymentRequest.js';
 const supplierBillRepository = {
   create: async (doc) => (await SupplierBill.create(doc)).toObject(),
   findById: (id) => SupplierBill.findById(id).lean(),
+  /** The bills linked to one order (newest first), bounded — through supplier_bill_order. */
+  findForOrder: (orderId, limit = 50) => SupplierBill.find({ order: { $eq: orderId, $type: 'objectId' } })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean(),
   findByClientId: (createdBy, clientId) => SupplierBill.findOne({ createdBy, clientId }).lean(),
   findOpenByKey: (supplier, billKey) => SupplierBill.findOne({ supplier, status: 'open', billKey }).lean(),
 
@@ -87,7 +92,7 @@ const supplierBillRepository = {
   // `$type` repeats the partial index's filter so the planner can use payment_request_supplier_bill
   // (an `$in` alone does not prove it, and the plan would scan every payment request).
   requestsFor: (billIds) => PaymentRequest.find({ supplierBill: { $in: billIds, $type: 'objectId' } })
-    .select('number status amount currency supplierBill requestedByName createdAt payment.paidAt payment.transactionAt')
+    .select('number status amount currency credit supplierBill requestedByName createdAt payment.paidAt payment.transactionAt')
     .sort({ createdAt: 1 })
     .lean(),
 };

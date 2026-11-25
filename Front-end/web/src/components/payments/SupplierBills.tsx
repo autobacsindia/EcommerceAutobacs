@@ -4,7 +4,10 @@ import EntityLink from '@/components/ui/EntityLink';
 import { useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Loader2, Plus } from 'lucide-react';
-import { errorMessage, money, paymentKeys, type OrderMatch } from './api';
+import { creditPreview, errorMessage, money, paymentKeys, type OrderMatch } from './api';
+import apiClient from '@/lib/api-client';
+import PaymentRequestDetail from './PaymentRequestDetail';
+import { supplierKeys } from './suppliers';
 import { istToday, newFormKey } from './credit';
 import OrderPicker from './OrderPicker';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
@@ -196,7 +199,7 @@ function BillRow({ bill: b, onChanged, onNotice }: { bill: SupplierBill; onChang
       </div>
       {open === 'pay' && (
         <PayForm bill={b} onCancel={() => setOpen('')} onBillChanged={onChanged}
-          onDone={async (number) => { setOpen(''); onNotice(`${number} sent to accounts for approval.`); await onChanged(); }} />
+          onDone={async (number, paid) => { setOpen(''); onNotice(paid ? `${number} is paid fully from supplier credit — nothing to transfer.` : `${number} sent to accounts for approval.`); await onChanged(); }} />
       )}
       {open === 'edit' && <BillForm bill={b} onCancel={() => setOpen('')} onDone={async () => { setOpen(''); await onChanged(); }} />}
       {open === 'cancel' && <CancelForm bill={b} onCancel={() => setOpen('')} onDone={async () => { setOpen(''); await onChanged(); }} />}
@@ -205,8 +208,11 @@ function BillRow({ bill: b, onChanged, onNotice }: { bill: SupplierBill; onChang
   );
 }
 
-function BillDetails({ id }: { id: string }) {
+export function BillDetails({ id }: { id: string }) {
   const q = useQuery({ queryKey: billKeys.one(id), queryFn: () => getBill(id) });
+  const qc = useQueryClient();
+  // A payment on the bill opens in full — accounts can use the supplier's credit on it there.
+  const [opened, setOpened] = useState<string | null>(null);
   if (q.isLoading) return <p className="mt-2 text-sm text-gray-500">Loading…</p>;
   if (q.isError || !q.data) return <p role="alert" className="mt-2 text-sm text-red-700">Could not load this bill.</p>;
   const b = q.data.bill;
@@ -222,12 +228,23 @@ function BillDetails({ id }: { id: string }) {
         <ul aria-label="Payments on this bill" className="divide-y divide-gray-100 rounded-lg border border-gray-200">
           {b.payments.map((p) => (
             <li key={p.id} className="flex flex-wrap justify-between gap-2 px-3 py-2">
-              <span><span className="font-medium">{p.number}</span> · {p.statusLabel}</span>
-              <span className="font-medium">{money(p.amount)}</span>
+              <span>
+                <button type="button" onClick={() => setOpened(p.id)} className="font-medium text-blue-700 hover:underline">{p.number}</button> · {p.statusLabel}
+              </span>
+              <span className="text-right">
+                <span className="font-medium">{p.credit ? `${money(p.amount + p.credit)} bill` : money(p.amount)}</span>
+                {!!p.credit && <span className="block text-xs text-emerald-800">{money(p.credit)} from supplier credit · {p.amount > 0 ? `${money(p.amount)} to pay` : 'nothing transferred'}</span>}
+              </span>
             </li>
           ))}
         </ul>
       ) : <p className="text-gray-500">No payments yet.</p>}
+      {opened && (
+        <PaymentRequestDetail id={opened} onClose={() => {
+          setOpened(null);
+          qc.invalidateQueries({ queryKey: billKeys.all });
+        }} />
+      )}
     </div>
   );
 }
@@ -237,7 +254,7 @@ function BillDetails({ id }: { id: string }) {
  * first asks for the bill amount and saves it, then shows the payment form.
  */
 function PayForm({ bill: start, onCancel, onDone, onBillChanged }: {
-  bill: SupplierBill; onCancel: () => void; onDone: (number: string) => Promise<void>; onBillChanged: () => Promise<unknown>;
+  bill: SupplierBill; onCancel: () => void; onDone: (number: string, paid?: boolean) => Promise<void>; onBillChanged: () => Promise<unknown>;
 }) {
   const [bill, setBill] = useState(start);
   if (bill.amount == null || bill.leftToAsk == null) {
@@ -281,8 +298,16 @@ function AmountFirst({ bill, onCancel, onSaved }: { bill: SupplierBill; onCancel
   );
 }
 
-function PayAmount({ bill, onCancel, onDone }: { bill: SupplierBill & { leftToAsk: number }; onCancel: () => void; onDone: (number: string) => Promise<void> }) {
+function PayAmount({ bill, onCancel, onDone }: { bill: SupplierBill & { leftToAsk: number }; onCancel: () => void; onDone: (number: string, paid?: boolean) => Promise<void> }) {
   const [amount, setAmount] = useState(String(bill.leftToAsk));
+  // The supplier's credit (what they owe us): "Use supplier credit" takes it off this payment.
+  const supplierQ = useQuery({
+    queryKey: supplierKeys.one(bill.supplier.id),
+    queryFn: () => apiClient.get<{ supplier: Supplier }>(`/suppliers/${encodeURIComponent(bill.supplier.id)}`),
+  });
+  const owedToUs = (supplierQ.data?.supplier?.credit || []).find((c) => c.currency === 'INR')?.owed ?? 0;
+  const [useCredit, setUseCredit] = useState(false);
+  const preview = useCredit ? creditPreview(owedToUs, Number(amount)) : null;
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -297,8 +322,8 @@ function PayAmount({ bill, onCancel, onDone }: { bill: SupplierBill & { leftToAs
     setBusy(true);
     setError('');
     try {
-      const { request } = await payBill(bill.id, { amount, description, clientId }, files);
-      await onDone(request.number);
+      const { request } = await payBill(bill.id, { amount, description, clientId, useCredit: useCredit && owedToUs > 0 }, files);
+      await onDone(request.number, request.status === 'paid');
     } catch (err) {
       setError(errorMessage(err, 'Could not send it. Please try again.'));
     } finally {
@@ -321,6 +346,21 @@ function PayAmount({ bill, onCancel, onDone }: { bill: SupplierBill & { leftToAs
           <input id={`${id}-note`} className={input} value={description} placeholder={bill.billNumber ? `Bill ${bill.billNumber} (${bill.number})` : `Supplier bill ${bill.number}`} onChange={(e) => setDescription(e.target.value)} />
         </div>
       </div>
+      {owedToUs > 0 && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" aria-label="Supplier credit">
+          <p>{bill.supplier.name} owes us <strong>{money(owedToUs)}</strong> (supplier credit).</p>
+          <label className="mt-2 flex items-center gap-2 font-medium">
+            <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} />
+            Use supplier credit on this payment
+          </label>
+          {preview && (
+            <p className="mt-2">
+              {money(preview.bill)} − credit {money(preview.used)} = <strong>{preview.toPay > 0 ? `pay ${money(preview.toPay)}` : 'nothing to pay'}</strong>
+              <span className="block text-xs text-emerald-800">Credit left for next time: {money(preview.left)}.{preview.toPay === 0 && ' Credit pays all of it — accounts approves and it closes as paid.'}</span>
+            </p>
+          )}
+        </div>
+      )}
       <div>
         <label htmlFor={`${id}-file`} className={label}>Bill photo / PDF for accounts (optional)</label>
         <input id={`${id}-file`} type="file" accept="image/*,application/pdf" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} className="text-sm" />

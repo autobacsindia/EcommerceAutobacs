@@ -259,7 +259,8 @@ const PaymentRequestSchema = new mongoose.Schema(
 
     // Filled when accounts records the payment.
     payment: {
-      method: { type: String, enum: ['razorpay', 'bank', 'upi', 'card', 'other'], default: undefined },
+      // 'credit': supplier credit paid the whole bill — no money was transferred (set by the server only).
+      method: { type: String, enum: ['razorpay', 'bank', 'upi', 'card', 'other', 'credit'], default: undefined },
       reference: { type: String, default: '', maxlength: 120 },
       paidAt: { type: Date, default: null }, // when it was RECORDED here
       // When the money actually moved (the admin enters it; defaults to paidAt).

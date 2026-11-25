@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe('using supplier credit on a payment', () => {
-  it('offers the picked supplier\'s credit, shows bill − credit = transfer, and sends the credit (not a total)', async () => {
+  it('offers the picked supplier\'s credit as a tick, shows bill − credit = pay, and sends only the tick (no figures)', async () => {
     get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
     wrap(<PaymentRequestForm supplier={{ orderId: 'o1', orderNumber: '#AB12', customer: 'Ravi', closedBy: 'Website', lines: [{ itemId: 'i1', name: 'Lift kit' }] }} onDone={jest.fn()} />);
     fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'ar' } });
@@ -54,14 +54,52 @@ describe('using supplier credit on a payment', () => {
     const box = screen.getByLabelText('Supplier credit');
     expect(box).toHaveTextContent('ARB Supplies owes us ₹15,000');
     fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '40000' } });
-    fireEvent.change(within(box).getByLabelText(/Credit to use/), { target: { value: '15000' } });
-    expect(box).toHaveTextContent('Bill ₹40,000 − credit ₹15,000 = transfer ₹25,000');
+    fireEvent.click(within(box).getByRole('checkbox', { name: /Use supplier credit/ }));
+    expect(box).toHaveTextContent('Bill ₹40,000 − credit ₹15,000 = pay ₹25,000');
+    expect(box).toHaveTextContent('Credit left for next time: ₹0');
     fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const form = fetchMock.mock.calls[0][1].body as FormData;
     expect(form.get('amount')).toBe('40000');
-    expect(form.get('creditToUse')).toBe('15000');
+    expect(form.get('useCredit')).toBe('true');
+    expect(form.get('creditToUse')).toBeNull();
     expect(form.get('supplierId')).toBe('s1');
+  });
+
+  it('credit bigger than the bill: ₹1,00,000 bill, ₹2,00,000 credit → nothing to pay, ₹1,00,000 left (on "Pay a supplier" too)', async () => {
+    get.mockImplementation(async (url: string) => (url.startsWith('/suppliers')
+      ? { suppliers: [{ ...ARB, credit: [{ currency: 'INR', owed: 200000, owedText: '₹2,00,000', pending: 0, pendingText: '' }] }], nextAfter: null }
+      : { options: { categories: [{ value: 'supplier', label: 'Supplier' }], currencies: [{ code: 'INR', label: 'Rupee' }], baseCurrency: 'INR' } }));
+    wrap(<PaymentRequestForm stock onDone={jest.fn()} />);
+    fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'ar' } });
+    fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '100000' } });
+    const box = screen.getByLabelText('Supplier credit');
+    fireEvent.click(within(box).getByRole('checkbox', { name: /Use supplier credit/ }));
+    expect(box).toHaveTextContent('Bill ₹1,00,000 − credit ₹1,00,000 = nothing to pay');
+    expect(box).toHaveTextContent('Credit left for next time: ₹1,00,000');
+    expect(box).toHaveTextContent('no money is transferred');
+  });
+
+  it('unticking sends no credit', async () => {
+    get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
+    wrap(<PaymentRequestForm supplier={{ orderId: 'o1', orderNumber: '#AB12', customer: 'Ravi', closedBy: 'Website', lines: [{ itemId: 'i1', name: 'Lift kit' }] }} onDone={jest.fn()} />);
+    fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'ar' } });
+    fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '400' } });
+    const tick = within(screen.getByLabelText('Supplier credit')).getByRole('checkbox', { name: /Use supplier credit/ });
+    fireEvent.click(tick); fireEvent.click(tick);
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect((fetchMock.mock.calls[0][1].body as FormData).get('useCredit')).toBeNull();
+  });
+
+  it('typing a saved supplier\'s exact name still lists it to pick (it used to vanish, so it could not be picked)', async () => {
+    get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
+    wrap(<PaymentRequestForm supplier={{ orderId: 'o1', orderNumber: '#AB12', customer: 'Ravi', closedBy: 'Website', lines: [{ itemId: 'i1', name: 'Lift kit' }] }} onDone={jest.fn()} />);
+    fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'ARB Supplies' } });
+    fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
+    expect(screen.getByLabelText('Supplier credit')).toBeInTheDocument();
   });
 
   it('no credit box when the supplier owes nothing in this currency', async () => {
@@ -291,5 +329,50 @@ describe('adding supplier credit on the Suppliers tab (per role)', () => {
     get.mockResolvedValue(page({ can: { propose: true, writeOff: true }, balances: [{ currency: 'INR', owed: 5000, owedText: '₹5,000', pending: 0, pendingText: '' }] }));
     wrap(<SupplierCreditPanel supplierId="s1" />);
     expect(await screen.findByRole('button', { name: 'Write off' })).toBeInTheDocument();
+  });
+});
+
+describe('credit on a waiting payment (request detail)', () => {
+  const base = {
+    id: 'r1', number: 'PR-0200', status: 'submitted', statusLabel: 'Waiting for accounts', kind: 'supplier', currency: 'INR',
+    amount: 20000, bill: null, credit: null, rev: 0, payee: { name: 'ARB Supplies', method: 'bank' }, supplier: { id: 's1' },
+  } as unknown as import('./api').PaymentRequest;
+
+  it('CreditSum shows the full bill, the credit used and what is left to pay', async () => {
+    const { CreditSum } = await import('./RequestCredit');
+    render(<CreditSum r={{ ...base, amount: 25000, bill: 40000, credit: { amount: 15000 } }} />);
+    const sum = screen.getByLabelText('Supplier credit used');
+    expect(sum).toHaveTextContent('Full bill₹40,000');
+    expect(sum).toHaveTextContent('Supplier credit used− ₹15,000');
+    expect(sum).toHaveTextContent('Remaining to pay₹25,000');
+  });
+
+  it('CreditSum: credit covering it all says nothing is transferred and it does not go to the admin', async () => {
+    const { CreditSum } = await import('./RequestCredit');
+    render(<CreditSum r={{ ...base, amount: 0, bill: 20000, credit: { amount: 20000 }, paidByCredit: true }} />);
+    expect(screen.getByLabelText('Supplier credit used')).toHaveTextContent('Nothing — no transfer');
+    expect(screen.getByLabelText('Supplier credit used')).toHaveTextContent('does not go to the admin to pay');
+  });
+
+  it('accounts uses the supplier\'s credit with one click; the server gets only the tick and the version shown', async () => {
+    const { CreditControl } = await import('./RequestCredit');
+    get.mockResolvedValue({ supplier: { ...ARB, credit: [{ currency: 'INR', owed: 8000, owedText: '₹8,000', pending: 0, pendingText: '' }] } });
+    post.mockResolvedValue({ request: { ...base, amount: 12000, bill: 20000, credit: { amount: 8000 }, rev: 1 } });
+    const onSaved = jest.fn();
+    wrap(<CreditControl r={base} onSaved={onSaved} />);
+    const panel = await screen.findByLabelText('Use supplier credit');
+    expect(panel).toHaveTextContent('Using it: bill ₹20,000 − credit ₹8,000 = pay ₹12,000 · ₹0 credit left.');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Use supplier credit' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(post).toHaveBeenCalledWith('/payment-requests/r1/credit', { useCredit: true, rev: 0 });
+  });
+
+  it('a payment already using credit can take it off again', async () => {
+    const { CreditControl } = await import('./RequestCredit');
+    get.mockResolvedValue({ supplier: { ...ARB, credit: [] } });
+    post.mockResolvedValue({ request: base });
+    wrap(<CreditControl r={{ ...base, amount: 12000, bill: 20000, credit: { amount: 8000 }, rev: 1 }} onSaved={jest.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Remove credit/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/payment-requests/r1/credit', { creditToUse: 0, rev: 1 }));
   });
 });

@@ -9,7 +9,7 @@ import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import EditHistory from './EditHistory';
 import { cardLabelOf } from './CardFields';
 import {
-  accountName, actOn, kmText, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  accountName, actOn, kmText, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paidHow, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { useSlipReader } from './slipReader';
 import SlipReadStatus, { SlipFieldTag, SlipSources } from './SlipReadStatus';
@@ -20,6 +20,7 @@ import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderPicker from './OrderPicker';
 import DealSummaryBox from './DealSummary';
 import { SupplierRefundLine } from './SupplierCredit';
+import { CreditControl, CreditSum } from './RequestCredit';
 import RichText from '@/components/ui/RichText';
 import { heldByText } from './HoldLine';
 
@@ -278,12 +279,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 ? <p className="text-sm text-gray-700">Rupee amount: what the bank debits — recorded when paid.</p>
                 : foreignBill(r) && <p className="text-sm text-gray-700">Bill: {foreignBill(r)}</p>}
               <p className="text-sm text-gray-600">to {r.payee.name || 'payee not given yet'}</p>
-              {r.credit && r.bill != null && (
-                <p className="mt-1 text-sm text-emerald-800" aria-label="Supplier credit used">
-                  Bill {money(r.bill, r.currency)} − supplier credit {money(r.credit.amount, r.currency)} = transfer {money(Math.round((r.bill - r.credit.amount) * 100) / 100, r.currency)}
-                </p>
-              )}
+              {r.credit && r.bill != null && <CreditSum r={r} />}
             </div>
+            {r.can.credit && r.supplier && <CreditControl r={r} onSaved={done} />}
             {r.supplierRefund && (
               <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'} bill={r.bill ?? (r.currency !== 'INR' ? r.foreignAmount ?? 0 : r.amount)} />
             )}
@@ -334,7 +332,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               <Row k="Pay by" v={payByLine(r.payee)} />
               {r.payee.method === 'card' && <Row k="Name on card" v={r.payee.cardName} />}
               <Row k="Payee phone" v={r.payee.phone} />
-              {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}
+              {r.payment && <Row k="Paid" v={`${paidHow(r.payment.method)}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}
               {r.paidFrom && <Row k="Paid from" v={`${accountName(r.paidFrom)} · ${money(r.paidFrom.amount, r.paidFrom.currency)} sent`} />}
               {r.payment && <Row k="Transaction" v={formatDateTimeIST(r.payment.transactionAt || r.payment.paidAt)} />}
               {r.payment && <Row k="Recorded" v={formatDateTimeIST(r.payment.paidAt)} />}

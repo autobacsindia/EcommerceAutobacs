@@ -265,9 +265,10 @@ describe('Supplier credit', () => {
     const over = await raise(id, kit, arb, 50000, { creditToUse: 30000.01 });
     expect(over.status).toBe(409);
     expect(over.body.message).toMatch(/credit in INR is ₹30,000/);
-    const whole = await raise(id, kit, arb, 20000, { creditToUse: 20000 });
-    expect(whole.status).toBe(400);
-    expect(whole.body.message).toMatch(/less than the bill/);
+    // More than the bill is refused; the WHOLE bill is allowed since 2026-11-25 (supplierCreditUse.test.js).
+    const past = await raise(id, kit, arb, 20000, { creditToUse: 20000.01 });
+    expect(past.status).toBe(400);
+    expect(past.body.message).toMatch(/more than the bill/);
     const thb = await raise(id, kit, arb, 20000, { creditToUse: 100, currency: 'THB' });
     expect(thb.status).toBe(409);
     expect(thb.body.message).toMatch(/no credit in THB/);
@@ -342,7 +343,8 @@ describe('Supplier credit', () => {
     const edit = await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 45000 });
     expect(edit.status).toBe(200);
     expect(edit.body.request).toMatchObject({ amount: 30000, bill: 45000, credit: { amount: 15000 } });
-    expect((await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 15000 })).status).toBe(400);
+    // The bill down to the credit: covered in full, nothing to transfer (was refused before 2026-11-25).
+    expect((await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", amount: 15000 })).body.request).toMatchObject({ amount: 0, bill: 15000, credit: { amount: 15000 } });
     const swap = await procurement.session.put(`/payment-requests/${r.id}`, { reason: "Correction", supplierId: other });
     expect(swap.status).toBe(409);
     expect(swap.body.message).toMatch(/supplier cannot change/);
