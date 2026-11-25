@@ -21,13 +21,16 @@ export type SupplierBill = {
   /** '' when the bill has not come yet (it is optional). */
   billNumber: string;
   billDate: string;
+  /** '' when there is no due date yet (then never overdue). */
   dueDate: string;
-  dueInDays: number;
-  amount: number;
+  dueInDays: number | null;
+  /** null until the bill's amount is known; such a bill cannot be paid yet and is in no total. */
+  amount: number | null;
+  amountKnown: boolean;
   paid: number;
   waiting: number;
-  owed: number;
-  leftToAsk: number;
+  owed: number | null;
+  leftToAsk: number | null;
   currency: 'INR';
   state: BillState;
   stateLabel: string;
@@ -54,7 +57,7 @@ export type BillPage = {
 };
 
 export type OwedRow = {
-  id: string; name: string; bills: number; owed: number; overdueBills: number; overdue: number; nextDue: string;
+  id: string; name: string; bills: number; owed: number; noAmountBills: number; overdueBills: number; overdue: number; nextDue: string;
 };
 export type OwedBySupplier = { suppliers: OwedRow[]; total: { owed: number; overdue: number } };
 
@@ -80,9 +83,10 @@ export const getOwedBySupplier = () => apiClient.get<OwedBySupplier>('/supplier-
 export const getBill = (id: string) => apiClient.get<{ bill: SupplierBill }>(`/supplier-bills/${enc(id)}`);
 export const billFileHref = (id: string, fileId: string) => `/api/v1/supplier-bills/${enc(id)}/files/${enc(fileId)}`;
 
+/** Only the supplier is required (when adding); every other field may be '' and filled in later. */
 export type BillInput = {
-  supplierId?: string; billNumber: string; billDate: string; dueDate: string; amount: string;
-  description: string; orderId?: string | null; clientId?: string; rev?: number;
+  supplierId?: string; billNumber?: string; billDate?: string; dueDate?: string; amount?: string;
+  description?: string; orderId?: string | null; clientId?: string; rev?: number;
 };
 
 function billForm(fields: BillInput, files: File[]) {
@@ -114,7 +118,7 @@ export function payBill(billId: string, fields: { amount: string; description: s
 
 /** "Due in 3 days", "Due today", "5 days overdue". */
 export function dueText(b: Pick<SupplierBill, 'dueInDays' | 'state'>) {
-  if (b.state === 'paid' || b.state === 'cancelled') return '';
+  if (b.state === 'paid' || b.state === 'cancelled' || b.dueInDays == null) return '';
   if (b.dueInDays < 0) return `${-b.dueInDays} day${b.dueInDays === -1 ? '' : 's'} overdue`;
   if (b.dueInDays === 0) return 'Due today';
   return `Due in ${b.dueInDays} day${b.dueInDays === 1 ? '' : 's'}`;
