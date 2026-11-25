@@ -923,6 +923,11 @@ export async function ensureCriticalIndexes() {
       { 'lateRequest.status': 1, teams: 1, rank: 1, _id: 1 },
       { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_team', background: true }
     );
+    // The deadline-alert sweep (services/taskAlertService.js): open, dated tasks only.
+    await db.collection('stafftasks').createIndex(
+      { dueOn: 1, _id: 1 },
+      { partialFilterExpression: { bucket: 'open', dueOn: { $type: 'string' } }, name: 'staff_task_due_sweep', background: true }
+    );
     await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
     await db.collection('stafftaskcomments').createIndex({ assignedTo: 1, resolvedAt: 1, _id: -1 }, { name: 'staff_task_comment_assigned', background: true });
     await db.collection('stafftaskcomments').createIndex(

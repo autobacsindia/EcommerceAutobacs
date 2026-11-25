@@ -165,6 +165,21 @@ describe('reading it', () => {
     expect(get.mock.calls.some(([u]) => String(u).startsWith('/staff/tasks?'))).toBe(false);
   });
 
+  it('deadline alerts read from "Deadline", with no person', async () => {
+    serve({ lines: [
+      line('0000000000000000000000b3', { kind: 'due_escalated', by: null, text: 'Bala’s task is 19h late — no new date asked yet.', at: ago(1) }),
+      line('0000000000000000000000b2', { kind: 'due_late', by: null, text: 'Late — was due 2026-11-25 17:00. Say why and give a new date.', at: ago(2) }),
+      line('0000000000000000000000b1', { kind: 'due_soon', by: null, text: 'Only 2h 10m left — due 17:00', at: ago(3) }),
+    ] });
+    workspace();
+    const box = await inbox();
+    await within(box).findByText('Today');
+    const rows = [...box.querySelectorAll('ul > li')].map((li) => li.textContent?.replace(/\s+/g, ' ').trim());
+    expect(rows[1]).toMatch(/^Deadline T-15 is late, with no new date asked · Diwali stock checkBala’s task is 19h late/);
+    expect(rows[2]).toMatch(/^Deadline T-15 is late · Diwali stock checkLate — was due/);
+    expect(rows[3]).toMatch(/^Deadline T-15 is due soon · Diwali stock checkOnly 2h 10m left — due 17:00/);
+  });
+
   it('shows placeholders while loading, then an empty Inbox', async () => {
     let answer: (v: unknown) => void = () => {};
     serve({ lines: [] });

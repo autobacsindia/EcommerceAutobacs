@@ -293,7 +293,7 @@ export type TaskRules = {
 };
 
 /** One line in the Inbox (GET /staff/tasks/inbox). */
-export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided' | 'late_requested' | 'late_decided' | 'project_added';
+export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided' | 'late_requested' | 'late_decided' | 'due_soon' | 'due_late' | 'due_escalated' | 'project_added';
 export type InboxItem = {
   id: string;
   kind: InboxKind;
@@ -417,6 +417,19 @@ export const todayIST = (now: Date = new Date()) =>
   new Date(now.getTime() + (5 * 60 + 30) * 60_000).toISOString().slice(0, 10);
 
 /** A due day that has already gone by (the task would be overdue the moment it is saved). */
+/**
+ * Minutes left until a task due TODAY at a time (null otherwise: no time, another
+ * day, already late). Display only — the server owns lateness and the alerts.
+ */
+export function minutesLeft(t: Pick<Task, 'dueOn' | 'dueTime'>, now: Date = new Date()): number | null {
+  if (!t.dueOn || !t.dueTime || t.dueOn !== todayIST(now)) return null;
+  const left = Math.floor((Date.parse(`${t.dueOn}T${t.dueTime}:00+05:30`) - now.getTime()) / 60000);
+  return left > 0 ? left : null;
+}
+/** Under this many minutes left, the pill turns red with a countdown (the server's "only Xh left" is 3 h). */
+export const SOON_MINUTES = 180;
+/** "2h 10m", "45m". */
+export const leftLabel = (m: number) => (m < 60 ? `${m}m` : m % 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m / 60}h`);
 export const isPastDay = (ymd: string, today: string = todayIST()) => !!ymd && ymd < today;
 
 /** The time in India now, 'HH:mm' (24-hour). */

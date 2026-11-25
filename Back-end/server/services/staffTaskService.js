@@ -1719,6 +1719,18 @@ async function notifyNewDateAsked(t, actor) {
   }
 }
 
+/** No person did it: deadline alerts come from the system (services/taskAlertService.js). */
+const SYSTEM_ACTOR = Object.freeze({ _id: null, name: '' });
+
+/**
+ * One deadline alert about task `t` to `ids`: an Inbox line keyed by `key` (so a
+ * retry adds nothing) and a pop-up. Best effort, never throws.
+ */
+export async function sendTaskAlert(t, ids, { kind, key, text, title, body }) {
+  await toInbox(t, SYSTEM_ACTOR, ids, { kind, key, text });
+  await notifyPeople(t, SYSTEM_ACTOR, ids, { title, body });
+}
+
 /** "Your new date was approved / not approved": whoever asked and everyone on the task. */
 async function notifyNewDateDecided(t, actor) {
   const lr = t.lateRequest;
