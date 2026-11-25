@@ -6,7 +6,8 @@ export const DEPARTURE_STATUSES = ['open', 'left', 'cancelled'];
 /**
  * Someone is leaving. `reason` is the private part: only admin and the person's
  * head ever receive it (admin only when the person leaving is a head).
- * `lastDay` is an IST calendar date, YYYY-MM-DD, like a task's due date.
+ * `lastDay` and `resignedOn` are IST calendar dates, YYYY-MM-DD, like a task's due date.
+ * `resignedOn` is '' on records made before it existed.
  * Recording this changes nothing about the person's access or their work.
  */
 const StaffDepartureSchema = new mongoose.Schema(
@@ -16,6 +17,7 @@ const StaffDepartureSchema = new mongoose.Schema(
     team: { type: String, enum: STAFF_TEAM_VALUES, required: true },
     wasHead: { type: Boolean, default: false },
     lastDay: { type: String, required: true },
+    resignedOn: { type: String, default: '' },
     reason: { type: String, default: '' },
     successor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     successorName: { type: String, default: '' },
@@ -29,6 +31,10 @@ const StaffDepartureSchema = new mongoose.Schema(
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdByName: { type: String, default: '' },
+    // Who cancelled it (they withdrew, or it was recorded by mistake), and when.
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    cancelledByName: { type: String, default: '' },
+    cancelledAt: { type: Date, default: null },
     rev: { type: Number, default: 0 },
     handoverLockedUntil: { type: Date, default: null },
   },
