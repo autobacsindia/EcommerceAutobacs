@@ -5,10 +5,9 @@ import { Search } from 'lucide-react';
 import { countedUnread, liveStatus } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Kbd } from '@/components/panel/shortcuts';
-import { Avatar, ChannelIcon } from './chatUi';
+import { Avatar, ChannelIcon, channelTitle } from './chatUi';
 
-/** How a conversation is written in lists: #space, a team's name, a person. */
-export const channelTitle = (c: ChatChannel) => (c.kind === 'dm' || c.audience === 'teams' ? c.name : `#${c.name}`);
+export { channelTitle };
 
 type Option =
   | { kind: 'channel'; channel: ChatChannel }
