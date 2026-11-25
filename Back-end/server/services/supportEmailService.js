@@ -29,6 +29,7 @@ import ticketRepository from '../repositories/supportTicketRepository.js';
 import { trackOrderUrl } from '../utils/storefrontUrl.js';
 import messageRepository from '../repositories/supportMessageRepository.js';
 import { REPLY_SENTINEL } from './supportSanitizer.js';
+import { isWithinSupportHours, afterHoursKey, SUPPORT_HOURS_TEXT } from '../config/supportHours.js';
 
 /** The public support address customers see and reply to. */
 const supportAddress = () =>
@@ -266,19 +267,33 @@ export const ACK_LINES = Object.freeze({
 });
 
 /**
+ * The after-hours note. Same wording rules as ACK_LINES (no dates, no weekday
+ * names, no promises) — it says only that we are offline and when we work.
+ */
+export const AFTER_HOURS_LINES = Object.freeze({
+  heading: 'Thanks for your message',
+  body: `Our support team is offline right now. We work ${SUPPORT_HOURS_TEXT}, and we will reply as soon as we are back.`,
+});
+
+/**
  * Acknowledge a newly opened ticket — once per ticket, ever.
  *
  * Never sent in response to an auto-reply, and never for a ticket opened from
  * mail we classified as spam — both would be shouting into a void, or worse,
  * into a loop.
  */
-export const sendAcknowledgement = async (ticket) => {
+export const sendAcknowledgement = async (ticket, { now = new Date() } = {}) => {
   const name = ticket.requester.name || 'there';
   const trackUrl = trackOrderUrl();
+  // Out of hours, the one acknowledgement also says when we're back — and claims
+  // tonight's after-hours key, so a second mail tonight gets no extra note.
+  const afterHours = !isWithinSupportHours(now);
+  if (afterHours) await ticketRepository.claimEmailKey(ticket._id, afterHoursKey(now));
   const text = [
     `Hi ${name},`,
     '',
     ACK_LINES.body,
+    ...(afterHours ? ['', AFTER_HOURS_LINES.body] : []),
     ...(trackUrl ? ['', `${ACK_LINES.track} ${trackUrl}`] : []),
     '',
     ACK_LINES.replyHint,
@@ -294,6 +309,7 @@ export const sendAcknowledgement = async (ticket) => {
     bodyHtml: `
       <p style="margin:0 0 12px;">Hi ${escapeHtml(name)},</p>
       <p style="margin:0 0 12px;">${escapeHtml(ACK_LINES.body)}</p>
+      ${afterHours ? `<p style="margin:0 0 12px;">${escapeHtml(AFTER_HOURS_LINES.body)}</p>` : ''}
       ${trackUrl ? `<p style="margin:0 0 12px;">${escapeHtml(ACK_LINES.track)}</p>` : ''}
       <p style="margin:0;color:#6b7280;font-size:13px;">${escapeHtml(ACK_LINES.replyHint)}</p>`,
     ctaLabel: 'Track your order',
@@ -308,6 +324,89 @@ export const sendAcknowledgement = async (ticket) => {
     automated: true,
     onceKey: 'ack',
   });
+};
+
+/**
+ * After-hours auto-reply on an EXISTING ticket: one polite note per ticket per
+ * closed stretch (the once-only key is the day we next open, so every mail from
+ * 6:30 pm to 9:30 am — or across Sunday — shares one key). Callers decide whether
+ * the inbound mail deserves one (see followUpInbound); this only sends it.
+ */
+export const sendAfterHoursReply = async (ticket, { now = new Date() } = {}) => {
+  const name = ticket.requester.name || 'there';
+  const trackUrl = trackOrderUrl();
+  const text = [
+    `Hi ${name},`,
+    '',
+    AFTER_HOURS_LINES.body,
+    ...(trackUrl ? ['', `${ACK_LINES.track} ${trackUrl}`] : []),
+    '',
+    `— ${supportName()}`,
+    '',
+    REPLY_SENTINEL,
+  ].join('\n');
+
+  const html = renderEmail({
+    heading: AFTER_HOURS_LINES.heading,
+    reference: ticket.reference,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Hi ${escapeHtml(name)},</p>
+      <p style="margin:0 0 12px;">${escapeHtml(AFTER_HOURS_LINES.body)}</p>
+      ${trackUrl ? `<p style="margin:0 0 12px;">${escapeHtml(ACK_LINES.track)}</p>` : ''}`,
+    ctaLabel: 'Track your order',
+    ctaHref: trackUrl,
+  });
+
+  return send({
+    ticket,
+    subject: `Re: ${threadSubject(ticket)}`,
+    text,
+    html,
+    automated: true, // Auto-Submitted: other autoresponders must not answer it
+    onceKey: afterHoursKey(now),
+  });
+};
+
+/** Mail from our own support address must never be answered (a loop by definition). */
+const isOwnAddress = (email) => {
+  const e = String(email || '').toLowerCase();
+  return !!e && e === String(supportAddress()).toLowerCase();
+};
+
+/**
+ * What to send after an inbound email was filed (called by the queue worker):
+ *   - a NEW human-written ticket → the acknowledgement (with the after-hours line
+ *     when we are closed) — one email, never two;
+ *   - a human reply on an existing ticket, out of hours → the after-hours note,
+ *     once per ticket per night, and only while it is still the same closed
+ *     stretch it arrived in (a backlog processed after we open gets nothing).
+ * Never for auto-replies, no-reply/bounce senders (result.isAutoReply) or our own
+ * address.
+ *
+ * @param {object} result  processInbound's result
+ * @param {(ref: string) => Promise<object|null>} loadTicket
+ * @returns {Promise<{ sent: string|null, reason?: string }>}
+ */
+export const followUpInbound = async (result, loadTicket, { now = new Date() } = {}) => {
+  if (result?.status !== 'processed' || !result.ticket) return { sent: null, reason: 'not_processed' };
+  if (result.isAutoReply) return { sent: null, reason: 'auto_reply' };
+  if (isOwnAddress(result.fromEmail)) return { sent: null, reason: 'own_address' };
+
+  if (result.shouldAcknowledge) {
+    const ticket = await loadTicket(result.ticket);
+    if (!ticket) return { sent: null, reason: 'ticket_missing' };
+    const r = await sendAcknowledgement(ticket, { now });
+    return { sent: r.sent ? 'ack' : null, reason: r.reason };
+  }
+
+  if (isWithinSupportHours(now)) return { sent: null, reason: 'open' };
+  const receivedAt = result.receivedAt ? new Date(result.receivedAt) : now;
+  if (afterHoursKey(receivedAt) !== afterHoursKey(now)) return { sent: null, reason: 'stale' };
+  const ticket = await loadTicket(result.ticket);
+  if (!ticket) return { sent: null, reason: 'ticket_missing' };
+  if (isOwnAddress(ticket.requester?.email)) return { sent: null, reason: 'own_address' };
+  const r = await sendAfterHoursReply(ticket, { now });
+  return { sent: r.sent ? 'after_hours' : null, reason: r.reason };
 };
 
 /**
@@ -367,5 +466,7 @@ export default {
   buildReplyTo,
   parseReplyTo,
   sendAcknowledgement,
+  sendAfterHoursReply,
+  followUpInbound,
   sendAgentReply,
 };
