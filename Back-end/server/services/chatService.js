@@ -32,10 +32,13 @@ import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import { orderNumber } from './invoiceService.js';
 import { normalizeEmoji } from '../utils/reactions.js';
+import { MESSAGE_MAX_LENGTH, SPACE_DESCRIPTION_MAX, messageTooLong } from '../config/chatLimits.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
-export const MESSAGE_MAX_LENGTH = 4000;
+// Typed text limits live in config/chatLimits.js (shared with the route validators).
+export { MESSAGE_MAX_LENGTH, SPACE_DESCRIPTION_MAX };
+const tooLongMessage = messageTooLong;
 
 /**
  * How long after sending its author may still edit or delete a message.
@@ -724,7 +727,7 @@ export async function sendMessage(user, channelId, {
   const hasFiles = Array.isArray(files) && files.length > 0;
   // A photo on its own is a perfectly good message; only an empty one is refused.
   if (!body && !hasFiles) throw fail('Message cannot be empty', 400);
-  if (body.length > MESSAGE_MAX_LENGTH) throw fail(`Message is too long (max ${MESSAGE_MAX_LENGTH} characters)`, 400);
+  if (body.length > MESSAGE_MAX_LENGTH) throw fail(tooLongMessage(), 400);
   if (hasFiles && files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
     throw fail(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files at a time`, 400);
   }
@@ -1208,7 +1211,8 @@ export async function editMessage(user, messageId, { text } = {}) {
   if (m.deletedAt) throw fail('This message was deleted', 409);
   assertWithinWindow(m);
 
-  const body = cleanText(text).slice(0, MESSAGE_MAX_LENGTH);
+  const body = cleanText(text);
+  if (body.length > MESSAGE_MAX_LENGTH) throw fail(tooLongMessage(), 400);
   if (!body && !(m.attachments || []).length) {
     throw fail('A message needs some text — delete it instead', 400);
   }
@@ -1349,6 +1353,15 @@ export async function removeSpaceMember(user, channelId, memberId) {
 }
 
 /** New custom space. Admins and team heads only; the creator is always a member. */
+/** A space's "what is it for?" line: refused when over the cap, never cut. */
+function cleanSpaceDescription(raw) {
+  const text = cleanText(raw);
+  if (text.length > SPACE_DESCRIPTION_MAX) {
+    throw fail(`The description is too long (max ${SPACE_DESCRIPTION_MAX.toLocaleString('en-IN')} characters).`, 400);
+  }
+  return text;
+}
+
 export async function createSpace(user, { name, description, memberIds } = {}) {
   if (!canCreateSpace(user)) throw fail('Only admins and team heads can create spaces', 403);
   const cleanName = cleanText(name).toLowerCase().replace(/^#/, '').replace(/\s+/g, '-').slice(0, 60);
@@ -1366,7 +1379,7 @@ export async function createSpace(user, { name, description, memberIds } = {}) {
   const channel = await chatRepository.createChannel({
     kind: 'space',
     name: cleanName,
-    description: cleanText(description).slice(0, 240),
+    description: cleanSpaceDescription(description),
     audience: 'members',
     members,
     createdBy: user._id,

@@ -27,7 +27,7 @@ const ChatChannelSchema = new mongoose.Schema(
     // converge on one document. Custom spaces have no key.
     key: { type: String, default: undefined },
     name: { type: String, trim: true, maxlength: 60 },
-    description: { type: String, trim: true, maxlength: 240, default: '' },
+    description: { type: String, trim: true, maxlength: 1000, default: '' }, // = chatService SPACE_DESCRIPTION_MAX
     audience: { type: String, enum: ['all', 'team', 'members', 'teams'], required: true },
     team: { type: String, default: null },
     // audience 'teams' only: the two teams, sorted (matches the 'pair:<a>:<b>' key).

@@ -9,6 +9,9 @@ import { Avatar, TeamBadge, chatDownloadUrl, dayLabel, fileSize, timeOf, useOpen
 import EmojiPicker from './EmojiPicker';
 import { formatMessage } from './chatFormat';
 import { CallLine } from '@/components/calls/DmCallButtons';
+import { isOverLimit } from '@/lib/textLimit';
+import { TextLimitNote } from '@/components/ui/TextLimitNote';
+import { CHAT_MESSAGE_MAX } from './chatLimits';
 
 /**
  * Message text with its formatting (*bold*, _italic_, lists, code…), links and
@@ -646,6 +649,7 @@ export default function MessageItem({
   const saveEdit = async () => {
     if (!onEdit || busy) return;
     if (draft.trim() === m.text.trim()) { setEditing(false); return; }
+    if (isOverLimit(draft.trim(), CHAT_MESSAGE_MAX)) return; // the note under the box says why
     setBusy(true);
     setChangeError('');
     try {
@@ -751,16 +755,16 @@ export default function MessageItem({
                   if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void saveEdit(); }
                 }}
-                maxLength={4000}
                 rows={Math.min(8, Math.max(2, draft.split('\n').length))}
                 aria-label="Edit message"
                 className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
               />
+              <TextLimitNote value={draft.trim()} max={CHAT_MESSAGE_MAX} />
               <div className="mt-1 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void saveEdit()}
-                  disabled={busy || (!draft.trim() && !m.attachments.length)}
+                  disabled={busy || (!draft.trim() && !m.attachments.length) || isOverLimit(draft.trim(), CHAT_MESSAGE_MAX)}
                   className="rounded-md bg-blue-700 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {busy ? 'Saving…' : 'Save'}
