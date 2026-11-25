@@ -49,18 +49,34 @@ export type SupplierContext = {
   setUpDeal?: boolean;
 };
 
+/** What an expense form hands over when someone switches it to a supplier payment. */
+export type StockDraft = { amount: string; description: string; reference: string };
+
+/** Expense options that are really goods bought from a supplier: the form steers these to a supplier payment. */
+export const SUPPLIER_GOODS = ['product_purchase', 'import_purchase'];
+
 /**
- * Raise a payment request — an expense (any team) or a supplier
- * payment for an order's items (procurement). The server checks every field
+ * Raise a payment request — an expense (any team), a supplier payment for an
+ * order's items (procurement), or a supplier payment NOT for one order (`stock`:
+ * stock, or one bill for several orders — the supplier must be a saved one). The server checks every field
  * again; this form only helps get it right first time.
  */
 export default function PaymentRequestForm({
   supplier,
   sameAs,
   orderLink,
+  stock,
+  initial,
+  onSwitchToSupplier,
   onDone,
   onCancel,
 }: {
+  /** A supplier payment not for one order (Payments → New request → Pay a supplier). */
+  stock?: boolean;
+  /** Carried over from an expense form that was switched to a supplier payment. */
+  initial?: StockDraft;
+  /** On an expense: shown with Product / Import purchase — switch this form to a supplier payment. */
+  onSwitchToSupplier?: (draft: StockDraft) => void;
   /** An expense raised from an order's page: linked to that order, which then shows it. */
   orderLink?: { orderId: string; orderNumber: string };
   /** Present for a supplier payment; absent for an expense. */
@@ -77,14 +93,16 @@ export default function PaymentRequestForm({
   const [completionDate, setCompletionDate] = useState('');
   const [linked, setLinked] = useState<OrderMatch | null>(null);
   const [itemIds, setItemIds] = useState<string[]>(supplier ? supplier.lines.map((l) => l.itemId) : []);
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState(initial?.amount ?? '');
+  const [description, setDescription] = useState(initial?.description ?? '');
   // A supplier is paid by UPI or bank, always. An expense may also be paid by a
   // company card, or leave it all for accounts (click the chosen one to un-choose).
   const [method, setMethod] = useState<PayMethod>('upi');
   const [payee, setPayee] = useState({ name: '', upiId: '', accountName: '', accountNumber: '', ifsc: '', swift: '', bankName: '', phone: '' });
   const [card, setCard] = useState<CardDetails>(EMPTY_CARD);
-  const optional = !supplier;
+  // Any supplier payment: for an order's items, or not for one order.
+  const paysSupplier = Boolean(supplier) || Boolean(stock);
+  const optional = !paysSupplier;
   // IFSC or SWIFT: whatever the person picked, else SWIFT for a foreign-currency bill.
   const [codeChoice, setCodeChoice] = useState<BankCodeKind | null>(null);
   const [bills, setBills] = useState<File[]>([]);
@@ -95,7 +113,7 @@ export default function PaymentRequestForm({
   const [creditToUse, setCreditToUse] = useState('');
   // Optional: the project ("PRJ-0007") and any other ID this cost belongs to. The server checks the project exists.
   const [projectCode, setProjectCode] = useState('');
-  const [reference, setReference] = useState('');
+  const [reference, setReference] = useState(initial?.reference ?? '');
   // A Reimbursement: its kind, date and (Fuel) km. The task it was for (any expense may name one).
   const [claim, setClaim] = useState<ClaimDraft>(emptyClaim);
   const [task, setTask] = useState<PickedTask | null>(null);
@@ -110,14 +128,17 @@ export default function PaymentRequestForm({
   // The team's options and currencies, from the server. A supplier payment is
   // procurement's (an admin raising one names the team; staff get their own).
   const optionsQ = useQuery({
-    queryKey: paymentKeys.options(supplier ? 'procurement' : 'mine'),
-    queryFn: () => getExpenseOptions(supplier ? 'procurement' : undefined),
+    queryKey: paymentKeys.options(paysSupplier ? 'procurement' : 'mine'),
+    queryFn: () => getExpenseOptions(paysSupplier ? 'procurement' : undefined),
     staleTime: 10 * 60 * 1000,
   });
   const options = optionsQ.data?.options;
   const chosen = options?.categories.find((c) => c.value === category) ?? options?.categories[0];
-  const reimbursing = !supplier && chosen?.value === REIMBURSEMENT && Boolean(options?.reimbursement);
-  const noteRequired = !supplier && (reimbursing ? claim.type === 'other' : (chosen?.noteRequired ?? true));
+  const reimbursing = !paysSupplier && chosen?.value === REIMBURSEMENT && Boolean(options?.reimbursement);
+  // Not for one order: there are no item names, so "what was bought" is the record.
+  const noteRequired = stock ? true : !supplier && (reimbursing ? claim.type === 'other' : (chosen?.noteRequired ?? true));
+  // Goods from a supplier raised as an expense: offer the supplier payment instead.
+  const steerToSupplier = !paysSupplier && Boolean(onSwitchToSupplier) && SUPPLIER_GOODS.includes(chosen?.value ?? '');
   const base = options?.baseCurrency ?? 'INR';
   const foreign = currency !== base;
   const setup = Boolean(supplier?.setUpDeal);
@@ -188,9 +209,10 @@ export default function PaymentRequestForm({
     setError('');
     if (supplier && itemIds.length === 0) { setError('Choose the item(s) this payment is for.'); return; }
     if (picked?.payment.method === 'none') { setError(`Add how we pay ${picked.name} (bank or UPI) in Suppliers first.`); return; }
-    if (supplier && !picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
+    if (stock && !picked && !saveSupplier) { setError('Pick the supplier from the list, or tick “Save as a new supplier” — so it shows under that supplier and can be paid together.'); return; }
+    if (paysSupplier && !picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
     if (!picked && method === 'card' && last4Problem(card.cardLast4)) { setError(last4Problem(card.cardLast4)); return; }
-    if (!supplier && !chosen) { setError('The options are still loading — try again in a moment.'); return; }
+    if (!paysSupplier && !chosen) { setError('The options are still loading — try again in a moment.'); return; }
     if (setup && Number(amount) > Number(agreedTotal)) { setError(`The advance cannot be more than the agreed total (${money(Number(agreedTotal), currency)}).`); return; }
     const codeProblem = !picked && method === 'bank' ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
@@ -198,7 +220,7 @@ export default function PaymentRequestForm({
       const problem = claimProblem(claim, options!.reimbursement!, { amount: Number(amount), details: richTextToPlain(description), bills: bills.length });
       if (problem) { setError(problem); return; }
     }
-    if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
+    if (noteRequired && richTextToPlain(description).trim().length < 3) { setError(stock ? 'Say what was bought (for example “20 floor mats, bill 4471”).' : 'Add details — say what it was for.'); return; }
     const form = new FormData();
     // A foreign bill sends only what was billed: the rupees are recorded when it is paid.
     form.append('currency', currency);
@@ -237,6 +259,9 @@ export default function PaymentRequestForm({
       else form.append('itemIds', JSON.stringify(itemIds));
       if (supplier.partId) form.append('partId', supplier.partId);
       if (!picked && saveSupplier) form.append('saveSupplier', 'true');
+    } else if (stock) {
+      // No orderId: the server raises it as a supplier payment not for one order.
+      if (!picked && saveSupplier) form.append('saveSupplier', 'true');
     } else {
       form.append('category', chosen!.value);
       const link = orderLink?.orderId ?? linked?.id;
@@ -246,7 +271,7 @@ export default function PaymentRequestForm({
     for (const f of qr) form.append('qr', f);
     setBusy(true);
     try {
-      const endpoint = setup ? '/payment-requests/deals' : supplier ? '/payment-requests/supplier' : '/payment-requests/expenses';
+      const endpoint = setup ? '/payment-requests/deals' : paysSupplier ? '/payment-requests/supplier' : '/payment-requests/expenses';
       const res = await postForm<{ request: PaymentRequest }>(endpoint, form);
       onDone(res.request);
     } catch (err) {
@@ -259,9 +284,9 @@ export default function PaymentRequestForm({
   const set = (k: keyof typeof payee) => (e: React.ChangeEvent<HTMLInputElement>) => setPayee({ ...payee, [k]: e.target.value });
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border border-gray-200 bg-white p-5" aria-label={supplier ? 'Supplier payment request' : 'Expense request'}>
+    <form onSubmit={submit} className="space-y-4 rounded-xl border border-gray-200 bg-white p-5" aria-label={paysSupplier ? 'Supplier payment request' : 'Expense request'}>
       <div>
-        <h3 className="text-base font-semibold text-gray-900">{setup ? 'Made to order — pay in parts' : deal ? 'Request next supplier payment' : supplier ? 'Request supplier payment' : orderLink ? `Expense for order ${orderLink.orderNumber}` : 'New expense request'}</h3>
+        <h3 className="text-base font-semibold text-gray-900">{setup ? 'Made to order — pay in parts' : deal ? 'Request next supplier payment' : supplier ? 'Request supplier payment' : stock ? 'Pay a supplier' : orderLink ? `Expense for order ${orderLink.orderNumber}` : 'New expense request'}</h3>
         <p className="text-xs text-gray-500">
           {setup
             ? 'Enter the supplier, the total agreed with them, the advance and when they will finish. The advance goes to accounts to approve; the date it is paid is recorded by itself.'
@@ -296,6 +321,11 @@ export default function PaymentRequestForm({
           </fieldset>
           )}
         </div>
+      ) : stock ? (
+        <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+          For stock, or one bill covering several orders. It shows under the supplier, so the admin can pay it together with their other bills.
+          {' '}For one customer order’s item, raise it from that order instead.
+        </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -323,7 +353,18 @@ export default function PaymentRequestForm({
         </div>
       )}
 
-      {!supplier && (
+      {steerToSupplier && (
+        <div role="note" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          <p><strong>Paying a supplier for these goods?</strong> Raise it as a supplier payment instead. It then shows under that supplier, and the admin can pay all their bills in one transfer.</p>
+          <button type="button" onClick={() => onSwitchToSupplier!({ amount, description, reference })}
+            className="mt-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700">
+            Switch to supplier payment
+          </button>
+          <p className="mt-1 text-xs text-blue-800">Keep it as an expense only for a shop or cash buy with no supplier account.</p>
+        </div>
+      )}
+
+      {!paysSupplier && (
         <div>
           <label className={label} htmlFor="pr-task">Task (optional)</label>
           <TaskPicker picked={task} onPick={setTask} />
@@ -395,9 +436,9 @@ export default function PaymentRequestForm({
       <div className="grid gap-3 sm:grid-cols-2">
         {!picked && (
           <div>
-            <label className={label} htmlFor="pr-payee">{supplier ? 'Supplier' : 'Pay to'}</label>
-            <input id="pr-payee" className={input} required={!optional} minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={supplier ? 'Type the supplier name' : 'Shop / person (optional)'} autoComplete="off" />
-            {supplier && <SupplierSuggestions query={payee.name} onPick={setPicked} />}
+            <label className={label} htmlFor="pr-payee">{paysSupplier ? 'Supplier' : 'Pay to'}</label>
+            <input id="pr-payee" className={input} required={!optional} minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={paysSupplier ? 'Type the supplier name' : 'Shop / person (optional)'} autoComplete="off" />
+            {paysSupplier && <SupplierSuggestions query={payee.name} onPick={setPicked} />}
           </div>
         )}
       </div>
@@ -409,7 +450,7 @@ export default function PaymentRequestForm({
         </button>
       )}
 
-      {supplier && picked && (
+      {paysSupplier && picked && (
         <div>
           <span className={label}>Saved supplier</span>
           <SupplierPicker picked={picked} onPick={(p) => { setPicked(p); setCreditToUse(''); }} />
@@ -464,7 +505,7 @@ export default function PaymentRequestForm({
             <input aria-label="Bank name" className={`${input} sm:self-end`} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
           </div>
         ) : null}
-        {supplier && (
+        {paysSupplier && (
           <label className="mt-2 flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={saveSupplier} onChange={(e) => setSaveSupplier(e.target.checked)} />
             Save as a new supplier for next time
@@ -479,7 +520,7 @@ export default function PaymentRequestForm({
           {!supplier && <span className="text-xs text-gray-500">{noteRequired ? 'Required' : 'Optional'}</span>}
         </div>
         <RichTextBox id="pr-desc" ariaLabel="Details" compact maxLength={2000} value={description} onChange={setDescription}
-          placeholder={supplier ? 'Supplier invoice number, anything accounts should know' : noteRequired ? 'Say what it was for (e.g. which tool, which month’s GST)' : 'What was bought / where you travelled, and why'} />
+          placeholder={stock ? 'What was bought (e.g. 20 floor mats, bill 4471)' : supplier ? 'Supplier invoice number, anything accounts should know' : noteRequired ? 'Say what it was for (e.g. which tool, which month’s GST)' : 'What was bought / where you travelled, and why'} />
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">

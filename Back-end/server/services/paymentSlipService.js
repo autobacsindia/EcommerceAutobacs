@@ -178,7 +178,7 @@ export async function renderPaymentSlip(r) {
       const leftEnd = block(L, 'REQUEST', [
         ['Team', STAFF_TEAM_LABELS[r.team] || r.team],
         ['Raised by', r.requestedByName],
-        ['For', r.kind === 'supplier' ? (r.itemNames || []).join(', ')
+        ['For', r.kind === 'supplier' ? ((r.itemNames || []).join(', ') || 'Stock / not for one order')
           : r.category === REIMBURSEMENT && r.reimbursement?.type
             ? `${categoryLabel(r.category)} – ${claimLabel(r.reimbursement)}${r.reimbursement.on ? `, spent ${r.reimbursement.on}` : ''}${r.reimbursement.from || r.reimbursement.to ? `, ${[r.reimbursement.from, r.reimbursement.to].filter(Boolean).join(' → ')}` : ''}`
             : categoryLabel(r.category)],

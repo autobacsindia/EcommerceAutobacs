@@ -791,6 +791,74 @@ function cleanReference(raw) {
 const cleanClientId = (raw) => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(raw) ? raw : undefined);
 
 /**
+ * A supplier payment that is not for one order's item (owner, 2026-11-24): stock,
+ * or goods for several orders on one bill. Before this, procurement could only
+ * raise these as a "Product purchase" expense with the supplier typed as text —
+ * so they never showed under the supplier and could not be paid in one transfer
+ * (PR-0144/0145/0146, RK New Popular).
+ *
+ * The supplier MUST be a saved one (picked from the list, or saved now): that link
+ * is what keeps it under "Supplier payments — by supplier". "What was bought" is
+ * required, since there are no item names. No order, items, deal or supplier
+ * credit (those belong to an order's payment). Idempotent on `clientId`.
+ */
+async function createStockSupplierRequest(actor, input, uploaded, req) {
+  if (filled(input.dealId) || filled(input.partId)) throw fail('A supplier deal or part is paid from its order.', 400);
+  if (Number(input.creditToUse) > 0) throw fail('Supplier credit is used on a payment raised from an order.', 400);
+  if (!input.supplierId && !truthy(input.saveSupplier)) {
+    throw fail('Pick the supplier from the list (or save them as a new supplier), so the payment shows under that supplier.', 400);
+  }
+  const description = cleanDetails(input.description);
+  if (description.replace(/[^a-z]/gi, '').length < 3) throw fail('Say what was bought (for example "20 floor mats, bill 4471").', 400);
+  const money = supplierMoney(input, null);
+  const extra = await otherLinks(actor, input);
+  const clientId = cleanClientId(input.clientId);
+  if (clientId) {
+    const seen = await paymentRequestRepository.findByClientId(actor._id, clientId);
+    if (seen) return shape(seen, actor);
+  }
+  const { files, kinds } = filesFrom(uploaded);
+  // Checked before a new supplier is saved, so a refused request saves nothing.
+  if (!input.supplierId) requireUpiOrQr(cleanPayee(input.payee), kinds);
+  const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
+  requireUpiOrQr(payee, kinds);
+  const stored = await storeFiles(files, kinds, actor);
+  let doc;
+  try {
+    doc = await paymentRequestRepository.create({
+      number: await nextNumber(),
+      kind: 'supplier',
+      status: 'submitted',
+      team: STAFF_TEAMS.PROCUREMENT,
+      requestedBy: actor._id,
+      requestedByName: actor.name || '',
+      ...money,
+      category: 'supplier',
+      description,
+      payee,
+      ...extra,
+      supplier: supplierId,
+      bankNotice,
+      files: stored,
+      ...(clientId ? { clientId } : {}),
+      history: [entry(actor, 'submitted', 'not for one order (stock / several orders)')],
+    });
+  } catch (err) {
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    // The same submit twice at the same moment: the unique index kept one.
+    if (err?.code === 11000 && clientId) {
+      const seen = await paymentRequestRepository.findByClientId(actor._id, clientId);
+      if (seen) return shape(seen, actor);
+    }
+    throw err;
+  }
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', stock: true, amount: money.amount, currency: money.currency, foreignAmount: money.foreignAmount, supplierId: idOf(supplierId) });
+  const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${plainLine(description)}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
+  return shape(doc, actor);
+}
+
+/**
  * A supplier payment for items on a paid order. Snapshots the order, customer
  * and who closed the sale onto the request.
  */
@@ -798,6 +866,8 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   if (!isAdmin(actor) && !onTeam(actor, STAFF_TEAMS.PROCUREMENT)) {
     throw fail('Only procurement raises supplier payments.', 403);
   }
+  // Stock, or several orders' goods on one bill: no single order's item to pay for.
+  if (!filled(input.orderId)) return createStockSupplierRequest(actor, input, uploaded, req);
   const order = await orderRepository.findForWorkflow(input.orderId);
   const view = order && workflowView(order);
   if (!view) throw fail('Order not found in the team workflow.', 404);
@@ -1431,6 +1501,10 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   } else if (input.payee) {
     payee = cleanPayee(input.payee, { optional: isExpense });
     if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) { supplier = null; bankNotice = null; }
+  }
+  // A payment not for one order is found under its supplier only through the saved link.
+  if (r0.kind === 'supplier' && !r0.order && !supplier) {
+    throw fail('Pick the supplier from the list — a payment not for one order must be linked to a saved supplier.', 400);
   }
   if (creditPaise && idOf(supplier) !== idOf(r0.supplier)) {
     throw fail(`${r0.number} uses ${deals.moneyOf(creditPaise, before.currency)} of ${r0.payee?.name || 'this supplier'}'s credit, so the supplier cannot change. Cancel it and raise a new payment instead.`, 409);
