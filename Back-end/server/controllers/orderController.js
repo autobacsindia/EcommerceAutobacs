@@ -26,6 +26,7 @@ import { extractAffiliateRef } from '../utils/affiliateAttribution.js';
 import { resolveBuyerAndAcceptance } from '../services/buyerService.js';
 import { BUYER_TYPES } from '../config/buyer.js';
 import { contentIdForLineItem } from '../utils/metaCatalogId.js';
+import { customerOrderProgress } from '../utils/customerOrderProgress.js';
 import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -391,6 +392,10 @@ export const getOrderById = async (req, res) => {
     // What the order summary's "Subtotal" row prints, from the order's own
     // snapshot — so Subtotal − discount + Tax + Shipping = Total on the page.
     subtotalBeforeTax: subtotalBeforeTax(order.subtotal, order.tax),
+    // The customer's progress timeline (placed → preparing → packed → shipped →
+    // delivered) with dates and the delivery estimate. Read from the FULL order
+    // (workflow included) but only step keys and dates leave — see the util.
+    progress: customerOrderProgress(order),
     // Shows the admin "Edit address" button; PATCH /:id/shipping-address re-checks.
     ...(isAdmin ? { addressEditable: isAddressEditable(order) } : {}),
     items: order.items.map(item => {
@@ -399,7 +404,12 @@ export const getOrderById = async (req, res) => {
       // `variants` (heavy) and `wpId` (internal WooCommerce migration id) must not
       // leak to the client.
       const product = item.product
-        ? (() => { const { variants: _variants, wpId: _wpId, ...rest } = item.product; return rest; })()
+        ? (() => {
+          // Size fields were populated only for the delivery window (progress, above);
+          // the listed/stored sizes are admin data.
+          const { variants: _variants, wpId: _wpId, shippingSize: _ss, listedSize: _ls, shippingClass: _sc, ...rest } = item.product;
+          return rest;
+        })()
         : { _id: item.product, name: '[Product no longer available]', images: [], price: item.price };
       return { ...item, product, metaContentId };
     })

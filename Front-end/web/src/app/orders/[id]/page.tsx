@@ -23,6 +23,7 @@ import { customerReturnKeys } from '@/hooks/queries/keys';
 import WriteReviewModal from '@/components/reviews/WriteReviewModal';
 import OrderServiceRatingCard from '@/components/orderRating/OrderServiceRatingCard';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
+import CustomerOrderProgress, { type CustomerProgress } from '@/components/orders/CustomerOrderProgress';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
 import { productUrl, type OrderPaymentSummary } from '@/lib/types';
@@ -129,6 +130,8 @@ interface OrderDetail {
   carrier?: { name: string; code: string; trackingUrl?: string };
   estimatedDelivery?: string;
   deliveredAt?: string;
+  /** Placed → Preparing → Packed → Shipped → Delivered, from real order state (server). Null when cancelled/unpaid. */
+  progress?: CustomerProgress | null;
   statusHistory?: Array<{
     status: string;
     timestamp: string;
@@ -532,7 +535,11 @@ export default function OrderDetailPage() {
             </div>
           </div>
           <div className="mt-8">
-            <TimelineProgress currentStatus={order.status as OrderStatus} />
+            {/* The step-by-step timeline for a live order; cancelled, returned and
+                unpaid orders keep the simple status bar (the server sends no progress). */}
+            {order.progress
+              ? <CustomerOrderProgress progress={order.progress} />
+              : <TimelineProgress currentStatus={order.status as OrderStatus} />}
           </div>
         </div>
 

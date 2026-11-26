@@ -39,6 +39,7 @@ import {
 import { owesGoodie } from '../utils/orderLines.js';
 import * as Sentry from '@sentry/node';
 import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
+import { onParcelPacked } from './orderProgressService.js';
 import { isPayLaterDue } from '../config/payLater.js';
 import { afterDispatch as payLaterAfterDispatch } from './payLaterService.js';
 
@@ -179,6 +180,8 @@ class ShipmentService {
       const created = updated.shipments[updated.shipments.length - 1];
       await this._syncOrderStatus(updated, userId);
       if (dispatch) this._enqueueShipmentEmail(orderId, created._id.toString(), 'shipped');
+      // Packed, waiting for the courier: "packed", or "courier booked" when it has an AWB.
+      else onParcelPacked(orderId, created);
 
       return {
         success: true,

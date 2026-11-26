@@ -100,7 +100,9 @@ class OrderRepository extends BaseRepository {
       // wpId + variants (id/wpVariationId) are needed to derive the Meta catalogue
       // content_id per line item (utils/metaCatalogId.js) for CAPI + the order API.
       // The order API strips `variants` before responding (see getOrderById).
-      .populate('items.product', 'name images price wpId variants._id variants.wpVariationId')
+      // shippingSize/listedSize/shippingClass: the delivery window on the order page
+      // (utils/customerOrderProgress.js → deliveryWindowFor). A few small fields.
+      .populate('items.product', 'name images price wpId variants._id variants.wpVariationId shippingSize listedSize shippingClass')
       .populate('user', 'name email phone')
       .populate('payment')
       .lean();
@@ -1642,6 +1644,29 @@ class OrderRepository extends BaseRepository {
    * oldest first by default, newest first with `newestFirst` (the team panel's
    * lists). Both directions are served by the partial `team_workflow_open` index.
    */
+  /**
+   * One page of orders the customer-progress sweep checks (services/orderProgressService.js):
+   * still processing, placed on/after `since`, newest first, keyset-paged on
+   * (createdAt, _id). Served by `{ status: 1, createdAt: -1 }`. Projected to what
+   * utils/customerJourney.js and the sent-keys check read.
+   */
+  async findProgressCandidatesPage({ since, after = null, limit = 100 } = {}) {
+    const query = { status: 'processing', createdAt: { $gte: since } };
+    if (after) {
+      query.$or = [
+        { createdAt: { $lt: after.createdAt } },
+        { createdAt: after.createdAt, _id: { $lt: after.id } },
+      ];
+    }
+    return Order.find(query)
+      .select('status createdAt paidAt deliveredAt notifiedStatuses shipments.status shipments._id '
+        + 'shipments.trackingNumber shipments.shippedAt shipments.deliveredAt '
+        + 'workflow.enteredAt workflow.history.action workflow.history.at workflow.lines.stock')
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean();
+  }
+
   async findOpenWorkflowPage({ after = null, limit = 50, newestFirst = false, byListDate = false } = {}) {
     // byListDate: the team lists, on the paid date (utils/orderListDate.js) —
     // `team_workflow_open_list_date`. Otherwise workflow.enteredAt, for the jobs

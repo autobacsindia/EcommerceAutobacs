@@ -530,6 +530,18 @@ class EmailHandler {
   }
 
   /**
+   * Progress between "confirmed" and "shipped" (preparing / packed / courier booked)
+   * and the "still on it" note — provider-only; the idempotency and relevance checks
+   * live in orderProgressService.
+   */
+  async sendOrderProgress({ to, order, user = null, kind, shipment = null, stage = null }) {
+    const { orderProgressEmail } = await import('../utils/orderProgressEmail.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = orderProgressEmail({ order, user, kind, shipment, stage, company: companyInfo });
+    return this.sendEmail({ to, subject, text, html });
+  }
+
+  /**
    * "Your delivery details were updated" — provider-only; the change detection,
    * idempotency and rate guard live in deliveryUpdateEmailService.
    */
