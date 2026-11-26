@@ -943,6 +943,84 @@ export const emailStaffSalesPaidAlert = async (orderId) => {
   }, `Paid alert (order ${orderId})`);
 };
 
+/**
+ * "Ship before payment" was turned on (services/payLaterService.js): the order goes
+ * to the teams WITHOUT the money. Procurement starts the stock check; accounts knows
+ * a shipped-unpaid order is coming; the seller hears it is approved.
+ */
+export const emailStaffPayLaterApprovedAlert = async (orderId) => {
+  const order = await teamOrder(orderId);
+  if (!order?.payLater?.approvedAt) return { status: 'not-found' };
+  const heads = (await Promise.all([
+    teamStaff('accounts', { headsOnly: true }),
+    teamStaff('procurement', { headsOnly: true }),
+    teamStaff('operations', { headsOnly: true }),
+  ])).flat();
+  const seller = order.salesUser;
+  const people = [...heads];
+  if (seller?.role === 'staff' && seller.staff?.active) people.push(seller);
+
+  const ref = orderRef(order);
+  const subject = `Ship before payment: ${ref} — ${inr(order.totalAmount)} NOT paid yet`;
+  const intro = `${order.payLater.approvedByName || 'The admin'} let this B2B order ship before the customer pays. Procurement: please check stock and ship as usual. `
+    + `When it is dispatched the customer gets a payment link; accounts will see it under "Shipped – payment due".`;
+  const link = teamPanelLink('/team/pay-later');
+  const rows = orderRows(order, [
+    ['To collect', `<strong>${escapeHtml(inr(order.totalAmount))}</strong>`],
+    ['Approved by', escapeHtml(order.payLater.approvedByName || 'Admin')],
+    ['Why', escapeHtml(order.payLater.reason || '')],
+    ['Items', itemLines(order).map((l) => escapeHtml(l)).join('<br>')],
+  ]);
+  return sendToStaff(people, {
+    subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Open team panel', link),
+  }, `Pay-later approved alert (order ${orderId})`);
+};
+
+/** A "Ship before payment" order has been paid (verified webhook or confirmed transfer). */
+export const emailStaffPayLaterPaidAlert = async (orderId) => {
+  const order = await teamOrder(orderId);
+  if (!order) return { status: 'not-found' };
+  const people = [...await teamStaff('accounts', { headsOnly: true })];
+  const seller = order.salesUser;
+  if (seller?.role === 'staff' && seller.staff?.active) people.push(seller);
+  const ref = orderRef(order);
+  const subject = `Paid after dispatch: ${ref} — ${inr(order.totalAmount)}`;
+  const intro = 'The customer has paid this order, which shipped before payment. Nothing else to do.';
+  const link = teamPanelLink('/team/pay-later');
+  const rows = orderRows(order, [['Paid', `<strong>${escapeHtml(inr(order.totalAmount))}</strong>`]]);
+  return sendToStaff(people, {
+    subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Open team panel', link),
+  }, `Pay-later paid alert (order ${orderId})`);
+};
+
+/**
+ * Once a day: every "Ship before payment" order past its due date, in one email to
+ * the admin inbox and the accounts heads. The sweep sends only orders it claimed
+ * for today, so a re-run the same day sends nothing new.
+ */
+export const emailPayLaterOverdueAlert = async ({ orderIds = [] } = {}) => {
+  const orders = (await Promise.all(orderIds.slice(0, 200).map((id) => teamOrder(id))))
+    .filter((o) => o?.payLater?.approvedAt && o.paymentStatus === 'pending');
+  if (!orders.length) return { status: 'nothing-due' };
+  const total = orders.reduce((sum, o) => sum + Math.round(Number(o.totalAmount || 0) * 100), 0) / 100;
+  const subject = `Overdue: ${orders.length} order${orders.length === 1 ? '' : 's'} shipped before payment — ${inr(total)} not paid`;
+  const intro = 'These customers got their order but have not paid past the due date. They have been sent a reminder today. '
+    + 'Please call them. They cannot ship before paying again until they pay.';
+  const days = (o) => Math.max(1, Math.ceil((Date.now() - new Date(o.payLater.dueAt).getTime()) / 86400000));
+  const rows = orders.map((o) => [
+    escapeHtml(orderRef(o)),
+    `${escapeHtml(inr(o.totalAmount))} — ${escapeHtml(orderCustomer(o).name)} (${escapeHtml(orderCustomer(o).phone)}) — `
+      + `${days(o)} day${days(o) === 1 ? '' : 's'} late — sold by ${escapeHtml(soldBy(o))}`,
+  ]);
+  const link = teamPanelLink('/team/pay-later');
+  const message = { subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Open the list', link) };
+  const [admins, accounts] = await Promise.all([
+    sendToAdmins(message, 'Pay-later overdue alert'),
+    sendToStaff(await teamStaff('accounts', { headsOnly: true }), message, 'Pay-later overdue alert'),
+  ]);
+  return { status: 'sent', admins, accounts, count: orders.length };
+};
+
 /** Procurement uploaded the supplier's proof: the sales side and operations heads are told. */
 export const emailTeamShippedAlert = async ({ orderId, shipmentId, fromWarehouse = false }) => {
   const order = await teamOrder(orderId);

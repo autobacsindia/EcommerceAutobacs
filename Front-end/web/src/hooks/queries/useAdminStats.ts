@@ -18,6 +18,32 @@ export interface AdminRevenuePeriod {
   startDate: string;
 }
 
+/** Whole-company revenue, FY to date, incl. GST: Zoho bills after refunds + panel orders not billed in Zoho. */
+export interface CompanyRevenueTile {
+  total: number;
+  /** Every Zoho Books invoice, net of credit notes. */
+  zoho: number;
+  zohoExGst: number;
+  /** Website / old website / sales-panel orders that no Zoho invoice stands for yet. */
+  panelNotInZoho: number;
+  /** Zoho credit notes (refunds) already taken off `zoho`. */
+  creditNotes: number;
+  basis: 'incl_gst';
+  period: { kind: 'fy' | 'all'; label: string; startDate: string | null };
+  /** Zoho bills that probably are a website order (counted once, as the bill) — an admin should confirm. */
+  needsCheck: { count: number; total: number };
+}
+
+/** FY sales: Zoho bills still a sale after credit notes + panel orders not billed in Zoho. */
+export interface SalesTile {
+  total: number;
+  website: { total: number; delivered: number; shipped: number; processing: number };
+  zoho: number;
+  /** Zoho bills fully cancelled by a credit note — NOT in `total`. */
+  zohoCancelled: number;
+  fyLabel: string;
+}
+
 export interface AdminStats {
   totalOrders: number;
   pendingOrders: number;
@@ -27,6 +53,8 @@ export interface AdminStats {
   totalUsers: number;
   revenuePeriod?: AdminRevenuePeriod;
   filters?: AdminStatFilters;
+  companyRevenue?: CompanyRevenueTile;
+  sales?: SalesTile;
 }
 
 const EMPTY_STATS: AdminStats = {

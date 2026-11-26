@@ -68,14 +68,14 @@ import staffTaskInboxRepository, { INBOX_UNREAD_CAP } from '../repositories/staf
 import orderRepository from '../repositories/orderRepository.js';
 import staffTaskTimeRepository from '../repositories/staffTaskTimeRepository.js';
 import { sendToUsers } from './pushService.js';
-import { getTaskRules, checkDue } from './taskDueRules.js';
+import { getTaskRules, checkDue, daysAhead } from './taskDueRules.js';
 import { listForTask, liveList } from './staffTaskListService.js';
 import { inProjectAccess, loadVisibleProject, projectForTask, projectName, projectById, stageFor } from './staffProjectService.js';
 import { orderNumber } from './invoiceService.js';
 import { cleanRepeat, nextDueOn, shiftStart, repeatLabel, sameRepeat } from './taskRepeat.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
-import { TASK_PICKABLE_STATUSES, TASK_PRIORITIES, shownStatus } from '../models/StaffTask.js';
+import { TASK_PICKABLE_STATUSES, TASK_PRIORITIES, shownStatus, LATE_REASONS, DATE_MOVES_CAP } from '../models/StaffTask.js';
 import { keysetPage } from '../utils/listQuery.js';
 import { normalizeEmoji } from '../utils/reactions.js';
 import {
@@ -144,6 +144,9 @@ const IST_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', h
 export const timeIST = (now = new Date()) => IST_CLOCK.format(now);
 /** A due day and time as one sort key / history value: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'. */
 const dueKey = (dueOn, dueTime) => (dueOn ? (dueTime ? `${dueOn} ${dueTime}` : dueOn) : null);
+/** Is open task `t` past its deadline? An earlier day, or today once its time has come (untimed: from the next day). */
+const isLate = (t, today = todayIST(), now = timeIST()) => t.bucket === 'open' && !!t.dueOn
+  && (t.dueOn < today || (t.dueOn === today && !!t.dueTime && t.dueTime <= now));
 
 // ── Rules ───────────────────────────────────────────────────────────────────
 
@@ -163,6 +166,12 @@ export const peopleOf = (t) => t.assignees ?? (t.assignee ? [{ user: t.assignee,
 const teamsOf = (t) => t.teams ?? [t.team ?? null];
 const followersOf = (t) => t.followers ?? [];
 const isDoing = (u, t) => peopleOf(t).some((p) => same(u?._id, p.user));
+/** `u` was given open task `t` by someone else and has not answered (Accept / can't make this date). */
+const awaitsAccept = (u, t) => t.bucket === 'open' && !t.personal && peopleOf(t).some((p) => same(u?._id, p.user) && p.acceptedAt === null);
+/** `t`'s stored people with `user` marked accepted at `now` (null when there is nothing to mark). */
+const withAccepted = (t, user, now, base = t.assignees) => (base?.some((p) => same(p.user, user) && p.acceptedAt === null)
+  ? base.map((p) => (same(p.user, user) && p.acceptedAt === null ? { ...p, acceptedAt: now } : p))
+  : null);
 const isFollowing = (u, t) => followersOf(t).some((p) => same(u?._id, p.user));
 const headOnTask = (u, t) => teamsOf(t).some((team) => headOf(u, team));
 // Like a Google Chat space: everyone in a team sees the team's tasks (seeing,
@@ -206,6 +215,24 @@ function approvalFor(actor, t, dueOn, now) {
     : { ...base, status: 'pending' };
 }
 const APPROVAL_LABELS = Object.freeze({ pending: 'waiting for approval', approved: 'approved', rejected: 'not approved' });
+
+/*
+  ── A new date for a late (or soon-late) task ──────────────────────────────
+  Owner's rule (2026-11-24): "everyone must take approval if they didn't finish
+  on time". The person doing it gives a reason and a new date; whoever gave the
+  task approves it — or a head of its team, or the admin. Never the person who
+  asked. Once the deadline has passed, the people doing it can't move it
+  themselves, even when they could edit it otherwise (a head's own task): only
+  the admin's own late tasks are theirs to move.
+*/
+export const mayDecideNewDate = (u, t) => !t.personal
+  && !!t.lateRequest?.requestedBy
+  && !same(u?._id, t.lateRequest.requestedBy)
+  && (isAdmin(u) || same(u?._id, t.createdBy) || headOnTask(u, t));
+/** Asks for more time made BEFORE the deadline, per task. After it, asking is how a late task moves, so no limit. */
+export const EARLY_ASKS_MAX = 2;
+export const LATE_NOTE_MIN = 5;
+export const LATE_NEEDS_ASK = 'This task is late. Give a reason and a new date — it goes to whoever gave you the task to approve.';
 
 /** The bucket a task lives in, and its sort key inside it. */
 export function placeOf({ status, dueOn, dueTime, completedAt, archivedAt }) {
@@ -391,13 +418,17 @@ async function loadAssignees(actor, rawIds) {
  * each of their teams once, and the first person in the old one-person fields
  * (kept for older code and the 4a rollback; nothing decides on them).
  */
-export const peopleFields = (people) => personFields(people.map((p) => ({ user: p._id, name: p.name || '', team: teamOf(p) })));
+export const peopleFields = (people, giver = null, now = new Date()) => personFields(people.map((p) => ({
+  user: p._id, name: p.name || '', team: teamOf(p),
+  // Given by someone else: waiting for them to accept. Given to yourself: accepted.
+  ...(giver && { acceptedAt: same(p._id, giver._id) ? now : null }),
+})));
 /** The same, from `{ user, name, team }` entries (some kept from the task, some just loaded). */
 const personFields = (list) => ({
   assignee: list[0].user,
   assigneeName: list[0].name,
   team: list[0].team,
-  assignees: list.map(({ user, name, team }) => ({ user, name, team })),
+  assignees: list.map(({ user, name, team, acceptedAt }) => ({ user, name, team, ...(acceptedAt !== undefined && { acceptedAt }) })),
   teams: [...new Set(list.map((p) => p.team))],
 });
 const namesOf = (list) => list.map((p) => p.name || '?').join(', ');
@@ -414,8 +445,10 @@ async function loadOrderRef(raw) {
 
 export function shape(t, viewer, { full = false, today = todayIST(), now = timeIST() } = {}) {
   const open = t.bucket === 'open';
-  // Late: an earlier day, or today once its time has come.
-  const late = open && !!t.dueOn && (t.dueOn < today || (t.dueOn === today && !!t.dueTime && t.dueTime <= now));
+  const late = isLate(t, today, now);
+  // Misses: every deadline already moved after it passed, plus this one if it has passed.
+  const misses = (t.misses || 0) + (late ? 1 : 0);
+  const lr = t.lateRequest?.status ? t.lateRequest : null;
   const archived = t.bucket === 'archived';
   const description = t.description || '';
   // Lists show a plain preview; the task's own page gets the formatted notes.
@@ -440,6 +473,32 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     tags: t.tags || [],
     overdue: late,
     dueToday: open && t.dueOn === today,
+    misses,
+    // Missed twice or more: dark red with a danger sign.
+    danger: open && misses >= 2,
+    lateRequest: lr ? {
+      status: lr.status,
+      late: !!lr.late,
+      reason: lr.reason,
+      reasonLabel: LATE_REASONS[lr.reason] || lr.reason,
+      note: lr.note || '',
+      fromDue: lr.fromDue,
+      dueOn: lr.dueOn,
+      dueTime: lr.dueTime || null,
+      requestedBy: { id: idOf(lr.requestedBy), name: lr.requestedByName || '' },
+      requestedAt: lr.requestedAt || null,
+      decidedBy: lr.decidedBy ? { id: idOf(lr.decidedBy), name: lr.decidedByName || '' } : null,
+      decidedAt: lr.decidedAt || null,
+      approvedDue: lr.approvedDue || '',
+      decisionNote: lr.decisionNote || '',
+      atStart: !!lr.atStart,
+    } : null,
+    // Given to them by someone else and not answered: Accept, or "can't make this date".
+    needsAccept: awaitsAccept(viewer, t),
+    // Everyone still to accept (whoever gave it sees who has not taken it on).
+    notAccepted: open && !t.personal ? peopleOf(t).filter((p) => p.acceptedAt === null).map((p) => ({ id: idOf(p.user), name: p.name || '' })) : [],
+    // Late, theirs, and no new date asked for yet: the panel asks them for a reason.
+    needsReason: late && !t.personal && isDoing(viewer, t) && lr?.status !== 'pending',
     // The first person, for screens that show one; `assignees` is everyone.
     assignee: { id: idOf(peopleOf(t)[0]?.user), name: peopleOf(t)[0]?.name || '' },
     assignees: peopleOf(t).map((p) => ({ id: idOf(p.user), name: p.name || '' })),
@@ -504,6 +563,9 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
       // Anyone who sees a task may track time on it (services/staffTaskTimeService.js).
       time: !archived && canSee(viewer, t),
       approveDue: !archived && t.dueApproval?.status === 'pending' && mayApproveDue(viewer, t),
+      askNewDate: open && !!t.dueOn && !t.personal && isDoing(viewer, t) && lr?.status !== 'pending',
+      decideNewDate: open && lr?.status === 'pending' && mayDecideNewDate(viewer, t),
+      accept: awaitsAccept(viewer, t) && lr?.status !== 'pending',
     },
     ...(full && {
       files: (t.files || []).map((f) => ({
@@ -514,6 +576,10 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
       })),
       checklistItems: (t.checklist || []).map((c) => ({
         id: idOf(c._id), text: c.text, done: !!c.done, doneAt: c.doneAt || null, doneBy: c.doneByName || '',
+      })),
+      dateMoves: [...(t.dateMoves || [])].reverse().map((m) => ({
+        at: m.at, fromDue: m.fromDue, toDue: m.toDue, late: !!m.late, how: m.how,
+        reason: m.reason ? LATE_REASONS[m.reason] || m.reason : '', note: m.note || '', by: m.byName || '',
       })),
       history: [...(t.history || [])].reverse().map((h) => ({
         at: h.at, by: h.byName || '', action: h.action, from: h.from || '', to: h.to || '',
@@ -827,16 +893,7 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, due
       query['assignees.user'] = new mongoose.Types.ObjectId(assignee);
     }
   } else if (view === 'approvals') {
-    // Dates waiting for this person to approve: their team's (a head), or every team's (the admin).
-    query['dueApproval.status'] = 'pending';
-    query['dueApproval.requestedBy'] = { $ne: actor._id };
-    if (isAdmin(actor)) {
-      if (team) query.teams = team === 'admin' ? null : team;
-    } else if (isHead(actor)) {
-      query.teams = actor.staff.team;
-    } else {
-      throw fail('Only team heads and the admin approve due dates.', 403);
-    }
+    query.$or = approvalsOr(actor, team);
   } else if (view === 'project') {
     // Every task of one project — to whoever sees the project (and so may open each of them).
     const p = await loadVisibleProject(actor, project);
@@ -976,12 +1033,27 @@ export async function summaryFor(user) {
   return { late: before + lateToday, today: allToday - lateToday, inbox, assignedComments, inProgress: inProgress.count, doneWeek: doneWeek.count, approvals };
 }
 
-/** How many due dates wait for `user` to approve (0 for anyone who approves none). */
+/**
+ * What waits for `actor` to decide, as `$or` branches (each one index range):
+ *   far due dates   their team's (a head), every team's (the admin)
+ *   new dates       tasks they gave, their team's (a head), every team's (the admin)
+ * Never what they asked for themselves.
+ */
+export function approvalsOr(actor, team) {
+  const due = { 'dueApproval.status': 'pending', 'dueApproval.requestedBy': { $ne: actor._id } };
+  const asked = { 'lateRequest.status': 'pending', 'lateRequest.requestedBy': { $ne: actor._id } };
+  if (isAdmin(actor)) {
+    const teams = team ? { teams: team === 'admin' ? null : team } : {};
+    return [{ ...due, ...teams }, { ...asked, ...teams }];
+  }
+  const mine = [{ ...asked, createdBy: actor._id }];
+  if (!isHead(actor)) return mine;
+  return [{ ...due, teams: actor.staff.team }, { ...asked, teams: actor.staff.team }, ...mine];
+}
+
+/** How many dates wait for `user` to decide (far due dates and asked-for new dates). */
 async function countApprovalsFor(user) {
-  if (!isAdmin(user) && !isHead(user)) return 0;
-  const query = { bucket: 'open', 'dueApproval.status': 'pending', 'dueApproval.requestedBy': { $ne: user._id } };
-  if (!isAdmin(user)) query.teams = user.staff.team;
-  return (await staffTaskRepository.countUpTo(query, 99)).count;
+  return (await staffTaskRepository.countUpTo({ bucket: 'open', $or: approvalsOr(user) }, 99)).count;
 }
 
 /** The bell: open tasks given to `user` that are overdue or due today. */
@@ -1129,7 +1201,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         ...(tags.length ? { tags } : {}),
         ...(stage ? { stage: stage._id, stageName: stage.name } : {}),
         ...(projectList ? { projectList: projectList._id } : {}),
-        ...peopleFields(who),
+        ...peopleFields(who, personal ? null : actor, now),
         ...(personal ? { personal: true, team: null, teams: [] } : {}),
         ...(estimateMinutes ? { estimateMinutes } : {}),
         ...(repeat ? { repeat } : {}),
@@ -1218,10 +1290,12 @@ async function nextPeople(actor, t, ids) {
     name: p.name || '',
     // A backfilled task has one person and keeps their team on the task itself.
     team: p.team !== undefined ? p.team : now.length === 1 ? teamsOf(t)[0] ?? null : null,
+    acceptedAt: p.acceptedAt,
   }]));
   const fresh = ids.filter((x) => !kept.has(x));
   const loaded = fresh.length ? await loadAssignees(actor, fresh) : [];
-  const byId = new Map(loaded.map((u) => [idOf(u._id), { user: u._id, name: u.name || '', team: teamOf(u) }]));
+  // Someone just added waits to accept, unless they added themselves.
+  const byId = new Map(loaded.map((u) => [idOf(u._id), { user: u._id, name: u.name || '', team: teamOf(u), acceptedAt: same(u._id, actor._id) ? new Date() : null }]));
   return ids.map((x) => kept.get(x) ?? byId.get(x));
 }
 
@@ -1235,9 +1309,12 @@ async function applyUpdate(actor, t, input, req) {
   const has = (k) => Object.prototype.hasOwnProperty.call(input, k) && input[k] !== undefined;
   const set = {};
   const entries = [];
+  // A deadline that moves is recorded apart from `history` (dateMoves), and a late one counts as a miss.
+  const more = {};
   const now = new Date();
   const by = { at: now, by: actor._id, byName: actor.name || '' };
   const note = (action, from = '', to = '') => entries.push({ ...by, action, from: String(from ?? ''), to: String(to ?? '') });
+  let acceptOnSave = false;
 
   if (has('archived')) {
     const want = input.archived === true || input.archived === 'true';
@@ -1285,7 +1362,18 @@ async function applyUpdate(actor, t, input, req) {
       // Whoever may move the task gives it its first date as they move it out of To Do
       // ("When will this be done?"): the move needs one, so it can't be the giver's alone.
       const datingAMove = !t.dueOn && !!dueOn && has('status') && canSetStatus(actor, t);
+      const lateNow = isLate(t);
+      if (lateNow && !t.personal && !isAdmin(actor) && isDoing(actor, t)) throw fail(LATE_NEEDS_ASK, 403);
       if (!datingAMove) needEdit();
+      if (t.dueOn && dueOn && t.bucket === 'open' && !t.personal) {
+        more.push = { dateMoves: { $each: [{ at: now, fromDue: was, toDue: next, late: lateNow, how: 'edit', by: actor._id, byName: actor.name || '' }], $slice: -DATE_MOVES_CAP } };
+        if (lateNow) more.inc = { misses: 1 };
+      }
+      // Whoever gave it set the date themselves: an open ask for a new one is answered by that.
+      if (t.lateRequest?.status === 'pending') {
+        set.lateRequest = null;
+        note('late_request', 'asked', 'date set by hand');
+      }
       // Taking a date off is allowed where a date is optional; the end of applyUpdate checks that.
       if (dueOn !== (t.dueOn || null)) set.dueOn = dueOn;
       if (dueTime !== (t.dueTime || null)) set.dueTime = dueTime;
@@ -1352,6 +1440,8 @@ async function applyUpdate(actor, t, input, req) {
       set.status = status;
       set.completedAt = status === 'done' ? now : null;
       note('status', STATUS_LABELS[shownStatus(t.status)], STATUS_LABELS[status]);
+      // Starting or finishing it yourself is taking it on.
+      if (status !== 'todo' && awaitsAccept(actor, t)) acceptOnSave = true;
     }
   }
   let added = [];
@@ -1454,6 +1544,12 @@ async function applyUpdate(actor, t, input, req) {
   // A retired 'waiting' becomes what it was already shown as, on its next change.
   if (t.status === 'waiting' && !set.status) set.status = 'in_progress';
 
+  if (acceptOnSave) {
+    const accepted = withAccepted(t, actor._id, now, set.assignees ?? t.assignees);
+    // No history line of its own: the status change already says they started it.
+    if (accepted) set.assignees = accepted;
+  }
+
   Object.assign(set, placeOf({
     status: set.status ?? t.status,
     dueOn: set.dueOn !== undefined ? set.dueOn : t.dueOn,
@@ -1462,7 +1558,7 @@ async function applyUpdate(actor, t, input, req) {
     archivedAt: set.archivedAt !== undefined ? set.archivedAt : t.archivedAt,
   }));
 
-  const next = await staffTaskRepository.updateIfRev(t._id, rev, set, entries);
+  const next = await staffTaskRepository.updateIfRev(t._id, rev, set, entries, more);
   if (!next) throw fail('Someone changed this task just now. It has been reloaded — check it and try again.', 409);
 
   // Sub-tasks follow their parent's archive; a parent's count follows its sub-tasks.
@@ -1605,6 +1701,228 @@ export async function decideDueApproval(actor, id, { rev: rawRev, decision, note
   if (!next) throw fail('Someone changed this task just now. It has been reloaded — check it and try again.', 409);
   auditLogger.logAction(req, 'UPDATE', 'StaffTask', t._id, { number: t.number, dueApproval: status, dueOn: a.dueOn });
   await notifyDueDecision(next, actor);
+  return shape(next, actor, { full: true });
+}
+
+// ── A new date: asked by the person doing it, approved by whoever gave it ──
+
+const STALE = 'Someone changed this task just now. It has been reloaded — check it and try again.';
+const cleanLine = (raw) => String(raw ?? '').replace(/\s+/g, ' ').trim();
+
+/** A new deadline must still be ahead: a later day, today (all day, or a time not yet come). */
+function refusePastDue(dueOn, dueTime, today = todayIST(), now = timeIST()) {
+  if (dueOn < today || (dueOn === today && dueTime && dueTime <= now)) throw fail('Pick a new date and time that is still ahead.', 400);
+}
+
+/** The deadline as people read it: "2026-11-24 17:00". */
+const dueLabel = (dueOn, dueTime) => dueKey(dueOn, dueTime);
+
+/**
+ * "Please approve a new date": whoever gave the task — or, when they asked it
+ * themselves or have left, the heads of its teams, else the admins. A second
+ * miss (or more) also goes to the heads, so it can't stay between two people.
+ */
+async function notifyNewDateAsked(t, actor) {
+  try {
+    const lr = t.lateRequest;
+    const giver = !same(t.createdBy, lr.requestedBy) ? (await userRepository.findChatUsersByIds([idOf(t.createdBy)]))[0] : null;
+    const heads = realTeams(t).length ? (await userRepository.findTeamHeads(realTeams(t))).map((u) => u._id) : [];
+    const notMe = (x) => !same(x, lr.requestedBy);
+    let ids = giver ? [giver._id] : heads.filter(notMe);
+    if (!ids.length) ids = (await userRepository.findAdmins()).map((u) => u._id).filter(notMe);
+    const misses = (t.misses || 0) + (lr.late ? 1 : 0);
+    if (lr.late && misses >= 2) ids = [...ids, ...heads.filter(notMe)];
+    const asked = dueLabel(lr.dueOn, lr.dueTime);
+    const text = `${lr.late ? `Late (missed ${misses}×)` : lr.atStart ? 'Can’t make this date' : 'Asks for more time'} · ${LATE_REASONS[lr.reason]}: ${lr.note} · new date ${asked}`;
+    await toInbox(t, actor, ids, { kind: 'late_requested', key: revKey(t, 'late_requested'), text });
+    void notifyPeople(t, actor, ids, {
+      title: lr.late
+        ? `${misses >= 2 ? '⚠ ' : ''}${actor.name || 'Someone'} missed T-${t.number} and asks for a new date`
+        : lr.atStart
+          ? `${actor.name || 'Someone'} can’t make the date on T-${t.number}`
+          : `${actor.name || 'Someone'} asks for more time on T-${t.number}`,
+      body: `${t.title} · ${LATE_REASONS[lr.reason]}: ${lr.note} · new date ${asked}`,
+    });
+  } catch (err) {
+    console.error('[StaffTask] new-date request notice failed (ignored):', err.message);
+  }
+}
+
+/** No person did it: deadline alerts come from the system (services/taskAlertService.js). */
+const SYSTEM_ACTOR = Object.freeze({ _id: null, name: '' });
+
+/**
+ * One deadline alert about task `t` to `ids`: an Inbox line keyed by `key` (so a
+ * retry adds nothing) and a pop-up. Best effort, never throws.
+ */
+export async function sendTaskAlert(t, ids, { kind, key, text, title, body }) {
+  await toInbox(t, SYSTEM_ACTOR, ids, { kind, key, text });
+  await notifyPeople(t, SYSTEM_ACTOR, ids, { title, body });
+}
+
+/** "Your new date was approved / not approved": whoever asked and everyone on the task. */
+async function notifyNewDateDecided(t, actor) {
+  const lr = t.lateRequest;
+  const ids = [lr.requestedBy, ...audienceOf(t)];
+  const approved = lr.status === 'approved';
+  const text = approved
+    ? `New date approved: ${lr.approvedDue}${lr.decisionNote ? ` — ${lr.decisionNote}` : ''}`
+    : `New date not approved — ${lr.decisionNote}`;
+  await toInbox(t, actor, ids, { kind: 'late_decided', key: revKey(t, 'late_decided'), text });
+  void notifyPeople(t, actor, ids, {
+    title: `${actor.name || 'Your manager'} ${approved ? 'approved' : 'did not approve'} the new date for T-${t.number}`,
+    body: `${t.title} · ${approved ? `due ${lr.approvedDue}` : lr.decisionNote}`,
+  });
+}
+
+/**
+ * Take on a task someone gave you, at its date. (Not able to make the date?
+ * askNewDate does that: "can't make this date", for whoever gave it to approve.)
+ * Named against `rev`, so a double click accepts once.
+ */
+export async function acceptTask(actor, id, input = {}, req) {
+  const t = await loadVisible(actor, id);
+  const rev = Number(input.rev);
+  if (!Number.isInteger(rev)) throw fail('Reload the task and try again.', 400);
+  if (t.bucket !== 'open') throw fail(t.bucket === 'archived' ? 'This task is archived. Restore it first.' : 'This task is already done.', 409);
+  if (rev !== t.rev) throw fail(STALE, 409);
+  if (!awaitsAccept(actor, t)) throw fail('There is nothing to accept on this task.', 409);
+  if (t.lateRequest?.status === 'pending') throw fail('Your new date is waiting for approval.', 409);
+  const now = new Date();
+  const assignees = withAccepted(t, actor._id, now);
+  const entry = { at: now, by: actor._id, byName: actor.name || '', action: 'accepted', from: '', to: t.dueOn ? `due ${dueKey(t.dueOn, t.dueTime)}` : '' };
+  const next = await staffTaskRepository.updateIfRev(t._id, rev, { assignees }, [entry]);
+  if (!next) throw fail(STALE, 409);
+  auditLogger.logAction(req, 'UPDATE', 'StaffTask', t._id, { number: t.number, accepted: true });
+  return shape(next, actor, { full: true });
+}
+
+/**
+ * Ask for a new date (the person doing the task). Late: the reason it was
+ * missed. Not late yet: asking for more time early, at most EARLY_ASKS_MAX
+ * times per task. The task keeps its date until it is approved.
+ *
+ * @param {{ rev: number, reason: string, note: string, dueOn: string, dueTime?: string }} input
+ */
+export async function askNewDate(actor, id, input = {}, req) {
+  const t = await loadVisible(actor, id);
+  const rev = Number(input.rev);
+  if (!Number.isInteger(rev)) throw fail('Reload the task and try again.', 400);
+  if (t.bucket !== 'open') throw fail(t.bucket === 'archived' ? 'This task is archived. Restore it first.' : 'This task is already done.', 409);
+  if (t.personal) throw fail('This is your personal task — change its date yourself.', 400);
+  if (!isDoing(actor, t)) throw fail('Only the people doing this task can ask for a new date.', 403);
+  if (!t.dueOn) throw fail('This task has no due date yet.', 400);
+  if (rev !== t.rev) throw fail(STALE, 409);
+  if (t.lateRequest?.status === 'pending') throw fail('A new date is already waiting for approval.', 409);
+
+  const reason = String(input.reason ?? '');
+  if (!Object.hasOwn(LATE_REASONS, reason)) throw fail('Pick a reason.', 400);
+  const note = cleanLine(input.note);
+  if (note.length < LATE_NOTE_MIN) throw fail('Say in a few words what happened.', 400);
+  if (note.length > APPROVAL_NOTE_MAX) throw fail(`Keep it under ${APPROVAL_NOTE_MAX} characters.`, 400);
+  const dueOn = cleanDueOn(input.dueOn);
+  if (!dueOn) throw fail('Pick the new date.', 400);
+  const dueTime = cleanDueTime(input.dueTime);
+  refusePastDue(dueOn, dueTime);
+  const fromDue = dueKey(t.dueOn, t.dueTime);
+  if (dueKey(dueOn, dueTime) === fromDue) throw fail('That is the date it has now. Pick a new one.', 400);
+  if (t.startOn && t.startOn > dueOn) throw fail('The new date can’t be before the start date.', 400);
+
+  const late = isLate(t);
+  // Not accepted yet: "I can't make this date" — part of taking it on, not an early ask.
+  const atStart = !late && awaitsAccept(actor, t);
+  if (!late && !atStart) {
+    const early = (t.dateMoves || []).filter((m) => m.how === 'request' && !m.late).length;
+    if (early >= EARLY_ASKS_MAX) throw fail(`You have already been given more time ${EARLY_ASKS_MAX} times on this task. Talk to whoever gave it to you.`, 400);
+  }
+
+  const now = new Date();
+  const set = {
+    lateRequest: {
+      status: 'pending', late, ...(atStart && { atStart: true }), reason, note, fromDue, dueOn, dueTime,
+      requestedBy: actor._id, requestedByName: actor.name || '', requestedAt: now,
+    },
+  };
+  const entry = { at: now, by: actor._id, byName: actor.name || '', action: 'late_request', from: fromDue, to: `${atStart ? 'can’t make this date — ' : ''}asked: due ${dueKey(dueOn, dueTime)} — ${LATE_REASONS[reason]}: ${note}` };
+  const next = await staffTaskRepository.updateIfRev(t._id, rev, set, [entry]);
+  if (!next) throw fail(STALE, 409);
+  auditLogger.logAction(req, 'UPDATE', 'StaffTask', t._id, { number: t.number, lateRequest: 'asked', late, atStart, reason, fromDue, to: dueKey(dueOn, dueTime) });
+  await notifyNewDateAsked(next, actor);
+  return shape(next, actor, { full: true });
+}
+
+/**
+ * Approve or refuse a new date (whoever gave the task, a head of its team, or
+ * the admin — never whoever asked). Approving may give a different date. A
+ * refusal needs a note; the task stays as it was, and if it is late the person
+ * is asked again. Named against `rev`, so two clicks decide it once.
+ *
+ * @param {{ rev: number, decision: 'approve'|'reject', note?: string, dueOn?: string, dueTime?: string }} input
+ */
+export async function decideNewDate(actor, id, input = {}, req) {
+  const t = await loadVisible(actor, id);
+  const rev = Number(input.rev);
+  if (!Number.isInteger(rev)) throw fail('Reload the task and try again.', 400);
+  const { decision } = input;
+  if (!['approve', 'reject'].includes(decision)) throw fail('Pick approve or reject.', 400);
+  if (t.bucket !== 'open') throw fail(t.bucket === 'archived' ? 'This task is archived. Restore it first.' : 'This task is already done.', 409);
+  if (rev !== t.rev) throw fail(STALE, 409);
+  const lr = t.lateRequest;
+  if (lr?.status !== 'pending') throw fail('This new date isn’t waiting for approval any more.', 409);
+  if (same(actor._id, lr.requestedBy)) throw fail('You asked for this date, so someone else must approve it.', 403);
+  if (!mayDecideNewDate(actor, t)) throw fail('Only whoever gave this task, a head of its team or the admin can decide this.', 403);
+  const note = cleanLine(input.note);
+  if (note.length > APPROVAL_NOTE_MAX) throw fail(`Keep the note under ${APPROVAL_NOTE_MAX} characters.`, 400);
+
+  const now = new Date();
+  const by = { at: now, by: actor._id, byName: actor.name || '' };
+  const decided = { decidedBy: actor._id, decidedByName: actor.name || '', decidedAt: now, decisionNote: note };
+  let set;
+  let more = {};
+  const entries = [];
+  if (decision === 'reject') {
+    if (!note) throw fail('Say why, or which date would do.', 400);
+    set = { lateRequest: { ...lr, status: 'rejected', ...decided } };
+    entries.push({ ...by, action: 'late_request', from: 'asked', to: `not approved — ${note}` });
+  } else {
+    // Their own date, or the one asked for.
+    const dueOn = input.dueOn ? cleanDueOn(input.dueOn) : lr.dueOn;
+    const dueTime = input.dueOn ? cleanDueTime(input.dueTime) : lr.dueTime || null;
+    if (!dueOn) throw fail('Pick the new date.', 400);
+    refusePastDue(dueOn, dueTime);
+    if (t.startOn && t.startOn > dueOn) throw fail('The new date can’t be before the start date.', 400);
+    // A far date still needs a manager (services/taskDueRules.js); the priority limit
+    // does not apply — the task is already past it, and someone in charge said yes.
+    const rules = await getTaskRules();
+    const far = daysAhead(dueOn, todayIST()) > rules.approvalAfterDays;
+    if (far && !isAdmin(actor) && !headOnTask(actor, t)) {
+      throw fail(`A date more than ${rules.approvalAfterDays} days away needs a team head or the admin.`, 403);
+    }
+    const fromDue = dueKey(t.dueOn, t.dueTime);
+    const toDue = dueKey(dueOn, dueTime);
+    // Missed if it was asked late, or the deadline passed while it waited.
+    const late = !!lr.late || isLate(t);
+    set = {
+      dueOn,
+      dueTime,
+      lateRequest: { ...lr, status: 'approved', approvedDue: toDue, ...decided },
+      dueApproval: far ? { status: 'approved', dueOn, requestedBy: lr.requestedBy, requestedByName: lr.requestedByName, requestedAt: lr.requestedAt, decidedBy: actor._id, decidedByName: actor.name || '', decidedAt: now, note } : null,
+      ...placeOf({ status: t.status, dueOn, dueTime, completedAt: t.completedAt, archivedAt: t.archivedAt }),
+    };
+    // "Can't make this date", approved: the date is now one they agreed to.
+    const accepted = lr.atStart ? withAccepted(t, lr.requestedBy, now) : null;
+    if (accepted) set.assignees = accepted;
+    more = {
+      push: { dateMoves: { $each: [{ at: now, fromDue, toDue, late, how: lr.atStart ? 'start' : 'request', reason: lr.reason, note: lr.note, by: lr.requestedBy, byName: lr.requestedByName }], $slice: -DATE_MOVES_CAP } },
+      ...(late ? { inc: { misses: 1 } } : {}),
+    };
+    entries.push({ ...by, action: 'late_request', from: 'asked', to: `approved: due ${toDue}${note ? ` — ${note}` : ''}` });
+    entries.push({ ...by, action: 'due', from: fromDue, to: toDue });
+  }
+  const next = await staffTaskRepository.updateIfRev(t._id, rev, set, entries, more);
+  if (!next) throw fail(STALE, 409);
+  auditLogger.logAction(req, 'UPDATE', 'StaffTask', t._id, { number: t.number, lateRequest: next.lateRequest.status, due: dueKey(next.dueOn, next.dueTime) });
+  await notifyNewDateDecided(next, actor);
   return shape(next, actor, { full: true });
 }
 

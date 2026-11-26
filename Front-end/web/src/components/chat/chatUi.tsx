@@ -28,6 +28,14 @@ export function useOpenUpwardIfCut(ref: RefObject<HTMLElement | null>) {
 }
 
 /** The chat's primary fill (a solid blue badge / button); `text-white` reads dark on it in dark mode. */
+/**
+ * How a conversation is written: a one-word space as #space; a person, a
+ * team-to-team chat, or a space whose name is a written title ("Team Report",
+ * the whole-company space) as written, without '#'.
+ */
+export const channelTitle = (c: Pick<ChatChannel, 'kind' | 'audience' | 'name'>) =>
+  c.kind === 'dm' || c.audience === 'teams' || /\s/.test(c.name) ? c.name : `#${c.name}`;
+
 export const PRIMARY_FILL = 'bg-blue-600 text-white';
 
 export const newClientId = () =>

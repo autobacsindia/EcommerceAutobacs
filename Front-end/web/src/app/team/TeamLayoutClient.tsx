@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck, UserCog } from 'lucide-react';
+import { AlarmClock, BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Hourglass, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck, UserCog } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -17,6 +17,7 @@ import { MARKETING_AREAS } from './marketingAreas';
 import CallProvider from '@/components/calls/CallProvider';
 import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
 import NewWorkPopup from '@/components/notifications/NewWorkPopup';
+import { LateTasksPrompt } from '@/components/tasks/lateDates';
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -43,6 +44,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
     { href: '/team/chat', label: 'Team chat', icon: MessagesSquare },
     // Every team: heads give tasks to their team, members keep their own.
     { href: '/team/tasks', label: 'Tasks', icon: ListTodo },
+    // Every team: what each person owns that is late, due today or pending.
+    { href: '/team/delays', label: 'My delays', icon: AlarmClock },
     // Every team: training that heads and admins post.
     { href: '/team/lessons', label: 'Lessons', icon: GraduationCap },
     { href: '/team/training', label: 'Training', icon: BookOpenCheck },
@@ -100,6 +103,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/bank-transfers', label: 'Bank transfers', icon: Landmark });
   // Extra amounts on paid orders: GTM asks, accounts approves.
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/extra-charges', label: 'Extra charges', icon: Coins });
+  // Orders the admin let ship before payment: accounts follows the money, the GTM head the customers.
+  if (team === 'accounts' || (team === 'sales' && isHead)) nav.push({ href: '/team/pay-later', label: 'B2B / B2C · Pay later', icon: Hourglass });
   // Sales made before the website: GTM enters its own, accounts corrects and deletes.
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/past-sales', label: 'Past sales', icon: History });
   nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
@@ -107,6 +112,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   // Procurement's own tools: ask suppliers for prices on WhatsApp; work out a price.
   if (team === 'procurement') {
     nav.push(
+      // Autobacs Partner: supplier sign-ups, their products, price changes, margin rules.
+      { href: '/team/partners', label: 'Supplier partners', icon: Handshake },
       { href: '/team/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
       { href: '/team/price-calculator', label: 'Price calculator', icon: Calculator },
       { href: '/team/shipping-calculator', label: 'Shipping calculator', icon: Truck },
@@ -206,6 +213,7 @@ export default function TeamLayoutClient({
         {children}
         <ProjectReminderPopup tasksHref="/team/tasks" />
         <NewWorkPopup />
+        <LateTasksPrompt base="/team/tasks" />
       </PanelShell>
     </CallProvider>
   );

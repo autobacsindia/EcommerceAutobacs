@@ -97,7 +97,7 @@ function EmptyState({ view, narrowed, onNew }: { view: TaskView; narrowed: boole
         : view === 'personal' ? ['Your private list is empty', 'Add reminders and to-dos only you can see. Nobody else can open them, not even the admin.']
         : view === 'following' ? ['You aren’t following any tasks', 'Open a task and press Follow to hear about it without doing it.']
         : view === 'project' ? ['No open tasks in this project', 'Add one here, or open any task and pick this project in its Project field.']
-        : view === 'approvals' ? ['No dates to approve', 'When someone sets a due date more than 9 days away, it waits here for you.']
+        : view === 'approvals' ? ['No dates to approve', 'When someone asks for a new date on a task you gave, or sets one more than 9 days away, it waits here for you.']
         : ['No open tasks in the team', 'Everyone is up to date.'];
   return (
     <div className="flex flex-col items-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
@@ -129,7 +129,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   base: string; canSeeTeam: boolean; myTeam?: string | null; myTeamLabel?: string; isHead?: boolean;
 }) {
   const isAdmin = base.startsWith('/admin');
-  // Heads and the admin approve far due dates (services/taskDueRules.js).
+  // Heads and the admin approve far due dates (services/taskDueRules.js); anyone approves
+  // a new date on a task they gave (lateDates.tsx), so the tab shows for them when one waits.
   const approver = isAdmin || isHead;
   const [editingRules, setEditingRules] = useState(false);
   const router = useRouter();
@@ -163,7 +164,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const inOther = inInbox || inTrash || inAssigned || inOverview || inProjects;
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>('all');
   // A view this person cannot see (an old or shared link) falls back to "My tasks".
-  const view: TaskView = inTrash ? (isAdmin || isHead ? 'team' : 'created') : lp.view === 'project' && lp.project ? 'project' : lp.view === 'created' || lp.view === 'following' || lp.view === 'personal' || (lp.view === 'team' && canSeeTeam) || (lp.view === 'approvals' && approver) ? lp.view : 'mine';
+  const view: TaskView = inTrash ? (isAdmin || isHead ? 'team' : 'created') : lp.view === 'project' && lp.project ? 'project' : lp.view === 'created' || lp.view === 'following' || lp.view === 'personal' || (lp.view === 'team' && canSeeTeam) || lp.view === 'approvals' ? lp.view : 'mine';
   // The admin's team view: one team, or '' for all of them.
   const team = view === 'team' && isAdmin && SPACES.some((sp) => sp.value === lp.team) ? lp.team : '';
   // The space on screen (whose folders and lists apply), and one list of it: an id, or 'none' = Other tasks.
@@ -238,7 +239,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     { value: 'following', label: 'Following' },
     { value: 'created', label: 'Assigned by me' },
     { value: 'personal', label: 'Personal' },
-    ...(approver ? [{ value: 'approvals' as const, label: 'Approve dates' }] : []),
+    ...(approver || (summary.data?.approvals ?? 0) > 0 || view === 'approvals' ? [{ value: 'approvals' as const, label: 'Approve dates' }] : []),
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
   const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team, list, project: projectId, projectList };

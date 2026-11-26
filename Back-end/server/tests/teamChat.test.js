@@ -10,7 +10,8 @@ import { app, cronService, adaptiveThrottlingService } from '../app.js';
 import * as dbHandler from './db-handler.js';
 import User from '../models/User.js';
 import ChatMessage from '../models/ChatMessage.js';
-import { postSystemMessage, canAccess } from '../services/chatService.js';
+import ChatChannel from '../models/ChatChannel.js';
+import { postSystemMessage, canAccess, MESSAGE_MAX_LENGTH } from '../services/chatService.js';
 import { onChatEvent } from '../services/chatEvents.js';
 import { STAFF_TEAM_VALUES } from '../config/staff.js';
 
@@ -104,6 +105,16 @@ describe('Team chat', () => {
       expect(pair).toMatchObject({ audience: 'teams', name: 'Accounts & Procurement', withTeam: null });
     });
 
+    it('the whole-company space reads "Team Report" as written, while the stored space stays "company"', async () => {
+      for (const who of [admin, salesMember]) {
+        const company = (await who.get('/chat/channels')).body.channels.find((c) => c.key === 'company');
+        expect(company).toMatchObject({ key: 'company', name: 'Team Report', audience: 'all' });
+      }
+      // Display-only: key, stored name and therefore links and history are unchanged.
+      const stored = await ChatChannel.findOne({ key: 'company' }).lean();
+      expect(stored).toMatchObject({ key: 'company', name: 'company' });
+    });
+
     it('staff see #company, their own team space and their team\'s conversations with each other team', async () => {
       const { body } = await salesMember.get('/chat/channels');
       // Their own space, #company, and one conversation per OTHER team — built
@@ -164,7 +175,7 @@ describe('Team chat', () => {
 
     it('rejects empty and over-long messages', async () => {
       expect((await admin.post(`/chat/channels/${company}/messages`, { text: '   ' })).status).toBe(400);
-      expect((await admin.post(`/chat/channels/${company}/messages`, { text: 'x'.repeat(4001) })).status).toBe(400);
+      expect((await admin.post(`/chat/channels/${company}/messages`, { text: 'x'.repeat(MESSAGE_MAX_LENGTH + 1) })).status).toBe(400);
     });
 
     it('stores text as plain text (markup is not interpreted server-side)', async () => {
@@ -365,6 +376,10 @@ describe('Team chat', () => {
       await admin.post('/chat/channels', { name: 'deals' });
       expect((await admin.post('/chat/channels', { name: 'Deals' })).status).toBe(409);
       expect((await admin.post('/chat/channels', { name: 'sales' })).status).toBe(409);
+      // Nobody can make a second "Team Report", however it is typed.
+      for (const name of ['Team Report', 'team report', '#team-report', 'TEAM   REPORT', 'company']) {
+        expect((await admin.post('/chat/channels', { name })).status).toBe(409);
+      }
     });
   });
 

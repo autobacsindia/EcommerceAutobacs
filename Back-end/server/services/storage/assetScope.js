@@ -49,10 +49,15 @@ export const PRIVATE_PREFIXES = [
   'tasks',
   // Invoices on the tools / subscriptions list (services/subscriptionDueService.js).
   'subscription-dues',
+  // Bills on "We owe suppliers" (services/supplierBillService.js).
+  'supplier-bills',
   // Training lessons: PDFs, videos, slides (services/staffLessonService.js), one folder per lesson.
   'autobacs/lessons',
   // Photos on procurement's supplier price enquiries (services/supplierEnquiryService.js).
   'supplier-enquiries',
+  // Autobacs Partner: supplier GST certificates, cancelled cheques and listing
+  // photos before approval (services/supplierPortal/uploads.js).
+  'supplier-portal',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

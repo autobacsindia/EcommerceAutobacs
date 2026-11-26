@@ -32,6 +32,7 @@ import { toE164India } from '../../utils/identity.js';
 import { storefrontOrigin, trackOrderUrl } from '../../utils/storefrontUrl.js';
 import { notificationKey, stillRelevant, paymentFailedEmailDelayMs } from '../orderNotificationRules.js';
 import { sendTemplateMessage } from './whatsappClient.js';
+import { STILL_ON_IT_LINES } from '../../utils/orderProgressEmail.js';
 
 export const WHATSAPP_JOB = 'send-order-whatsapp';
 
@@ -46,6 +47,12 @@ const LOG_EVENT = {
   payment_failed: 'payment_failed',
   refund_initiated: 'refund_started',
   refunded: 'refund_processed',
+  // Progress milestones (services/orderProgressService.js). Sent only once their
+  // template is approved at Meta and named in Railway — see config/whatsapp.js.
+  preparing: 'order_preparing',
+  packed: 'order_packed',
+  courier_booked: 'order_courier_booked',
+  still_on_it: 'order_still_on_it',
 };
 
 export const WHATSAPP_EVENTS = new Set(Object.keys(LOG_EVENT));
@@ -72,7 +79,7 @@ const cancelReason = (order) => {
  * changing the ORDER of variables here without re-approving the template sends
  * customers the wrong values in the wrong places.
  */
-export function buildTemplateParams(order, status, { shipment = null, user = null, amount = null } = {}) {
+export function buildTemplateParams(order, status, { shipment = null, user = null, amount = null, stage = null } = {}) {
   const origin = storefrontOrigin();
   if (!origin) return null;
   const name = (order.shippingAddress?.fullName || user?.name || 'there').trim();
@@ -106,10 +113,20 @@ export function buildTemplateParams(order, status, { shipment = null, user = nul
     case 'refund_initiated':
     case 'refunded':
       return [name, formatAmount(refundAmount), ref];
+    case 'preparing':
+    case 'packed':
+      return [name, ref, orderLink];
+    case 'courier_booked':
+      return [name, ref, src.carrier?.name || 'our courier partner', trackingNumber || 'to be shared soon', trackLink];
+    case 'still_on_it':
+      return [name, ref, stillOnItLine(stage), orderLink];
     default:
       return null;
   }
 }
+
+/** still_on_it: where the order is, in the same words as the email. */
+const stillOnItLine = (stage) => STILL_ON_IT_LINES[stage] || 'our team is working on it';
 
 /** Best-effort audit row; a logging failure must never fail or re-send the message. */
 const logMessage = async (fields) => {
@@ -131,7 +148,7 @@ const logMessage = async (fields) => {
  * @param {number} [opts.amount] - refund amount in ₹
  * @param {object} [deps] - injected for tests
  * @returns {Promise<{status: string, messageId?: string}>}
- *   sent | disabled | unsupported | not-found | skipped | stale | no-consent |
+ *   sent | disabled | unsupported | no-template | not-found | skipped | stale | no-consent |
  *   bad-phone | not-allowlisted | no-link | failed
  * @throws on a TRANSIENT send failure, so BullMQ retries (the claim is released first)
  */
@@ -153,7 +170,7 @@ export async function sendOrderWhatsApp(orderId, status, opts = {}, deps = {}) {
     ? (order.shipments || []).find((s) => String(s._id) === String(shipmentId))
     : null;
   if (shipmentId && !shipment) return { status: 'not-found' };
-  if (!stillRelevant(order, status, shipment)) return { status: 'stale' };
+  if (!stillRelevant(order, status, shipment, occurrence)) return { status: 'stale' };
 
   // Consent is per order and must be an explicit yes. Absent (every order placed
   // before this feature) is a no.
@@ -164,7 +181,11 @@ export async function sendOrderWhatsApp(orderId, status, opts = {}, deps = {}) {
   if (cfg.testRecipients && !cfg.testRecipients.has(to)) return { status: 'not-allowlisted' };
 
   const user = order.user && typeof order.user === 'object' ? order.user : null;
-  const params = buildTemplateParams(order, status, { shipment, user, amount });
+  // A progress event whose template has not been approved yet sends nothing rather
+  // than a template name Meta would reject (config/whatsapp.js OPTIONAL_TEMPLATES).
+  if (!cfg.templates[status]) return { status: 'no-template' };
+
+  const params = buildTemplateParams(order, status, { shipment, user, amount, stage: occurrence });
   if (!params) {
     console.warn(`[WhatsApp] FRONTEND_URL not set — cannot build links; skipping ${status} for order ${orderId}`);
     return { status: 'no-link' };
@@ -227,7 +248,8 @@ const queueConfigured = () => !!(process.env.REDIS_URL || process.env.QUEUE_REDI
  */
 export function enqueueOrderWhatsApp(orderId, status, opts = {}) {
   if (!WHATSAPP_EVENTS.has(status) || !queueConfigured()) return null;
-  if (!getWhatsAppConfig(toE164India)) return null;
+  const cfg = getWhatsAppConfig(toE164India);
+  if (!cfg || !cfg.templates[status]) return null;
   const { shipmentId = null, occurrence = null, amount = null } = opts;
   const id = String(orderId);
   // BullMQ refuses ':' in a custom job id.

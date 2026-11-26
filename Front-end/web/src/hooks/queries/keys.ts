@@ -182,6 +182,12 @@ export const adminKeys = {
     [...adminKeys.resource(resource), normalizeParams(params)] as const,
   /** Header counters (pending orders / revenue) — polled, shared by every admin screen. */
   stats: () => [...adminKeys.all, 'stats'] as const,
+  /** Company revenue page (panel + Zoho) and its held-back invoice list. */
+  companyRevenueAll: () => [...adminKeys.all, 'company-revenue'] as const,
+  companyRevenue: (period: string) => [...adminKeys.companyRevenueAll(), period] as const,
+  companySales: (period: string, source: string) => [...adminKeys.companyRevenueAll(), 'sales', period, source] as const,
+  zohoInvoicesAll: () => [...adminKeys.all, 'zoho-invoices'] as const,
+  zohoInvoices: (state: string) => [...adminKeys.zohoInvoicesAll(), state] as const,
   /** GTM head + leads an order can be credited to ("Sold by"). */
   sellers: () => [...adminKeys.all, 'sellers'] as const,
 };
@@ -279,6 +285,7 @@ export const handoverKeys = {
   mine: () => [...handoverKeys.all, 'mine'] as const,
   one: (id: string) => [...handoverKeys.all, 'one', id] as const,
   work: (id: string) => [...handoverKeys.all, 'work', id] as const,
+  people: () => [...handoverKeys.all, 'people'] as const,
 };
 
 export const pastMemberKeys = {
@@ -320,6 +327,8 @@ export const taskKeys = {
   summary: () => [...taskKeys.all, 'summary'] as const,
   /** The admin's due-date rules (how far ahead each priority may be due). */
   rules: () => [...taskKeys.all, 'rules'] as const,
+  /** Your late tasks still waiting for a reason (the "why is this late?" pop-up). */
+  lateMine: () => [...taskKeys.all, 'late-mine'] as const,
   /** The Inbox: what happened on your tasks. `state` is 'all' or 'unread'. */
   inboxes: () => [...taskKeys.all, 'inbox'] as const,
   inbox: (state: string) => [...taskKeys.inboxes(), state] as const,
@@ -445,6 +454,8 @@ export const deliveryFeeKeys = {
   remotePins: (prefix: string) => ['delivery-fees', 'remote-pins', prefix] as const,
   /** Product cards' Black Friday fee waiver, per sorted id list. */
   cardWaivers: (ids: string[]) => ['delivery-fees', 'card-waivers', [...ids].sort().join(',')] as const,
+  /** Delivery window per product (PDP + cards), per sorted id list. */
+  estimates: (ids: string[]) => ['delivery-fees', 'estimates', [...ids].sort().join(',')] as const,
 };
 
 /** Shoppable reels (`/reels/*`, `/admin/reels/*`) — the staff review queue by status tab. */

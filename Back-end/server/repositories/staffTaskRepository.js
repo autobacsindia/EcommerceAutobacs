@@ -17,7 +17,7 @@ const HISTORY_CAP = 100;
 export const LIST_PROJECTION = Object.freeze({
   number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, dueTime: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
-  order: 1, group: 1, groupSize: 1, list: 1, project: 1, projectList: 1, stage: 1, repeat: 1, repeatOf: 1, repeatNext: 1, stageName: 1, personal: 1, estimateMinutes: 1, dueApproval: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
+  order: 1, group: 1, groupSize: 1, list: 1, project: 1, projectList: 1, stage: 1, repeat: 1, repeatOf: 1, repeatNext: 1, stageName: 1, personal: 1, estimateMinutes: 1, dueApproval: 1, lateRequest: 1, misses: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
   checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
   checklistDone: { $size: { $filter: { input: { $ifNull: ['$checklist', []] }, cond: '$$this.done' } } },
@@ -86,9 +86,14 @@ const staffTaskRepository = {
    * Apply a change only if nobody changed the task since `rev` was read
    * (compare-and-set). Returns the new task, or null when it moved on.
    */
-  updateIfRev: (id, rev, set, entries) => StaffTask.findOneAndUpdate(
+  /** `more.push` / `more.inc`: other arrays to append to and counters to add to, in the same write. */
+  updateIfRev: (id, rev, set, entries, more = {}) => StaffTask.findOneAndUpdate(
     { _id: id, rev },
-    { $set: set, $inc: { rev: 1 }, $push: { history: { $each: entries, $slice: -HISTORY_CAP } } },
+    {
+      $set: set,
+      $inc: { rev: 1, ...more.inc },
+      $push: { history: { $each: entries, $slice: -HISTORY_CAP }, ...more.push },
+    },
     { new: true },
   ).lean(),
 
@@ -173,6 +178,52 @@ const staffTaskRepository = {
     ]);
     return { total, done };
   },
+  /**
+   * Deadline sweep: open tasks due between `from` and `to` (IST days, inclusive),
+   * keyset on (dueOn, _id) — rides staff_task_due_sweep (partial: open + dated).
+   */
+  dueSweepPage: ({ from, to, after = null, limit }) => StaffTask.find({
+    bucket: 'open',
+    dueOn: { $type: 'string', $gte: from, $lte: to },
+    ...(after && { $or: [{ dueOn: { $gt: after.dueOn } }, { dueOn: after.dueOn, _id: { $gt: after.id } }] }),
+  })
+    .select('number title dueOn dueTime personal assignee assigneeName assignees team teams createdBy lateRequest.status alerts')
+    .sort({ dueOn: 1, _id: 1 })
+    .limit(limit)
+    .lean(),
+  /**
+   * One write per page for the alert bookkeeping that sends nothing: starting a
+   * ladder for a new deadline (`fresh`), and levels whose moment is long gone
+   * (claimed silently). A fresh write matches only while the stored ladder is for
+   * another deadline, a silent one only while those levels are still unclaimed —
+   * so neither can wipe or steal a level another sweep just claimed. No `rev`
+   * bump, no `updatedAt`: a system write must not make anyone's open edit stale.
+   * @param {{ id, due, dueOn, dueTime, fresh: boolean, levels: string[], at: Date }[]} writes
+   */
+  settleAlerts: (writes) => (writes.length ? StaffTask.bulkWrite(writes.map((w) => {
+    const same = { _id: w.id, bucket: 'open', dueOn: w.dueOn, dueTime: w.dueTime || null };
+    if (w.fresh) {
+      const alerts = { due: w.due };
+      for (const l of w.levels) alerts[l] = w.at;
+      return { updateOne: { filter: { ...same, 'alerts.due': { $ne: w.due } }, update: { $set: { alerts } }, timestamps: false } };
+    }
+    return {
+      updateOne: {
+        filter: { ...same, 'alerts.due': w.due, ...Object.fromEntries(w.levels.map((l) => [`alerts.${l}`, null])) },
+        update: { $set: Object.fromEntries(w.levels.map((l) => [`alerts.${l}`, w.at])) },
+        timestamps: false,
+      },
+    };
+  }), { ordered: false, timestamps: false }) : null),
+  /**
+   * Claim one level of deadline `due` (compare-and-set): true only for the one
+   * caller that set it, and only while the task is open with that same date.
+   */
+  claimAlert: async (id, { due, dueOn, dueTime, level, at }) => (await StaffTask.updateOne(
+    { _id: id, bucket: 'open', dueOn, dueTime: dueTime || null, 'alerts.due': due, [`alerts.${level}`]: null },
+    { $set: { [`alerts.${level}`]: at } },
+    { timestamps: false },
+  )).modifiedCount === 1,
   /** Store the counts on the parent. Does not bump `rev`: a sub-task moving never blocks an edit of the parent. */
   setSubtaskCounts: (parentId, counts) => StaffTask.updateOne({ _id: parentId }, { $set: { subtasks: counts } }),
   readSubtaskCounts: async (parentId) => (await StaffTask.findById(parentId).select('subtasks').lean())?.subtasks ?? null,

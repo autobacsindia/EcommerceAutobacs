@@ -22,6 +22,7 @@ jest.mock('@/hooks/queries/useNotifications', () => ({ useWaitingWork: () => ({ 
 // Calls have their own tests (components/calls); here they are just a pass-through wrapper.
 jest.mock('@/components/tasks/ProjectReminderPopup', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/notifications/NewWorkPopup', () => ({ __esModule: true, default: () => null }));
+jest.mock('@/components/tasks/lateDates', () => ({ LateTasksPrompt: () => null }));
 jest.mock('@/components/calls/CallProvider', () => ({ __esModule: true, default: ({ children }: { children: React.ReactNode }) => children }));
 jest.mock('@/components/incentives/ChampionBanner', () => ({ __esModule: true, default: () => null }));
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a> }));
@@ -187,13 +188,23 @@ it('the other teams\' menus are exactly as before the Refunds change, with the l
     expect(more.map((l) => l.label)).toEqual(expected);
     return visible.map((l) => l.label);
   };
-  expect(parts('sales', false, true)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'My orders', 'Customer decisions', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments', 'My Roav Points', 'Google reviews']);
-  expect(parts('sales', true, true)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'Team orders', 'Customer decisions', 'Order processing', 'Delivered', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments', 'My Roav Points', 'Google reviews']);
-  expect(parts('sales', false, false)).toEqual(['Team chat', 'Tasks', 'Website leads', 'Meta leads', 'Payments', 'My Roav Points', 'Google reviews']);
-  expect(parts('procurement')).toEqual(['Team chat', 'Tasks', 'Orders', 'Deliveries', 'Delivered', 'Returns', 'Payments', 'Suppliers', 'Supplier enquiries', 'Price calculator', 'Shipping calculator', 'Delivery fees']);
-  expect(parts('operations')).toEqual(['Team chat', 'Tasks', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments']);
-  expect(parts('developer')).toEqual(['Team chat', 'Tasks', 'Payments']);
-  expect(parts('marketing')).toEqual(['Team chat', 'Tasks', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments']);
+  expect(parts('sales', false, true)).toEqual(['Team chat', 'Tasks', 'My delays', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'My orders', 'Customer decisions', 'Returns', 'Bank transfers', 'Extra charges', 'Past sales', 'Payments', 'My Roav Points', 'Google reviews']);
+  expect(parts('sales', true, true)).toEqual(['Team chat', 'Tasks', 'My delays', 'Website leads', 'Meta leads', 'New quotation', 'Payment first', 'Quotations', 'Team orders', 'Customer decisions', 'Order processing', 'Delivered', 'Returns', 'Bank transfers', 'Extra charges', 'B2B / B2C · Pay later', 'Past sales', 'Payments', 'My Roav Points', 'Google reviews']);
+  expect(parts('sales', false, false)).toEqual(['Team chat', 'Tasks', 'My delays', 'Website leads', 'Meta leads', 'Payments', 'My Roav Points', 'Google reviews']);
+  expect(parts('procurement')).toEqual(['Team chat', 'Tasks', 'My delays', 'Orders', 'Deliveries', 'Delivered', 'Returns', 'Payments', 'Suppliers', 'Supplier partners', 'Supplier enquiries', 'Price calculator', 'Shipping calculator', 'Delivery fees']);
+  expect(parts('operations')).toEqual(['Team chat', 'Tasks', 'My delays', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments']);
+  expect(parts('developer')).toEqual(['Team chat', 'Tasks', 'My delays', 'Payments']);
+  expect(parts('marketing')).toEqual(['Team chat', 'Tasks', 'My delays', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments']);
+});
+
+it('"Payment due" (ship before payment) shows for accounts and the GTM head only', () => {
+  pathname = '/team';
+  const has = (team: string, isHead: boolean, canSell = false) =>
+    menuLabels(team, isHead, canSell).some((l) => l.href === '/team/pay-later');
+  expect(has('accounts', false)).toBe(true);
+  expect(has('sales', true, true)).toBe(true);
+  expect(has('sales', false, true)).toBe(false);
+  expect(has('procurement', true)).toBe(false);
 });
 
 it('"Google reviews" shows for every GTM member and the marketing head only', () => {

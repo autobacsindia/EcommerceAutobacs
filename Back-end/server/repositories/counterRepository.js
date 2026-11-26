@@ -18,6 +18,7 @@ class CounterRepository extends BaseRepository {
   async next(name) {
     return Counter.next(name);
   }
+
 }
 
 export default new CounterRepository();

@@ -8,6 +8,10 @@ import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { useRouter, useSearchParams } from 'next/navigation';
+jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
+  useDeliveryEstimates: () => ({ estimates: null, pending: false }),
+}));
+
 
 // ── Hooks ──
 jest.mock('next/navigation', () => ({

@@ -34,7 +34,8 @@ export interface WaitingItem {
  */
 export interface WorkAlert {
   id: string;
-  kind: 'assigned' | 'project_added';
+  /** followup_due / followup_escalated: an order step due or late (services/followUp). */
+  kind: 'assigned' | 'project_added' | 'followup_due' | 'followup_escalated';
   /** Who gave it. */
   by: string;
   /** "T-42 · Fit roof rack", or the project's name. */

@@ -114,7 +114,7 @@ const ADMIN_DEFAULT_REASONS = ['admin_update', 'bulk_admin_update'];
  * Define status transition reasons/categories
  */
 const TRANSITION_REASONS = {
-  'processing': ['payment_verified', 'warehouse_assigned', 'items_picked', 'packing_started', 'manual_confirmation'],
+  'processing': ['payment_verified', 'warehouse_assigned', 'items_picked', 'packing_started', 'manual_confirmation', 'pay_later_approved'],
   'shipped': ['handed_to_carrier', 'label_created', 'in_transit'],
   'delivered': ['customer_received', 'left_at_door', 'signed_for'],
   // Owned by config/cancellationReasons.js so the cancel screens and this check agree.
@@ -260,7 +260,11 @@ class OrderStatusService {
       recordedPayment = false,
       // Set ONLY by the parcel / per-line roll-ups (shipmentService, cancellationService):
       // they may make the ROLL_UP_CORRECTIONS moves the status menu never offers.
-      rollUp = false
+      rollUp = false,
+      // "Ship before payment" (services/payLaterService.js ONLY): the admin let this
+      // UNPAID order go to the teams. Stamped on this same save, and it is the one way
+      // an unpaid order reaches `processing`. It never touches paymentStatus.
+      payLater = null
     } = options;
 
     try {
@@ -317,10 +321,19 @@ class OrderStatusService {
         order.paymentStatus = 'paid';
       }
 
+      if (payLater) {
+        if (currentStatus !== 'awaiting_payment' || newStatus !== 'processing' || order.paymentStatus === 'paid' || order.payLater?.approvedAt) {
+          throw new Error('Ship before payment can only be turned on for an unpaid order that has not started.');
+        }
+        order.payLater = payLater;
+        // A failed link attempt is still "not paid yet": the order now waits on its new link.
+        order.paymentStatus = 'pending';
+      }
+
       // An unpaid order starts being worked on only once the money is real. The admin
       // menu, the bulk "Process" button and any other caller without a payment in hand
       // stop here — this is what used to turn unpaid orders "paid".
-      if (currentStatus === 'awaiting_payment' && newStatus !== 'cancelled' && order.paymentStatus !== 'paid') {
+      if (currentStatus === 'awaiting_payment' && newStatus !== 'cancelled' && order.paymentStatus !== 'paid' && !payLater) {
         throw new Error('This order has not been paid. It moves on by itself when the payment is confirmed (Razorpay, or a bank transfer confirmed by accounts).');
       }
 
@@ -355,8 +368,9 @@ class OrderStatusService {
             the webhook drives it — and never on its own. Once only: an order that
             somehow returns to processing keeps its history.
           */
-          if (order.paymentStatus === 'paid' && !order.workflow?.enteredAt) {
+          if ((order.paymentStatus === 'paid' || payLater) && !order.workflow?.enteredAt) {
             order.workflow = initialWorkflow(order);
+            if (payLater) order.workflow.history[0].note = 'Ship before payment (approved by the admin) — waiting for a stock check';
           }
           break;
         case 'cancelled':
@@ -424,6 +438,8 @@ class OrderStatusService {
         exactly as the first request wrote it.
       */
       order.$where = { ...(order.$where || {}), status: currentStatus };
+      // Ship before payment: a payment that landed meanwhile wins, never the approval.
+      if (payLater) order.$where.paymentStatus = { $ne: 'paid' };
       try {
         await orderRepository.save(order, session);
       } catch (error) {

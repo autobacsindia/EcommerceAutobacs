@@ -92,9 +92,15 @@ export type PaymentRequest = {
     linkOrder?: boolean;
     /** May set, change or remove its project and other ID (any kind, any status — no money changes). */
     linkProject?: boolean;
+    /** May add / change / remove supplier credit on it (a waiting supplier payment). */
+    credit?: boolean;
   };
+  /** Supplier credit pays all of it: nothing to transfer — approving closes it as paid. */
+  paidByCredit?: boolean;
   /** One part of a supplier deal: its currency is the deal's and cannot change. */
   dealId?: string | null;
+  /** The supplier bill this pays (all or part of), from "We owe suppliers". */
+  supplierBillId?: string | null;
   /** Advance / Part payment / Balance / Full payment — '' for a one-off payment. */
   part?: '' | 'advance' | 'part' | 'balance' | 'full';
   partLabel?: string;
@@ -212,7 +218,11 @@ export type SupplierDeal = {
   can: { raise: boolean; edit: boolean; remove: boolean };
 };
 
-export type OrderPayments = { requests: OrderPayment[]; deals: SupplierDeal[] };
+export type OrderPayments = {
+  requests: OrderPayment[]; deals: SupplierDeal[];
+  /** Supplier bills ("We owe suppliers") linked to this order — only for procurement, accounts and admin. */
+  bills?: import('./supplierBillsApi').SupplierBill[];
+};
 
 /**
  * What a team may claim an expense for, and in which currencies. The server's
@@ -401,6 +411,30 @@ export type ListFilterOptions = { categories: { value: string; label: string }[]
 export const getListFilterOptions = () => apiClient.get<ListFilterOptions>('/payment-requests/filter-options');
 export const getRequest = (id: string) => apiClient.get<{ request: PaymentRequest }>(`/payment-requests/${id}`);
 /** `rev`: with Approve, the version on screen — the server refuses if it was edited since. */
+/**
+ * What "Use supplier credit" would do to a bill — the same rule the server applies
+ * (credit used = min(balance, bill)), in paise so ₹0.10 + ₹0.20 adds up. A preview
+ * only; null until a bill amount is typed.
+ * e.g. bill ₹1,00,000, credit ₹2,00,000 → used ₹1,00,000, pay ₹0, ₹1,00,000 left.
+ */
+export function creditPreview(owed: number, bill: number) {
+  if (!(bill > 0) || !(owed > 0)) return null;
+  const owedP = Math.round(owed * 100);
+  const billP = Math.round(bill * 100);
+  const usedP = Math.min(owedP, billP);
+  return { bill: billP / 100, used: usedP / 100, toPay: (billP - usedP) / 100, left: (owedP - usedP) / 100 };
+}
+
+/**
+ * Supplier credit on a waiting supplier payment: `useCredit` takes as much as there is
+ * (up to the whole bill), `creditToUse: 0` removes it. The server works out the figures.
+ */
+export const setRequestCredit = (id: string, body: { useCredit?: boolean; creditToUse?: number; rev?: number }) =>
+  apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/credit`, body);
+
+/** How a payment was paid, in words ('credit' = supplier credit paid it all, nothing transferred). */
+export const paidHow = (method: string) => (method === 'credit' ? 'Supplier credit — nothing transferred' : method.toUpperCase());
+
 export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'release' | 'cancel', note = '', rev?: number) =>
   apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, { note, ...(action === 'approve' && rev != null ? { rev } : {}) });
 

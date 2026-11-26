@@ -11,6 +11,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import CustomerBankCard from './CustomerBankCard';
 import HoldControl from './HoldControl';
 import QuoteDiscountSummary from './QuoteDiscountSummary';
+import SalesTypeBadge from './SalesTypeBadge';
 import DiscountApprovalPanel from './DiscountApprovalPanel';
 import ProductLink from '@/components/staff/ProductLink';
 import { whatsappNumber } from './PaymentLinkCard';
@@ -88,6 +89,7 @@ export default function QuotationDetail({ id }: { id: string }) {
             {quote.version > 1 ? `Version ${quote.version} · ` : ''}Valid until {formatDateTimeIST(quote.validUntil)}
             {quote.salesPerson ? ` · ${quote.salesPerson}` : ''}
           </p>
+          {quote.salesType && <div className="mt-2"><SalesTypeBadge info={quote.salesType} /></div>}
         </div>
         <span className={`rounded-full px-3 py-1 text-sm font-medium ${status.cls}`}>{status.text}</span>
       </div>

@@ -61,6 +61,8 @@ const saveBusinessProfile = (userId, buyer) =>
  *   afterwards in parts (salesPaymentService); nothing is sent until it is paid.
  * @param {string} p.actorId       User id recorded in status history
  * @param {string} [p.defaultNote]
+ * @param {Object} [p.buyerTypeCheck]  GTM order: accounts' B2B/B2C check, created `pending`
+ *   (utils/salesType.js pendingCheckFor)
  * @param {boolean} [p.whatsappOptIn]  staff confirmed the customer wants WhatsApp order
  *   updates (defaults to body.whatsappOptIn); not a boolean → nothing stored, no messages
  * @returns {Promise<{order: Object, customer: {id, email, isNewUser}, paymentLink: {id, shortUrl}|null}>}
@@ -86,6 +88,7 @@ export async function createOfflineOrderRecord({
   actorId,
   defaultNote = 'Offline order created by admin',
   whatsappOptIn = body?.whatsappOptIn,
+  buyerTypeCheck = null,
 }) {
   /*
     Validate the buyer BEFORE creating the customer: a mistyped GSTIN would
@@ -165,6 +168,7 @@ export async function createOfflineOrderRecord({
     salesRep: salesRepId,
     ...(salesUserId && { salesUser: salesUserId }),
     ...(salesDiscount && { salesDiscount }),
+    ...(buyerTypeCheck && { buyerTypeCheck }),
     ...(discountApproval && { discountApproval }),
     ...(buyer.type === BUYER_TYPES.ENTERPRISE && { buyer }),
     legalAcceptance,

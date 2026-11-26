@@ -3,7 +3,9 @@
 /**
  * The "new work" pop-up inside the panel: a card in the corner the moment
  * someone gives you a task or adds you to a project — "Vicky added you to a
- * project · Vicky's Hilux" — with the "new work" sound.
+ * project · Vicky's Hilux" — with the "new work" sound. Order follow-ups use the
+ * same card: a step due (followup_due) or late and escalated to a head / admin
+ * (followup_escalated, red), each with an "Open order" button.
  *
  * ── Where it comes from ─────────────────────────────────────────────────────
  * The bell's poll (/notifications/summary, every 20 s; hooks/queries/
@@ -23,7 +25,7 @@
  */
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FolderKanban, UserPlus, X } from 'lucide-react';
+import { AlarmClock, FolderKanban, TriangleAlert, UserPlus, X } from 'lucide-react';
 import { useWaitingWork, type WorkAlert } from '@/hooks/queries/useNotifications';
 import { alert as playAlert } from '@/lib/notificationChime';
 
@@ -50,9 +52,31 @@ function writeSeen(list: string[]) {
   }
 }
 
-const headline = (a: WorkAlert) => (a.kind === 'project_added'
-  ? `${a.by || 'Someone'} added you to a project`
-  : `New task from ${a.by || 'your team'}`);
+function headline(a: WorkAlert) {
+  switch (a.kind) {
+    case 'project_added': return `${a.by || 'Someone'} added you to a project`;
+    case 'followup_due': return 'Order follow-up due';
+    case 'followup_escalated': return 'Late order follow-up';
+    default: return `New task from ${a.by || 'your team'}`;
+  }
+}
+
+/** Icon, colours and button per kind. */
+function look(kind: WorkAlert['kind']) {
+  if (kind === 'followup_escalated') {
+    return { Icon: TriangleAlert, card: 'border-red-200', badge: 'bg-red-100 text-red-700', button: 'bg-red-600 hover:bg-red-700', action: 'Open order' };
+  }
+  if (kind === 'followup_due') {
+    return { Icon: AlarmClock, card: 'border-amber-200', badge: 'bg-amber-100 text-amber-800', button: 'bg-blue-600 hover:bg-blue-700', action: 'Open order' };
+  }
+  return {
+    Icon: kind === 'project_added' ? FolderKanban : UserPlus,
+    card: 'border-blue-200',
+    badge: 'bg-blue-100 text-blue-700',
+    button: 'bg-blue-600 hover:bg-blue-700',
+    action: kind === 'project_added' ? 'Open project' : 'Open task',
+  };
+}
 
 /** "due 2026-11-25" → "Due 25 Nov"; anything else as written. */
 function detail(text: string) {
@@ -103,11 +127,11 @@ export default function NewWorkPopup() {
       className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
     >
       {showing.map((a) => {
-        const Icon = a.kind === 'project_added' ? FolderKanban : UserPlus;
+        const { Icon, card, badge, button, action } = look(a.kind);
         return (
-          <div key={a.id} role="status" className="pointer-events-auto rounded-xl border border-blue-200 bg-white p-3 shadow-lg">
+          <div key={a.id} role="status" className={`pointer-events-auto rounded-xl border ${card} bg-white p-3 shadow-lg`}>
             <div className="flex items-start gap-2.5">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${badge}`}>
                 <Icon aria-hidden className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1">
@@ -117,9 +141,9 @@ export default function NewWorkPopup() {
                 <Link
                   href={a.href}
                   onClick={() => close(a.id)}
-                  className="mt-2 inline-flex rounded-lg bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-700"
+                  className={`mt-2 inline-flex rounded-lg px-3 py-1 text-sm font-semibold text-white ${button}`}
                 >
-                  {a.kind === 'project_added' ? 'Open project' : 'Open task'}
+                  {action}
                 </Link>
               </div>
               <button

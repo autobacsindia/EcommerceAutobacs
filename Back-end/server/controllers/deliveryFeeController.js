@@ -2,6 +2,7 @@
  * Delivery fees — public display read + admin rate card and remote-PIN list.
  * All maths and validation live in services/deliveryFeeService.js.
  */
+import { deliveryEstimates } from '../services/deliveryEstimateService.js';
 import deliveryFeeService, {
   resolvePublicDeliveryFeeConfig,
 } from '../services/deliveryFeeService.js';
@@ -16,6 +17,12 @@ export const getPublicDeliveryFees = async (_req, res) => {
 export const getCardFeeWaivers = async (req, res) => {
   const ids = String(req.query.ids || '').split(',');
   res.json({ success: true, waivers: await deliveryFeeService.cardFeeWaivers(ids) });
+};
+
+// @route GET /delivery-fees/estimates?ids=a,b,c  (product page + cards: "7–10 days")
+export const getDeliveryEstimates = async (req, res) => {
+  const ids = String(req.query.ids || '').split(',');
+  res.json({ success: true, estimates: await deliveryEstimates(ids) });
 };
 
 // @route GET /delivery-fees/admin

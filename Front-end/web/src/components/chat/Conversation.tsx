@@ -27,7 +27,7 @@ import { useTypingLine } from '@/lib/chatTyping';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import MembersPanel from './MembersPanel';
-import { Avatar, ChannelIcon, FileKindIcon, chatDownloadUrl, fileSize, newClientId, timeOf } from './chatUi';
+import { Avatar, ChannelIcon, FileKindIcon, channelTitle, chatDownloadUrl, fileSize, newClientId, timeOf } from './chatUi';
 import Composer, { mentionableTeams, type ComposerHandle } from './Composer';
 import { DropOverlay, useFileDrop } from './useFileDrop';
 import MessageItem, { DaySeparator, messageDomId, startsNewDay } from './MessageItem';
@@ -429,7 +429,7 @@ export default function Conversation({
     ? null
     : chatMessages.find((m) => !m.pending && activityOf(m) > newFrom && m.sender?.id !== meId)?.id ?? null;
 
-  const title = channel.kind === 'dm' ? channel.name : channel.audience === 'teams' ? channel.name : `#${channel.name}`;
+  const title = channelTitle(channel);
   const subtitle =
     channel.group
       ? `${channel.memberIds?.length ?? channel.memberCount ?? ''} people · ${['You', ...(channel.memberIds ?? []).filter((id) => id !== meId).map((id) => peopleById.get(id)?.name ?? 'Former member')].join(', ')}`
@@ -633,7 +633,7 @@ export default function Conversation({
 
             {forwardedTo && (
               <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-900">
-                Forwarded to {forwardedTo.kind === 'dm' || forwardedTo.audience === 'teams' ? forwardedTo.name : `#${forwardedTo.name}`}.
+                Forwarded to {channelTitle(forwardedTo)}.
                 <span className="flex gap-3">
                   {onOpenChannel && forwardedTo.id !== channel.id && (
                     <button type="button" onClick={() => onOpenChannel(forwardedTo.id)} className="font-semibold underline">Open</button>

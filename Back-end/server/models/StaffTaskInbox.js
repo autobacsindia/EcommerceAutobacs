@@ -18,11 +18,24 @@ import mongoose from 'mongoose';
  * days after they were written: this is a feed of what happened, not the record
  * of it (that is the task's own history), so nothing of value is lost.
  */
-export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask', 'comment_assigned', 'comment_resolved', 'approval_requested', 'approval_decided', 'project_added']);
+export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask', 'comment_assigned', 'comment_resolved', 'approval_requested', 'approval_decided', 'late_requested', 'late_decided', 'due_soon', 'due_late', 'due_escalated', 'project_added', 'followup_due', 'followup_escalated']);
 /** Kinds about a whole project, not one task: they carry `project`, not `task`/`number`. */
 export const PROJECT_INBOX_KINDS = Object.freeze(['project_added']);
-const aboutTask = function aboutTask() { return !PROJECT_INBOX_KINDS.includes(this.kind); };
+/**
+ * Order follow-up pop-ups (services/followUp/channels.js): they carry `order`, not
+ * `task`/`number`, and are not task updates. They are written in state `alert`,
+ * which the task Inbox list, its unread badge and "mark all read" never read —
+ * so those hot queries are unchanged — and reach the panel only as pop-up cards.
+ * When the step moves on they become `cleared`.
+ */
+export const FOLLOWUP_INBOX_KINDS = Object.freeze(['followup_due', 'followup_escalated']);
+const aboutTask = function aboutTask() {
+  return !PROJECT_INBOX_KINDS.includes(this.kind) && !FOLLOWUP_INBOX_KINDS.includes(this.kind);
+};
+/** States a person can set on their own lines. */
 export const INBOX_STATES = Object.freeze(['unread', 'read', 'cleared']);
+/** A follow-up pop-up line (see FOLLOWUP_INBOX_KINDS): written by the engine only. */
+export const ALERT_STATE = 'alert';
 export const INBOX_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 const StaffTaskInboxSchema = new mongoose.Schema(
@@ -34,12 +47,14 @@ const StaffTaskInboxSchema = new mongoose.Schema(
     number: { type: Number, required: aboutTask, default: undefined },
     /** A project line ("Vicky added you to Vicky's Hilux"): the project; `title` holds its name. */
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffProject', default: undefined },
+    /** An order follow-up line ("#1234 · New Order is due"): the order. */
+    order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: undefined },
     title: { type: String, default: '' },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     byName: { type: String, default: '' },
     /** The status it moved to, a comment's first words, the sub-task's name. */
     text: { type: String, default: '', maxlength: 200 },
-    state: { type: String, enum: INBOX_STATES, default: 'unread' },
+    state: { type: String, enum: [...INBOX_STATES, ALERT_STATE], default: 'unread' },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: 'stafftaskinbox' },
 );

@@ -44,7 +44,7 @@ describe('ParcelOverdueReason', () => {
 
     await waitFor(() => expect(put).toHaveBeenCalledWith(
       '/staff/work/orders/o1/parcels/s1/overdue-reason',
-      { code: 'courier_delay', note: 'stuck at hub', expectedDate: '2026-11-17' },
+      { code: 'courier_delay', note: 'stuck at hub', expectedDate: '2026-11-17', requestId: expect.any(String) },
     ));
   });
 
@@ -86,6 +86,101 @@ describe('ParcelOverdueReason', () => {
   it('nothing for a parcel that is not overdue and was never explained', () => {
     const { container } = wrap(<ParcelOverdueReason orderId="o1" parcel={{ ...parcel, etaState: 'upcoming', canExplainOverdue: false }} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('ParcelOverdueReason — optional file', () => {
+  const fetchMock = jest.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    (global as unknown as { fetch: typeof fetchMock }).fetch = fetchMock;
+  });
+  const png = (name = 'courier.png', size = 1000, type = 'image/png') => {
+    const f = new File([new Uint8Array(1)], name, { type });
+    Object.defineProperty(f, 'size', { value: size });
+    return f;
+  };
+  const openForm = () => {
+    wrap(<ParcelOverdueReason orderId="o1" parcel={parcel} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add reason' }));
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'courier_delay' } });
+  };
+  const attach = (f: File) => fireEvent.change(screen.getByLabelText('Attach a photo or PDF (optional)'), { target: { files: [f] } });
+
+  it('a picked photo goes with the reason as one multipart save (with a requestId); no JSON call', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ order: { parcels: [] } }) });
+    openForm();
+    attach(png());
+    expect(screen.getByText('courier.png')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save reason' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/staff/work/orders/o1/parcels/s1/overdue-reason');
+    expect(init.method).toBe('PUT');
+    const form = init.body as FormData;
+    expect(form.get('code')).toBe('courier_delay');
+    expect(form.get('expectedDate')).toBe('2026-11-17');
+    expect((form.get('file') as File).name).toBe('courier.png');
+    expect(String(form.get('requestId'))).toMatch(/.{8,}/);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it('a wrong type or a file over 10 MB is refused with a clear message and not attached', () => {
+    openForm();
+    attach(png('notes.docx', 1000, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'));
+    expect(screen.getByRole('alert')).toHaveTextContent('"notes.docx" is not a photo (JPG, PNG, WebP) or a PDF.');
+    expect(screen.queryByText('notes.docx')).toBeNull();
+    attach(png('huge.png', 11 * 1024 * 1024));
+    expect(screen.getByRole('alert')).toHaveTextContent('"huge.png" is too large (10 MB maximum).');
+    expect(screen.queryByRole('button', { name: 'Remove file' })).toBeNull();
+  });
+
+  it('upload fails → nothing saved silently; "Save without file" saves the reason with the SAME requestId', async () => {
+    fetchMock.mockResolvedValue({ ok: false, json: async () => ({ message: 'The file could not be uploaded, so the reason was not saved. Try again, or save the reason without the file.' }) });
+    put.mockResolvedValue({ order: { parcels: [] } });
+    openForm();
+    attach(png());
+    fireEvent.click(screen.getByRole('button', { name: 'Save reason' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/reason was not saved/);
+    expect(put).not.toHaveBeenCalled();
+    const firstId = (fetchMock.mock.calls[0][1].body as FormData).get('requestId');
+    fireEvent.click(screen.getByRole('button', { name: 'Save without file' }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith(
+      '/staff/work/orders/o1/parcels/s1/overdue-reason',
+      { code: 'courier_delay', note: '', expectedDate: '2026-11-17', requestId: firstId },
+    ));
+  });
+
+  it('a double-click sends one save', async () => {
+    let resolve: (v: unknown) => void = () => {};
+    put.mockReturnValue(new Promise((r) => { resolve = r; }));
+    openForm();
+    const save = screen.getByRole('button', { name: 'Save reason' });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled());
+    expect(put).toHaveBeenCalledTimes(1);
+    resolve({ order: { parcels: [] } });
+  });
+
+  it('shows the file chip on the reason and on each history entry, linking to the staff file route', () => {
+    const f1 = { name: 'courier page.png', mime: 'image/png', size: 2048, uploadedAt: null, url: '/api/v1/staff/work/orders/o1/parcels/s1/overdue-files/overdue-a.png' };
+    const f0 = { name: 'old.pdf', mime: 'application/pdf', size: 4096, uploadedAt: null, url: '/api/v1/staff/work/orders/o1/parcels/s1/overdue-files/overdue-b.pdf' };
+    wrap(<ParcelOverdueReason orderId="o1" parcel={{
+      ...parcel,
+      overdueReason: { code: 'courier_delay', label: 'Courier delay', note: '', text: 'Courier delay', by: 'Aromal S', at: null, attachment: f1 },
+      overdueReasonHistory: [
+        { code: 'courier_delay', label: 'Courier delay', note: '', forDate: '2026-11-17', by: 'Aromal S', at: '2026-11-20T05:00:00Z', attachment: f1 },
+        { code: 'address_issue', label: 'Address issue', note: '', forDate: '2026-11-17', by: 'Admin', at: '2026-11-19T05:00:00Z', attachment: null },
+        { code: 'supplier_delay', label: 'Supplier delay', note: '', forDate: '2026-11-17', by: 'Admin', at: '2026-11-18T05:00:00Z', attachment: f0 },
+      ],
+    }} />);
+    expect(screen.getByRole('link', { name: 'Open file courier page.png' })).toHaveAttribute('href', f1.url);
+    fireEvent.click(screen.getByRole('button', { name: /Reasons given \(3\)/ }));
+    expect(screen.getAllByRole('link', { name: 'Open file courier page.png' })).toHaveLength(2);
+    const old = screen.getByRole('link', { name: 'Open file old.pdf' });
+    expect(old).toHaveAttribute('href', f0.url);
+    expect(old).toHaveAttribute('target', '_blank');
   });
 });
 

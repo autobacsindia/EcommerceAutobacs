@@ -449,12 +449,16 @@ export const uploadPayDetailsQr = staffUpload(['qr'], (file) => `"${file.origina
   .fields([{ name: 'qr', maxCount: 1 }]);
 /** A tool / subscription on Payments → Subscriptions & dues: up to MAX_ATTACHMENTS invoices (field `invoice`). */
 export const uploadSubscriptionInvoices = staffUpload().array('invoice', MAX_ATTACHMENTS);
+/** A supplier bill we owe (services/supplierBillService.js): up to MAX_ATTACHMENTS photos or PDFs (field `bill`). */
+export const uploadSupplierBillFiles = staffUpload().array('bill', MAX_ATTACHMENTS);
 /** Recording a payment or a bank transfer: up to MAX_ATTACHMENTS screenshots (field `proof`). */
 export const uploadPaymentProof = staffUpload().array('proof', MAX_ATTACHMENTS);
 /** A payment slip to READ (services/slipReader): one photo or PDF (field `slip`). Never stored. */
 export const uploadSlipToRead = staffUpload().single('slip');
 /** Parcel proof: up to MAX_ATTACHMENTS photos or PDFs (field `photo`, repeated). */
 export const uploadProofPhotos = staffUpload().array('photo', MAX_ATTACHMENTS);
+/** Reason for an overdue parcel: at most ONE photo or PDF (field `file`). */
+export const uploadOverdueReasonFile = staffUpload().single('file');
 
 const PROOF_DOCUMENTS = new Set(['docx', 'xlsx', 'txt', 'csv']);
 /**

@@ -28,7 +28,7 @@ const ACTION_LABELS = {
   submitted: 'Raised', approved: 'Approved by admin', declined: 'Declined by admin',
   on_hold: 'Put on hold by accounts', paid: 'Paid by accounts', cancelled: 'Cancelled',
 };
-const METHOD_LABELS = { razorpay: 'Razorpay', bank: 'Bank transfer', upi: 'UPI', card: 'Card', other: 'Other' };
+const METHOD_LABELS = { razorpay: 'Razorpay', bank: 'Bank transfer', upi: 'UPI', card: 'Card', other: 'Other', credit: 'Supplier credit (nothing transferred)' };
 const dateTime = (d) => formatDateTimeIST(d);
 /** An amount in a deal's currency: "Rs 29,000.00" / "THB 29,400.00". */
 const dealMoney = (n, cur) => (!cur || cur === BASE_CURRENCY ? money(n) : `${cur} ${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -178,7 +178,7 @@ export async function renderPaymentSlip(r) {
       const leftEnd = block(L, 'REQUEST', [
         ['Team', STAFF_TEAM_LABELS[r.team] || r.team],
         ['Raised by', r.requestedByName],
-        ['For', r.kind === 'supplier' ? (r.itemNames || []).join(', ')
+        ['For', r.kind === 'supplier' ? ((r.itemNames || []).join(', ') || 'Stock / not for one order')
           : r.category === REIMBURSEMENT && r.reimbursement?.type
             ? `${categoryLabel(r.category)} – ${claimLabel(r.reimbursement)}${r.reimbursement.on ? `, spent ${r.reimbursement.on}` : ''}${r.reimbursement.from || r.reimbursement.to ? `, ${[r.reimbursement.from, r.reimbursement.to].filter(Boolean).join(' → ')}` : ''}`
             : categoryLabel(r.category)],

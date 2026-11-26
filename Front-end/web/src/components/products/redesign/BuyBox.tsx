@@ -21,6 +21,8 @@ import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import { trustBadges, shippingStatement, type TrustIcon } from '@/lib/storePolicies';
 import { useDeliveryFeesPublic } from '@/hooks/queries/useDeliveryFeesPublic';
+import { useDeliveryEstimates } from '@/hooks/queries/useDeliveryEstimates';
+import DeliveryEstimate from '@/components/products/delivery/DeliveryEstimate';
 import { UNBOXING_VIDEO_NOTE } from '@/lib/constants';
 import Eyebrow from '@/components/ui/Eyebrow';
 import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCountdown';
@@ -103,6 +105,8 @@ export default function BuyBox({
   const { formatPrice } = useCurrency();
   // Display only: how delivery is charged right now (the checkout quote prices it).
   const { chargeAtCheckout, offerLive: deliveryOfferLive } = useDeliveryFeesPublic();
+  // Delivery window ("Delivered by …"): the server's, from this product's size class.
+  const delivery = useDeliveryEstimates([product._id]);
   const badges = trustBadges(chargeAtCheckout);
   // For the add-to-cart congratulation. A cached read the badge below already needs,
   // so this costs nothing extra.
@@ -298,6 +302,11 @@ export default function BuyBox({
           <span className="ml-1 font-semibold text-[#E3132C]">· Black Friday: apply the offer at checkout for ₹0 delivery fees</span>
         )}
       </p>
+      <DeliveryEstimate
+        variant="page"
+        window={outOfStock ? null : delivery.estimates?.[product._id] ?? null}
+        className="mt-3"
+      />
 
       {/* The campaign, made visible where the buying decision is actually made. Hidden
           until a variable product has a model picked, because the rate is charged on the

@@ -12,7 +12,7 @@
 import { usePanelPhotos } from '@/hooks/queries/usePanelPhotos';
 import { CalendarClock, CircleCheck, CircleDashed, CircleDot, Flag, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { DUE_TIMES, formatDue, formatDueTime, type Task, type TaskPriority, type TaskStatus } from './types';
+import { DUE_TIMES, SOON_MINUTES, formatDue, formatDueTime, leftLabel, minutesLeft, type Task, type TaskPriority, type TaskStatus } from './types';
 import './tasks.css';
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -127,6 +127,8 @@ export function dueLabel(t: Pick<Task, 'dueOn' | 'dueTime' | 'overdue' | 'dueTod
   if (t.bucket === 'done') return formatDue(t.dueOn, t.dueTime);
   const time = formatDueTime(t.dueTime);
   if (t.overdue) return `Late · ${t.dueToday && time ? time : formatDue(t.dueOn, t.dueTime)}`;
+  const left = minutesLeft(t);
+  if (left != null && left <= SOON_MINUTES) return `${leftLabel(left)} left · ${time}`;
   if (t.dueToday) return time ? `Today ${time}` : 'Today';
   return formatDue(t.dueOn, t.dueTime);
 }
@@ -148,10 +150,15 @@ export function DueTimeSelect({ value, onChange, className = '', disabled = fals
 }
 
 /** The due date as a pill: red when late, amber today, otherwise quiet — or nothing. */
-export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'dueTime' | 'overdue' | 'dueToday' | 'bucket'>; empty?: ReactNode }) {
+export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'dueTime' | 'overdue' | 'dueToday' | 'bucket'> & Partial<Pick<Task, 'danger'>>; empty?: ReactNode }) {
   if (!t.dueOn) return <>{empty}</>;
-  const tone = t.overdue
+  // Missed twice or more: dark red (lateDates.tsx).
+  const tone = t.overdue && t.danger
+    ? 'bg-red-900 text-white'
+    : t.overdue
     ? 'bg-red-100 text-red-800'
+    // Under 3 hours left today: red, like the "only Xh left" alert.
+    : t.bucket !== 'done' && (minutesLeft(t) ?? Infinity) <= SOON_MINUTES ? 'bg-red-600 text-white'
     : t.dueToday ? 'bg-amber-100 text-amber-800' : 'border border-gray-200 text-gray-600';
   return (
     <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${t.bucket === 'done' ? 'border border-gray-200 text-gray-400' : tone}`}>

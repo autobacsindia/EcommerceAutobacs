@@ -370,7 +370,8 @@ describe('the "Waiting for my approval" list and count', () => {
     expect(await titles(salesHead)).toEqual(['sales far']);
     expect(await titles(admin)).toEqual(['proc far', 'sales far', 'head own']);
     expect(await titles(admin, { team: 'sales' })).toEqual(['sales far']);
-    await status(403, () => tasks.listTasks(arun, { view: 'approvals' }));
+    // A member approves no far dates (only new dates on tasks they gave: staffTaskNewDate.test.js).
+    expect(await titles(arun)).toEqual([]);
     // The open list is what waits; nothing done is waiting.
     expect(await titles(head, { state: 'done' })).toEqual([]);
 

@@ -55,6 +55,7 @@ import {
 } from '../utils/listQuery.js';
 import * as suppliers from './supplierService.js';
 import * as deals from './supplierDealService.js';
+import * as bills from './supplierBillService.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
 import { partForRequest, requestPartReplaced } from '../utils/supplierParts.js';
 import * as credit from './supplierLedgerService.js';
@@ -102,6 +103,8 @@ const isActiveStaff = (u) => u?.role === 'staff' && u.staff?.active === true;
 const onTeam = (u, team) => isActiveStaff(u) && u.staff.team === team;
 const isAccounts = (u) => onTeam(u, STAFF_TEAMS.ACCOUNTS);
 const seesAll = (u) => isAdmin(u) || isAccounts(u);
+/** "Pay a supplier" not for one order: the admin, or any active staff member who raises expenses. */
+const mayPaySupplierStock = (u) => isAdmin(u) || (isActiveStaff(u) && EXPENSE_TEAMS.includes(u.staff.team));
 const roleOf = (u) => (isAdmin(u) ? 'admin' : u?.staff?.team || '');
 
 /**
@@ -132,13 +135,23 @@ const mayHold = (u) => mayDecide(u) || mayPay(u);
   end with exactly one of them landing (update + approve compare-and-set on it).
 */
 const EDITABLE = Object.freeze(['submitted', 'on_hold', 'declined']);
-const resubmittable = (r) => r.status !== 'declined' || r.kind === 'expense' || (!r.deal && !r.credit?.amount);
+const resubmittable = (r) => r.status !== 'declined' || r.kind === 'expense' || (!r.deal && !r.supplierBill && !r.credit?.amount);
 // A subscription / due expense ("Mark paid") is not edited here: its money follows the
 // item's own rules, and a declined one reopens the cycle to be marked paid again —
 // resending it as well could pay that cycle twice.
 const fromSubscription = (r) => Boolean(r.subscription?.item);
 const mayEdit = (u, r) => EDITABLE.includes(r.status) && resubmittable(r) && !fromSubscription(r)
   && (isAdmin(u) || idOf(r.requestedBy) === idOf(u?._id));
+/**
+ * Who may add / change / remove supplier credit on a waiting supplier payment: the
+ * people who see credit (procurement, accounts, admin) — accounts and the admin on any
+ * one (owner: "admin and accounts also should have the access"), procurement on their own.
+ */
+// Accounts / the admin also on one they approved or put on hold (still unpaid) — e.g. a
+// supplier bill's payment on hold while the supplier's credit covers it (owner, 2026-11-25).
+const CREDIT_STATUSES_DECIDER = Object.freeze(['submitted', 'approved', 'on_hold']);
+const mayChangeCredit = (u, r) => r.kind === 'supplier' && Boolean(r.supplier) && !fromSubscription(r) && credit.maySeeCredit(u)
+  && (mayDecide(u) ? CREDIT_STATUSES_DECIDER.includes(r.status) : r.status === 'submitted' && idOf(r.requestedBy) === idOf(u?._id));
 /** The compare-and-set clause for "still the version that was read" (old records have no rev). */
 const revIs = (rev) => ({ rev: Number(rev) > 0 ? Number(rev) : { $in: [0, null] } });
 
@@ -286,10 +299,51 @@ function netOfCredit(money, creditPaise) {
   if (!creditPaise) return money;
   const field = money.currency === BASE_CURRENCY ? 'amount' : 'foreignAmount';
   const billPaise = toPaise(money[field]);
-  if (creditPaise >= billPaise) {
-    throw fail(`The bill (${deals.moneyOf(billPaise, money.currency)}) must be more than the supplier credit used on it (${deals.moneyOf(creditPaise, money.currency)}).`, 400);
+  if (creditPaise > billPaise) {
+    throw fail(`The supplier credit used (${deals.moneyOf(creditPaise, money.currency)}) cannot be more than the bill (${deals.moneyOf(billPaise, money.currency)}).`, 400);
   }
-  return { ...money, [field]: fromPaise(billPaise - creditPaise) };
+  const net = { ...money, [field]: fromPaise(billPaise - creditPaise) };
+  // Credit covers the whole bill: nothing moves, in any currency (no rupee estimate either).
+  if (creditPaise === billPaise) Object.assign(net, { amount: 0, ...(field === 'foreignAmount' ? { fxRate: null } : {}) });
+  return net;
+}
+
+/**
+ * Supplier credit pays the WHOLE bill (owner, 2026-11-25: "we want to pay 1 lakh, the
+ * credit is 2 lakh, so we don't want to pay anything"): no money is transferred, so
+ * the admin is never asked to pay it — approving it closes it as paid (creditSettled).
+ */
+export const creditCovers = (r) => Number(r?.credit?.amount) > 0
+  && toPaise((r.currency || BASE_CURRENCY) === BASE_CURRENCY ? r.amount : r.foreignAmount) === 0;
+
+/** What approving / raising a credit-covered payment records as its payment: no transfer. */
+const creditSettledSet = (actor, now) => ({
+  status: 'paid',
+  approvedBy: actor._id,
+  approvedAt: now,
+  payment: {
+    method: 'credit', reference: 'Supplier credit', paidAt: now, transactionAt: now,
+    paidBy: actor._id, paidByName: actor.name || '',
+  },
+});
+
+const truthyFlag = (v) => v === true || v === 'true' || v === '1' || v === 1 || v === 'on';
+
+/**
+ * The supplier credit a new payment uses, in paise of the bill's currency — worked out
+ * here, never taken from the browser's sums: `useCredit` (the tick) takes
+ * min(balance, bill); `creditToUse` takes that figure, refused past the balance or the
+ * bill. Procurement, accounts and the admin (the people who see credit) may use it.
+ */
+async function creditFor(actor, input, supplierId, bill) {
+  const useAll = truthyFlag(input.useCredit);
+  if (!useAll && !(Number(input.creditToUse) > 0)) {
+    // A negative / garbage figure is a tampered form, not "no credit".
+    if (filled(input.creditToUse) && Number(input.creditToUse) !== 0) credit.cleanAmountPaise(input.creditToUse);
+    return 0;
+  }
+  if (!credit.maySeeCredit(actor)) throw fail('Only procurement, accounts or the admin can use supplier credit.', 403);
+  return credit.checkCreditUse({ supplierId, currency: bill.currency, creditInput: input.creditToUse, useAll, billPaise: toPaise(deals.unitsOf(bill)) });
 }
 
 /** Paid from a foreign-currency account (no rupees were debited): its `payment.fromAccount`, or null. */
@@ -299,7 +353,7 @@ export const paidFromForeign = (r) => (r?.status === 'paid' && r.payment?.fromAc
  * A foreign bill whose rupees are not recorded yet (raised without a rate, not paid).
  * Not one paid from a foreign account: that has no rupees at all, by design.
  */
-export const rupeesPending = (r) => Boolean(r?.currency && r.currency !== BASE_CURRENCY && !(Number(r.amount) > 0) && !paidFromForeign(r));
+export const rupeesPending = (r) => Boolean(r?.currency && r.currency !== BASE_CURRENCY && !(Number(r.amount) > 0) && !paidFromForeign(r) && !creditCovers(r));
 
 /** "THB 10,000" — a foreign amount in its currency. */
 const unitsText = (currency, amount) => `${currency} ${Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -573,6 +627,8 @@ export function shape(r, viewer) {
     subscription: subscriptionOf(r),
     // One part of a made-to-order deal (advance / part / balance), or ''.
     dealId: r.deal ? idOf(r.deal) : null,
+    // The supplier bill this pays (all or part of), from "We owe suppliers".
+    supplierBillId: r.supplierBill ? idOf(r.supplierBill) : null,
     part: r.part || '',
     partLabel: deals.PART_LABELS[r.part] || '',
     itemNames: r.itemNames || [],
@@ -582,6 +638,8 @@ export function shape(r, viewer) {
     // Supplier credit used: the bill = what is transferred + this.
     credit: r.credit?.amount ? { amount: r.credit.amount, entryId: idOf(r.credit.entry) } : null,
     bill: r.credit?.amount ? deals.unitsOf(r) : null,
+    // Supplier credit pays all of it: nothing to transfer (approving closes it as paid).
+    paidByCredit: creditCovers(r),
     bankNotice: r.bankNotice?.at ? { at: r.bankNotice.at, byName: r.bankNotice.byName || '' } : null,
     files: (r.files || []).map((f) => ({ id: idOf(f._id), kind: f.kind, name: f.name, contentType: f.contentType, bytes: f.bytes })),
     payment: r.status === 'paid' ? r.payment : null,
@@ -604,7 +662,9 @@ export function shape(r, viewer) {
       // Only the admin pays — an approved request, or a waiting one directly
       // (the approval is recorded with the payment).
       // Never while on hold: a hold means "do not pay this yet" (release it first).
-      pay: mayPay(viewer) && PAYABLE.includes(r.status) && !r.subscription?.alreadyPaid,
+      pay: mayPay(viewer) && PAYABLE.includes(r.status) && !r.subscription?.alreadyPaid && !creditCovers(r),
+      // Add / change / remove supplier credit on a waiting supplier payment (setCredit).
+      credit: mayChangeCredit(viewer, r),
       hold: mayHold(viewer) && r.status === 'approved',
       release: mayHold(viewer) && r.status === 'on_hold',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
@@ -614,7 +674,7 @@ export function shape(r, viewer) {
       // Which project / other ID it belongs to: any kind, any status (no money changes).
       linkProject: mayLinkOrder(viewer, r),
       // After paying: the admin may correct how it was paid, the reference and the screenshots.
-      editPayment: mayPay(viewer) && r.status === 'paid',
+      editPayment: mayPay(viewer) && r.status === 'paid' && r.payment?.method !== 'credit',
     },
     // Only for whoever pays: sent back with "Pay" (see payVersionOf).
     ...(mayPay(viewer) ? { payVersion: payVersionOf(r) } : {}),
@@ -791,13 +851,136 @@ function cleanReference(raw) {
 const cleanClientId = (raw) => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(raw) ? raw : undefined);
 
 /**
+ * A supplier payment that is not for one order's item (owner, 2026-11-24): stock,
+ * or goods for several orders on one bill. Before this, procurement could only
+ * raise these as a "Product purchase" expense with the supplier typed as text —
+ * so they never showed under the supplier and could not be paid in one transfer
+ * (PR-0144/0145/0146, RK New Popular).
+ *
+ * The supplier MUST be a saved one (picked from the list, or saved now): that link
+ * is what keeps it under "Supplier payments — by supplier". "What was bought" is
+ * required, since there are no item names. No order, items, deal or supplier
+ * credit (those belong to an order's payment). Idempotent on `clientId`.
+ * Raised by anyone who raises expenses (2026-11-25), and kept with their team.
+ * A bill we owe (supplierBillId) is procurement's — checked by the caller.
+ */
+async function createStockSupplierRequest(actor, input, uploaded, req) {
+  if (filled(input.dealId) || filled(input.partId)) throw fail('A supplier deal or part is paid from its order.', 400);
+  // "Pay" on a bill we owe (supplierBillService): the bill's supplier, in rupees, within what is left on it.
+  const bill = filled(input.supplierBillId) ? await bills.billForPayment(input.supplierBillId) : null;
+  if (bill) {
+    if (filled(input.currency) && String(input.currency).trim().toUpperCase() !== BASE_CURRENCY) throw fail('Supplier bills are paid in rupees.', 400);
+    // Whatever the browser sent, the payment goes to the bill's supplier.
+    input = { ...input, supplierId: idOf(bill.supplier), saveSupplier: undefined, payee: undefined, currency: BASE_CURRENCY, foreignAmount: undefined };
+    if (!filled(input.description)) input.description = bill.billNumber ? `Bill ${bill.billNumber} (${bill.number})` : `Supplier bill ${bill.number}`;
+    if (!filled(input.reference)) input.reference = bill.billNumber || bill.number;
+  }
+  if (!input.supplierId && !truthy(input.saveSupplier)) {
+    throw fail('Pick the supplier from the list (or save them as a new supplier), so the payment shows under that supplier.', 400);
+  }
+  const description = cleanDetails(input.description);
+  if (description.replace(/[^a-z]/gi, '').length < 3) throw fail('Say what was bought (for example "20 floor mats, bill 4471").', 400);
+  // The bill as typed; supplier credit (if used) comes off what is transferred, below.
+  const billMoney = supplierMoney(input, bill ? { currency: BASE_CURRENCY } : null);
+  const extra = await otherLinks(actor, input);
+  const clientId = cleanClientId(input.clientId);
+  if (clientId) {
+    const seen = await paymentRequestRepository.findByClientId(actor._id, clientId);
+    if (seen) return shape(seen, actor);
+  }
+  const { files, kinds } = filesFrom(uploaded);
+  // Checked before a new supplier is saved, so a refused request saves nothing.
+  if (!input.supplierId) requireUpiOrQr(cleanPayee(input.payee), kinds);
+  // Credit is checked before a new supplier could be saved (a new one has none anyway).
+  if (!input.supplierId && (truthyFlag(input.useCredit) || Number(input.creditToUse) > 0)) {
+    throw fail('Supplier credit can only be used with a saved supplier — pick the supplier from the list.', 400);
+  }
+  const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
+  requireUpiOrQr(payee, kinds);
+  // Supplier credit (owner, 2026-11-25: "for a new payment to a supplier or anywhere"):
+  // worked out here; re-checked under the supplier's lock when saved.
+  const creditPaise = await creditFor(actor, input, supplierId, billMoney);
+  const money = netOfCredit(billMoney, creditPaise);
+  // The bill's share is taken before anything is saved, and given back if the save fails.
+  // It is the whole bill paid by this request — the money moved AND the credit used.
+  const billPaise = bill ? toPaise(deals.unitsOf(billMoney)) : 0;
+  if (bill) await bills.reserve(bill._id, billPaise);
+  let stored;
+  try {
+    stored = await storeFiles(files, kinds, actor);
+  } catch (err) {
+    if (bill) await bills.release(bill._id, billPaise, 'files failed');
+    throw err;
+  }
+  let doc;
+  try {
+    const fields = {
+      _id: new mongoose.Types.ObjectId(),
+      number: await nextNumber(),
+      kind: 'supplier',
+      status: 'submitted',
+      // The raiser's team, so they (and their team head) see it like their expenses;
+      // accounts and the admin see every team's. The admin's go under procurement.
+      team: isAdmin(actor) ? STAFF_TEAMS.PROCUREMENT : actor.staff.team,
+      requestedBy: actor._id,
+      requestedByName: actor.name || '',
+      ...money,
+      category: 'supplier',
+      description,
+      payee,
+      ...extra,
+      supplier: supplierId,
+      bankNotice,
+      files: stored,
+      ...(clientId ? { clientId } : {}),
+      ...(bill ? { supplierBill: bill._id } : {}),
+      history: [entry(actor, 'submitted', [bill
+        ? `for ${bill.supplierName}'s ${bills.billLabel(bill)} (${bill.number}): ${bills.rupees(billPaise)} of ${bills.rupees(bill.amountPaise)}`
+        : 'not for one order (stock / several orders)',
+      creditPaise ? `bill ${deals.moneyOf(toPaise(deals.unitsOf(billMoney)), money.currency)} − ${deals.moneyOf(creditPaise, money.currency)} supplier credit` : '',
+      ].filter(Boolean).join('; '))],
+    };
+    // With credit: the credit row and the request land together, or neither.
+    doc = !creditPaise
+      ? await paymentRequestRepository.create(fields)
+      : await paymentRequestRepository.inTransaction(async (session) => {
+        const used = await credit.useCredit(session, { supplierId, currency: money.currency, creditPaise, request: fields, actor });
+        return paymentRequestRepository.create({ ...fields, credit: { amount: fromPaise(creditPaise), entry: used._id } }, session);
+      });
+  } catch (err) {
+    if (bill) await bills.release(bill._id, billPaise, 'request failed to save');
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    // The same submit twice at the same moment: the unique index kept one.
+    if (err?.code === 11000 && clientId) {
+      const seen = await paymentRequestRepository.findByClientId(actor._id, clientId);
+      if (seen) return shape(seen, actor);
+    }
+    throw err;
+  }
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', stock: true, amount: money.amount, currency: money.currency, foreignAmount: money.foreignAmount, supplierId: idOf(supplierId), ...(creditPaise ? { creditPaise } : {}), ...(bill ? { supplierBillId: idOf(bill._id) } : {}) });
+  if (creditCovers(doc) && mayDecide(actor)) return shape(await closeByCredit(actor, doc, req, 'raised'), actor);
+  const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${plainLine(description)}. Raised by ${doc.requestedByName}.${creditLine(doc)} Accounts: please approve or decline.${warn}`);
+  return shape(doc, actor);
+}
+
+/**
  * A supplier payment for items on a paid order. Snapshots the order, customer
  * and who closed the sale onto the request.
  */
 export async function createSupplierRequest(actor, input, uploaded, req) {
+  // "Pay a supplier" (no order): anyone who raises expenses (owner, 2026-11-25, "ok do
+  // this for all") — goods bought from a supplier go under that supplier, not in as
+  // a plain expense. Paying an order's items, or a bill we owe, stays procurement's.
+  if (!filled(input.orderId) && !filled(input.supplierBillId)) {
+    if (!mayPaySupplierStock(actor)) throw fail('Only active staff raise supplier payments.', 403);
+    return createStockSupplierRequest(actor, input, uploaded, req);
+  }
   if (!isAdmin(actor) && !onTeam(actor, STAFF_TEAMS.PROCUREMENT)) {
     throw fail('Only procurement raises supplier payments.', 403);
   }
+  // A bill we owe (supplierBillService): no single order's item to pay for.
+  if (!filled(input.orderId)) return createStockSupplierRequest(actor, input, uploaded, req);
   const order = await orderRepository.findForWorkflow(input.orderId);
   const view = order && workflowView(order);
   if (!view) throw fail('Order not found in the team workflow.', 404);
@@ -816,9 +999,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   // Supplier credit (services/supplierLedgerService.js): the bill stays the bill (the
   // deal counts it in full); only what is transferred is less. Re-checked under the
   // supplier's lock when it is saved.
-  const creditPaise = Number(input.creditToUse) > 0
-    ? await credit.checkCreditUse({ supplierId, currency: bill.currency, creditInput: input.creditToUse, billPaise: toPaise(deals.unitsOf(bill)) })
-    : 0;
+  const creditPaise = await creditFor(actor, input, supplierId, bill);
   const money = netOfCredit(bill, creditPaise);
   const { amount } = money;
   const description = cleanDetails(input.description);
@@ -911,9 +1092,42 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
       console.error(`[PaymentRequest] ${doc.number}: could not mark ${itemId} payment pending:`, err.message);
     }
   }
+  // Credit pays all of it and accounts / the admin raised it: nothing to transfer and
+  // nobody else to ask — closed as paid now, recorded with the credit used.
+  if (creditCovers(doc) && mayDecide(actor)) return shape(await closeByCredit(actor, doc, req, 'raised'), actor);
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
-  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}.${creditLine(doc)} Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
+}
+
+/** For the chat: what credit did ("₹40,000 bill − ₹15,000 supplier credit = ₹25,000 to pay"). */
+function creditLine(r) {
+  if (!r.credit?.amount) return '';
+  const cur = r.currency || BASE_CURRENCY;
+  const billPaise = toPaise(deals.unitsOf(r));
+  const usedPaise = toPaise(r.credit.amount);
+  return creditCovers(r)
+    ? ` Paid fully from supplier credit (${deals.moneyOf(usedPaise, cur)}) — nothing to transfer.`
+    : ` Bill ${deals.moneyOf(billPaise, cur)} − ${deals.moneyOf(usedPaise, cur)} supplier credit = ${deals.moneyOf(billPaise - usedPaise, cur)} to pay.`;
+}
+
+/**
+ * A waiting payment that supplier credit pays in full, closed as paid by accounts /
+ * the admin (raising it, or approving it): no transfer, so the admin's "pay" step is
+ * skipped and nobody is pinged to pay. Its order lines / bill / deal follow exactly as
+ * for a paid one. Compare-and-set on status + rev: an edit landing first wins.
+ */
+async function closeByCredit(actor, r0, req, how = 'approved', note = '') {
+  const now = new Date();
+  const set = creditSettledSet(actor, now);
+  // Approved earlier (or approved, then held): keep who approved it.
+  if (r0.status !== 'submitted') { delete set.approvedBy; delete set.approvedAt; }
+  const r = await paymentRequestRepository.transitionInSession(r0._id, [r0.status], revIs(r0.rev),
+    set, entry(actor, 'paid', [`${how} — paid fully from supplier credit (${deals.moneyOf(toPaise(r0.credit.amount), r0.currency || BASE_CURRENCY)}), nothing transferred`, note].filter(Boolean).join(' — ')), {}, undefined);
+  if (!r) throw fail(EDITED_SINCE, 409);
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', idOf(r._id), { change: 'paid', method: 'credit', creditAmount: r.credit.amount });
+  await followOnOrder(r, actor, 'paid');
+  return r;
 }
 
 /**
@@ -1041,7 +1255,9 @@ async function supplierPayee(actor, input, req) {
   }
   const payee = cleanPayee(input.payee);
   if (truthy(input.saveSupplier)) {
-    const saved = await suppliers.create(actor, { name: payee.name, phone: payee.phone, payment: payee }, req);
+    // Anyone raising the payment may save a new supplier here; the duplicate check
+    // (same name, or same phone) points them at the saved one instead.
+    const saved = await suppliers.createFromPayment(actor, { name: payee.name, phone: payee.phone, payment: payee }, req);
     return { payee, supplierId: saved.id, bankNotice: null };
   }
   return { payee, supplierId: null, bankNotice: null };
@@ -1053,6 +1269,12 @@ async function followOnOrder(r, actor, outcome) {
   if (r.deal && outcome !== 'paid') await deals.release(r.deal, toPaise(deals.unitsOf(r)), `${r.number} ${outcome}`);
   // …and any supplier credit it used goes back to the supplier's balance (once).
   if (r.credit?.amount && outcome !== 'paid') await credit.restoreCredit(r, `${r.number} ${outcome}`);
+  // A supplier bill's payment: a declined / cancelled one gives its share back; paid or not, the bill's paid figure follows.
+  if (r.supplierBill) {
+    // The bill's share is what was reserved: the bill (money moved + any credit used on it).
+    if (outcome !== 'paid') await bills.release(r.supplierBill, toPaise(deals.unitsOf(r)), `${r.number} ${outcome}`);
+    await bills.resync(r.supplierBill);
+  }
   if (r.kind !== 'supplier' || !r.order) return;
   try {
     const wf = await import('./teamWorkflowService.js');
@@ -1144,6 +1366,14 @@ export async function approve(actor, id, { note, rev } = {}, req) {
   const pinned = rev != null && rev !== '';
   if (pinned && Number(rev) !== (r0.rev || 0)) throw fail(EDITED_SINCE, 409);
   await assertOrderLive(r0);
+  // Supplier credit pays all of it: approving closes it as paid — nothing to transfer,
+  // so it never goes to the admin to pay (owner, 2026-11-25).
+  if (creditCovers(r0) && r0.status === 'submitted') {
+    if (pinned && Number(rev) !== (r0.rev || 0)) throw fail(EDITED_SINCE, 409);
+    const r = await closeByCredit(actor, r0, req, 'approved', String(note || '').trim().slice(0, 300));
+    await tellChat(r, 'approved', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)} — paid fully from supplier credit, nothing to transfer. Closed as paid.`, { mentionRequester: true });
+    return shape(r, actor);
+  }
   const now = new Date();
   // Paid already (company card, auto-debit): approving it closes it as paid — the
   // admin is not asked to pay money that has already left.
@@ -1244,6 +1474,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   if (filled(payVersion) && String(payVersion) !== payVersionOf(r0)) throw fail(PAY_CHANGED, 409);
   if (r0.status === 'on_hold') throw fail(heldMessage(await paymentRequestRepository.findById(id) || r0), 409);
   if (r0.subscription?.alreadyPaid) throw fail(`${r0.number} was paid already (${r0.requestedByName} marked it paid) — accounts approves it, which closes it as paid.`, 409);
+  if (creditCovers(r0)) throw fail(`${r0.number} is paid fully from supplier credit — there is nothing to transfer. Approve it to close it as paid.`, 409);
   await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   const fromForeign = paidFrom === 'foreign';
@@ -1371,7 +1602,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
         : 'A paid or cancelled payment cannot be edited.', 403);
     }
     if (fromSubscription(r0)) throw fail('A subscription payment is not edited here — ask accounts to decline it, then mark it paid again with the right details.', 409);
-    if (!resubmittable(r0)) throw fail('A declined deal part or a payment that used supplier credit cannot be sent again — raise a new payment instead.', 409);
+    if (!resubmittable(r0)) throw fail('A declined deal part, supplier bill payment or payment that used supplier credit cannot be sent again — raise a new payment instead.', 409);
     throw fail('Only whoever raised it, or the admin, can edit it.', 403);
   }
   // A double-submitted edit (same form key): the answer the first one got.
@@ -1397,8 +1628,13 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   const claim = isExpense && nextCategory === REIMBURSEMENT ? await claimMoney(input, r0) : null;
   const billMoney = claim ? claim.money : isExpense
     ? cleanMoney(r0.team, input, { amount: r0.amount, ...before })
-    : supplierMoney(input, r0.deal || creditPaise ? { currency: before.currency } : null, { amount: billAmount, ...billBefore });
-  const money = creditPaise ? { ...netOfCredit(billMoney, creditPaise), credit: r0.credit } : billMoney;
+    : supplierMoney(input, r0.deal || r0.supplierBill || creditPaise ? { currency: before.currency } : null, { amount: billAmount, ...billBefore });
+  // The bill edited below the credit used: the credit drops to the whole bill (nothing to
+  // transfer) and the rest goes back to the supplier's balance — in the same write.
+  const billPaiseNow = creditPaise ? toPaise(deals.unitsOf(billMoney)) : 0;
+  const creditNow = Math.min(creditPaise, billPaiseNow);
+  const creditBack = creditPaise - creditNow;
+  const money = creditPaise ? { ...netOfCredit(billMoney, creditNow), credit: { amount: fromPaise(creditNow), entry: r0.credit.entry } } : billMoney;
   // An unchanged foreign bill keeps its stored rupees/rate (cleanMoney), not a recomputed net.
   if (creditPaise && money.currency !== BASE_CURRENCY && billMoney.foreignAmount === billBefore.foreignAmount) {
     Object.assign(money, { foreignAmount: before.foreignAmount, amount: r0.amount, fxRate: before.fxRate });
@@ -1432,6 +1668,13 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
     payee = cleanPayee(input.payee, { optional: isExpense });
     if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) { supplier = null; bankNotice = null; }
   }
+  // A payment not for one order is found under its supplier only through the saved link.
+  if (r0.kind === 'supplier' && !r0.order && !supplier) {
+    throw fail('Pick the supplier from the list — a payment not for one order must be linked to a saved supplier.', 400);
+  }
+  if (r0.supplierBill && idOf(supplier) !== idOf(r0.supplier)) {
+    throw fail(`${r0.number} pays a supplier bill, so the supplier cannot change. Cancel it and raise the payment from the right bill instead.`, 409);
+  }
   if (creditPaise && idOf(supplier) !== idOf(r0.supplier)) {
     throw fail(`${r0.number} uses ${deals.moneyOf(creditPaise, before.currency)} of ${r0.payee?.name || 'this supplier'}'s credit, so the supplier cannot change. Cancel it and raise a new payment instead.`, 409);
   }
@@ -1457,6 +1700,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) change('Payment details', payText(r0.payee), payText(payee));
   if (category !== r0.category) change('What for', categoryLabel(r0.category), categoryLabel(category));
   if (description !== (r0.description || '')) change('Details', plainLine(r0.description), plainLine(description));
+  if (creditBack) change('Supplier credit', deals.moneyOf(creditPaise, money.currency), `${deals.moneyOf(creditNow, money.currency)} (${deals.moneyOf(creditBack, money.currency)} given back)`);
   if (claimChanged && claimNow) change('Reimbursement', claimWas ? `${claims.claimLabel(claimWas)} (${claimWas.on})` : '', `${claims.claimLabel(claimNow)} (${claimNow.on})`);
   for (const f of removing) change('Attachment removed', `${FILE_NOUN[f.kind]}${f.name ? ` (${f.name})` : ''}`, '');
   newFiles.forEach((f, i) => { if (f?.buffer?.length) change('Attachment added', '', `${FILE_NOUN[newKinds[i]]}${f.originalname ? ` (${String(f.originalname).slice(0, 120)})` : ''}`); });
@@ -1493,7 +1737,21 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
     const now = await deals.dealForPayment(r0.deal, r0.order);
     part = deals.partFor({ ...now, reservedPaise: now.reservedPaise - wasUnits }, nowUnits);
   }
-  const undoLock = async () => { if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`); };
+  // A supplier bill's payment: the same, on what is left of the bill (rupees) — the
+  // bill this request pays (money moved + credit used), as reserved when it was raised.
+  const billDelta = r0.supplierBill ? toPaise(deals.unitsOf(money)) - toPaise(deals.unitsOf(r0)) : 0;
+  if (billDelta > 0) {
+    try {
+      await bills.reserve(r0.supplierBill, billDelta);
+    } catch (err) {
+      if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`);
+      throw err;
+    }
+  }
+  const undoLock = async () => {
+    if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit not saved`);
+    if (billDelta > 0) await bills.release(r0.supplierBill, billDelta, `${r0.number} edit not saved`);
+  };
 
   let stored = [];
   try {
@@ -1514,13 +1772,24 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
     rev: (r0.rev || 0) + 1,
     editedAt: at,
     ...(claimChanged ? { reimbursement: claimNow } : {}),
+    ...(creditBack ? { credit: money.credit } : {}),
     ...(r0.deal ? { part } : {}),
     ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
   };
   let r;
   try {
-    const write = (session) => paymentRequestRepository.transitionInSession(id, [r0.status], revIs(r0.rev),
+    const writeOnly = (session) => paymentRequestRepository.transitionInSession(id, [r0.status], revIs(r0.rev),
       set, entry(actor, backToAccounts ? 'resubmitted' : 'edited', note), { edits: editRow }, session);
+    // Credit given back lands with the edit, or not at all (a lost race aborts both).
+    const write = !creditBack ? writeOnly : async (session) => {
+      const next = await writeOnly(session);
+      if (!next) throw fail(MOVED, 409);
+      await credit.giveBackCredit(session, {
+        supplierId: r0.supplier, currency: money.currency, creditPaise: creditBack, request: r0, actor,
+        key: `restore:${idOf(r0._id)}:r${set.rev}`, note: `${r0.number} edited: bill now ${deals.moneyOf(billPaiseNow, money.currency)}`,
+      });
+      return next;
+    };
     r = resubmitSupplier
       // The same guard as raising one: two payments for the item at the same moment cannot both be live.
       ? await paymentRequestRepository.inTransaction(async (session) => {
@@ -1530,7 +1799,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
         if (clash) throw fail(`${clash.number} for this item is already ${STATUS_LABELS[clash.status].toLowerCase()}.`, 409);
         return write(session);
       })
-      : await write(undefined);
+      : creditBack ? await paymentRequestRepository.inTransaction((session) => write(session)) : await write(undefined);
   } catch (err) {
     r = null;
     await undoLock();
@@ -1546,6 +1815,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
   }
   // A smaller amount gives its share back only once the edit has landed.
   if (delta < 0) await deals.release(r0.deal, -delta, `${r0.number} edited`);
+  if (billDelta < 0) await bills.release(r0.supplierBill, -billDelta, `${r0.number} edited`);
   // Only now, with no request pointing at them any more, delete the removed files.
   await Promise.all(removing.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
   if (resubmitSupplier) {
@@ -1580,6 +1850,8 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   if (!mayPay(actor)) throw fail('Only the admin can edit a payment record.', 403);
   const r0 = await loadVisible(actor, id);
   if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
+  // Paid by supplier credit: no transfer happened, so there is no method / reference to correct.
+  if (r0.payment?.method === 'credit') throw fail(`${r0.number} was paid fully from supplier credit — no money was transferred, so there is no payment record to edit.`, 409);
 
   const how = method ? paidMethodOf(method) : r0.payment?.method;
   if (!how) throw fail('Choose how it was paid.', 400);
@@ -1895,6 +2167,94 @@ export async function orderLookup(actor, q) {
 }
 
 /**
+ * Use supplier credit on a payment that is already raised and waiting for accounts —
+ * or change / remove what it uses (owner, 2026-11-25: procurement, accounts and the
+ * admin may all do this). Who: mayChangeCredit.
+ *
+ * `useCredit` (the tick): as much as there is, up to the whole bill. `creditToUse`: a
+ * figure (0 removes the credit). The bill stays what it is; only what is transferred
+ * changes. The difference is spent (credit_used) or given back (credit_restored) under
+ * the supplier's lock, in ONE transaction with the request's compare-and-set on
+ * status + rev — so two people at once cannot both spend it, and an approval landing
+ * first wins. Each change is in the request's edits and the ledger (who, when, which).
+ */
+export async function setCredit(actor, id, input = {}, req) {
+  const r0 = await loadVisible(actor, id);
+  if (!mayChangeCredit(actor, r0)) {
+    if (!credit.maySeeCredit(actor)) throw fail('Only procurement, accounts or the admin can use supplier credit.', 403);
+    if (r0.kind !== 'supplier' || !r0.supplier) throw fail('Supplier credit is used only on a payment to a saved supplier.', 400);
+    if (!CREDIT_STATUSES_DECIDER.includes(r0.status)) throw fail('Credit can be changed only on a payment not paid, declined or cancelled yet.', 409);
+    if (r0.status !== 'submitted') throw fail('Accounts has approved this payment — ask accounts (or the admin) to use the credit on it.', 403);
+    throw fail('Only whoever raised it, accounts or the admin can change its credit.', 403);
+  }
+  if (input.rev != null && input.rev !== '' && Number(input.rev) !== (r0.rev || 0)) throw fail(MOVED, 409);
+  const currency = r0.currency || BASE_CURRENCY;
+  const billPaise = toPaise(deals.unitsOf(r0));
+  const hadPaise = toPaise(r0.credit?.amount || 0);
+  const owed = await credit.owedPaise(r0.supplier, currency);
+  const room = Math.min(billPaise, hadPaise + owed);
+  let wantPaise;
+  if (truthyFlag(input.useCredit)) {
+    wantPaise = room;
+  } else if (filled(input.creditToUse) && Number(input.creditToUse) === 0) {
+    wantPaise = 0;
+  } else if (filled(input.creditToUse)) {
+    wantPaise = credit.cleanAmountPaise(input.creditToUse);
+    if (wantPaise > billPaise) throw fail(`Credit used cannot be more than the bill (${deals.moneyOf(billPaise, currency)}).`, 400);
+    if (wantPaise > hadPaise + owed) throw fail(`This supplier's credit in ${currency} is ${deals.moneyOf(owed, currency)}${hadPaise ? ` (plus the ${deals.moneyOf(hadPaise, currency)} this payment already uses)` : ''} — you cannot use more than that.`, 409);
+  } else {
+    throw fail('Tick “Use supplier credit”, or enter the credit to use (0 to remove it).', 400);
+  }
+  if (wantPaise === 0 && hadPaise === 0 && truthyFlag(input.useCredit)) throw fail(`This supplier has no credit in ${currency} right now.`, 409);
+  if (wantPaise === hadPaise) return shape(r0, actor);
+
+  const netPaise = billPaise - wantPaise;
+  const field = currency === BASE_CURRENCY ? 'amount' : 'foreignAmount';
+  const money = { [field]: fromPaise(netPaise) };
+  // A foreign bill with an old quoted rate keeps its rupee estimate in step; one with none stays 0 until paid.
+  if (field === 'foreignAmount') money.amount = netPaise && r0.fxRate ? round2(fromPaise(netPaise) * r0.fxRate) : 0;
+  const nextRev = (r0.rev || 0) + 1;
+  const fromText = hadPaise ? deals.moneyOf(hadPaise, currency) : 'none';
+  const toText = wantPaise ? deals.moneyOf(wantPaise, currency) : 'none';
+  const reason = String(input.reason || '').trim().slice(0, 1000) || (wantPaise > hadPaise ? 'Used supplier credit' : 'Supplier credit changed');
+  const changes = [{ field: 'Supplier credit', from: fromText, to: toText }, { field: 'To transfer', from: deals.moneyOf(billPaise - hadPaise, currency), to: deals.moneyOf(netPaise, currency) }];
+  const at = new Date();
+  const note = `${reason} — supplier credit: ${fromText} → ${toText}; to transfer ${deals.moneyOf(netPaise, currency)} of the ${deals.moneyOf(billPaise, currency)} bill`;
+  // It will be closed as paid below: refuse first if its order was cancelled (nothing moves then).
+  if (netPaise === 0 && mayDecide(actor)) await assertOrderLive(r0);
+  // A supplier bill's payment: the ledger row names the bill too.
+  const billRef = r0.supplierBill ? ` for supplier bill ${r0.reference || ''}`.trimEnd() : '';
+  const r = await paymentRequestRepository.inTransaction(async (session) => {
+    let entryId = r0.credit?.entry || null;
+    const delta = wantPaise - hadPaise;
+    const key = `${delta > 0 ? 'use' : 'restore'}:${idOf(r0._id)}:r${nextRev}`;
+    if (delta > 0) {
+      const used = await credit.useCredit(session, { supplierId: r0.supplier, currency, creditPaise: delta, request: r0, actor, key, note: `on ${r0.number}${billRef} (credit ${fromText} → ${toText})` });
+      entryId = used._id;
+    } else {
+      await credit.giveBackCredit(session, { supplierId: r0.supplier, currency, creditPaise: -delta, request: r0, actor, key, note: `${r0.number}: credit ${fromText} → ${toText}` });
+    }
+    const next = await paymentRequestRepository.transitionInSession(id, [r0.status], revIs(r0.rev), {
+      ...money,
+      credit: wantPaise ? { amount: fromPaise(wantPaise), entry: entryId } : null,
+      rev: nextRev, editedAt: at,
+    }, entry(actor, 'edited', note), { edits: { at, by: actor._id, byName: actor.name || '', role: roleOf(actor), reason, fromStatus: r0.status, changes } }, session);
+    if (!next) throw fail(MOVED, 409); // aborts: no credit moves
+    return next;
+  });
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'credit', fromPaise: hadPaise, toPaise: wantPaise, currency });
+  // Accounts / the admin made credit cover all of it: nothing to transfer and they are
+  // the approvers — closed as paid now (the bill, order lines and deal follow).
+  if (creditCovers(r) && mayDecide(actor)) {
+    const closed = await closeByCredit(actor, r, req, r.status === 'submitted' ? 'approved' : r.status === 'on_hold' ? 'hold ended' : 'already approved');
+    await tellChat(closed, 'paid', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} used ${closed.payee?.name || 'the supplier'}'s credit on ${what(closed)} — paid fully from supplier credit, nothing to transfer. Closed as paid.`, { mentionRequester: true });
+    return shape(closed, actor);
+  }
+  await tellChat(r, 'edited', `✏️ ${actor.name || 'Someone'} changed the supplier credit on ${what(r)}: ${fromText} → ${toText}.${creditLine(r)}`);
+  return shape(r, actor);
+}
+
+/**
  * Link an expense to an order, change it, or remove it (`orderId` null / '').
  * Allowed at any status — no money changes, it only says which order the cost was
  * for. A supplier payment's order is fixed: it pays for that order's items.
@@ -2169,7 +2529,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   if (held.length) {
     throw fail(`${held.map((r) => r.number).join(', ')} ${held.length === 1 ? 'is' : 'are'} on hold — release the hold before paying, or untick ${held.length === 1 ? 'it' : 'them'}.`, 409);
   }
-  const notReady = rows.filter((r) => r.kind !== 'supplier' || !TO_PAY.includes(r.status));
+  const notReady = rows.filter((r) => r.kind !== 'supplier' || !TO_PAY.includes(r.status) || creditCovers(r));
   if (notReady.length) {
     throw fail(`${notReady.map((r) => r.number).join(', ')} ${notReady.length === 1 ? 'is' : 'are'} not waiting to be paid — refresh the list.`, 409);
   }

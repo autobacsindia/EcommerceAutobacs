@@ -13,6 +13,7 @@ import { cacheMiddleware } from '../middleware/cacheControl.js';
 import {
   getPublicDeliveryFees,
   getCardFeeWaivers,
+  getDeliveryEstimates,
   getDeliveryFeeAdmin,
   updateDeliveryFeeAdmin,
   listRemotePins,
@@ -30,6 +31,14 @@ router.get(
   query('ids').optional().isString().isLength({ max: 2000 }).withMessage('Too many product ids in one request'),
   validateRequest,
   asyncHandler(getCardFeeWaivers),
+);
+
+// Delivery window per product (PDP + cards). Display only; one request per grid.
+router.get(
+  '/estimates',
+  query('ids').optional().isString().isLength({ max: 2000 }).withMessage('Too many product ids in one request'),
+  validateRequest,
+  asyncHandler(getDeliveryEstimates),
 );
 
 router.get('/admin', protect, admin, asyncHandler(getDeliveryFeeAdmin));

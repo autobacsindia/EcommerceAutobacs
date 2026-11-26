@@ -156,6 +156,8 @@ describe('Conversation notification settings', () => {
       await say(priya, company, { text: 'Lunch at 1' });
       await settle();
       expect(poppedFor()).toContain(SUB(2).endpoint);
+      // The whole-company space is named "Team Report" in the pop-up, not #company.
+      expect(sent[0].payload.title).toMatch(/ · Team Report$/);
     });
 
     it('"Off" also silences an @mention', async () => {
@@ -211,6 +213,13 @@ describe('Conversation notification settings', () => {
       for (let i = 0; i < 40 && !mail.mock.calls.length; i += 1) await new Promise((r) => setTimeout(r, 25));
       expect(mail).toHaveBeenCalledTimes(1);
       expect(mail.mock.calls[0][0].to).toBe(pavan.user.email);
+    });
+
+    it('a mention in the whole-company space says "Team Report", not #company', async () => {
+      const mail = jest.spyOn(emailHandler, 'sendEmail').mockResolvedValue({ success: true });
+      await say(priya, company, { text: '@Pavan hi', mentions: [String(pavan.user._id)] });
+      for (let i = 0; i < 40 && !mail.mock.calls.length; i += 1) await new Promise((r) => setTimeout(r, 25));
+      expect(mail.mock.calls[0][0].subject).toMatch(/mentioned you in Team Report$/);
     });
   });
 

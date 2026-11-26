@@ -2,6 +2,10 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import ProductGrid, { GRID_PRIORITY_IMAGES } from './ProductGrid';
 import '@testing-library/jest-dom';
+jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
+  useDeliveryEstimates: () => ({ estimates: null, pending: false }),
+}));
+
 
 // Mocks
 jest.mock('next/navigation', () => ({

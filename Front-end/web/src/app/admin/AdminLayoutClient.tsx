@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpenCheck,
+import { AlarmClock, BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ScanSearch, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
@@ -13,6 +13,7 @@ import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
 import { useAdminStats } from '@/hooks/queries/useAdminStats';
 import { formatCurrency } from '@/lib/utils';
+import { compactRupees } from '@/lib/compactRupees';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
@@ -20,6 +21,7 @@ import { splitMore } from '@/components/panel/navMore';
 import CallProvider from '@/components/calls/CallProvider';
 import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
 import NewWorkPopup from '@/components/notifications/NewWorkPopup';
+import { LateTasksPrompt } from '@/components/tasks/lateDates';
 
 interface NavItem {
   href: string;
@@ -41,6 +43,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/handover', label: 'Handover', icon: Handshake },
       { href: '/admin/past-members', label: 'Past members', icon: UserMinus },
       { href: '/admin/analytics', label: 'Analytics', icon: ChartLine },
+      { href: '/admin/revenue', label: 'Company revenue', icon: Landmark },
     ],
   },
   {
@@ -130,11 +133,13 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       // The printable slips a project offers in "Create slip" (delivery slip, driver authorisation…).
       { href: '/admin/slip-templates', label: 'Slip templates', icon: Printer },
       { href: '/admin/team-activity', label: 'Team activity', icon: Timer },
+      { href: '/admin/delays', label: 'Delays by person', icon: AlarmClock },
       { href: '/admin/pop-ups', label: 'Pop-up check', icon: BellRing },
       { href: '/admin/payments', label: 'Payments', icon: CreditCard },
       // What accounts decides — payments, supplier refunds / credit, supplier changes — across orders.
       { href: '/admin/approvals', label: 'Waiting for approval', icon: ClipboardCheck },
       { href: '/admin/suppliers', label: 'Suppliers', icon: Factory },
+      { href: '/admin/supplier-partners', label: 'Supplier partners', icon: Handshake },
       { href: '/admin/supplier-enquiries', label: 'Supplier enquiries', icon: MessageSquareQuote },
       { href: '/admin/price-calculator', label: 'Price calculator', icon: Calculator },
       { href: '/admin/shipping-calculator', label: 'Shipping calculator', icon: Truck },
@@ -142,6 +147,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/delivery-fees', label: 'Delivery fees', icon: Truck },
       { href: '/admin/bank-transfers', label: 'Bank transfers', icon: Landmark },
       { href: '/admin/extra-charges', label: 'Extra charges', icon: Coins },
+      { href: '/admin/pay-later', label: 'B2B / B2C · Pay later', icon: Hourglass },
       // GTM discounts above 10% waiting for approval (the GTM head approves them too).
       { href: '/admin/discount-approvals', label: 'Discount approvals', icon: ShieldCheck },
       { href: '/admin/workflows', label: 'Workflows', icon: Zap },
@@ -177,15 +183,32 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
   const { stats, isError: statsFailed } = useAdminStats();
   const chatUnread = useChatUnreadTotal();
 
-  // Deep-link each counter to the Orders view it summarises, carrying the exact
-  // status group (and, for revenue, the exact date window) the backend counted —
-  // so the list can never disagree with the number above it. The fallbacks only
-  // apply to a cached pre-`filters` API response.
-  const ordersHref = (statuses: string[] | undefined, fallback: string, startDate?: string) => {
-    const params = new URLSearchParams({ status: statuses?.length ? statuses.join(',') : fallback });
-    if (startDate) params.set('startDate', startDate);
-    return `/admin/orders?${params.toString()}`;
-  };
+  // Header figures. The fallback to the old website-only revenue only applies to a
+  // cached response from before `companyRevenue` existed.
+  const company = stats.companyRevenue;
+  const sales = stats.sales;
+  const n = (x: number) => x.toLocaleString('en-IN');
+  // Hover text: the breakdown behind each figure. Click opens the full list.
+  const revenueTitle = company
+    ? [
+        `Revenue ${company.period.label}: ${formatCurrency(company.total)} incl. GST`,
+        `• Zoho Books bills after refunds: ${formatCurrency(company.zoho)} (${formatCurrency(company.zohoExGst)} without GST)`,
+        `   refunds taken off (credit notes): ${formatCurrency(company.creditNotes)}`,
+        `• Website & sales-panel orders not yet billed in Zoho: ${formatCurrency(company.panelNotInZoho)}`,
+        'Each sale counted once; cancelled, refunded, draft and void are left out.',
+        ...(company.needsCheck.count ? [`${n(company.needsCheck.count)} Zoho bill(s) are probably website orders — counted once; please confirm on the page.`] : []),
+        'Click for every sale.',
+      ].join('\n')
+    : 'Realised revenue since the start of the financial year — excludes cancelled, returned and abandoned orders';
+  const salesTitle = sales
+    ? [
+        `Sales ${sales.fyLabel}: ${n(sales.total)}`,
+        `• Billed in Zoho Books: ${n(sales.zoho)}`,
+        `• Website orders not yet in Zoho: ${n(sales.website.total)} — delivered ${n(sales.website.delivered)}, shipped ${n(sales.website.shipped)}, processing ${n(sales.website.processing)}`,
+        `Not counted: ${n(sales.zohoCancelled)} Zoho bill(s) cancelled by credit note, and cancelled / returned / refunded orders.`,
+        'Click for every sale.',
+      ].join('\n')
+    : '';
 
   const navSections = NAV_SECTIONS;
 
@@ -275,32 +298,35 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{pageLabel || 'Admin'}</h2>}
         actions={
           <>
-            {/* Stats Overview — each tile drills into the orders behind the number */}
+            {/* Company figures (admin only — the API refuses everyone else). Both open
+                the Company revenue page, which shows where every rupee comes from. */}
             <Link
-              href={ordersHref(stats.filters?.pendingOrders, 'processing,shipped')}
-              title="Orders placed but not delivered yet"
+              href="/admin/revenue#sales"
+              title={salesTitle}
               className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
             >
-              <p className="text-xs text-gray-500">Pending orders</p>
-              <p className="text-base font-bold tabular-nums text-amber-700">
-                {statsFailed ? '—' : stats.pendingOrders.toLocaleString('en-IN')}
+              <p className="text-xs text-gray-500">Sales{sales ? ` (${sales.fyLabel})` : ''}</p>
+              <p className="text-base font-bold tabular-nums text-blue-700">
+                {statsFailed || !sales ? '—' : n(sales.total)}
               </p>
+              {sales && !statsFailed && (
+                <p className="text-[10px] leading-tight text-gray-400">{n(sales.website.shipped + sales.website.processing)} on the way</p>
+              )}
             </Link>
             <Link
-              href={ordersHref(
-                stats.filters?.totalRevenue,
-                'processing,shipped,delivered',
-                stats.revenuePeriod?.startDate
-              )}
-              title={`Realised revenue since ${stats.revenuePeriod?.startDate ?? 'the start of the financial year'} — excludes cancelled, returned and abandoned orders`}
+              href="/admin/revenue"
+              title={revenueTitle}
               className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
             >
               <p className="text-xs text-gray-500">
-                Revenue{stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
+                Revenue{company ? ` (${company.period.label})` : stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
               </p>
               <p className="text-base font-bold tabular-nums text-green-700">
-                {statsFailed ? '—' : formatCurrency(stats.totalRevenue)}
+                {statsFailed ? '—' : company ? compactRupees(company.total) : formatCurrency(stats.totalRevenue)}
               </p>
+              {company && !statsFailed && (
+                <p className="text-[10px] leading-tight text-gray-400">incl. GST · all sales</p>
+              )}
             </Link>
             <span className="mx-1 hidden h-8 w-px bg-gray-200 sm:block" aria-hidden="true" />
             <ViewWebsiteLink />
@@ -329,6 +355,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         {children}
         <ProjectReminderPopup tasksHref="/admin/tasks" />
         <NewWorkPopup />
+        <LateTasksPrompt base="/admin/tasks" />
       </PanelShell>
     </CallProvider>
   );

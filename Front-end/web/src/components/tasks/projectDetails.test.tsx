@@ -100,7 +100,9 @@ describe('Job details box', () => {
     expect(within(box).getByText('₹85,000')).toBeInTheDocument();
     expect(within(box).getByText('Balance due').nextSibling).toHaveTextContent('₹60,000');
     expect(within(box).getByText('Key tag').nextSibling).toHaveTextContent('14');
-    expect(within(box).getByText(/Order #AB12CD34/)).toBeInTheDocument();
+    expect(within(box).getByText('#AB12CD34')).toBeInTheDocument();
+    // The order number keeps its copy button (no session here, so plain text rather than a link).
+    expect(within(box).getByRole('button', { name: 'Copy order number #AB12CD34' })).toBeInTheDocument();
     expect(within(box).getByText('Last changed by Ravi')).toBeInTheDocument();
   });
 

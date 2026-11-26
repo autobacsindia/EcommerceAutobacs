@@ -93,6 +93,31 @@ const AddressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * B2B / B2C (utils/salesType.js). Same shape as Order.buyer: `enterprise` = B2B,
+ * with the company's legal name, GSTIN and bill-to (validated by
+ * services/buyerService.js resolveBuyer). Absent on older quotations = B2C.
+ */
+const BuyerSchema = new mongoose.Schema(
+  {
+    type: { type: String, enum: ['individual', 'enterprise'], required: true },
+    legalName: String,
+    gstin: String,
+    stateCode: String,
+    billingAddress: {
+      addressLine1: String,
+      addressLine2: String,
+      city: String,
+      state: String,
+      stateCode: String,
+      postalCode: String,
+      country: String,
+      phone: String,
+    },
+  },
+  { _id: false }
+);
+
 const SalesQuotationSchema = new mongoose.Schema(
   {
     number: { type: String, required: true },
@@ -116,6 +141,7 @@ const SalesQuotationSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true }, // subtotal − discount.amount
     // Absent when the discount is 10% or less (nothing to approve) or never asked.
     discountApproval: { type: DiscountApprovalSchema, default: undefined },
+    buyer: { type: BuyerSchema, default: undefined },
     notes: { type: String, default: '' },
 
     salesUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

@@ -8,6 +8,8 @@
  *   send-order-whatsapp      { orderId, status, shipmentId?, occurrence?, amount? } — WhatsApp twin of the
  *                            two jobs above; its own job + stamp (Order.whatsappNotified), see
  *                            services/whatsapp/orderWhatsAppService.js
+ *   send-order-progress-email { orderId, kind, shipmentId?, stage? } — preparing / packed / courier booked /
+ *                            "still on it" (services/orderProgressService.js), once per key
  *   send-delivery-update-email { orderId, shipmentId } — tracking/courier corrected after dispatch (once per change, ≤1 per parcel per 10 min)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
@@ -49,6 +51,7 @@ import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice, emailExtraChargeReceipt } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
 import { sendOrderWhatsApp, WHATSAPP_JOB } from '../../services/whatsapp/orderWhatsAppService.js';
+import { emailOrderProgress, PROGRESS_EMAIL_JOB } from '../../services/orderProgressService.js';
 import { emailDeliveryUpdate } from '../../services/deliveryUpdateEmailService.js';
 import { emailAffiliateApproved, emailAffiliatePayoutSent } from '../../services/affiliateEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
@@ -60,6 +63,9 @@ import {
   emailAdminCareersAlert,
   emailAdminOrderPlacedAlert,
   emailStaffSalesPaidAlert,
+  emailStaffPayLaterApprovedAlert,
+  emailStaffPayLaterPaidAlert,
+  emailPayLaterOverdueAlert,
   emailTeamShippedAlert,
   emailTeamOutOfStockAlert,
   emailTeamRefundRequestedAlert,
@@ -127,6 +133,13 @@ const handlers = {
       console.log(`[Notifications] ${WHATSAPP_JOB} ${orderId} ${status}: ${res.status}`);
     }
     return res;
+  },
+
+  // Progress between "confirmed" and "shipped", and the one "still on it" note per
+  // step. Idempotent on Order.notifiedStatuses; re-checks the order before sending.
+  [PROGRESS_EMAIL_JOB]: async (job) => {
+    const { orderId, kind, shipmentId, stage } = job.data;
+    return emailOrderProgress(orderId, kind, { shipmentId: shipmentId || null, stage: stage || null });
   },
 
   // A parcel's tracking/courier was corrected after it shipped. Idempotent per value
@@ -202,6 +215,11 @@ const handlers = {
     await emailStaffSalesPaidAlert(orderId);
   },
 
+  // "Ship before payment" (services/payLaterService.js). Senders never throw.
+  'send-staff-pay-later-approved-alert': async (job) => { await emailStaffPayLaterApprovedAlert(job.data.orderId); },
+  'send-staff-pay-later-paid-alert': async (job) => { await emailStaffPayLaterPaidAlert(job.data.orderId); },
+  'send-pay-later-overdue-alert': async (job) => { await emailPayLaterOverdueAlert(job.data); },
+
   // Team workflow alerts. Each sender never throws (per-recipient errors are logged),
   // so a flaky inbox cannot make BullMQ re-send to everyone else.
   'send-team-shipped-alert': async (job) => { await emailTeamShippedAlert(job.data); },
@@ -259,10 +277,9 @@ const handlers = {
     const { inboundId } = job.data;
     const result = await inboundEmailService.processInbound(inboundId);
 
-    if (result.shouldAcknowledge && result.ticket) {
-      const ticket = await supportTicketRepository.findByReference(result.ticket);
-      if (ticket) await supportEmailService.sendAcknowledgement(ticket);
-    }
+    // New ticket → acknowledgement; a reply out of hours → one after-hours note
+    // per ticket per night. Auto-replies and no-reply senders get nothing.
+    await supportEmailService.followUpInbound(result, (ref) => supportTicketRepository.findByReference(ref));
     return result;
   },
 

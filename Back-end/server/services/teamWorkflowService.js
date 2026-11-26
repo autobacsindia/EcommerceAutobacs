@@ -55,6 +55,7 @@ import { getNotificationsQueue } from '../queue/queues.js';
 import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
 import { enqueueParcelStepEmail, CUSTOMER_EMAILED_STEPS } from './orderStatusEmailService.js';
 import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
+import { onStockDecision } from './orderProgressService.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from './orderTrackingService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
@@ -338,9 +339,23 @@ function moneyOf(o) {
 
 const photoPath = (orderId, shipmentId) => `/api/v1/staff/work/orders/${orderId}/parcels/${shipmentId}/photo`;
 
-const overdueReasonView = (r) => (r ? {
+/** The stored name in an overdue-reason file's key — what its URL carries. */
+const overdueFileName = (key) => String(key || '').split('/').pop();
+const OVERDUE_FILE_PATTERN = /^overdue-[a-f0-9]{24}-[a-f0-9]{12}\.(jpg|png|webp|pdf)$/;
+export const isOverdueFileName = (name) => OVERDUE_FILE_PATTERN.test(String(name));
+const overdueFilePath = (orderId, shipmentId, key) =>
+  `/api/v1/staff/work/orders/${orderId}/parcels/${shipmentId}/overdue-files/${encodeURIComponent(overdueFileName(key))}`;
+
+/** The file on a reason (or a history entry), for staff: name, type, size and the access-checked link. */
+const overdueAttachmentView = (a, orderId, shipmentId) => (a?.key ? {
+  name: a.name || 'file', mime: a.mime || '', size: a.size || 0, uploadedAt: a.uploadedAt || null,
+  url: overdueFilePath(orderId, shipmentId, a.key),
+} : null);
+
+const overdueReasonView = (r, orderId, shipmentId) => (r ? {
   code: r.code, label: OVERDUE_REASONS[r.code] || 'Other', note: r.note || '', text: overdueReasonText(r),
   by: r.byName || '', at: r.at || null,
+  attachment: overdueAttachmentView(r.attachment, orderId, shipmentId),
 } : null);
 
 /** The full order for the detail view, with the actions this person may take. */
@@ -415,9 +430,10 @@ function detail(u, o) {
       etaHistory: (s.etaHistory || []).slice().reverse().map((h) => ({ from: h.from || '', to: h.to, by: h.byName || '', at: h.at })),
       canSetEta: s.status === SHIPMENT_STATUS.SHIPPED && can.planDelivery(u),
       // Why it is overdue (only while it is): the current reason, every one given, and who may give it.
-      overdueReason: overdueReasonView(currentOverdueReason(s)),
+      overdueReason: overdueReasonView(currentOverdueReason(s), idOf(o._id), idOf(s._id)),
       overdueReasonHistory: (s.overdueReasonHistory || []).slice().reverse().map((h) => ({
         code: h.code, label: OVERDUE_REASONS[h.code] || 'Other', note: h.note || '', forDate: h.forDay || '', by: h.byName || '', at: h.at,
+        attachment: overdueAttachmentView(h.attachment, idOf(o._id), idOf(s._id)),
       })),
       canExplainOverdue: etaState(s, today) === 'overdue' && can.explainOverdue(u),
     })),
@@ -1074,6 +1090,8 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
   if (!updated) throw fail(RACE, 409);
 
   await refreshOpen(orderId);
+  // Tell the customer we are preparing it (once per order; skipped if it ships first).
+  onStockDecision(orderId, stock);
   if (stock === STOCK.OUT_OF_STOCK) enqueue('send-team-out-of-stock-alert', { orderId: String(orderId), itemId: String(itemId) });
   if (stock === STOCK.ORDERED) {
     enqueue(WORKFLOW_CHAT_JOB, { event: 'ordered', orderId: String(orderId), itemId: String(itemId), supplier, by: actor.name });
@@ -1508,36 +1526,106 @@ export async function setParcelEta(actor, orderId, shipmentId, { date, previousD
  * is in transit AND overdue. The reason is tied to the date it explains, so a new
  * date or a delivery makes it history; every save is kept (who, when, what).
  * `expectedDate` is the date this screen showed — saved only if it still is.
+ *
+ * `file` (optional): ONE photo / screenshot / PDF proving the reason, checked by
+ * its BYTES (storage/attachmentCheck.js) and stored privately like parcel proofs.
+ * If it cannot be stored the reason is NOT saved — the person chooses to save
+ * without it. Never deleted: the history entry keeps its own copy of the ref.
+ *
+ * `requestId` (optional, from the client per save): a double-click or a retry of
+ * the same save adds ONE history entry; the repeat just returns the order.
  */
-export async function setParcelOverdueReason(actor, orderId, shipmentId, { code, note, expectedDate } = {}, req) {
+export async function setParcelOverdueReason(actor, orderId, shipmentId, { code, note, expectedDate, requestId } = {}, req, file = null) {
   if (!can.explainOverdue(actor)) throw fail('Only procurement, operations or an admin can give the reason for overdue.', 403);
   if (!Object.hasOwn(OVERDUE_REASONS, code)) throw fail('Choose a reason.', 400);
   const text = String(note ?? '').trim();
   if (text.length > MAX_OVERDUE_NOTE) throw fail(`Keep the note under ${MAX_OVERDUE_NOTE} characters.`, 400);
   if (code === 'other' && !text) throw fail('Say what the reason is.', 400);
+  const rid = requestId ? String(requestId) : null;
+  // Check the file before touching the order: a wrong type or size is the person's to fix.
+  const [checked] = file ? checkAttachments([file], { max: 1, noun: 'file' }) : [];
 
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
   const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
   if (!parcel) throw fail('Parcel not found on this order.', 404);
+  const alreadySaved = (p) => !!rid && (p?.overdueReasonHistory || []).some((h) => h.requestId === rid);
+  // The same save again (double-click, a retry after a lost reply): nothing new.
+  if (alreadySaved(parcel)) return getOrder(actor, orderId);
   if (etaState(parcel, istDay()) !== 'overdue') throw fail('A reason can only be given while the parcel is overdue.', 409);
   const day = parcel.eta.day;
   if (expectedDate != null && String(expectedDate) !== day) throw fail('The expected delivery date just changed. Refresh and try again.', 409);
 
   const at = new Date();
   const who = { by: actor._id, byName: actor.name };
+  let attachment;
+  if (checked) {
+    try {
+      const ref = await putPrivateAsset({
+        buffer: checked.file.buffer, folder: PROOF_FOLDER,
+        basename: `overdue-${idOf(o._id)}-${crypto.randomBytes(6).toString('hex')}.${checked.ext}`,
+        contentType: checked.contentType, cloudinaryPrivate: true,
+      });
+      attachment = {
+        key: ref.publicId, provider: ref.provider, url: ref.url || undefined, name: checked.name || `file.${checked.ext}`,
+        mime: checked.contentType, size: checked.bytes, uploadedAt: at, by: actor._id,
+      };
+    } catch (err) {
+      console.error(`[OVERDUE_REASON_FILE] store failed for order ${orderId}: ${err?.message || err}`);
+      throw new AppError('The file could not be uploaded, so the reason was not saved. Try again, or save the reason without the file.', 502, {
+        expose: true, code: 'OVERDUE_FILE_UPLOAD_FAILED',
+      });
+    }
+  }
+  const discardFile = () => (attachment
+    ? deletePrivateAsset({ publicId: attachment.key, resourceType: resourceTypeOf({ contentType: attachment.mime }), provider: attachment.provider }).catch(() => {})
+    : Promise.resolve());
+
+  const withFile = attachment ? { attachment } : {};
   const updated = await orderRepository.setShipmentOverdueReasonIf(orderId, shipmentId, day, {
-    reason: { code, note: text, forDay: day, ...who, byTeam: actorTeam(actor), at },
-    change: { code, note: text, forDay: day, ...who, at },
+    reason: { code, note: text, forDay: day, ...who, byTeam: actorTeam(actor), at, ...withFile },
+    change: { code, note: text, forDay: day, ...who, at, ...(rid ? { requestId: rid } : {}), ...withFile },
     event: event(actor, 'overdue_reason_set', {
-      note: `Parcel ${parcel.sequence}: ${overdueReasonText({ code, note: text })}`,
+      note: `Parcel ${parcel.sequence}: ${overdueReasonText({ code, note: text })}${attachment ? ' (file attached)' : ''}`,
     }),
     maxHistory: MAX_OVERDUE_REASON_HISTORY,
+    requestId: rid,
   });
-  if (!updated) throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
+  if (!updated) {
+    // Not written: the file stored for it would be an orphan.
+    await discardFile();
+    // Two copies of the same save raced: the other one landed — that is success.
+    const now = await orderRepository.findForWorkflow(orderId);
+    if (alreadySaved((now?.shipments || []).find((s) => idOf(s._id) === String(shipmentId)))) return getOrder(actor, orderId);
+    throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
+  }
 
-  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_overdue_reason', shipmentId: String(shipmentId), code, forDay: day });
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {
+    change: 'team_parcel_overdue_reason', shipmentId: String(shipmentId), code, forDay: day, file: attachment ? attachment.key : null,
+  });
   return getOrder(actor, orderId);
+}
+
+/**
+ * The file proving an overdue reason (current or any past one), for anyone who
+ * may see the order. Only a name recorded on THIS parcel resolves — the URL can
+ * never be pointed at another stored object.
+ */
+export async function getOverdueReasonFile(actor, orderId, shipmentId, fileName) {
+  if (!isOverdueFileName(fileName)) throw fail('File not found.', 404);
+  const o = await orderRepository.findForWorkflow(orderId);
+  if (!o || !canView(actor, o)) throw fail('Not found.', 404);
+  const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
+  const all = [parcel?.overdueReason?.attachment, ...(parcel?.overdueReasonHistory || []).map((h) => h.attachment)];
+  const found = all.find((a) => a?.key && overdueFileName(a.key) === fileName);
+  if (!found) throw fail('File not found.', 404);
+  let buffer;
+  try {
+    buffer = await readPrivateAsset({ publicId: found.key, provider: found.provider, url: found.url }, fetchBuffer);
+  } catch {
+    throw fail('File not found.', 404);
+  }
+  return { buffer, contentType: found.mime || 'application/octet-stream', name: found.name || fileName };
 }
 
 /** Operations: the parcel (or every parcel in transit) has arrived. */

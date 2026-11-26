@@ -34,6 +34,7 @@ afterAll(async () => { await dbHandler.closeDatabase(); });
 test.each([
   ['admin', {}],
   ['head', { team: 'marketing', wasHead: false }],
+  ['teammate', { team: 'marketing', wasHead: { $in: [false, true] }, status: { $in: ['open', 'left'] } }],
 ])('list: %s reads about one page', async (_n, filter) => {
   const s = stats(await StaffDeparture.find(filter).sort({ _id: -1 }).limit(PAGE).explain('executionStats'));
   console.log('list', _n, s.keys, s.docs);
@@ -57,4 +58,11 @@ test.each([
   console.log('bell', _n, s.keys, s.docs);
   expect(s.plan).not.toContain('COLLSCAN');
   expect(s.docs).toBeLessThanOrEqual(due);
+});
+
+test('record: finding someone\'s open record reads one row', async () => {
+  const s = stats(await StaffDeparture.findOne({ active: true, user: people[50] }).explain('executionStats'));
+  console.log('open by user', s.keys, s.docs);
+  expect(s.plan).not.toContain('COLLSCAN');
+  expect(s.docs).toBeLessThanOrEqual(1);
 });

@@ -62,6 +62,7 @@ import analyticsRoutes from './analytics.js';
 import leadRoutes from './leads.js';
 import salesRepRoutes from './salesReps.js';
 import staffRoutes from './staff.js';
+import followUpRoutes from './followUps.js';
 import hrRoutes from './hr/index.js';
 import chatRoutes from './chat.js';
 import warehouseRoutes from './warehouses.js';
@@ -87,6 +88,7 @@ import redisMonitorRoutes from './redisMonitor.js';
 import securityRoutes from './security.js';
 import csrfTokenRoutes from './csrfToken.js';
 import adminStatsRoutes from './adminStats.js';
+import adminRevenueRoutes from './adminRevenue.js';
 import adminTeamActivityRoutes from './adminTeamActivity.js';
 import adminOverviewRoutes from './adminOverview.js';
 import adminSlipTemplateRoutes from './adminSlipTemplates.js';
@@ -94,10 +96,13 @@ import adminLookupRoutes from './adminLookup.js';
 import paymentRequestRoutes from './paymentRequests.js';
 import slipReaderRoutes from './slipReader.js';
 import subscriptionDueRoutes from './subscriptionDues.js';
+import supplierBillRoutes from './supplierBills.js';
 import incentiveRoutes from './incentives.js';
 import googleReviewRoutes from './googleReviews.js';
 import supplierRoutes from './suppliers.js';
 import supplierEnquiryRoutes from './supplierEnquiries.js';
+import procurementPartnerRoutes from './procurementPartners.js';
+import partnerRoutes from './partner.js';
 import pushRoutes from './push.js';
 import notificationRoutes from './notifications.js';
 import redirectRoutes from './redirects.js';
@@ -197,6 +202,8 @@ apiRouter.use('/leads', adminRouteRateLimit, leadRoutes);
 apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
 // Staff panel (/team): invite redemption is public; everything else is active staff
 // or admin, scoped per team inside staffService. Limiters are applied per route.
+// "My delays" (follow-ups): own gate inside; mounted before /staff so its paths win.
+apiRouter.use('/staff/delays', followUpRoutes);
 apiRouter.use('/staff', staffRoutes);
 // HR system (docs/ADR-hr-system.md): employee profiles, attendance, leave, payroll.
 // protect + per-user limiter inside; role checks on every route (middleware/hrAuth.js).
@@ -243,14 +250,19 @@ apiRouter.use('/admin/lookup', adminLookupRoutes);
 apiRouter.use('/admin/reels', adminRouteRateLimit, adminReelRoutes);
 apiRouter.use('/payment-requests', paymentRequestRoutes);
 apiRouter.use('/subscription-dues', subscriptionDueRoutes);
+apiRouter.use('/supplier-bills', supplierBillRoutes);
 apiRouter.use('/incentives', incentiveRoutes);
 // Google review bonus (salesperson sends a screenshot, marketing head / admin verifies → Roav Points).
 apiRouter.use('/google-reviews', googleReviewRoutes);
 apiRouter.use('/suppliers', supplierRoutes);
 apiRouter.use('/supplier-enquiries', supplierEnquiryRoutes);
+apiRouter.use('/procurement/partners', procurementPartnerRoutes); // Autobacs Partner: procurement review (docs/ADR-supplier-portal.md)
+// Autobacs Partner supplier app (Bearer supplier token; docs/ADR-supplier-portal.md).
+apiRouter.use('/partner', partnerRoutes);
 apiRouter.use('/push', pushRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/admin', adminStatsRoutes);
+apiRouter.use('/admin', adminRevenueRoutes);
 
 // ============================================================================
 // CONTACT DOMAIN

@@ -10,6 +10,7 @@ import { overviewKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST, formatIsoDateIST } from '@/lib/datetime';
 import { duration } from '@/lib/teamActivity';
 import { foreignTotals } from '@/components/payments/api';
+import EntityLink from '@/components/ui/EntityLink';
 
 /**
  * Company overview — what every team is doing, on one page: today's numbers,
@@ -227,7 +228,7 @@ function CompanyOverview() {
               <ul className="divide-y">
                 {data.overdue.map((r) => (
                   <li key={`${r.orderId}-${r.stageLabel}`} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm">
-                    <Link href={`/admin/orders/${r.orderId}`} className="font-medium text-blue-700 hover:underline">{r.orderNumber}</Link>
+                    <EntityLink type="order" id={r.orderId} value={r.orderNumber} label="Order number" linkClassName="font-medium" />
                     <span className="text-gray-600">{r.customer} · {r.stageLabel}</span>
                     <span className="ml-auto text-gray-700">on <strong>{r.waitingFor}</strong> for {duration(r.waitingHours * 3600000)}</span>
                   </li>

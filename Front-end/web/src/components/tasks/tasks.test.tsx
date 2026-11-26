@@ -13,6 +13,7 @@ import { formatDueDay, isPastDay, todayIST, type Task } from './types';
 import { groupTasks } from './grouping';
 import { PeopleMenu, placePopover } from './AssigneePicker';
 import { addressBar } from '@/test-utils/addressBarMock';
+import AuthContext from '@/context/AuthContext';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -37,9 +38,14 @@ jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a>,
 }));
+/** Who is signed in, for the order links (lib/entityLinks): set per test, null = no session mounted. */
+let signedIn: unknown = null;
 const wrap = (ui: React.ReactElement) => render(
-  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
+  <AuthContext.Provider value={(signedIn ? { user: signedIn } : undefined) as never}>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>
+  </AuthContext.Provider>,
 );
+const ACCOUNTS = { role: 'staff', staff: { team: 'accounts', isHead: false } };
 
 const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true, follow: true, followers: true };
 const task = (over: Partial<Task> = {}): Task => ({
@@ -83,6 +89,7 @@ beforeEach(() => {
   get.mockReset(); post.mockReset(); patch.mockReset(); remove.mockReset();
   addressBar.reset('/team/tasks');
   jest.spyOn(window, 'confirm').mockReturnValue(true);
+  signedIn = null;
 });
 
 const workspace = (props: Partial<{ base: string; canSeeTeam: boolean; myTeam: string; myTeamLabel: string; isHead: boolean }> = {}) =>
@@ -638,9 +645,12 @@ describe('one task', () => {
 
   it('shows the properties; the title is edited in place and saved with the revision', async () => {
     patch.mockResolvedValue({ task: task({ title: 'Call Bosch today', rev: 4 }) });
+    // Operations: has the order page, and (unlike accounts) no task money panel to serve.
+    signedIn = { role: 'staff', staff: { team: 'operations', isHead: false } };
     detail(task({ order: { id: 'o1', code: '#51234' } }));
     expect(await screen.findByText('Ask about the lift kit')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '#51234' })).toHaveAttribute('href', '/team/orders');
+    expect(screen.getByRole('link', { name: '#51234' })).toHaveAttribute('href', '/team/orders/o1');
+    expect(screen.getByRole('button', { name: 'Copy order number #51234' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Edit title' }));
     const input = screen.getByLabelText('title');
     fireEvent.change(input, { target: { value: 'Call Bosch today' } });
@@ -938,15 +948,23 @@ describe('the board card quick buttons', () => {
     expect(card).toHaveAttribute('data-late', 'true');
   });
 
-  it('the order on a card links to the order: the team list, or the admin order itself', async () => {
-    const one = task({ order: { id: 'o9', code: '#10482' } });
-    const card = await board([one]);
-    expect(within(card).getByRole('link', { name: /#10482/ })).toHaveAttribute('href', '/team/orders');
+  it('the order on a card opens that order on the team\'s own order page', async () => {
+    signedIn = ACCOUNTS;
+    const card = await board([task({ order: { id: 'o9', code: '#10482' } })]);
+    expect(within(card).getByRole('link', { name: /#10482/ })).toHaveAttribute('href', '/team/orders/o9');
   });
 
   it('the admin\'s card opens that exact order', async () => {
+    signedIn = { role: 'admin' };
     const card = await board([task({ order: { id: 'o9', code: '#10482' } })], { base: '/admin/tasks', canSeeTeam: true });
-    expect(within(card).getByRole('link', { name: /#10482/ })).toHaveAttribute('href', '/admin/orders?order=o9');
+    expect(within(card).getByRole('link', { name: /#10482/ })).toHaveAttribute('href', '/admin/orders/o9');
+  });
+
+  it('a team with no order page sees the order as a plain chip, not a link it would be refused', async () => {
+    signedIn = { role: 'staff', staff: { team: 'developer', isHead: false } };
+    const card = await board([task({ order: { id: 'o9', code: '#10482' } })]);
+    expect(within(card).queryByRole('link', { name: /#10482/ })).toBeNull();
+    expect(within(card).getByText('#10482')).toBeInTheDocument();
   });
 });
 

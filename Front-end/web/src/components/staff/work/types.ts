@@ -53,6 +53,8 @@ export type SupplierPart = {
 /** A parcel in transit against its expected delivery date (Back-end utils/parcelEta.js). */
 export type EtaState = 'none' | 'upcoming' | 'due_today' | 'overdue';
 /** Why a parcel is overdue (Back-end utils/parcelEta.js OVERDUE_REASONS). */
+/** The optional photo / PDF on an overdue reason. `url` is the staff-only file route (checks access on every open). */
+export type OverdueReasonFile = { name: string; mime: string; size: number; uploadedAt: string | null; url: string };
 export type OverdueReasonCode = 'supplier_delay' | 'courier_delay' | 'customer_unreachable' | 'address_issue' | 'other';
 
 export type WorkRow = {
@@ -158,9 +160,9 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     /** Procurement, operations or admin, while in transit. */
     canSetEta?: boolean;
     /** Why it is overdue — only while it is (a new date makes it history). */
-    overdueReason?: { code: OverdueReasonCode; label: string; note: string; text: string; by: string; at: string | null } | null;
-    /** Every reason given, newest first; forDate is the expected date it explained. */
-    overdueReasonHistory?: { code: OverdueReasonCode; label: string; note: string; forDate: string; by: string; at: string }[];
+    overdueReason?: { code: OverdueReasonCode; label: string; note: string; text: string; by: string; at: string | null; attachment?: OverdueReasonFile | null } | null;
+    /** Every reason given, newest first; forDate is the expected date it explained. Each keeps its own file. */
+    overdueReasonHistory?: { code: OverdueReasonCode; label: string; note: string; forDate: string; by: string; at: string; attachment?: OverdueReasonFile | null }[];
     /** Procurement, operations or admin, while the parcel is overdue. */
     canExplainOverdue?: boolean;
   }[];

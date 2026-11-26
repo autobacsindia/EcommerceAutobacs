@@ -10,6 +10,10 @@ import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import HoldControl from './HoldControl';
 import ProductLink from '@/components/staff/ProductLink';
 import PaymentLinkCard from './PaymentLinkCard';
+import BankTransferForm from './BankTransferForm';
+import PayLaterBadge from '@/components/payments/payLater/PayLaterBadge';
+import SalesTypeBadge from './SalesTypeBadge';
+import { payLaterTone } from '@/components/payments/payLater/api';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { STAGE_TONE } from '@/components/staff/work/types';
 import OrderListFilters, { useOrderListParams } from '@/components/staff/OrderListFilters';
@@ -31,6 +35,8 @@ function statusOf(o: SalesOrder): { text: string; cls: string } {
     const done = /Delivered/.test(o.workflowSummary);
     return { text: o.workflowSummary, cls: done ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800' };
   }
+  // Shipped before payment (admin-approved): the money is the news, not the stage.
+  if (o.payLater?.due) return { text: o.payLater.label, cls: payLaterTone(o.payLater.label) };
   if (o.paymentStatus === 'paid') {
     const after: Record<string, string> = { shipped: 'Paid · shipped', delivered: 'Paid · delivered', cancelled: 'Paid · cancelled' };
     return { text: after[o.status] || 'Paid', cls: 'bg-green-100 text-green-800' };
@@ -88,6 +94,10 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
           <p className="text-sm font-semibold text-gray-900">
             {order.customer.name} <span className="font-normal text-gray-500">· {order.orderNumber}</span>
             <OrderTypeTag type="purchase" className="ml-2 align-middle" />
+            {order.salesType && (
+              <span className={`ml-2 rounded-full px-2 py-0.5 align-middle text-[11px] font-bold ${order.salesType.type === 'b2b' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'}`}
+                title={order.salesType.reason}>{order.salesType.label}</span>
+            )}
           </p>
           <p className="text-xs text-gray-500">
             {/* The paid date is the date of the sale (and what the list sorts by). */}
@@ -106,6 +116,31 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
         <PinButton orderId={order.id} pinned={!!order.pinned} />
       </div>
       </div>
+
+      {open && order.salesType && (
+        <div className="border-t border-gray-100 px-4 py-3"><SalesTypeBadge info={order.salesType} detail /></div>
+      )}
+
+      {open && mode === 'sales' && order.payLater?.due && (
+        // Shipped before payment: the link to share again, and "customer paid by bank transfer".
+        <div className="space-y-3 border-t border-amber-100 bg-amber-50/40 p-4">
+          <PayLaterBadge state={order.payLater} detail />
+          {order.payLater.payUrl && (
+            <PaymentLinkCard
+              url={order.payLater.payUrl}
+              orderNumber={order.orderNumber}
+              amount={order.totalAmount}
+              customerName={order.customer.name}
+              customerPhone={order.customer.phone}
+              expiresAt={order.payLater.payUrlExpiresAt}
+            />
+          )}
+          {!order.payLater.payUrl && !order.payLater.dispatchedAt && <p className="text-xs text-gray-600">The payment link goes to the customer by itself when the parcel is sent.</p>}
+          {order.bankTransferPending
+            ? <p className="text-xs text-blue-800">A bank transfer is waiting for accounts to check.</p>
+            : <BankTransferForm order={order} onDone={done} />}
+        </div>
+      )}
 
       {open && !unpaid && order.status !== 'cancelled' && (
         // Paid: the shared team view (items, stock, parcels + supplier photos, refunds, history).

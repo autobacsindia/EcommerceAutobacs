@@ -198,6 +198,52 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false })],
     default: undefined,
   },
+  /*
+    B2B / B2C on a GTM order (utils/salesType.js). The type itself is `buyer.type`
+    (enterprise = B2B), snapshotted from the quotation. This block is ACCOUNTS'
+    check of that type: `pending` on every GTM order made since 2026-11-25, then
+    `approved` with a note (services/salesTypeService.js). Absent on older orders.
+    A B2B order can ship before payment only once this is approved.
+  */
+  buyerTypeCheck: {
+    type: new mongoose.Schema({
+      status: { type: String, enum: ["pending", "approved"], required: true },
+      type: { type: String, enum: ["b2b", "b2c"] },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: String,
+      role: { type: String, enum: ["accounts", "admin"] },
+      at: Date,
+      note: String,
+    }, { _id: false }),
+    default: undefined,
+  },
+  /*
+    "Ship before payment" (config/payLater.js, services/payLaterService.js). The admin
+    let this unpaid sales order go to the teams and ship; the customer pays after
+    dispatch. paymentStatus stays `pending` until the verified webhook (or accounts
+    confirming a bank transfer) marks it paid — this block never does.
+  */
+  payLater: {
+    type: new mongoose.Schema({
+      approvedAt: { type: Date, required: true },
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      approvedByName: String,
+      reason: { type: String, default: "" },
+      // First parcel sent: the due date runs from here.
+      dispatchedAt: Date,
+      dueAt: Date,
+      // The payment link after dispatch: claimed (in flight) → sent.
+      linkClaimedAt: Date,
+      linkSentAt: Date,
+      // Why no link was sent automatically (e.g. part of the order was cancelled).
+      linkBlocked: String,
+      // Overdue chasing: one reminder + one alert per IST day.
+      lastChasedOn: String,
+      chaseCount: { type: Number, default: 0 },
+    }, { _id: false }),
+    default: undefined,
+  },
+
   // Unpaid sales order parked as "On hold — customer thinking" (utils/salesHold.js).
   // Changes nothing about price or payment: links stay live, the status stays
   // awaiting_payment. It only hides the order from the active list and the
@@ -1040,6 +1086,23 @@ const OrderSchema = new mongoose.Schema({
     estimatedDelivery: Date,
     shippedAt: Date,
     deliveredAt: Date,
+    /*
+      What the courier's own tracking said, read by services/courier/courierSyncService.js.
+      STAFF ONLY, written by the sync and nothing else. `lastStatus` is the normalised
+      courier state (in_transit | out_for_delivery | delivered | failed | unknown);
+      `lastScanAt` the courier's newest scan; `noMovementSince` is set while no scan has
+      come for COURIER_SYNC_NO_MOVEMENT_HOURS (cleared when one does).
+      `deliveredByCourierAt` is the courier's delivery time when the SYNC marked the
+      parcel delivered — it doubles as a once-only claim: if staff undo that delivery,
+      the sync never marks this parcel delivered again (a person decided otherwise).
+    */
+    courierSync: {
+      lastCheckedAt: Date,
+      lastScanAt: Date,
+      lastStatus: String,
+      noMovementSince: Date,
+      deliveredByCourierAt: Date
+    },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     notes: String,
     /*
@@ -1088,6 +1151,10 @@ const OrderSchema = new mongoose.Schema({
       eta.day it explains: a new date makes it stale (currentOverdueReason), so
       a parcel overdue again needs a fresh reason. Every save is kept, newest
       MAX_OVERDUE_REASON_HISTORY, in `overdueReasonHistory`.
+      `attachment` (optional): ONE private file (photo / screenshot / PDF) proving
+      the reason, stored like parcel proofs (storage/privateUploads.js). The
+      history entry carries the same ref, so a changed reason never loses an
+      older file; files are never deleted. `requestId` makes a retried save a no-op.
     */
     overdueReason: {
       code: String,
@@ -1096,7 +1163,17 @@ const OrderSchema = new mongoose.Schema({
       by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       byName: String,
       byTeam: String,
-      at: Date
+      at: Date,
+      attachment: { type: new mongoose.Schema({
+        key: String,
+        provider: String,
+        url: String, // Cloudinary only (private); R2 is read by key
+        name: String,
+        mime: String,
+        size: Number,
+        uploadedAt: Date,
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+      }, { _id: false }), default: undefined }
     },
     overdueReasonHistory: [{
       code: { type: String, required: true },
@@ -1105,6 +1182,17 @@ const OrderSchema = new mongoose.Schema({
       by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       byName: String,
       at: { type: Date, required: true },
+      requestId: String,
+      attachment: { type: new mongoose.Schema({
+        key: String,
+        provider: String,
+        url: String, // Cloudinary only (private); R2 is read by key
+        name: String,
+        mime: String,
+        size: Number,
+        uploadedAt: Date,
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+      }, { _id: false }), default: undefined },
       _id: false
     }]
   }],
@@ -1441,6 +1529,19 @@ OrderSchema.index(
   { partialFilterExpression: { 'workflow.open': true }, name: 'team_workflow_open_list_date' }
 );
 OrderSchema.index({ listDate: -1, _id: -1 }, { name: 'order_list_date' });
+// "Ship before payment" orders (services/payLaterService.js): the accounts list
+// (newest approval first), the outstanding-limit sum and the hourly chase. Partial,
+// so it holds only the handful of orders the admin ever let ship unpaid.
+OrderSchema.index(
+  { paymentStatus: 1, 'payLater.approvedAt': -1, _id: -1 },
+  { partialFilterExpression: { 'payLater.approvedAt': { $type: 'date' } }, name: 'order_pay_later' }
+);
+// Accounts' B2B / B2C check (services/salesTypeService.js): both lists, newest
+// first. Partial, so it holds only GTM orders that carry a check — not every order.
+OrderSchema.index(
+  { 'buyerTypeCheck.status': 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { 'buyerTypeCheck.status': { $exists: true } }, name: 'order_sales_type_check' }
+);
 
 // SINGLE-FIELD indexes for specific lookups
 // Declared retroactively from $indexStats (2026-08-21): these were hand-built in

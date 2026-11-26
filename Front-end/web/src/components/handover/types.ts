@@ -7,20 +7,29 @@ export interface Departure {
   team: string;
   teamLabel: string;
   lastDay: string;
+  /** The day they handed in notice; '' on older records. */
+  resignedOn?: string;
   daysLeft: number;
   status: DepartureStatus;
   successor: { id: string; name: string } | null;
   rev: number;
   createdAt: string;
-  /** Sent only to the head and admins. */
+  /** Sent only to HR, admins and the head. */
   reason?: string;
   createdByName?: string;
+  cancelledByName?: string;
+  cancelledAt?: string;
   note?: string;
+  /** Main responsibilities, written by the person leaving or an admin. */
+  responsibilities?: string;
   noteByName?: string;
   noteAt?: string | null;
   mine?: 'leaving' | 'taking_over';
   can: { manage: boolean; writeNote: boolean; handover?: boolean };
 }
+
+/** Someone HR or an admin can record as leaving (GET /staff/departures/people). */
+export interface RecordablePerson { id: string; name: string; team: string; teamLabel: string }
 
 export interface WorkItem { id: string; label: string; status?: string }
 export interface HandoverMove { id: string; kind: 'task' | 'lead' | 'quotation' | 'lesson'; label: string; fromName: string; toName: string; byName: string; state: 'pending' | 'moved' | 'failed'; error: string; at: string }

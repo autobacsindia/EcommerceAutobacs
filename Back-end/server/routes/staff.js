@@ -1,4 +1,6 @@
 import * as extraCharges from '../services/orderExtraChargeService.js';
+import * as payLater from '../services/payLaterService.js';
+import * as salesType from '../services/salesTypeService.js';
 import * as supplierParts from '../services/supplierPartsService.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
@@ -29,6 +31,10 @@ import {
   validateBankTransferReject,
   validateExtraChargeId,
   validateExtraChargeList,
+  validatePayLaterList,
+  validatePayLaterApprove,
+  validateSalesTypeList,
+  validateSalesTypeApprove,
   validateSetSeller, validateCreditProofFile,
   validateOrderIdParam,
   validateSalesOrder,
@@ -57,6 +63,7 @@ import {
   validateParcelStep,
   validateParcelEta,
   validateOverdueReason,
+  validateOverdueReasonFile,
   validateCustomerDecision,
   validateRefundReview,
   validateRefundRetry,
@@ -76,7 +83,7 @@ import staffReturnRoutes from './staffReturns.js';
 import staffLeadRoutes from './staffLeads.js';
 import staffMetaLeadRoutes from './staffMetaLeads.js';
 import {
-  uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr, uploadCreditProof,
+  uploadProofPhotos, uploadOverdueReasonFile, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr, uploadCreditProof,
 } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
@@ -96,6 +103,7 @@ import {
   addParcelStep,
   setParcelEta,
   setParcelOverdueReason,
+  getOverdueReasonFile,
   undoDelivered,
 } from '../services/teamWorkflowService.js';
 import {
@@ -559,6 +567,35 @@ router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRe
   res.json({ success: true, transfer: await rejectBankTransfer(req.user, req.params.id, req.body, req) });
 }));
 
+// ── B2B / B2C check (scope enforced in salesTypeService: approve = accounts, admin) ─
+
+// @route  GET /staff/sales-type-checks?view=check|b2b_unpaid&cursor= — accounts, admin, GTM head
+router.get('/sales-type-checks', validateSalesTypeList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await salesType.listSalesTypeChecks(req.user, req.query)) });
+}));
+
+// @route  POST /staff/orders/:id/sales-type-check { note } — accounts, admin: approve B2B / B2C
+router.post('/orders/:id/sales-type-check', validateSalesTypeApprove, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await salesType.approveSalesType(req.user, req.params.id, { note: req.body.note }, req)) });
+}));
+
+// ── Ship before payment (scope enforced in payLaterService: approve = admin, accounts; B2B only) ─
+
+// @route  GET /staff/orders/:id/pay-later — can the admin turn it on here, or its state
+router.get('/orders/:id/pay-later', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await payLater.payLaterOptionFor(req.user, req.params.id)) });
+}));
+
+// @route  POST /staff/orders/:id/pay-later { reason } — admin / accounts: ship a B2B order before payment
+router.post('/orders/:id/pay-later', validatePayLaterApprove, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await payLater.approvePayLater(req.user, req.params.id, { reason: req.body.reason }, req)) });
+}));
+
+// @route  GET /staff/pay-later?view=due|paid&cursor= — accounts, admin, GTM head
+router.get('/pay-later', validatePayLaterList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await payLater.listPayLater(req.user, req.query)) });
+}));
+
 // ── Extra charges on paid orders (scope enforced in orderExtraChargeService) ─
 
 // @route  GET /staff/orders/:id/extra-charges — the order's extras and the server's sum
@@ -786,11 +823,18 @@ router.put('/work/orders/:id/parcels/:shipmentId/eta', validateParcelEta, valida
   res.json({ success: true, order: await setParcelEta(req.user, req.params.id, req.params.shipmentId, { date, previousDate }, req) });
 }));
 
-// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/overdue-reason  { code, note?, expectedDate? } — procurement / operations / admin: why it is overdue
-router.put('/work/orders/:id/parcels/:shipmentId/overdue-reason', validateOverdueReason, validateRequest, asyncHandler(async (req, res) => {
-  const { code, note, expectedDate } = req.body;
-  res.set('Cache-Control', 'no-store');
-  res.json({ success: true, order: await setParcelOverdueReason(req.user, req.params.id, req.params.shipmentId, { code, note, expectedDate }, req) });
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/overdue-reason  { code, note?, expectedDate?, requestId? } (JSON, or multipart with one `file`)
+//         — procurement / operations / admin: why it is overdue, optionally with a photo / PDF
+router.put('/work/orders/:id/parcels/:shipmentId/overdue-reason', concurrentUploadGuard, attachmentSizeGuard, uploadOverdueReasonFile, handleAttachmentError,
+  validateOverdueReason, validateRequest, asyncHandler(async (req, res) => {
+    const { code, note, expectedDate, requestId } = req.body;
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, order: await setParcelOverdueReason(req.user, req.params.id, req.params.shipmentId, { code, note, expectedDate, requestId }, req, req.file || null) });
+  }));
+
+// @route  GET /staff/work/orders/:id/parcels/:shipmentId/overdue-files/:fileName — the file on an overdue reason (private, staff who see the order)
+router.get('/work/orders/:id/parcels/:shipmentId/overdue-files/:fileName', validateOverdueReasonFile, validateRequest, asyncHandler(async (req, res) => {
+  sendProof(res, await getOverdueReasonFile(req.user, req.params.id, req.params.shipmentId, req.params.fileName));
 }));
 
 // @route  POST /staff/work/orders/:id/undo-delivered  { shipmentId } — operations / admin: back in transit

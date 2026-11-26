@@ -3,9 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useChatChannels, useForwardMessage } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage } from '@/hooks/queries/useTeamChat';
-import { ChannelIcon, Dialog, newClientId } from './chatUi';
-
-const labelOf = (c: ChatChannel) => (c.kind === 'dm' || c.audience === 'teams' ? c.name : `#${c.name}`);
+import { ChannelIcon, Dialog, channelTitle as labelOf, newClientId } from './chatUi';
 
 /**
  * Forward a copy of a message into another conversation you are in. Only your

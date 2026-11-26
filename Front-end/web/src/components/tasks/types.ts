@@ -122,9 +122,29 @@ export type Task = {
     time?: boolean;
     /** Approve or refuse the due date it waits on (a head of its team or the admin — never whoever asked). */
     approveDue?: boolean;
+    /** Ask for a new date (the people doing it: late, or early). */
+    askNewDate?: boolean;
+    /** Approve or refuse a new date someone asked for (whoever gave it, a head, the admin — never whoever asked). */
+    decideNewDate?: boolean;
+    /** Take on a task someone gave you, at its date. */
+    accept?: boolean;
   };
   /** Set only when the due date needed a manager's approval (more than 9 days away). */
   dueApproval?: DueApproval | null;
+  /** Times its deadline has passed before it was done, this one included when it is late now. */
+  misses?: number;
+  /** Missed twice or more: dark red, with a danger sign. */
+  danger?: boolean;
+  /** Late, the viewer is doing it, and no new date is asked for yet: the panel asks them why. */
+  needsReason?: boolean;
+  /** Given to the viewer by someone else and not answered yet: Accept, or "can't make this date". */
+  needsAccept?: boolean;
+  /** Everyone on it who has not accepted yet. */
+  notAccepted?: Person[];
+  /** The last "I need a new date", while it waits and once decided. */
+  lateRequest?: LateRequest | null;
+  /** The task page only: every time its deadline moved, newest first. */
+  dateMoves?: DateMove[];
   /** In its maker's private Personal list: nobody else can see it. */
   personal?: boolean;
   /** How long it should take, in whole minutes; null when not planned. */
@@ -227,6 +247,51 @@ export type DueApproval = {
   note: string;
 };
 
+/** Why a task is late — the same list as the server's (models/StaffTask.js LATE_REASONS). */
+export const LATE_REASONS = [
+  { value: 'waiting_on_someone', label: 'Waiting on someone else' },
+  { value: 'more_work', label: 'Too much other work' },
+  { value: 'needed_info', label: 'Needed more information' },
+  { value: 'outside_delay', label: 'Customer, supplier or courier delay' },
+  { value: 'forgot', label: 'Forgot or missed it' },
+  { value: 'other', label: 'Other' },
+] as const;
+export type LateReason = (typeof LATE_REASONS)[number]['value'];
+
+export type LateRequest = {
+  status: 'pending' | 'approved' | 'rejected';
+  /** Asked after the deadline had passed. */
+  late: boolean;
+  reason: LateReason;
+  reasonLabel: string;
+  note: string;
+  /** The deadline when it was asked: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'. */
+  fromDue: string;
+  dueOn: string;
+  dueTime: string | null;
+  requestedBy: Person;
+  requestedAt: string | null;
+  decidedBy: Person | null;
+  decidedAt: string | null;
+  /** The date given — the approver's own when they picked another. */
+  approvedDue: string;
+  decisionNote: string;
+  /** "I can't make this date", asked before accepting the task. */
+  atStart?: boolean;
+};
+
+export type DateMove = {
+  at: string;
+  fromDue: string;
+  toDue: string;
+  /** The old deadline had already passed: a miss. */
+  late: boolean;
+  how: 'request' | 'start' | 'edit';
+  reason: string;
+  note: string;
+  by: string;
+};
+
 /** The admin's due-date rules (GET /staff/tasks/rules). */
 export type TaskRules = {
   approvalAfterDays: number;
@@ -236,7 +301,7 @@ export type TaskRules = {
 };
 
 /** One line in the Inbox (GET /staff/tasks/inbox). */
-export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided' | 'project_added';
+export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved' | 'approval_requested' | 'approval_decided' | 'late_requested' | 'late_decided' | 'due_soon' | 'due_late' | 'due_escalated' | 'project_added';
 export type InboxItem = {
   id: string;
   kind: InboxKind;
@@ -360,6 +425,19 @@ export const todayIST = (now: Date = new Date()) =>
   new Date(now.getTime() + (5 * 60 + 30) * 60_000).toISOString().slice(0, 10);
 
 /** A due day that has already gone by (the task would be overdue the moment it is saved). */
+/**
+ * Minutes left until a task due TODAY at a time (null otherwise: no time, another
+ * day, already late). Display only — the server owns lateness and the alerts.
+ */
+export function minutesLeft(t: Pick<Task, 'dueOn' | 'dueTime'>, now: Date = new Date()): number | null {
+  if (!t.dueOn || !t.dueTime || t.dueOn !== todayIST(now)) return null;
+  const left = Math.floor((Date.parse(`${t.dueOn}T${t.dueTime}:00+05:30`) - now.getTime()) / 60000);
+  return left > 0 ? left : null;
+}
+/** Under this many minutes left, the pill turns red with a countdown (the server's "only Xh left" is 3 h). */
+export const SOON_MINUTES = 180;
+/** "2h 10m", "45m". */
+export const leftLabel = (m: number) => (m < 60 ? `${m}m` : m % 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m / 60}h`);
 export const isPastDay = (ymd: string, today: string = todayIST()) => !!ymd && ymd < today;
 
 /** The time in India now, 'HH:mm' (24-hour). */
@@ -400,10 +478,6 @@ export function formatDueDay(ymd: string | null): string {
   const thisYear = new Date().getUTCFullYear() === y;
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(thisYear ? {} : { year: 'numeric' }), timeZone: 'UTC' });
 }
-
-/** Where a task's linked order opens: the admin's orders screen, or the team's order list. */
-export const orderHrefFor = (base: string, orderId: string) =>
-  (base.startsWith('/admin') ? `/admin/orders?order=${encodeURIComponent(orderId)}` : '/team/orders');
 
 /**
  * The staff safety cap on long text (server: config/staffTextLimits.js). Not a

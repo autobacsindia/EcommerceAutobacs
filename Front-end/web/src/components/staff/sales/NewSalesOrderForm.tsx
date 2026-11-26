@@ -135,6 +135,34 @@ export default function NewSalesOrderForm({
   // server computes the rupee amount and the total.
   const [discountPercent, setDiscountPercent] = useState(quotation?.discount ? String(quotation.discount.percent) : '');
   const [discountReason, setDiscountReason] = useState(quotation?.discount?.reason || '');
+  // B2B or B2C (owner 2026-11-25). A new quotation starts with neither, so GTM
+  // must choose. B2B = a business with a GSTIN: no offers (the server refuses them
+  // too), and ship before payment becomes possible once accounts approves.
+  const [saleType, setSaleType] = useState<'' | 'b2b' | 'b2c'>(() => (quotation
+    ? (quotation.buyer?.type === 'enterprise' ? 'b2b' : 'b2c')
+    : ''));
+  const isB2B = saleType === 'b2b';
+  const [company, setCompany] = useState(() => ({
+    legalName: quotation?.buyer?.legalName || '',
+    gstin: quotation?.buyer?.gstin || '',
+  }));
+  const savedBilling = quotation?.buyer?.billingAddress;
+  // Bill-to for the tax invoice: the delivery address unless it is different.
+  const [billingSame, setBillingSame] = useState(() => !savedBilling
+    || (savedBilling.addressLine1 === quotation?.shippingAddress?.addressLine1 && savedBilling.postalCode === quotation?.shippingAddress?.postalCode));
+  const [billing, setBilling] = useState(() => ({
+    addressLine1: savedBilling?.addressLine1 || '', addressLine2: savedBilling?.addressLine2 || '',
+    city: savedBilling?.city || '', postalCode: savedBilling?.postalCode || '',
+  }));
+  /** B2B gets no offers: every catalogue line back to its price, no discount on the total. */
+  function chooseType(t: 'b2b' | 'b2c') {
+    setSaleType(t);
+    if (t === 'b2b') {
+      setLines((ls) => ls.map((l) => (l.custom ? l : { ...l, offer: '' })));
+      setDiscountPercent('');
+      setDiscountReason('');
+    }
+  }
   // Editing a quotation the customer already accepted (nothing paid yet).
   const reopening = quotation?.status === 'accepted';
   const needsNotPaidCheck = reopening && !!quotation?.editAfterAccept?.payDetailsShared;
@@ -248,10 +276,20 @@ export default function NewSalesOrderForm({
           product: l.productId,
           variantId: l.variantId,
           quantity: l.quantity,
-          offerPrice: l.offer.trim() === '' ? null : Number(l.offer),
+          offerPrice: isB2B || l.offer.trim() === '' ? null : Number(l.offer),
         })),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
-      discount: percent > 0 ? { percent, reason: discountReason.trim() } : null,
+      discount: !isB2B && percent > 0 ? { percent, reason: discountReason.trim() } : null,
+      buyer: isB2B
+        ? {
+          type: 'enterprise',
+          legalName: company.legalName.trim(),
+          gstin: company.gstin.trim().toUpperCase(),
+          billingAddress: billingSame
+            ? { addressLine1: address.addressLine1, addressLine2: address.addressLine2, city: address.city, postalCode: address.postalCode }
+            : billing,
+        }
+        : { type: 'individual' },
       ...(reopening && needsNotPaidCheck ? { confirmNotPaid } : {}),
       };
       if (editing) return apiClient.put<{ quotation: Quotation }>(`/staff/sales/quotations/${quotation!.id}`, body);
@@ -283,11 +321,14 @@ export default function NewSalesOrderForm({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!saleType) { setError('Choose B2B (business) or B2C (retail customer).'); return; }
+    if (isB2B && company.legalName.trim().length < 2) { setError('B2B: enter the company name.'); return; }
+    if (isB2B && !/^[0-9A-Za-z]{15}$/.test(company.gstin.trim())) { setError('B2B: enter the 15-character GSTIN.'); return; }
     if (phoneProblem) { setPhoneTouched(true); setError(`Mobile number: ${phoneProblem}.`); return; }
     if (altPhoneProblem) { setAltPhoneTouched(true); setError(`Alternative phone number: ${altPhoneProblem}.`); return; }
     if (lines.length === 0) { setError('Add at least one product.'); return; }
     if (hasProblem) { setError('Fix the items marked in red.'); return; }
-    if (discountProblem) { setError(`Discount: ${discountProblem}`); return; }
+    if (!isB2B && discountProblem) { setError(`Discount: ${discountProblem}`); return; }
     if (needsNotPaidCheck && !confirmNotPaid) { setError('Tick the box to confirm the customer has not paid yet.'); return; }
     // Last stop before a real, payable order: a price under half the catalogue
     // one is far more often a dropped zero than a deal (see offerGuard).
@@ -325,6 +366,59 @@ export default function NewSalesOrderForm({
           )}
         </div>
       )}
+      {/* B2B or B2C */}
+      <section className="rounded-xl border border-gray-200 bg-white p-5" aria-labelledby="sale-type-h">
+        <h2 id="sale-type-h" className="mb-1 text-sm font-semibold text-gray-900">B2B or B2C?</h2>
+        <p className="mb-3 text-xs text-gray-500">Accounts and the admin see this on the order, and accounts approves it with a note.</p>
+        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="B2B or B2C">
+          <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${saleType === 'b2c' ? 'border-teal-500 bg-teal-50' : 'border-gray-300'}`}>
+            <input type="radio" name="sale-type" className="mt-0.5" checked={saleType === 'b2c'} onChange={() => chooseType('b2c')} />
+            <span><span className="font-semibold">B2C — retail customer</span><br /><span className="text-xs text-gray-600">Offers allowed (Black Friday, festival offers, discounts). Ship before payment is not available.</span></span>
+          </label>
+          <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${saleType === 'b2b' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300'}`}>
+            <input type="radio" name="sale-type" className="mt-0.5" checked={saleType === 'b2b'} onChange={() => chooseType('b2b')} />
+            <span><span className="font-semibold">B2B — business</span><br /><span className="text-xs text-gray-600">No offers: catalogue prices only. Needs company name + GSTIN. Ship before payment possible after accounts approves.</span></span>
+          </label>
+        </div>
+        {isB2B && (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={label} htmlFor="b2b-name">Company name (as on GST registration)</label>
+              <input id="b2b-name" className={input} required minLength={2} maxLength={200} value={company.legalName}
+                onChange={(e) => setCompany({ ...company, legalName: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="b2b-gstin">GSTIN</label>
+              <input id="b2b-gstin" className={`${input} uppercase`} required maxLength={15} placeholder="32ABCDE1234F1Z5" value={company.gstin}
+                onChange={(e) => setCompany({ ...company, gstin: e.target.value.replace(/\s/g, '').toUpperCase() })} />
+            </div>
+            <label className="flex items-center gap-2 text-xs font-medium text-gray-700 sm:col-span-2">
+              <input type="checkbox" className="h-4 w-4" checked={billingSame} onChange={(e) => setBillingSame(e.target.checked)} />
+              Bill to the delivery address
+            </label>
+            {!billingSame && (
+              <>
+                <div className="sm:col-span-2">
+                  <label className={label} htmlFor="b2b-bill1">Billing address</label>
+                  <input id="b2b-bill1" className={input} required maxLength={200} value={billing.addressLine1}
+                    onChange={(e) => setBilling({ ...billing, addressLine1: e.target.value })} />
+                </div>
+                <div>
+                  <label className={label} htmlFor="b2b-billcity">Billing city</label>
+                  <input id="b2b-billcity" className={input} required maxLength={80} value={billing.city}
+                    onChange={(e) => setBilling({ ...billing, city: e.target.value })} />
+                </div>
+                <div>
+                  <label className={label} htmlFor="b2b-billpin">Billing PIN code</label>
+                  <input id="b2b-billpin" className={input} required inputMode="numeric" maxLength={6} value={billing.postalCode}
+                    onChange={(e) => setBilling({ ...billing, postalCode: e.target.value.replace(/\D/g, '') })} />
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* Customer */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold text-gray-900">Customer</h2>
@@ -550,6 +644,8 @@ export default function NewSalesOrderForm({
                           inputMode="decimal"
                           placeholder={l.custom ? 'Price' : String(l.listPrice)}
                           value={l.offer}
+                          disabled={isB2B && !l.custom}
+                          title={isB2B && !l.custom ? 'B2B: catalogue price only, no offers' : undefined}
                           onChange={(e) => update(l.key, { offer: e.target.value.replace(/[^\d.]/g, '') })}
                           className={`${input} pl-7 ${problem ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : deep ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : ''}`}
                         />
@@ -558,6 +654,7 @@ export default function NewSalesOrderForm({
                         {problem
                           || (l.custom ? `Price each · ${rupees(offer * l.quantity)} total` : null)
                           || (deep ? 'Less than half price — check it' : null)
+                          || (isB2B && !l.custom ? 'B2B: catalogue price' : null)
                           || (offer < l.listPrice ? `Offer · saves ${rupees((l.listPrice - offer) * l.quantity)}` : 'Offer price (optional)')}
                       </p>
                     </div>
@@ -600,6 +697,11 @@ export default function NewSalesOrderForm({
         )}
       </section>
 
+      {isB2B ? (
+        <p className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3 text-xs text-indigo-900" role="note">
+          B2B order: no offers and no discount on the total — the customer pays the catalogue price.
+        </p>
+      ) : (
       <section className="rounded-xl border border-gray-200 bg-white p-5" aria-labelledby="discount-h">
         <h2 id="discount-h" className="text-sm font-semibold text-gray-900">Discount on the total (optional)</h2>
         <p className="mb-3 text-xs text-gray-500">A percentage off the whole quotation, after the offer prices. Your name and the reason are shown to the team only; the customer sees “Discount (5%)”.</p>
@@ -628,6 +730,7 @@ export default function NewSalesOrderForm({
             </p>
           )}
       </section>
+      )}
 
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <label className={label} htmlFor="notes">Note for the team (optional)</label>

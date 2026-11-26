@@ -38,7 +38,9 @@
     "backfill-order-list-date": "node --import=dotenv/config scripts/backfill-order-list-date.js",
     "create-order-rating-indexes": "node --import=dotenv/config scripts/create-order-rating-indexes.js",
     "create-chat-call-indexes": "node --import=dotenv/config scripts/create-chat-call-indexes.js",
+    "create-followup-indexes": "node --import=dotenv/config scripts/create-followup-indexes.js",
     "create-whatsapp-indexes": "node --import=dotenv/config scripts/create-whatsapp-indexes.js",
+    "create-supplier-portal-indexes": "node scripts/create-supplier-portal-indexes.js",
     "backfill-normalize-emails": "node --import=dotenv/config scripts/backfill-normalize-emails.js",
     "backfill-career-categories": "node --import=dotenv/config scripts/backfill-career-categories.js",
     "backfill-return-policy-flags": "node --import=dotenv/config scripts/backfill-return-policy-flags.js",
@@ -60,6 +62,7 @@
     "count-products": "node scripts/legacy/count-products.js",
     "add-sample-products": "node scripts/legacy/add-sample-products.js",
     "bulk-import-products": "node scripts/legacy/bulk-import-products.js",
+    "import-legacy-redirects": "node scripts/import-legacy-redirects.js",
     "csv-import-products": "node scripts/legacy/csv-import-products.js",
     "cleanup-wordpress-products": "node utils/wordpressProductCleanup.js",
     "test-wordpress-cleanup": "node scripts/legacy/test-wordpress-cleanup.js",
@@ -100,6 +103,7 @@
     "verify-atlas-search": "node scripts/verify-atlas-search.js",
     "verify-call-relay": "node scripts/verify-call-relay.js",
     "verify-shiprocket": "node scripts/verify-shiprocket.js",
+    "courier-sync": "node scripts/courier-sync.js",
     "verify-search-relevance": "node scripts/verify-search-relevance.js",
     "backfill-stock-rank": "node scripts/backfill-stock-rank.js",
     "seed-search-synonyms": "node scripts/seed-search-synonyms.js",
@@ -128,7 +132,8 @@
     "rewrite-asset-urls": "node --import=dotenv/config scripts/rewrite-asset-urls.js",
     "audit-vehicle-candidates": "node scripts/audit-vehicle-candidates.js",
     "backtest-incentives": "node scripts/backtest-incentives.js",
-    "create-hr-indexes": "node scripts/create-hr-indexes.js"
+    "create-hr-indexes": "node scripts/create-hr-indexes.js",
+    "create-supplier-bill-indexes": "node scripts/create-supplier-bill-indexes.js"
   },
   "engines": {
     "node": ">=20.9.0"

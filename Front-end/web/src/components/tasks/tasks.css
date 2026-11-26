@@ -179,6 +179,9 @@
 /* Late: a red edge down the left, so it stands out in a full column. */
 .tk-theme .tk-card[data-late='true'] { box-shadow: inset 3px 0 0 var(--tk-late), var(--tk-card-shadow); }
 .tk-theme .tk-card[data-late='true']:hover { box-shadow: inset 3px 0 0 var(--tk-late), var(--tk-card-lift); }
+/* Missed twice or more (lateDates.tsx): a thick dark-red edge. */
+.tk-theme .tk-card[data-danger='true'] { box-shadow: inset 5px 0 0 #7f1d1d, var(--tk-card-shadow); }
+.tk-theme .tk-card[data-danger='true']:hover { box-shadow: inset 5px 0 0 #7f1d1d, var(--tk-card-lift); }
 /* The card being dragged stays as a faint outline where it was. */
 .tk-theme .tk-card[data-dragging='true'] { opacity: 0.4; transform: none; }
 

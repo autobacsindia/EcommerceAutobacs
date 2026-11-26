@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, type KeyboardEvent } from 'react';
+import { useContext, useState, type KeyboardEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
+import AuthContext from '@/context/AuthContext';
+import { entityHref, viewerOf } from '@/lib/entityLinks';
 import { MessageSquare, Package, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '@/lib/api-client';
@@ -15,7 +17,7 @@ import { AddColumn, ColumnMenu } from './BoardColumns';
 import { useAskDue } from './DuePrompt';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { Chip, GroupCount, GroupPill, SkeletonRows } from './ui';
-import { TASK_STATUSES, confirmComplete, isConflict, listOf, orderHrefFor, projectListOf, projectOf, stageOf, type Project, type ProjectStage, type Task, type TaskFilters, type TaskStatus } from './types';
+import { TASK_STATUSES, confirmComplete, isConflict, listOf, projectListOf, projectOf, stageOf, type Project, type ProjectStage, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** One board column: a status, or one of the project's own statuses (`stageId`). */
 type Column = { key: string; label: string; kind: TaskStatus; stageId?: string; colour?: string };
@@ -35,6 +37,9 @@ function BoardCard({ t, base, column, columns, onOpen, onMove, onMoveTo, moving,
   const late = !done && t.overdue;
   const busy = moving || edit.isPending;
   const save = (patch: QuickEdit) => edit.mutate({ t, patch });
+  // The linked order's page for this viewer's role (none → a plain chip, never a link that is refused).
+  const viewer = viewerOf(useContext(AuthContext)?.user);
+  const orderHref = base && t.order ? entityHref('order', { id: t.order.id, query: t.order.code }, viewer) : null;
   return (
     <li
       draggable={t.can.status}
@@ -46,6 +51,7 @@ function BoardCard({ t, base, column, columns, onOpen, onMove, onMoveTo, moving,
       tabIndex={0}
       aria-label={`Open ${t.code}: ${t.title}`}
       data-late={late || undefined}
+      data-danger={(late && t.danger) || undefined}
       data-dragging={dragging || undefined}
       // `relative` keeps the card's hidden bits (screen-reader labels, the invisible
       // date picker) inside the card. Without it they are placed against the board row,
@@ -64,10 +70,10 @@ function BoardCard({ t, base, column, columns, onOpen, onMove, onMoveTo, moving,
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-[26px] empty:hidden">
         {late && <span className="rounded bg-red-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-red-800">Late</span>}
         <TaskMeta t={t} withComments={false} withOrder={false} />
-        {t.order && (base
+        {t.order && (orderHref
           ? (
             <Link
-              href={orderHrefFor(base, t.order.id)}
+              href={orderHref}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
               title={`Open order ${t.order.code}`}

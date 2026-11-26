@@ -2,6 +2,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import SearchPage from './page';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
+jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
+  useDeliveryEstimates: () => ({ estimates: null, pending: false }),
+}));
+
 
 // Mock apiClient
 jest.mock('@/lib/api', () => ({

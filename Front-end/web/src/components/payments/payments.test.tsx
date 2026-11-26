@@ -519,7 +519,8 @@ describe('each team’s own options', () => {
     post.mockResolvedValue({ request: { ...edited, status: 'approved' } });
     wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
     const history = await screen.findByRole('region', { name: 'Edit history' });
-    expect(within(history).getByText('Edited after submit (1)')).toBeInTheDocument();
+    expect(within(history).getByText('Edited 1 time after submit')).toBeInTheDocument();
+    fireEvent.click(within(history).getByRole('button', { name: 'Show changes' }));
     expect(within(history).getByText(/Bill was ₹1,100/)).toBeInTheDocument();
     expect(within(history).getByText(/was on hold, sent back to accounts/)).toBeInTheDocument();
     expect(within(history).getByText('₹1,250')).toHaveClass('line-through');

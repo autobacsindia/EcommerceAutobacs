@@ -647,6 +647,18 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Spin-to-Win indexes confirmed');
 
+    // "Ship before payment" orders (models/Order.js payLater): accounts list, limit sum,
+    // hourly chase. Partial on a $type (never $ne), so only those few orders are indexed.
+    await db.collection('orders').createIndex(
+      { paymentStatus: 1, 'payLater.approvedAt': -1, _id: -1 },
+      { name: 'order_pay_later', partialFilterExpression: { 'payLater.approvedAt': { $type: 'date' } }, background: true }
+    );
+    // Accounts' B2B / B2C check lists (models/Order.js buyerTypeCheck). Partial on $exists (never $ne), so only checked orders are indexed.
+    await db.collection('orders').createIndex(
+      { 'buyerTypeCheck.status': 1, createdAt: -1, _id: -1 },
+      { name: 'order_sales_type_check', partialFilterExpression: { 'buyerTypeCheck.status': { $exists: true } }, background: true }
+    );
+
     // Extra charges on paid orders (models/OrderExtraCharge.js has the reasons).
     const extraCharges = db.collection('order_extra_charges');
     await extraCharges.createIndex({ order: 1, sequence: 1 }, { unique: true, name: 'extra_charge_order_sequence', background: true });
@@ -710,6 +722,16 @@ export async function ensureCriticalIndexes() {
       { partialFilterExpression: { batchId: { $type: 'string' } }, name: 'past_sale_batch', background: true }
     );
     console.log('✓ PastSale indexes confirmed');
+
+    // Zoho Books invoices (models/ZohoInvoice.js) — same names as the schema.
+    // The unique id is what makes re-importing the same export a no-op.
+    await db.collection('zohoinvoices').createIndex({ zohoInvoiceId: 1 }, { unique: true, name: 'zoho_invoice_id', background: true });
+    await db.collection('zohoinvoices').createIndex({ invoiceDate: 1, 'match.state': 1 }, { name: 'zoho_invoice_date_state', background: true });
+    await db.collection('zohoinvoices').createIndex({ 'match.state': 1, invoiceDate: -1, _id: -1 }, { name: 'zoho_invoice_state_recent', background: true });
+    await db.collection('zohoinvoices').createIndex({ invoiceNumber: 1 }, { name: 'zoho_invoice_number', background: true });
+    await db.collection('zohocreditnotes').createIndex({ zohoCreditNoteId: 1 }, { unique: true, name: 'zoho_credit_note_id', background: true });
+    await db.collection('zohocreditnotes').createIndex({ invoiceNumber: 1 }, { name: 'zoho_credit_note_invoice', background: true });
+    console.log('✓ ZohoInvoice / ZohoCreditNote indexes confirmed');
 
     // Personal order pins (models/OrderPin.js) — same names as the schema.
     await db.collection('orderpins').createIndex({ user: 1, order: 1 }, { unique: true, name: 'order_pin_user_order', background: true });
@@ -906,6 +928,20 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasks').createIndex(
       { 'dueApproval.status': 1, teams: 1, rank: 1, _id: 1 },
       { partialFilterExpression: { 'dueApproval.status': 'pending' }, name: 'staff_task_due_approval', background: true }
+    );
+    // New dates asked for, waiting for whoever gave the task / a head / the admin (partial: only those).
+    await db.collection('stafftasks').createIndex(
+      { 'lateRequest.status': 1, createdBy: 1, rank: 1, _id: 1 },
+      { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_giver', background: true }
+    );
+    await db.collection('stafftasks').createIndex(
+      { 'lateRequest.status': 1, teams: 1, rank: 1, _id: 1 },
+      { partialFilterExpression: { 'lateRequest.status': 'pending' }, name: 'staff_task_new_date_team', background: true }
+    );
+    // The deadline-alert sweep (services/taskAlertService.js): open, dated tasks only.
+    await db.collection('stafftasks').createIndex(
+      { dueOn: 1, _id: 1 },
+      { partialFilterExpression: { bucket: 'open', dueOn: { $type: 'string' } }, name: 'staff_task_due_sweep', background: true }
     );
     await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
     await db.collection('stafftaskcomments').createIndex({ assignedTo: 1, resolvedAt: 1, _id: -1 }, { name: 'staff_task_comment_assigned', background: true });

@@ -149,7 +149,7 @@ const ChatMessageSchema = new mongoose.Schema(
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // null for system posts
     // Not required: a message may be attachments only. chatService enforces that
     // a message has text, files, or both.
-    text: { type: String, default: '', maxlength: 4000 },
+    text: { type: String, default: '', maxlength: 20000 }, // = chatService MESSAGE_MAX_LENGTH
     // Client-generated id per send attempt. A retried or double-clicked send
     // carries the same id, and the unique index below turns it into one message.
     clientId: { type: String, default: undefined },

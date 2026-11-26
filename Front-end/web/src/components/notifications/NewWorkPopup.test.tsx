@@ -109,3 +109,31 @@ it('still shows when the browser blocks storage', async () => {
   expect(await screen.findByText('Vicky added you to a project')).toBeInTheDocument();
   spy.mockRestore();
 });
+
+describe('order follow-ups', () => {
+  const DUE: WorkAlert = {
+    id: 'f1', kind: 'followup_due', by: '', title: '#AB1042 · New Order', text: 'Was due 23 Nov 2026, 11:30 am IST. Move it on, or give a reason and the next date.',
+    href: '/team/orders', at: '2026-11-23T06:00:00.000Z',
+  };
+  const LATE: WorkAlert = {
+    id: 'f2', kind: 'followup_escalated', by: '', title: '#AB1042 · New Order', text: 'Aromal S’s step is 5h late.',
+    href: '/admin/orders?order=o1', at: '2026-11-23T10:00:00.000Z',
+  };
+
+  it('a step that is due reads “Order follow-up due” and opens the order list', async () => {
+    alerts = [DUE];
+    render(<NewWorkPopup />);
+    expect(await screen.findByText('Order follow-up due')).toBeInTheDocument();
+    expect(screen.getByText('#AB1042 · New Order')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open order' })).toHaveAttribute('href', '/team/orders');
+    expect(playAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('an escalation to the head / admin reads “Late order follow-up”, in red, and opens that order', async () => {
+    alerts = [LATE];
+    render(<NewWorkPopup />);
+    expect(await screen.findByText('Late order follow-up')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveClass('border-red-200');
+    expect(screen.getByRole('link', { name: 'Open order' })).toHaveAttribute('href', '/admin/orders?order=o1');
+  });
+});

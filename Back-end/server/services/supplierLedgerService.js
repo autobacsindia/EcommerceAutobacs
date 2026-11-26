@@ -1102,14 +1102,26 @@ async function correctApproved(actor, e0, input, { reason, formKey, rev }, req) 
 /**
  * Checks before a payment that uses credit is saved (no lock: useCredit re-checks under it).
  * Returns the paise to use. `billPaise` is what the bill is for, before credit.
+ *
+ * Two ways to ask (owner, 2026-11-25 — "they could select credit for that supplier"):
+ *   useAll       the "Use supplier credit" tick: as much as there is, up to the whole
+ *                bill — min(balance, bill). The server works it out; nothing typed is used.
+ *   creditInput  a figure: at most the balance and at most the whole bill.
+ * The whole bill may be covered (₹1,00,000 bill, ₹2,00,000 credit → ₹0 to transfer,
+ * ₹1,00,000 credit left). The browser's own sums are never trusted.
  */
-export async function checkCreditUse({ supplierId, currency, creditInput, billPaise }) {
-  const creditPaise = cleanAmountPaise(creditInput);
+export async function checkCreditUse({ supplierId, currency, creditInput, useAll = false, billPaise }) {
   if (!supplierId) throw fail('Supplier credit can only be used with a saved supplier — pick the supplier from the directory.', 400);
-  if (creditPaise >= billPaise) {
-    throw fail(`Credit used must be less than the bill (${moneyOf(billPaise, currency)}) — something has to be transferred.`, 400);
-  }
+  if (!(billPaise > 0)) throw fail('Enter the bill amount first.', 400);
   const owed = await owedPaise(supplierId, currency);
+  if (useAll) {
+    if (owed <= 0) throw fail(`This supplier has no credit in ${currency} right now — someone may have just used it. Untick “Use supplier credit” and send again.`, 409);
+    return Math.min(owed, billPaise);
+  }
+  const creditPaise = cleanAmountPaise(creditInput);
+  if (creditPaise > billPaise) {
+    throw fail(`Credit used cannot be more than the bill (${moneyOf(billPaise, currency)}).`, 400);
+  }
   if (creditPaise > owed) {
     throw fail(owed > 0
       ? `This supplier's credit in ${currency} is ${moneyOf(owed, currency)} — you cannot use more than that.`
@@ -1120,9 +1132,11 @@ export async function checkCreditUse({ supplierId, currency, creditInput, billPa
 
 /**
  * Spend credit on a payment, inside the caller's transaction: lock the supplier,
- * re-check the balance, write the `credit_used` row (key `use:<request>`).
+ * re-check the balance, write the `credit_used` row (key `use:<request>`, or the
+ * caller's key for a later change). The lock (Supplier.ledgerSeq bumped in the
+ * transaction) is what stops two payments spending the same credit at once.
  */
-export async function useCredit(session, { supplierId, currency, creditPaise, request, actor }) {
+export async function useCredit(session, { supplierId, currency, creditPaise, request, actor, key = null, note = '' }) {
   const s = await supplierLedgerRepository.lockSupplier(supplierId, session);
   if (!s) throw fail('Supplier not found.', 404);
   const owed = await owedPaise(supplierId, currency, session);
@@ -1131,12 +1145,31 @@ export async function useCredit(session, { supplierId, currency, creditPaise, re
   }
   return supplierLedgerRepository.create({
     supplier: supplierId, supplierName: s.name, kind: 'credit_used', currency, amountPaise: creditPaise, status: 'approved',
-    key: `use:${idOf(request._id)}`,
+    key: key || `use:${idOf(request._id)}`,
     order: request.order || null, orderNumber: request.orderNumber || '',
     paymentRequest: request._id, paymentRequestNumber: request.number,
     createdBy: actor?._id || null, createdByName: actor?.name || '',
     decidedBy: actor?._id || null, decidedByName: actor?.name || '', decidedAt: new Date(),
-    history: [historyEntry(actor, 'used', `on ${request.number}`)],
+    history: [historyEntry(actor, 'used', text(note, 1000) || `on ${request.number}`)],
+  }, session);
+}
+
+/**
+ * Part of a payment's credit given back while the payment stays live (its credit was
+ * lowered, or its bill edited below the credit), inside the caller's transaction and
+ * under the supplier lock. `key` is unique per change, so a retry writes it once.
+ */
+export async function giveBackCredit(session, { supplierId, currency, creditPaise, request, actor, key, note = '' }) {
+  const s = await supplierLedgerRepository.lockSupplier(supplierId, session);
+  if (!s) throw fail('Supplier not found.', 404);
+  return supplierLedgerRepository.create({
+    supplier: supplierId, supplierName: s.name, kind: 'credit_restored', currency, amountPaise: creditPaise, status: 'approved',
+    key,
+    order: request.order || null, orderNumber: request.orderNumber || '',
+    paymentRequest: request._id, paymentRequestNumber: request.number || '',
+    createdBy: actor?._id || null, createdByName: actor?.name || '',
+    decidedBy: actor?._id || null, decidedByName: actor?.name || '', decidedAt: new Date(),
+    history: [historyEntry(actor, 'given back', text(note, 1000))],
   }, session);
 }
 
@@ -1168,5 +1201,5 @@ export async function restoreCredit(request, note = '') {
 
 export default {
   forSupplier, pending, owing, report, claimRefund, recordRepayment, addEntry, recordOrderRefund, getFile, writeOff, approve, decline, cancel, edit,
-  checkCreditUse, useCredit, restoreCredit, claimsFor, balancesForSuppliers, owedPaise, shape,
+  checkCreditUse, useCredit, giveBackCredit, restoreCredit, claimsFor, balancesForSuppliers, owedPaise, shape,
 };

@@ -7,6 +7,7 @@ import {
 } from '../middleware/uploadMiddleware.js';
 import * as pr from '../services/paymentRequestService.js';
 import * as deals from '../services/supplierDealService.js';
+import * as bills from '../services/supplierBillService.js';
 import * as claims from '../services/reimbursement.js';
 import { renderPaymentSlip } from '../services/paymentSlipService.js';
 
@@ -73,11 +74,13 @@ router.post('/supplier', concurrentUploadGuard, attachmentSizeGuard, uploadPayme
 
 // GET /payment-requests/order/:orderId — one order's payments (supplier + linked expenses) and supplier deals
 router.get('/order/:orderId', asyncHandler(async (req, res) => {
-  const [requests, supplierDeals] = await Promise.all([
+  const [requests, supplierDeals, supplierBills] = await Promise.all([
     pr.forOrder(req.user, req.params.orderId),
     deals.forOrder(req.user, req.params.orderId),
+    // Supplier bills ("We owe suppliers") linked to this order, with their payments.
+    bills.forOrder(req.user, req.params.orderId),
   ]);
-  res.json({ success: true, requests, deals: supplierDeals });
+  res.json({ success: true, requests, deals: supplierDeals, bills: supplierBills });
 }));
 
 // ── Supplier deals: made-to-order items paid in parts (services/supplierDealService.js) ──
@@ -152,6 +155,12 @@ router.get('/:id/files/:fileId', asyncHandler(async (req, res) => {
 router.put('/:id', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
   const body = { ...req.body, ...(req.body.payee != null ? { payee: json(req.body.payee, undefined) } : {}) };
   res.json({ success: true, request: await pr.update(req.user, req.params.id, body, req.files || {}, req) });
+}));
+
+// POST /payment-requests/:id/credit — { useCredit: true } | { creditToUse: number (0 removes) }, rev?, reason?
+//   Supplier credit on a waiting supplier payment (procurement on their own; accounts, admin on any).
+router.post('/:id/credit', asyncHandler(async (req, res) => {
+  res.json({ success: true, request: await pr.setCredit(req.user, req.params.id, req.body, req) });
 }));
 
 router.post('/:id/approve', asyncHandler(async (req, res) => {

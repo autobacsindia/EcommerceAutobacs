@@ -195,8 +195,10 @@ describe('the name order rides the index', () => {
 });
 
 describe('who', () => {
-  it('procurement, accounts and the admin; other teams are refused', async () => {
+  it('procurement, accounts and the admin see the directory; other teams only the picker', async () => {
     for (const who of [procurement, accounts, admin]) expect((await svc.list(who, {})).suppliers).toEqual([]);
-    await expect(svc.list(marketing, {})).rejects.toMatchObject({ statusCode: 403 });
+    // Other teams raise "Pay a supplier" too (2026-11-25): the picker, never the directory.
+    expect(await svc.list(marketing, {})).toEqual({ suppliers: [], nextAfter: null });
+    await expect(svc.list({ role: 'customer' }, { prefix: 'a' })).rejects.toMatchObject({ statusCode: 403 });
   });
 });

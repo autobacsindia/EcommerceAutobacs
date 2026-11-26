@@ -16,7 +16,7 @@ const TABS = [
 type Page = { extras: ExtraCharge[]; nextCursor?: string | null };
 
 /** Every extra charge this person may see, one tab at a time. Keyset-paged by the server. */
-export default function ExtraChargesList({ orderBase, fixedTab }: { orderBase?: string; fixedTab?: string }) {
+export default function ExtraChargesList({ fixedTab }: { fixedTab?: string }) {
   const [chosen, setTab] = useState('awaiting_accounts');
   const tab = fixedTab ?? chosen;
   const list = useInfiniteQuery({
@@ -37,7 +37,7 @@ export default function ExtraChargesList({ orderBase, fixedTab }: { orderBase?: 
       {list.isLoading && <p className="text-sm text-gray-500">Loading…</p>}
       {list.isError && <p role="alert" className="text-sm text-red-700">Could not load the extra charges.</p>}
       {!list.isLoading && !extras.length && !list.isError && <p className="text-sm text-gray-500">Nothing here.</p>}
-      <ul className="space-y-2">{extras.map((e) => <ExtraChargeCard key={e.id} extra={e} showOrder orderBase={orderBase} />)}</ul>
+      <ul className="space-y-2">{extras.map((e) => <ExtraChargeCard key={e.id} extra={e} showOrder />)}</ul>
       {list.hasNextPage && <button type="button" onClick={() => list.fetchNextPage()} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold">Load more</button>}
     </div>
   );

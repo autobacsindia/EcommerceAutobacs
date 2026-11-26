@@ -14,9 +14,11 @@ import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type ParcelStepStatus, type WorkOrder } from './types';
 import LineSupplierPayment, { OrderOtherPayments, useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
+import OrderSupplierBills from '@/components/payments/OrderSupplierBills';
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import CopyId from '@/components/ui/CopyId';
+import EntityLink from '@/components/ui/EntityLink';
 import DeliveryPartnerField from '@/components/tracking/DeliveryPartnerField';
 import TrackingIdDisplay from '@/components/tracking/TrackingIdDisplay';
 import {
@@ -235,8 +237,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
 
       {/* The order number, to quote to a supplier or paste into search. */}
       <p className="flex items-center gap-1 text-gray-700">
-        Order <span className="font-mono font-medium text-gray-900">{o.orderNumber}</span>
-        <CopyId value={o.orderNumber} label="Order number" />
+        Order <EntityLink type="order" id={orderId} value={o.orderNumber} label="Order number" linkClassName="font-mono font-medium" />
       </p>
 
       {/* Customer + delivery */}
@@ -327,6 +328,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       </div>
 
       <OrderOtherPayments order={o} requests={supplierPayments.data?.requests ?? []} />
+
+      {/* Supplier bills ("We owe suppliers") linked to this order — procurement / accounts / admin only (server-decided). */}
+      <OrderSupplierBills bills={supplierPayments.data?.bills ?? []} listHref="/team/payments?tab=owe" />
 
       <OrderExtraCharges orderId={o.id} />
 

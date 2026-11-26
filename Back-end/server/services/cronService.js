@@ -8,6 +8,7 @@ import { runScheduledMetaLeadSync } from './metaLeadSync.js';
 import { runScheduledSheetWrite } from './metaLeadSheetWriter.js';
 import { runDeadlineSweep } from './metaLeadDeadlineService.js';
 import { reconcileStuckPayments, reconcileSalesLinks } from './paymentReconciliationService.js';
+import { sweepPayLater } from './payLaterService.js';
 import { recomputeSalesScores } from './salesScoreService.js';
 import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
 import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '../queue/queues.js';
@@ -17,9 +18,17 @@ import { postStuckDigests } from './chatStuckDigest.js';
 import { sweepCalls } from './chatCallService.js';
 import { sendOverdueReport } from './overdueReportService.js';
 import { runDailyReminders, reminderCron } from './projectReminderService.js';
+import { remindOverdue as remindOverdueSupplierBills } from './supplierBillService.js';
 import { postEtaReminders } from './parcelEtaReminders.js';
 import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
 import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthService.js';
+import { runFollowUpSweep } from './followUp/sweep.js';
+import { runCustomerProgressSweep } from './orderProgressService.js';
+import { loadCustomerProgressConfig } from '../config/customerProgress.js';
+import { loadFollowUpConfig } from '../config/followUp.js';
+import { isOfficeTime } from './followUp/officeClock.js';
+import { runTaskAlertSweep } from './taskAlertService.js';
+import { loadTaskAlertConfig } from '../config/taskAlerts.js';
 
 class CronService {
   constructor() {
@@ -75,10 +84,14 @@ class CronService {
     this.scheduleChatStuckDigest();
     this.scheduleOverdueReport();
     this.scheduleProjectReminders();
+    this.scheduleSupplierBillReminders();
     this.scheduleEtaReminders();
     this.schedulePushCleanup();
     this.scheduleIncentives();
     this.scheduleCallSweep();
+    this.scheduleFollowUpSweep();
+    this.scheduleTaskAlerts();
+    this.scheduleCustomerProgress();
     import('./hr/attendance/cronJobs.js').then((m) => m.scheduleHrAttendanceJobs(this)).catch((err) => console.error('[CronService] HR attendance jobs NOT scheduled:', err.message));
 
     if (process.env.NODE_ENV !== 'test') {
@@ -431,6 +444,124 @@ class CronService {
     }
   }
 
+  /**
+   * "We owe suppliers": one team-chat message a day (10:00 IST, or
+   * SUPPLIER_BILL_REMINDER_CRON) listing supplier bills past due and not fully
+   * paid. Posted once per day by construction (the chat key is the day), so the
+   * lock only saves a second replica the work.
+   */
+  scheduleSupplierBillReminders() {
+    const schedule = process.env.SUPPLIER_BILL_REMINDER_CRON || '0 10 * * 1-6';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid SUPPLIER_BILL_REMINDER_CRON "${schedule}" — supplier bill reminders NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:supplierBillReminders', 10 * 60, () =>
+        remindOverdueSupplierBills()
+          .then((r) => console.log(`[CronService] Supplier bills ${r.day}: ${r.overdue} overdue${r.posted ? ', reminder posted' : ''}`))
+          .catch((err) => console.error('[CronService] Supplier bill reminders failed:', err.message))
+      ),
+      { scheduled: true, timezone: 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({ name: 'supplierBillReminders', task, schedule, description: 'Team chat: supplier bills past due and not fully paid' });
+    if (process.env.NODE_ENV !== 'test') console.log(`[CronService] Supplier bill reminders scheduled: "${schedule}"`);
+  }
+
+  /**
+   * Order follow-up engine (services/followUp/sweep.js): every 5 minutes, office
+   * time only (FOLLOWUP_OFFICE_*; holidays from STAFF_HOLIDAYS). FOLLOWUP_MODE
+   * off | shadow | live (default shadow: records, sends nothing). Lock-guarded so
+   * replicas do not overlap; each ladder level is also claimed per delay row, so
+   * even a double run sends once. FOLLOWUP_CRON overrides the schedule.
+   *
+   * TODO(follow-up piece B): call runCourierSync() from services/courier before
+   * the sweep once that export lands — not wired here on purpose.
+   */
+  scheduleFollowUpSweep() {
+    const schedule = process.env.FOLLOWUP_CRON || '*/5 * * * *';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid FOLLOWUP_CRON "${schedule}" — follow-up sweep NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () => {
+      const cfg = loadFollowUpConfig();
+      if (cfg.mode === 'off' || !isOfficeTime(new Date(), cfg.office)) return undefined;
+      return this.withDistributedLock('cron:lock:followUpSweep', 4 * 60 + 30, () =>
+        runFollowUpSweep().catch(err =>
+          console.error('[CronService] Follow-up sweep failed:', err.message)
+        )
+      );
+    }, { scheduled: true, timezone: 'Asia/Kolkata' });
+    this.scheduledTasks.push({
+      name: 'followUpSweep',
+      task,
+      schedule,
+      description: 'Order follow-ups: deadlines, reminders and escalations (office time)',
+    });
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Follow-up sweep scheduled: "${schedule}" (mode ${loadFollowUpConfig().mode})`);
+    }
+  }
+
+  /**
+   * Customer progress updates (services/orderProgressService.js): every 15 minutes,
+   * office time only, so a "still on it" note never lands at night. Lock-guarded;
+   * each message is keyed on the order too, so a double run sends once.
+   * CUSTOMER_PROGRESS_UPDATES=off stops it; CUSTOMER_PROGRESS_CRON overrides the schedule.
+   */
+  scheduleCustomerProgress() {
+    const { cron: schedule } = loadCustomerProgressConfig();
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid CUSTOMER_PROGRESS_CRON "${schedule}" — customer progress updates NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () => {
+      const cfg = loadCustomerProgressConfig();
+      if (!cfg.enabled || !isOfficeTime(new Date(), cfg.office)) return undefined;
+      return this.withDistributedLock('cron:lock:customerProgress', 10 * 60, () =>
+        runCustomerProgressSweep({ cfg }).catch(err =>
+          console.error('[CronService] Customer progress sweep failed:', err.message)
+        )
+      );
+    }, { scheduled: true, timezone: 'Asia/Kolkata' });
+    this.scheduledTasks.push({
+      name: 'customerProgress',
+      task,
+      schedule,
+      description: 'Customers: preparing / packed / courier booked, and one "still on it" note per slow step (office time)',
+    });
+  }
+
+  /**
+   * Task deadline alerts (services/taskAlertService.js): every 5 minutes, office
+   * time only. TASK_ALERTS_MODE off | shadow | live (default live — a level more
+   * than a day old is claimed silently, so the first run does not fire a burst).
+   * Lock-guarded, and each level is claimed on the task, so a double run sends once.
+   */
+  scheduleTaskAlerts() {
+    const schedule = process.env.TASK_ALERTS_CRON || '*/5 * * * *';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid TASK_ALERTS_CRON "${schedule}" — task deadline alerts NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () => {
+      const cfg = loadTaskAlertConfig();
+      if (cfg.mode === 'off' || !isOfficeTime(new Date(), cfg.office)) return undefined;
+      return this.withDistributedLock('cron:lock:taskAlerts', 4 * 60 + 30, () =>
+        runTaskAlertSweep().catch(err =>
+          console.error('[CronService] Task deadline alerts failed:', err.message)
+        )
+      );
+    }, { scheduled: true, timezone: 'Asia/Kolkata' });
+    this.scheduledTasks.push({
+      name: 'taskAlerts',
+      task,
+      schedule,
+      description: 'Task deadlines: "X left", late, then heads and admins (office time)',
+    });
+  }
+
   scheduleChatStuckDigest() {
     const schedule = process.env.CHAT_DIGEST_CRON || '30 9 * * 1-6';
     if (!cron.validate(schedule)) {
@@ -732,6 +863,9 @@ class CronService {
           // GTM payment links (parts + older single links) in the same locked run.
           .then(() => reconcileSalesLinks())
           .catch(err => console.error('[CronService] Sales link reconciliation failed:', err.message))
+          // "Ship before payment": missed captures, links after dispatch, overdue chasing.
+          .then(() => sweepPayLater())
+          .catch(err => console.error('[CronService] Pay-later sweep failed:', err.message))
       )
     );
     this.scheduledTasks.push({

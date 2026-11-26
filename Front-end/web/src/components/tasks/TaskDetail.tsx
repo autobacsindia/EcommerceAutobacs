@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import EntityLink from '@/components/ui/EntityLink';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -26,13 +27,14 @@ import { TaskMoney } from './TaskMoney';
 import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import { DueApprovalPanel } from './dueRules';
+import { NewDatePanel } from './lateDates';
 import { dueRequired, useAskDue } from './DuePrompt';
 import { ListPicker } from './spaces';
 import { ProjectPicker } from './ProjectPicker';
 import { RepeatField } from './RepeatPicker';
 import { useProject } from './Projects';
 import {
-  FOLLOWERS_MAX, LONG_TEXT_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, stageOf, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
+  FOLLOWERS_MAX, LONG_TEXT_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, stageOf, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, parseDuration, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type RepeatInput, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -677,6 +679,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
 
       <WaitingWarning task={task} onOpen={onOpen} />
       <DueApprovalPanel task={task} />
+      <NewDatePanel task={task} />
       {task.personal && (
         <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500"><Lock aria-hidden className="h-3.5 w-3.5" /> Private — only you can see this task.</p>
       )}
@@ -776,13 +779,13 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
           <Field label="Order" icon={Package} hidden={blank(emptyFields.order)}>
             {task.can.edit && task.order ? (
               <span className="flex min-w-0 items-center gap-1">
-                <Link href={orderHrefFor(base, task.order.id)} title={task.order.code} className="min-w-0 truncate font-medium text-blue-700 hover:underline">{task.order.code}</Link>
+                <EntityLink type="order" id={task.order.id} value={task.order.code} label="Order number" className="min-w-0" linkClassName="truncate font-medium" />
                 <button onClick={() => save.mutate({ orderId: null })} aria-label="Unlink the order" title="Unlink" className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X className="h-3.5 w-3.5" /></button>
               </span>
             ) : task.can.edit ? (
               <OrderPicker value={null} onChange={(o) => { if (o) save.mutate({ orderId: o.id }); }} quiet />
             ) : task.order
-              ? <Link href={orderHrefFor(base, task.order.id)} title={task.order.code} className="block truncate font-medium text-blue-700 hover:underline">{task.order.code}</Link>
+              ? <EntityLink type="order" id={task.order.id} value={task.order.code} label="Order number" className="min-w-0" linkClassName="truncate font-medium" />
               : <span className="text-gray-400">Empty</span>}
           </Field>
           {task.team && (

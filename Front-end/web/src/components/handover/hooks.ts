@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import { handoverKeys } from '@/hooks/queries/keys';
-import type { Departure, HandoverWork } from './types';
+import type { Departure, HandoverWork, RecordablePerson } from './types';
 
 const BASE = '/staff/departures';
 
@@ -15,6 +15,11 @@ export function useDeparturePages(enabled: boolean) {
     getNextPageParam: (last) => last.nextCursor || undefined,
     enabled,
   });
+}
+
+/** Active staff HR or an admin may record as leaving. Only call when canRecord. */
+export function useRecordablePeople(enabled = true) {
+  return useQuery({ queryKey: handoverKeys.people(), queryFn: () => apiClient.get<{ people: RecordablePerson[] }>(`${BASE}/people`).then((r) => r.people), enabled, staleTime: 60_000 });
 }
 
 export function useMyHandovers() {
@@ -37,7 +42,7 @@ function useApply() {
 export function useRecordDeparture() {
   const apply = useApply();
   return useMutation({
-    mutationFn: (body: { userId: string; lastDay: string; reason: string; successorId: string }) => apiClient.post<{ departure: Departure }>(BASE, body).then((r) => r.departure),
+    mutationFn: (body: { userId: string; resignedOn: string; lastDay: string; reason: string; successorId: string }) => apiClient.post<{ departure: Departure }>(BASE, body).then((r) => r.departure),
     onSuccess: apply,
   });
 }
@@ -45,7 +50,7 @@ export function useRecordDeparture() {
 export function useUpdateDeparture(id: string) {
   const apply = useApply();
   return useMutation({
-    mutationFn: (body: { rev: number; lastDay?: string; reason?: string; successorId?: string; note?: string }) => apiClient.patch<{ departure: Departure }>(`${BASE}/${id}`, body).then((r) => r.departure),
+    mutationFn: (body: { rev: number; lastDay?: string; resignedOn?: string; reason?: string; successorId?: string; note?: string; responsibilities?: string }) => apiClient.patch<{ departure: Departure }>(`${BASE}/${id}`, body).then((r) => r.departure),
     onSuccess: apply,
   });
 }

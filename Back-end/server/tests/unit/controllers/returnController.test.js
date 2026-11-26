@@ -46,7 +46,7 @@ jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({ de
 jest.unstable_mockModule('../../../repositories/paymentRepository.js', () => ({ default: mockPaymentRepo }));
 jest.unstable_mockModule('../../../services/razorpayService.js', () => ({ default: mockRazorpay }));
 jest.unstable_mockModule('../../../services/returnRefundLtvService.js', () => ({ reverseReturnLtvOnce: mockReverseLtv }));
-jest.unstable_mockModule('../../../queue/queues.js', () => ({ enqueueNotification: mockEnqueue }));
+jest.unstable_mockModule('../../../queue/queues.js', () => ({ enqueueNotification: mockEnqueue, getNotificationsQueue: jest.fn(() => ({ add: jest.fn(() => Promise.resolve()) })) }));
 jest.unstable_mockModule('../../../utils/returnsCloudinary.js', () => ({
   RETURNS_FOLDER_BASE: 'autobacs/returns',
   generateReturnUploadSignature: jest.fn(() => ({ signature: 'sig' })),

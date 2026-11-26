@@ -703,6 +703,19 @@ class ProductRepository {
   }
 
   /**
+   * What the delivery estimate needs per product (size inputs + categories for the
+   * category guess). Variable products included: variants share the parent's box.
+   */
+  async findDeliveryEstimateInputs(ids) {
+    const valid = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (!valid.length) return [];
+    return Product.find(
+      { _id: { $in: valid }, isActive: true },
+      { categories: 1, shippingSize: 1, listedSize: 1, shippingClass: 1 },
+    ).lean().maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
    * Find active product by ID (requires isActive: true)
    */
   async findActiveById(productId, session = null) {

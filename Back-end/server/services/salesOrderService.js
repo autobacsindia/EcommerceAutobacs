@@ -33,12 +33,15 @@ import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
+import { shapeSalesType } from '../utils/salesType.js';
 import { readListFilters, orderQueryFor, withCustomerIds } from '../utils/orderListFilters.js';
 import { and, findEachBranch, isObjectId, keysetPage, plainQuery } from '../utils/listQuery.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
 import { pinnedIds, withoutPinned, inPinOrder } from './orderPinService.js';
 import { shapePayDetails } from '../utils/salesPayDetails.js';
+import { isPayLaterDue } from '../config/payLater.js';
+import { shapePayLater } from '../utils/payLater.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -135,7 +138,7 @@ async function findHinted(query, options, hint) {
 
 const LIST_SELECT = 'orderNumber createdAt paidAt listDate status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
   + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
-  + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount';
+  + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount payLater buyer buyerTypeCheck';
 
 /**
  * keysetPage's read `q` with the pinned orders left out, keeping `query` as
@@ -150,7 +153,8 @@ function unpinned(q, query, pins) {
 }
 
 const linkState = (o, now = Date.now()) => {
-  if (o.paymentStatus === 'paid' || o.status !== 'awaiting_payment') return null;
+  // A "Ship before payment" order keeps its after-dispatch link while it is owed.
+  if (o.paymentStatus === 'paid' || (o.status !== 'awaiting_payment' && !isPayLaterDue(o))) return null;
   // Quotation-first orders are paid in parts (paymentParts), never by this link.
   if (!o.paymentLinkId && !o.paymentLinkUrl) return null;
   const exp = o.paymentLinkExpiresAt ? new Date(o.paymentLinkExpiresAt).getTime() : null;
@@ -198,6 +202,10 @@ function shape(o) {
     // The stage key behind that label, so the panel colours it like the stage it is.
     workflowStage: workflowView(o)?.summaryStage || null,
     linkState: linkState(o),
+    // "Ship before payment" (services/payLaterService.js): null on an ordinary order.
+    payLater: shapePayLater(o),
+    // B2B / B2C badge + reason + accounts' check (utils/salesType.js); sales-panel orders only.
+    salesType: o.salesUser ? shapeSalesType(o) : null,
     paymentLinkUrl: linkState(o) === 'active' ? o.paymentLinkUrl : null,
     paymentLinkExpiresAt: o.paymentLinkExpiresAt || null,
     razorpayPaymentId: payment?.gatewayPaymentId || null,

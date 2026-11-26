@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Handshake } from 'lucide-react';
 import { errorMessage } from '@/components/staff/sales/types';
-import { useLessonMeta } from '@/components/lessons/hooks';
 import { useTrainingMeta } from '@/components/training/hooks';
 import { field, primaryButton, quietButton } from '@/components/training/types';
-import { useDeparturePages, useMyHandovers, useRecordDeparture } from './hooks';
+import { useDeparturePages, useMyHandovers, useRecordablePeople, useRecordDeparture } from './hooks';
 import { dayLabel, timing, type Departure } from './types';
 
 function Row({ d, base, title }: { d: Departure; base: string; title: string }) {
@@ -24,11 +23,13 @@ function Row({ d, base, title }: { d: Departure; base: string; title: string }) 
   );
 }
 
-function RecordForm({ base, teams, onClose }: { base: string; teams: string[]; onClose: () => void }) {
+function RecordForm({ base, onClose }: { base: string; onClose: () => void }) {
   const router = useRouter();
-  const people = (useLessonMeta().data?.people ?? []).filter((p) => !p.isAdmin && teams.includes(p.team ?? ''));
+  const peopleQuery = useRecordablePeople();
+  const people = peopleQuery.data ?? [];
   const record = useRecordDeparture();
   const [userId, setUserId] = useState('');
+  const [resignedOn, setResignedOn] = useState('');
   const [lastDay, setLastDay] = useState('');
   const [reason, setReason] = useState('');
   const [successorId, setSuccessorId] = useState('');
@@ -36,7 +37,8 @@ function RecordForm({ base, teams, onClose }: { base: string; teams: string[]; o
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    record.mutate({ userId, lastDay, reason, successorId }, {
+    if (resignedOn && lastDay && lastDay < resignedOn) { setError('The last day cannot be before the resignation date.'); return; }
+    record.mutate({ userId, resignedOn, lastDay, reason, successorId }, {
       onSuccess: (d) => router.push(`${base}/${d.id}`),
       onError: (err) => setError(errorMessage(err, 'This could not be saved. Please try again.')),
     });
@@ -44,17 +46,22 @@ function RecordForm({ base, teams, onClose }: { base: string; teams: string[]; o
   return (
     <form onSubmit={submit} className="mb-5 max-w-3xl space-y-3 rounded-xl border border-gray-200 bg-white p-4">
       <h2 className="font-semibold text-gray-900">Record a resignation</h2>
-      <p className="text-sm text-gray-600">This does not remove their access or move any work.</p>
+      <p className="text-sm text-gray-600">Their team will see the handover. This does not remove their access or move any work.</p>
+      {peopleQuery.isError && <p className="text-sm text-red-700">The staff list could not be loaded. Close and try again.</p>}
+      <div>
+        <label htmlFor="d-user" className="mb-1 block text-sm font-medium text-gray-800">Who is leaving</label>
+        <select id="d-user" className={field} value={userId} onChange={(e) => setUserId(e.target.value)}>
+          <option value="">Choose…</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.teamLabel})</option>)}
+        </select>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor="d-user" className="mb-1 block text-sm font-medium text-gray-800">Who is leaving</label>
-          <select id="d-user" className={field} value={userId} onChange={(e) => setUserId(e.target.value)}>
-            <option value="">Choose…</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <label htmlFor="d-resigned" className="mb-1 block text-sm font-medium text-gray-800">Resignation date</label>
+          <input id="d-resigned" type="date" className={field} value={resignedOn} onChange={(e) => setResignedOn(e.target.value)} />
         </div>
         <div>
-          <label htmlFor="d-day" className="mb-1 block text-sm font-medium text-gray-800">Last day</label>
+          <label htmlFor="d-day" className="mb-1 block text-sm font-medium text-gray-800">Last working day</label>
           <input id="d-day" type="date" className={field} value={lastDay} onChange={(e) => setLastDay(e.target.value)} />
         </div>
       </div>
@@ -62,16 +69,16 @@ function RecordForm({ base, teams, onClose }: { base: string; teams: string[]; o
         <label htmlFor="d-next" className="mb-1 block text-sm font-medium text-gray-800">Who takes over (optional)</label>
         <select id="d-next" className={field} value={successorId} onChange={(e) => setSuccessorId(e.target.value)}>
           <option value="">Not named yet</option>
-          {people.filter((p) => p.id !== userId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {people.filter((p) => p.id !== userId).map((p) => <option key={p.id} value={p.id}>{p.name} ({p.teamLabel})</option>)}
         </select>
       </div>
       <div>
-        <label htmlFor="d-reason" className="mb-1 block text-sm font-medium text-gray-800">Reason (private: only admins and their team head)</label>
+        <label htmlFor="d-reason" className="mb-1 block text-sm font-medium text-gray-800">Reason (private: only HR, admins and their team head)</label>
         <textarea id="d-reason" className={field} rows={2} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} />
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={!userId || !lastDay || record.isPending} className={primaryButton}>Save</button>
+        <button type="submit" disabled={!userId || !resignedOn || !lastDay || record.isPending} className={primaryButton}>Save</button>
         <button type="button" onClick={onClose} className={quietButton}>Close</button>
       </div>
     </form>
@@ -83,23 +90,24 @@ export default function HandoverHome({ base }: { base: string }) {
   const teams = (meta.data?.teams ?? []).map((t) => t.key);
   const isManager = teams.length > 0;
   const mine = useMyHandovers();
-  const pages = useDeparturePages(isManager);
+  // Everyone sees their own team's handovers; admins see every team.
+  const pages = useDeparturePages(true);
   const [adding, setAdding] = useState(false);
   const canRecord = pages.data?.pages[0]?.canRecord === true;
   const rows = pages.data?.pages.flatMap((p) => p.departures) ?? [];
   const myRows = mine.data ?? [];
-  const nothing = mine.isSuccess && !myRows.length && (!isManager || (pages.isSuccess && !rows.length));
+  const nothing = mine.isSuccess && !myRows.length && pages.isSuccess && !rows.length;
 
   return (
     <div className="max-w-4xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Handover</h1>
-          <p className="mt-1 text-sm text-gray-600">When someone leaves, this keeps their last day and handover note together.</p>
+          <p className="mt-1 text-sm text-gray-600">When someone on your team leaves, see their last day, main responsibilities, open work and handover note here.</p>
         </div>
         {canRecord && !adding && <button type="button" onClick={() => setAdding(true)} className={primaryButton}>Record a resignation</button>}
       </div>
-      {adding && canRecord && <RecordForm base={base} teams={teams} onClose={() => setAdding(false)} />}
+      {adding && canRecord && <RecordForm base={base} onClose={() => setAdding(false)} />}
       {(mine.isError || pages.isError) && <p className="text-sm text-red-700">This could not be loaded. <button type="button" className="underline" onClick={() => { void mine.refetch(); void pages.refetch(); }}>Try again</button></p>}
       {(mine.isLoading || pages.isLoading) && <p className="text-sm text-gray-600">Loading…</p>}
       {nothing && (
@@ -116,7 +124,7 @@ export default function HandoverHome({ base }: { base: string }) {
       )}
       {rows.length > 0 && (
         <section className="space-y-3">
-          <h2 className="font-semibold text-gray-900">People leaving</h2>
+          <h2 className="font-semibold text-gray-900">{isManager || canRecord ? 'People leaving' : 'Leaving your team'}</h2>
           {rows.map((d) => <Row key={d.id} d={d} base={base} title={d.user.name} />)}
         </section>
       )}

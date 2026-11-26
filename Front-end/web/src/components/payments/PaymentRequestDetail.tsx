@@ -1,6 +1,7 @@
 'use client';
 
 import CopyId from '@/components/ui/CopyId';
+import EntityLink from '@/components/ui/EntityLink';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
@@ -8,7 +9,7 @@ import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import EditHistory from './EditHistory';
 import { cardLabelOf } from './CardFields';
 import {
-  accountName, actOn, kmText, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  accountName, actOn, kmText, amountText, bankCode, linkOrder, setLinks, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paidHow, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { useSlipReader } from './slipReader';
 import SlipReadStatus, { SlipFieldTag, SlipSources } from './SlipReadStatus';
@@ -19,6 +20,7 @@ import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderPicker from './OrderPicker';
 import DealSummaryBox from './DealSummary';
 import { SupplierRefundLine } from './SupplierCredit';
+import { CreditControl, CreditSum } from './RequestCredit';
 import RichText from '@/components/ui/RichText';
 import { heldByText } from './HoldLine';
 
@@ -80,7 +82,7 @@ function OrderLinkRow({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Payme
         {!picking && (
           <div className="flex flex-wrap items-center gap-2">
             {r.order
-              ? <span className="inline-flex items-center gap-1 font-medium">{r.order.number}<CopyId value={r.order.number} label="Order number" /></span>
+              ? <EntityLink type="order" id={r.order.id} value={r.order.number} label="Order number" className="font-medium" />
               : <span className="text-gray-500">Not linked to an order</span>}
             {may && (
               <button type="button" onClick={() => setPicking(true)} className={`${small} text-blue-700`}>
@@ -168,7 +170,7 @@ function ProjectLinkRows({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Pa
         <dt className="text-gray-500">Project</dt>
         <dd className="flex flex-wrap items-center gap-2 text-gray-900">
           {r.project
-            ? <span className="inline-flex items-center gap-1"><span className="font-mono font-medium">{r.project.code}</span> {r.project.name}<CopyId value={r.project.code} label="Project ID" /></span>
+            ? <EntityLink type="project" id={r.project.id} value={r.project.code} label="Project ID"><span className="font-mono font-medium">{r.project.code}</span> {r.project.name}</EntityLink>
             : <span className="text-gray-500">Not linked to a project</span>}
           {may && (
             <button type="button" onClick={() => setEditing(true)}
@@ -178,7 +180,14 @@ function ProjectLinkRows({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Pa
           )}
         </dd>
       </div>
-      {r.task && <Row k="Task" v={`${r.task.code}${r.task.title ? ` ${r.task.title}` : ''}`} copy="Task ID" />}
+      {r.task && (
+        <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+          <dt className="text-gray-500">Task</dt>
+          <dd className="break-words text-gray-900">
+            <EntityLink type="task" id={r.task.id} value={r.task.code} label="Task ID">{r.task.code}{r.task.title ? ` ${r.task.title}` : ''}</EntityLink>
+          </dd>
+        </div>
+      )}
       {r.reference && <Row k="Other ID" v={r.reference} copy="Other ID" />}
     </>
   );
@@ -270,12 +279,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 ? <p className="text-sm text-gray-700">Rupee amount: what the bank debits — recorded when paid.</p>
                 : foreignBill(r) && <p className="text-sm text-gray-700">Bill: {foreignBill(r)}</p>}
               <p className="text-sm text-gray-600">to {r.payee.name || 'payee not given yet'}</p>
-              {r.credit && r.bill != null && (
-                <p className="mt-1 text-sm text-emerald-800" aria-label="Supplier credit used">
-                  Bill {money(r.bill, r.currency)} − supplier credit {money(r.credit.amount, r.currency)} = transfer {money(Math.round((r.bill - r.credit.amount) * 100) / 100, r.currency)}
-                </p>
-              )}
+              {r.credit && r.bill != null && <CreditSum r={r} />}
             </div>
+            {r.can.credit && r.supplier && <CreditControl r={r} onSaved={done} />}
             {r.supplierRefund && (
               <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'} bill={r.bill ?? (r.currency !== 'INR' ? r.foreignAmount ?? 0 : r.amount)} />
             )}
@@ -305,9 +311,16 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                   if (was) qc.invalidateQueries({ queryKey: paymentKeys.forOrder(was) });
                   done(next);
                 }} />
-              ) : <Row k="Order" v={r.order?.number} copy="Order number" />}
+              ) : r.order && (
+                <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+                  <dt className="text-gray-500">Order</dt>
+                  <dd className="text-gray-900"><EntityLink type="order" id={r.order.id} value={r.order.number} label="Order number" /></dd>
+                </div>
+              )}
               <ProjectLinkRows key={`${r.id}-${r.project?.code ?? ''}-${r.task?.code ?? ''}-${r.reference ?? ''}`} r={r} onSaved={done} />
               <Row k="Items" v={r.itemNames.join(', ')} />
+              {/* A supplier payment not raised from an order (Payments → Pay a supplier). */}
+              <Row k="For" v={r.kind === 'supplier' && !r.order ? (r.supplierBillId ? `Supplier bill ${r.reference || ''} (We owe suppliers)`.replace('  ', ' ') : 'Stock / not for one order') : null} />
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.alternatePhone && `Alt: ${r.customer.alternatePhone}`, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />
               {r.description && (
@@ -319,7 +332,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               <Row k="Pay by" v={payByLine(r.payee)} />
               {r.payee.method === 'card' && <Row k="Name on card" v={r.payee.cardName} />}
               <Row k="Payee phone" v={r.payee.phone} />
-              {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}
+              {r.payment && <Row k="Paid" v={`${paidHow(r.payment.method)}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}
               {r.paidFrom && <Row k="Paid from" v={`${accountName(r.paidFrom)} · ${money(r.paidFrom.amount, r.paidFrom.currency)} sent`} />}
               {r.payment && <Row k="Transaction" v={formatDateTimeIST(r.payment.transactionAt || r.payment.paidAt)} />}
               {r.payment && <Row k="Recorded" v={formatDateTimeIST(r.payment.paidAt)} />}

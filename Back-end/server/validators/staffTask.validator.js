@@ -297,6 +297,27 @@ export const validateDueApproval = [
   body('note').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('Keep the note under 500 characters'),
 ];
 
+const ymd = /^\d{4}-\d{2}-\d{2}$/;
+const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const validateAskNewDate = [
+  ...validateTaskId,
+  body('rev').isInt().withMessage('Reload the task and try again'),
+  body('reason').isString().isLength({ min: 1, max: 40 }).withMessage('Pick a reason'),
+  body('note').isString().isLength({ max: 500 }).withMessage('Keep it under 500 characters'),
+  body('dueOn').isString().matches(ymd).withMessage('Pick the new date'),
+  body('dueTime').optional({ values: 'falsy' }).isString().matches(hhmm).withMessage('Pick a valid time'),
+];
+
+export const validateDecideNewDate = [
+  ...validateTaskId,
+  body('rev').isInt().withMessage('Reload the task and try again'),
+  body('decision').isIn(['approve', 'reject']).withMessage('Pick approve or reject'),
+  body('note').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('Keep the note under 500 characters'),
+  body('dueOn').optional({ values: 'falsy' }).isString().matches(ymd).withMessage('Pick a valid date'),
+  body('dueTime').optional({ values: 'falsy' }).isString().matches(hhmm).withMessage('Pick a valid time'),
+];
+
 export const validateTaskRules = [
   body('approvalAfterDays').optional().isInt({ min: 0, max: 365 }).withMessage('Days must be 0 to 365'),
   body('maxDays').optional().isObject().withMessage('Pick the limits for each priority'),

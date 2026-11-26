@@ -84,4 +84,8 @@ describe('Jump to a conversation', () => {
     expect(channelTitle(channels[3])).toBe('Arjun Mehta');
     expect(channelTitle(channel('t1', 'Procurement', { audience: 'teams' }))).toBe('Procurement');
   });
+
+  it('writes a titled space ("Team Report", the whole-company space) as written, without a #', () => {
+    expect(channelTitle(channel('c9', 'Team Report', { audience: 'all' }))).toBe('Team Report');
+  });
 });

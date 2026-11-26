@@ -24,6 +24,23 @@ export const TEMPLATE_ENV = {
   refunded: ['WHATSAPP_TEMPLATE_REFUND_PROCESSED', 'refund_processed'],
 };
 
+/**
+ * Progress milestones (services/orderProgressService.js). NO default name on purpose:
+ * these templates are not approved at Meta yet, and sending an unapproved name fails
+ * every message. Each one stays silent until its variable is set in Railway.
+ * Body variables, in order — submit the templates with exactly these:
+ *   preparing       {{1}} name, {{2}} order ref, {{3}} order link
+ *   packed          {{1}} name, {{2}} order ref, {{3}} order link
+ *   courier_booked  {{1}} name, {{2}} order ref, {{3}} courier, {{4}} tracking no., {{5}} tracking link
+ *   still_on_it     {{1}} name, {{2}} order ref, {{3}} where it is (one line), {{4}} order link
+ */
+export const OPTIONAL_TEMPLATE_ENV = {
+  preparing: 'WHATSAPP_TEMPLATE_ORDER_PREPARING',
+  packed: 'WHATSAPP_TEMPLATE_ORDER_PACKED',
+  courier_booked: 'WHATSAPP_TEMPLATE_COURIER_BOOKED',
+  still_on_it: 'WHATSAPP_TEMPLATE_STILL_ON_IT',
+};
+
 const DEFAULT_GRAPH_VERSION = 'v23.0';
 
 let warnedOff = false;
@@ -59,6 +76,10 @@ export function getWhatsAppConfig(toE164) {
   for (const [event, [envName, fallback]] of Object.entries(TEMPLATE_ENV)) {
     templates[event] = String(process.env[envName] || '').trim() || fallback;
   }
+  for (const [event, envName] of Object.entries(OPTIONAL_TEMPLATE_ENV)) {
+    const name = String(process.env[envName] || '').trim();
+    if (name) templates[event] = name;
+  }
   return {
     phoneNumberId,
     accessToken,
@@ -76,4 +97,4 @@ export function _resetWhatsAppWarning() {
   warnedOff = false;
 }
 
-export default { getWhatsAppConfig, TEMPLATE_ENV };
+export default { getWhatsAppConfig, TEMPLATE_ENV, OPTIONAL_TEMPLATE_ENV };

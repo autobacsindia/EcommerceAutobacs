@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import EntityLink from '@/components/ui/EntityLink';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, FileDown, Link2, Paperclip } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -25,7 +25,7 @@ type Panel = null | 'edit' | 'bank' | 'offline';
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 /** One extra charge and whatever this person may do to it next. The server decides what `can` says. */
-export default function ExtraChargeCard({ extra, showOrder = false, orderBase }: { extra: ExtraCharge; showOrder?: boolean; orderBase?: string }) {
+export default function ExtraChargeCard({ extra, showOrder = false }: { extra: ExtraCharge; showOrder?: boolean }) {
   const queryClient = useQueryClient();
   const [panel, setPanel] = useState<Panel>(null);
   const [note, setNote] = useState('');
@@ -83,9 +83,7 @@ export default function ExtraChargeCard({ extra, showOrder = false, orderBase }:
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900">
-            {showOrder && (orderBase
-              ? <Link href={`${orderBase}/${extra.orderId}`} className="underline-offset-2 hover:underline">{extra.orderNumber} · </Link>
-              : <span>{extra.orderNumber} · </span>)}
+            {showOrder && <><EntityLink type="order" id={extra.orderId} value={extra.orderNumber} label="Order number" /> · </>}
             Extra {extra.sequence} · {rupees(extra.amount)}
           </p>
           {showOrder && (

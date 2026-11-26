@@ -12,6 +12,10 @@ import { FESTIVAL_THEMES } from '@/lib/festival/themes';
 import BlackFridayHero from './BlackFridayHero';
 import { heroCardAction } from './BlackFridayHeroCard';
 import type { FestiveHeroPhoto } from './FestiveHome';
+jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
+  useDeliveryEstimates: () => ({ estimates: null, pending: false }),
+}));
+
 
 jest.mock('@/components/home/redesign/Img', () => ({ __esModule: true, default: (p: { alt?: string }) => <img alt={p.alt} /> }));
 jest.mock('@/context/CurrencyContext', () => ({

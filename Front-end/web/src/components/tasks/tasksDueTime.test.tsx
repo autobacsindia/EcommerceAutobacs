@@ -7,7 +7,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TaskDetail from './TaskDetail';
-import { dueLabel } from './ui';
+import { DuePill, dueLabel } from './ui';
 import { DUE_TIMES, formatDueKey, formatDueTime, isPastDue, type Task } from './types';
 
 const get = jest.fn();
@@ -70,6 +70,23 @@ describe('how a due time reads', () => {
     expect(dueLabel(t({ dueOn: '2026-11-03', dueTime: '09:00', overdue: true }))).toBe('Late · 3 Nov, 9 AM');
     expect(dueLabel(t({ dueOn: '2026-11-06', dueTime: '10:00' }))).toBe('6 Nov, 10 AM');
     expect(dueLabel(t({ dueOn: '2026-11-03', dueTime: '09:00', overdue: true, bucket: 'done' }))).toBe('3 Nov, 9 AM');
+  });
+
+  it('under 3 hours left today: a red countdown', () => {
+    const t = (over: Partial<Task>) => ({ ...task(), ...over });
+    jest.useFakeTimers({ now: new Date('2026-11-04T14:50:00+05:30') });
+    try {
+      expect(dueLabel(t({ dueOn: '2026-11-04', dueTime: '17:00', dueToday: true }))).toBe('2h 10m left · 5 PM');
+      expect(dueLabel(t({ dueOn: '2026-11-04', dueTime: '15:30', dueToday: true }))).toBe('40m left · 3:30 PM');
+      // More than 3 hours, untimed, or another day: as before.
+      expect(dueLabel(t({ dueOn: '2026-11-04', dueTime: '18:30', dueToday: true }))).toBe('Today 6:30 PM');
+      expect(dueLabel(t({ dueOn: '2026-11-04', dueToday: true }))).toBe('Today');
+      expect(dueLabel(t({ dueOn: '2026-11-05', dueTime: '10:00' }))).toBe('5 Nov, 10 AM');
+      const { container } = render(<DuePill t={t({ dueOn: '2026-11-04', dueTime: '17:00', dueToday: true })} />);
+      expect(container.firstElementChild?.className).toContain('bg-red-600');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('a time today that has come is past; one still to come is not (India time)', () => {
