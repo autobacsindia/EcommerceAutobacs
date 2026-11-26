@@ -110,7 +110,7 @@ async function makeRep(overrides = {}) {
 
 const BUYER = { email: 'walkin.buyer@example.com', phone: '9812345678', name: 'Walk In Buyer' };
 // A valid delivery address for offline-order requests (now required).
-const OFF_ADDR = { addressLine1: '12 MG Road', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India' };
+const OFF_ADDR = { houseNumber: 'Flat 4B', addressLine1: '12 MG Road', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India' };
 
 async function seedPendingOrder(identity) {
   // A created-but-unpaid order → the "left at checkout" lead signal.
@@ -118,7 +118,7 @@ async function seedPendingOrder(identity) {
     user: new mongoose.Types.ObjectId(),
     source: 'web',
     items: [{ product: new mongoose.Types.ObjectId(), quantity: 1, price: 1500, name: 'Alloy Wheel' }],
-    shippingAddress: { fullName: identity.name, phone: identity.phone, addressLine1: '1 St', city: 'Mumbai', state: 'MH', postalCode: '400001', country: 'India' },
+    shippingAddress: { fullName: identity.name, phone: identity.phone, houseNumber: 'Flat 4B', addressLine1: '1 Station Road', city: 'Mumbai', state: 'MH', postalCode: '400001', country: 'India' },
     subtotal: 1500, totalAmount: 1500, status: 'awaiting_payment', paymentStatus: 'pending',
     guestEmail: identity.email,
   });

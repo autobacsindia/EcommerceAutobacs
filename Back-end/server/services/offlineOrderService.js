@@ -16,6 +16,7 @@ import razorpayService from './razorpayService.js';
 import orderStatusService from './orderStatusService.js';
 import leadSyncService from './leadSyncService.js';
 import AppError from '../utils/AppError.js';
+import { firstAddressProblem, cleanStreetFields } from '../utils/deliveryAddress.js';
 import { resolveBuyerAndAcceptance } from './buyerService.js';
 import { BUYER_TYPES } from '../config/buyer.js';
 import { ACCEPTANCE_CHANNELS } from '../config/legalDocuments.js';
@@ -90,6 +91,14 @@ export async function createOfflineOrderRecord({
   whatsappOptIn = body?.whatsappOptIn,
   buyerTypeCheck = null,
 }) {
+  // The one door every staff order goes through (admin offline, sales panel,
+  // quotation accept), so the house-number / street rule is enforced here even
+  // if a caller's validator is skipped. An old quotation without a house number
+  // is stopped here with a message saying what to add.
+  const addressProblem = firstAddressProblem(shippingAddress);
+  if (addressProblem) throw new AppError(`Delivery address: ${addressProblem}`, 400, { expose: true });
+  const street = cleanStreetFields(shippingAddress);
+
   /*
     Validate the buyer BEFORE creating the customer: a mistyped GSTIN would
     otherwise 400 the request and leave behind a brand-new `mustResetPassword`
@@ -154,8 +163,10 @@ export async function createOfflineOrderRecord({
     fullName: (shippingAddress.fullName || name || user.name || '').trim(),
     phone: deliveryPhone,
     ...(altPhone && { alternatePhone: altPhone }),
-    addressLine1: String(shippingAddress.addressLine1).trim(),
+    houseNumber: street.houseNumber,
+    addressLine1: street.addressLine1,
     addressLine2: String(shippingAddress.addressLine2 || '').trim(),
+    ...(street.landmark && { landmark: street.landmark }),
     city: String(shippingAddress.city).trim(),
     state: String(shippingAddress.state).trim(),
     postalCode,

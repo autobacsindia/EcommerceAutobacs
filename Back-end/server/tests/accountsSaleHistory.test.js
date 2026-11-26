@@ -79,7 +79,7 @@ async function paidOrder({ source = 'web', salesUser = null, salesAttribution } 
   const order = await Order.create({
     user: new mongoose.Types.ObjectId(), source, salesUser,
     items: [{ product: new mongoose.Types.ObjectId(), name: 'Roof rack', price: 18000, quantity: 1 }],
-    shippingAddress: { fullName: 'Ravi', phone: '9812345678', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
+    shippingAddress: { fullName: 'Ravi', phone: '9812345678', houseNumber: 'Flat 4B', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
     guestEmail: 'ravi@example.com', subtotal: 18000, totalAmount: 18000, status: 'awaiting_payment', paymentStatus: 'pending',
     ...(salesAttribution && { salesAttribution }),
   });

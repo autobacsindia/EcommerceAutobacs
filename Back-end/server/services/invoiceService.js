@@ -32,6 +32,7 @@ import paymentRepository from '../repositories/paymentRepository.js';
 import { describeEmiPlan } from '../utils/paymentMethodDetails.js';
 import { discountLabel } from '../utils/quoteDiscount.js';
 import { deliveryFeeBreakdown } from '../utils/deliveryFeeBreakdown.js';
+import { streetLines } from '../utils/deliveryAddress.js';
 
 /** Payment enum → invoice-facing label. */
 const PAYMENT_METHOD_LABELS = {
@@ -147,8 +148,9 @@ export const buildBillToLines = (order, user) => {
   const name = (isEnterprise && buyer.legalName) || addr.fullName || user?.name || 'Customer';
 
   const lines = [
-    billing.addressLine1,
-    billing.addressLine2,
+    // houseNumber/landmark only exist on a delivery address; an enterprise
+    // bill-to has none, so streetLines gives its two old lines unchanged.
+    ...streetLines(billing),
     [billing.city, billing.postalCode].filter(Boolean).join(' ') || null,
     billing.state,
     // Directly under the registered name, so it reads as an attribute of the
@@ -175,7 +177,10 @@ export const buildBillToLines = (order, user) => {
     never removes information.
   */
   const shipDiffers = isEnterprise && (
-    billing.addressLine1 !== addr.addressLine1
+    // "Same as delivery" sends the house number folded into the bill-to's
+    // first line ("Flat 4B, MG Road") — a bill-to has no house-number field.
+    (billing.addressLine1 !== addr.addressLine1
+      && billing.addressLine1 !== [addr.houseNumber, addr.addressLine1].filter(Boolean).join(', '))
     || billing.city !== addr.city
     || billing.postalCode !== addr.postalCode
     || !statesMatch(addr.state, billing.state)
@@ -187,8 +192,7 @@ export const buildBillToLines = (order, user) => {
     shipTo: shipDiffers
       ? [
         addr.fullName,
-        addr.addressLine1,
-        addr.addressLine2,
+        ...streetLines(addr),
         [addr.city, addr.postalCode].filter(Boolean).join(' ') || null,
         addr.state,
       ].filter(Boolean)

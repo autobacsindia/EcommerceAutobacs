@@ -77,7 +77,7 @@ async function makeProduct(overrides = {}) {
 }
 
 const CUSTOMER = { name: 'Call In Customer', email: 'caller@example.com', phone: '9812345678' };
-const ADDRESS = { addressLine1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' };
+const ADDRESS = { houseNumber: 'Flat 4B', addressLine1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' };
 
 const orderInput = (product, extra = {}) => ({
   customer: CUSTOMER,

@@ -6,6 +6,7 @@ import apiClient from '@/lib/api';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { buildOrderLines } from '@/lib/orderLines';
 import { usePanel } from '@/lib/usePanel';
+import { streetLines } from '@/lib/deliveryAddress';
 
 /**
  * Printable packing slip.
@@ -40,7 +41,7 @@ interface SlipOrder {
   items: SlipItem[];
   shippingAddress: {
     fullName: string; phone: string; alternatePhone?: string;
-    addressLine1: string; addressLine2?: string;
+    houseNumber?: string; addressLine1: string; addressLine2?: string; landmark?: string;
     city: string; state: string; postalCode: string; country: string;
   };
   /**
@@ -183,7 +184,8 @@ function PackingSlipPageInner() {
         <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600">Ship to</div>
         <div className="mt-1 text-sm leading-relaxed">
           <div className="font-semibold">{a.fullName}</div>
-          <div>{a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}</div>
+          {/* House no. first, then street, then the landmark — the courier's label. */}
+          {streetLines(a).map((line, i) => <div key={i}>{line}</div>)}
           <div>{a.city}, {a.state} {a.postalCode}</div>
           <div>{a.country}</div>
           <div className="mt-1">📞 {a.phone}</div>

@@ -64,7 +64,9 @@ const patchAs = (token, orderId, body) => request(app)
   .set('Authorization', `Bearer ${token}`)
   .send(body);
 
-const fix = { address: { addressLine1: '12B Marine Drive', phone: '+91 91234 56789' }, reason: 'Customer called with the right flat number' };
+// ADDRESS is an order placed before the house-number rule, so a correction
+// has to add the house number (utils/deliveryAddress.js).
+const fix = { address: { houseNumber: 'Flat 4B', addressLine1: '12B Marine Drive', phone: '+91 91234 56789' }, reason: 'Customer called with the right flat number' };
 
 describe('PATCH /orders/:id/shipping-address', () => {
   it('admin corrects street and phone; trail kept on the order and the audit log', async () => {
@@ -74,7 +76,7 @@ describe('PATCH /orders/:id/shipping-address', () => {
 
     const res = await patchAs(token, order._id, fix);
     expect(res.status).toBe(200);
-    expect(res.body.shippingAddress).toMatchObject({ addressLine1: '12B Marine Drive', phone: '9123456789', postalCode: '682001', state: 'Kerala' });
+    expect(res.body.shippingAddress).toMatchObject({ houseNumber: 'Flat 4B', addressLine1: '12B Marine Drive', phone: '9123456789', postalCode: '682001', state: 'Kerala' });
     expect(res.body.addressEditable).toBe(true);
 
     const fresh = await Order.findById(order._id).lean();
@@ -149,7 +151,7 @@ describe('PATCH /orders/:id/shipping-address', () => {
     const { token } = await login('admin');
     const { user: customer } = await login();
     const order = await makeOrder(customer._id);
-    const res = await patchAs(token, order._id, { address: { ...ADDRESS, city: 'Ernakulam' }, reason: 'City spelled wrong' });
+    const res = await patchAs(token, order._id, { address: { ...ADDRESS, houseNumber: 'Flat 4B', addressLine1: 'Marine Drive, Kochi', city: 'Ernakulam' }, reason: 'City spelled wrong' });
     expect(res.status).toBe(200);
     expect(res.body.shippingAddress.city).toBe('Ernakulam');
   });
@@ -157,12 +159,18 @@ describe('PATCH /orders/:id/shipping-address', () => {
   it.each([
     ['no reason', { address: { city: 'Ernakulam' } }, /why/],
     ['a bad phone', { address: { phone: '12345' }, reason: 'fix' }, /10-digit/],
-    ['an emptied required field', { address: { addressLine1: '  ' }, reason: 'fix' }, /required/],
+    ['an emptied required field', { address: { houseNumber: 'Flat 4B', addressLine1: '  ' }, reason: 'fix' }, /street and area/],
     ['no actual change', { address: { city: 'Kochi' }, reason: 'fix' }, /Nothing changed/],
-  ])('rejects %s (400)', async (_label, body, msg) => {
+    ['an old order saved without adding the house no.', { address: { phone: '9123456789' }, reason: 'fix' }, /house \/ flat \/ building number/],
+    ['a one-word street', { address: { houseNumber: 'Flat 4B', addressLine1: 'Kochi' }, reason: 'fix' }, /one word/],
+    ['a junk street', { address: { houseNumber: 'Flat 4B', addressLine1: 'aaaa' }, reason: 'fix' }, /doesn't look right/],
+  ])('rejects %s (400)', async (label, body, msg) => {
     const { token } = await login('admin');
     const { user: customer } = await login();
-    const order = await makeOrder(customer._id);
+    // "Nothing changed" needs an address that already meets the rule.
+    const order = label === 'no actual change'
+      ? await makeOrder(customer._id, { shippingAddress: { ...ADDRESS, houseNumber: 'Flat 4B', addressLine1: 'Marine Drive, Kochi' } })
+      : await makeOrder(customer._id);
     const res = await patchAs(token, order._id, body);
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(msg);

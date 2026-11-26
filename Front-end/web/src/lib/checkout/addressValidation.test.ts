@@ -1,7 +1,7 @@
 import { validateCheckoutAddress, firstAddressError } from './addressValidation';
 import { isValidIndianMobile, isValidPinCode } from '@/lib/utils';
 
-const ok = { fullName: 'Rahul Menon', street: '12 MG Road', city: 'Kochi', state: 'Kerala', postalCode: '682016', phone: '9876543210' };
+const ok = { fullName: 'Rahul Menon', houseNumber: 'Flat 4B', street: '12 MG Road', landmark: '', city: 'Kochi', state: 'Kerala', postalCode: '682016', phone: '9876543210' };
 
 describe('validateCheckoutAddress', () => {
   it('passes a complete, real address', () => {
@@ -17,10 +17,18 @@ describe('validateCheckoutAddress', () => {
   });
 
   it('says "enter" (not "invalid") for empty or blank boxes, one message per box', () => {
-    const errors = validateCheckoutAddress({ fullName: ' ', street: '', city: '', state: '', postalCode: '', phone: '' });
-    expect(Object.keys(errors)).toEqual(['fullName', 'street', 'city', 'state', 'postalCode', 'phone']);
+    const errors = validateCheckoutAddress({ fullName: ' ', houseNumber: '', street: '', landmark: '', city: '', state: '', postalCode: '', phone: '' });
+    expect(Object.keys(errors).sort()).toEqual(['city', 'fullName', 'houseNumber', 'phone', 'postalCode', 'state', 'street']);
     expect(errors.postalCode).toBe('Enter the PIN code');
     expect(firstAddressError(errors)).toBe('Enter the name of the person receiving the parcel');
+  });
+
+  it('house no. required, one-word street and junk refused, landmark optional', () => {
+    expect(validateCheckoutAddress({ ...ok, houseNumber: '' })).toHaveProperty('houseNumber');
+    expect(validateCheckoutAddress({ ...ok, street: 'Kochi' })).toHaveProperty('street');
+    expect(validateCheckoutAddress({ ...ok, street: 'aaaa' })).toHaveProperty('street');
+    expect(validateCheckoutAddress({ ...ok, landmark: '' })).toEqual({});
+    expect(validateCheckoutAddress({ ...ok, landmark: '-' })).toHaveProperty('landmark');
   });
 
   it('reports the first wrong box in form order', () => {

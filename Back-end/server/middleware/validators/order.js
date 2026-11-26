@@ -3,6 +3,7 @@ import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
 import { OTHER_CARRIER_CODE, MAX_CUSTOM_CARRIER_NAME } from '../../services/orderTrackingService.js';
 import { CANCELLATION_REASON_CODES } from '../../config/cancellationReasons.js';
+import { addressFieldRules } from '../../utils/deliveryAddress.js';
 
 // The customer pop-up's limit; the same bound for the admin forms.
 export const MAX_CANCELLATION_NOTES = 500;
@@ -64,9 +65,9 @@ export const validateOrder = [
     .bail()
     .custom((value) => isDialableIndianMobile(value))
     .withMessage('Enter a valid 10-digit Indian mobile number'),
-  body('shippingAddress.addressLine1')
-    .notEmpty()
-    .withMessage('Address line 1 is required'),
+  // House / flat no. (required), Street / Area with real detail (required),
+  // Landmark (optional) — the one shared rule, utils/deliveryAddress.js.
+  ...addressFieldRules(body, 'shippingAddress'),
   body('shippingAddress.city')
     .notEmpty()
     .withMessage('City is required'),

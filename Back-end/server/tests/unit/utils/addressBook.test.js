@@ -3,6 +3,7 @@ import { MAX_ADDRESSES, AddressBookError, normaliseAddressBook, normalisePhone }
 const addr = (over = {}) => ({
   fullName: 'Tanveer Singh',
   phone: '9876543210',
+  houseNumber: 'Flat 4B',
   addressLine1: '12 MG Road',
   city: 'Kochi',
   state: 'Kerala',

@@ -57,7 +57,7 @@ const makeProduct = () => {
   return Product.create({ name: `Dash cam ${n}`, slug: `dash-st${n}`, sku: `SKUST-${n}`, description: 'x'.repeat(30), price: 5000, stock: 'in', isActive: true });
 };
 const CUSTOMER = { name: 'Rohit Shah', email: 'rohit.st@example.com', phone: '9820917286' };
-const ADDRESS = { addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
+const ADDRESS = { houseNumber: 'Flat 4B', addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
 const B2B_BUYER = { type: 'enterprise', legalName: 'ABC Motors Pvt Ltd', gstin: GSTIN, billingAddress: { addressLine1: 'Suman Heights', city: 'Navi Mumbai', postalCode: '400706' } };
 const input = (items, extra = {}) => ({ customer: CUSTOMER, shippingAddress: ADDRESS, items, ...extra });
 const BLACK_FRIDAY = { percent: 10, reason: 'Black Friday' };

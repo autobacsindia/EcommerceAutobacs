@@ -68,9 +68,12 @@ router.get("/addresses", protect, asyncHandler(async (req, res) => {
 //          see utils/addressBook.js for why this is not PUT /profile.
 // @access  Private
 router.put("/addresses", protect, asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+  if (!user) return res.status(404).json({ success: false, message: "User not found" });
   let addresses;
   try {
-    addresses = normaliseAddressBook(req.body?.addresses);
+    // Unchanged pre-rule addresses are kept as they are (see addressBook.js).
+    addresses = normaliseAddressBook(req.body?.addresses, (user.addresses || []).map((a) => (a.toObject ? a.toObject() : a)));
   } catch (err) {
     // Answered here, not thrown: the error middleware replaces messages it has
     // not whitelisted with a generic one, and "PIN code must be 6 digits" is
@@ -80,8 +83,6 @@ router.put("/addresses", protect, asyncHandler(async (req, res) => {
     }
     throw err;
   }
-  const user = await User.findById(req.user.id);
-  if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
   user.addresses = addresses;
   await user.save();

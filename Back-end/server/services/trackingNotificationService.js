@@ -5,6 +5,7 @@
 
 import Order from '../models/Order.js';
 import User from '../models/User.js';
+import { streetLines } from '../utils/deliveryAddress.js';
 
 /**
  * Email templates for tracking notifications
@@ -84,8 +85,7 @@ Time: ${new Date(event.timestamp).toLocaleString()}
 Please ensure someone is available to receive the package.
 
 Delivery Address:
-${order.shippingAddress.addressLine1}
-${order.shippingAddress.addressLine2 || ''}
+${streetLines(order.shippingAddress).join('\n')}
 ${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.postalCode}
 
 Best regards,

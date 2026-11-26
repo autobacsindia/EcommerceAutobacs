@@ -159,6 +159,9 @@ export interface PaginatedUserReviews {
 export interface Address {
   fullName: string;
   phone: string;
+  /** House / Flat / Building no. — absent on addresses saved before the rule. */
+  houseNumber?: string;
+  landmark?: string;
   addressLine1: string;
   addressLine2?: string;
   city: string;
@@ -437,6 +440,8 @@ export interface Order {
     fullName: string;
     phone: string;
     alternatePhone?: string;
+    houseNumber?: string;
+    landmark?: string;
     addressLine1: string;
     addressLine2?: string;
     city: string;

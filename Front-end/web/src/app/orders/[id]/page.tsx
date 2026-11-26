@@ -52,6 +52,7 @@ import OrderDeliveryFees, { type OrderDeliveryFeesSnapshot } from '@/components/
 import { formatRupees } from '@/lib/formatRupees';
 import CustomerExtraCharges, { type CustomerExtra, type CustomerExtraTotals } from '@/components/orders/CustomerExtraCharges';
 import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
+import { streetLines } from '@/lib/deliveryAddress';
 
 interface OrderDetail {
   _id: string;
@@ -79,8 +80,10 @@ interface OrderDetail {
     fullName: string;
     phone: string;
     alternatePhone?: string;
+    houseNumber?: string;
     addressLine1: string;
     addressLine2?: string;
+    landmark?: string;
     city: string;
     state: string;
     postalCode: string;
@@ -734,8 +737,7 @@ export default function OrderDetailPage() {
             </div>
             <div className="font-display text-sm space-y-1">
               <p className="font-display text-ink tracking-[-0.01em]">{order.shippingAddress.fullName}</p>
-              <p className="text-ink/70">{order.shippingAddress.addressLine1}</p>
-              {order.shippingAddress.addressLine2 && <p className="text-ink/70">{order.shippingAddress.addressLine2}</p>}
+              {streetLines(order.shippingAddress).map((line, i) => <p key={i} className="text-ink/70">{line}</p>)}
               <p className="text-ink/70">{order.shippingAddress.city}, {order.shippingAddress.state}</p>
               <p className="text-ink/70">{order.shippingAddress.postalCode}</p>
               <p className="text-ink-muted mt-2">{order.shippingAddress.phone}</p>

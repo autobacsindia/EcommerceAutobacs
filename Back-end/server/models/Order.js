@@ -523,7 +523,11 @@ const OrderSchema = new mongoose.Schema({
     // Optional second number for delivery / operations (sales panel). Snapshot,
     // contact only — never searched, matched or used to log in.
     alternatePhone: String,
-    addressLine1: { type: String, required: true },
+    // House / flat / building no. and landmark (utils/deliveryAddress.js).
+    // Optional in the schema: orders placed before the rule have neither.
+    houseNumber: String,
+    landmark: String,
+    addressLine1: { type: String, required: true }, // Street / Area
     addressLine2: String,
     city: { type: String, required: true },
     state: { type: String, required: true },

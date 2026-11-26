@@ -7,6 +7,7 @@ import emailHandler from './emailHandler.js';
 import smsHandler from './smsHandler.js';
 import notificationLogger from './notificationLogger.js';
 import { cancellationReasonLabel } from '../config/cancellationReasons.js';
+import { streetLines } from '../utils/deliveryAddress.js';
 
 class OrderNotificationService {
   log(message) {
@@ -320,8 +321,8 @@ ${order.items.map(item => `- ${item.name} (Qty: ${item.quantity}) - ₹${(item.p
 
 Shipping Address:
 ${order.shippingAddress.fullName}
-${order.shippingAddress.addressLine1}
-${order.shippingAddress.addressLine2 ? order.shippingAddress.addressLine2 + '\n' : ''}${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.postalCode}
+${streetLines(order.shippingAddress).join('\n')}
+${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.postalCode}
 
 We'll notify you once your order is confirmed and shipped.
 
@@ -363,7 +364,7 @@ Track your package: ${order.carrier?.trackingUrl || `Track with number: ${order.
 
 Shipping Address:
 ${order.shippingAddress.fullName}
-${order.shippingAddress.addressLine1}
+${streetLines(order.shippingAddress).join('\n')}
 ${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.postalCode}
 
 Best regards,

@@ -89,7 +89,9 @@ export function normaliseProfileUpdate(body, user, { now = new Date() } = {}) {
   }
   if (has(body, 'addresses')) {
     try {
-      set.addresses = normaliseAddressBook(body.addresses);
+      // Unchanged pre-rule addresses stay as they are (see utils/addressBook.js).
+      const existing = (user?.addresses || []).map((a) => (a?.toObject ? a.toObject() : a));
+      set.addresses = normaliseAddressBook(body.addresses, existing);
     } catch (err) {
       if (err instanceof AddressBookError) throw new ProfileUpdateError(err.message);
       throw err;

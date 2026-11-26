@@ -8,6 +8,8 @@ import { ExternalLink, Search, Plus, Trash2 } from 'lucide-react';
 import { productLinkHref } from '@/lib/productLink';
 import apiClient from '@/lib/api';
 import { SalesRep } from '@/lib/leads';
+import StreetFields from '@/components/address/StreetFields';
+import { isAddressComplete } from '@/lib/deliveryAddress';
 
 interface ProductHit { _id: string; name: string; price: number }
 // `listPrice` is the catalogue price snapshot; `price` is what the rep actually
@@ -43,7 +45,7 @@ export default function OfflineOrderForm({
   // "Order updates on WhatsApp": ticked by default; untick if the customer says no.
   const [whatsappOptIn, setWhatsappOptIn] = useState(true);
   const [addr, setAddr] = useState({
-    fullName: defaults?.name || '', addressLine1: '', addressLine2: '',
+    fullName: defaults?.name || '', houseNumber: '', addressLine1: '', landmark: '', addressLine2: '',
     city: '', state: '', postalCode: '', country: 'India',
   });
   const setAddrField = (k: keyof typeof addr, v: string) => setAddr((p) => ({ ...p, [k]: v }));
@@ -73,7 +75,8 @@ export default function OfflineOrderForm({
   const gstinCheck = checkGstin(biz.gstin);
   const [submitting, setSubmitting] = useState(false);
 
-  const addressComplete = !!(addr.addressLine1.trim() && addr.city.trim() && addr.state.trim() && /^\d{6}$/.test(addr.postalCode.trim()));
+  // House no. + street rule: lib/deliveryAddress.ts (the server re-checks).
+  const addressComplete = isAddressComplete(addr) && !!(addr.city.trim() && addr.state.trim() && /^\d{6}$/.test(addr.postalCode.trim()));
   const listTotal = items.reduce((sum, i) => sum + i.listPrice * i.quantity, 0);
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const discountTotal = Math.max(0, listTotal - total);
@@ -142,7 +145,7 @@ export default function OfflineOrderForm({
                 legalName: biz.legalName.trim(),
                 gstin: normalizeGstin(biz.gstin),
                 billingAddress: billingSameAsDelivery
-                  ? { addressLine1: addr.addressLine1, city: addr.city, postalCode: addr.postalCode, phone }
+                  ? { addressLine1: [addr.houseNumber.trim(), addr.addressLine1.trim()].filter(Boolean).join(', '), city: addr.city, postalCode: addr.postalCode, phone }
                   : {
                       addressLine1: biz.billingLine1.trim(),
                       addressLine2: biz.billingLine2.trim(),
@@ -276,14 +279,7 @@ export default function OfflineOrderForm({
             <span className="mb-1 block text-gray-600">Recipient name</span>
             <input value={addr.fullName} onChange={(e) => setAddrField('fullName', e.target.value)} placeholder={name || 'Same as customer'} className={inputCls} />
           </label>
-          <label className="text-sm sm:col-span-2">
-            <span className="mb-1 block text-gray-600">Address line 1 <span className="text-red-500">*</span></span>
-            <input value={addr.addressLine1} onChange={(e) => setAddrField('addressLine1', e.target.value)} placeholder="House / flat no., street" className={inputCls} />
-          </label>
-          <label className="text-sm sm:col-span-2">
-            <span className="mb-1 block text-gray-600">Address line 2</span>
-            <input value={addr.addressLine2} onChange={(e) => setAddrField('addressLine2', e.target.value)} placeholder="Area, landmark (optional)" className={inputCls} />
-          </label>
+          <StreetFields idPrefix="offline" value={addr} onChange={setAddrField} inputClassName={inputCls} />
           <label className="text-sm">
             <span className="mb-1 block text-gray-600">City <span className="text-red-500">*</span></span>
             <input value={addr.city} onChange={(e) => setAddrField('city', e.target.value)} className={inputCls} />
