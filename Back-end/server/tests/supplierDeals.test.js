@@ -13,6 +13,7 @@
  *   - an approved / paid advance blocks cancelling the order (customer and admin)
  *   - an expense can be linked to an order and shows there, without holding shipping
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -727,3 +728,6 @@ describe('Supplier deals — advance and balance', () => {
     });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

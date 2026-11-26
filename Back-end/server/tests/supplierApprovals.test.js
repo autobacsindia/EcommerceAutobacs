@@ -17,6 +17,7 @@
  *   - a return on an item bought from two suppliers offers both
  */
 
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -380,3 +381,6 @@ describe('Procurement records, accounts approves', () => {
     expect(destinationOptions(o, { items: [{ orderItemId: itemId, name: 'Jerry Can 20L', quantity: 1 }] }).suppliers).toEqual(['Trek N Trade', 'Mount Co']);
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

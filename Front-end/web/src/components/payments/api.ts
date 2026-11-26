@@ -6,6 +6,10 @@ import apiClient from '@/lib/api-client';
 import type { SlipRead } from './slipReader';
 import { tokenManager } from '@/lib/http/tokenManager';
 
+export type PaymentMargin = {
+  sale: number; cost: number; pct: number | null; minPct: number; below: boolean; reason: string;
+  acceptedByName: string; acceptedAt: string | null;
+};
 export type PaymentStatus = 'submitted' | 'approved' | 'on_hold' | 'paid' | 'declined' | 'cancelled';
 
 /** Why a payment is on hold, and who held it and when (null unless it is on hold now). */
@@ -79,6 +83,12 @@ export type PaymentRequest = {
   decisionNote: string;
   hold?: PaymentHold | null;
   history: { at: string; byName: string; role: string; action: string; note: string }[];
+  /**
+   * Our margin on a supplier payment for an order, worked out by the server: the customer's
+   * price for the items (GST included, after coupon) vs every supplier payment on them.
+   * `below`: under the admin's minimum — procurement gave `reason`, accounts must accept it.
+   */
+  margin?: PaymentMargin | null;
   /** Bumped by every edit; sent back with Approve so an edit in between is not approved unseen. */
   rev?: number;
   /** Set once it was edited after being submitted: the "Edited" tag. */
@@ -435,8 +445,13 @@ export const setRequestCredit = (id: string, body: { useCredit?: boolean; credit
 /** How a payment was paid, in words ('credit' = supplier credit paid it all, nothing transferred). */
 export const paidHow = (method: string) => (method === 'credit' ? 'Supplier credit — nothing transferred' : method.toUpperCase());
 
-export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'release' | 'cancel', note = '', rev?: number) =>
-  apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, { note, ...(action === 'approve' && rev != null ? { rev } : {}) });
+export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'release' | 'cancel', note = '', rev?: number, acceptBelowMargin = false) =>
+  apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, {
+    note,
+    ...(action === 'approve' && rev != null ? { rev } : {}),
+    // Below the minimum margin: approving says "I accept the lower margin" (the server refuses without it).
+    ...(action === 'approve' && acceptBelowMargin ? { acceptBelowMargin: true } : {}),
+  });
 
 /** 'YYYY-MM-DD' → "8 Nov 2026" (a calendar day: no time zone shift). */
 export const dayText = (d: string) => (d

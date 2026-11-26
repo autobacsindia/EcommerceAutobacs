@@ -251,6 +251,27 @@ const PaymentRequestSchema = new mongoose.Schema(
     // agreed total) or 'full' (the whole agreed total in one payment). Worked out by the server from the deal, never sent by the client.
     deal: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierDeal', default: null },
     part: { type: String, enum: ['advance', 'part', 'balance', 'full', ''], default: '' },
+    // Our margin on a supplier payment for an order's items, checked by the server when
+    // it was raised / edited (services/supplierMarginService.js) — what accounts saw.
+    // Sale = what the customer paid for those items (GST included, after coupon);
+    // cost = every live supplier payment on them, this one included (a deal: its agreed
+    // total). Below `minBp` needs `reason`, and accounts' approval records `accepted*`.
+    // Absent on payments not for an order and on payments raised before 2026-11-26.
+    margin: {
+      type: new mongoose.Schema({
+        salePaise: { type: Number, required: true },
+        costPaise: { type: Number, required: true },
+        bp: { type: Number, default: null },        // null = cost not known yet (foreign bill)
+        minBp: { type: Number, required: true },
+        below: { type: Boolean, default: false },
+        reason: { type: String, default: '', maxlength: 500 },
+        checkedAt: { type: Date, required: true },
+        acceptedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        acceptedByName: { type: String, default: '' },
+        acceptedAt: { type: Date, default: null },
+      }, { _id: false }),
+      default: undefined,
+    },
     // A payment (all or part) of a bill we owe a supplier (models/SupplierBill.js,
     // "We owe suppliers"). Set by the server from the bill; the bill's lock moves with it.
     supplierBill: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierBill', default: null },
@@ -316,6 +337,12 @@ PaymentRequestSchema.index({ team: 1, createdAt: -1, _id: -1 }, { name: 'payment
 */
 PaymentRequestSchema.index({ status: 1, amount: -1, _id: -1 }, { name: 'payment_request_status_amount' });
 PaymentRequestSchema.index({ status: 1, 'payment.paidAt': -1, _id: -1 }, { name: 'payment_request_status_paid' });
+// The admin's "Below-margin exceptions" list, newest first (keyset on createdAt, _id).
+// Partial: holds only the rare below-margin payments.
+PaymentRequestSchema.index(
+  { createdAt: -1, _id: -1 },
+  { name: 'payment_request_below_margin', partialFilterExpression: { 'margin.below': true } }
+);
 // The admin activity feed: most recently changed first.
 PaymentRequestSchema.index({ updatedAt: -1 }, { name: 'payment_request_updated' });
 // "Is there a supplier request in flight for this order?" (shipping guard, order panel).

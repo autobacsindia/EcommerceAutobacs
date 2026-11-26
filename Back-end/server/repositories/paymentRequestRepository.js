@@ -193,6 +193,22 @@ const paymentRequestRepository = {
     order: { $eq: orderId, $type: 'objectId' }, kind: 'supplier', status: { $in: ['submitted', 'approved', 'on_hold'] },
   }).select('number status itemIds partId').session(session).lean(),
 
+  /** Every supplier request for an order, with what its margin needs (served by payment_request_order). */
+  findCostsForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' }, kind: 'supplier' })
+    .limit(200) // bounded: one order's payments, far above any real order
+    .select('number kind status itemIds partId deal amount currency foreignAmount credit payee.name')
+    .lean(),
+
+  /** One page of below-margin supplier payments, newest first (payment_request_below_margin). */
+  pageBelowMargin: ({ after = null, limit }) => PaymentRequest.find({
+    'margin.below': true,
+    ...(after ? { $or: [{ createdAt: { $lt: after.createdAt } }, { createdAt: after.createdAt, _id: { $lt: after._id } }] } : {}),
+  })
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit)
+    .select('number status order orderNumber itemNames amount currency payee.name requestedByName createdAt approvedAt decisionNote margin')
+    .lean(),
+
   /** Every supplier request for an order, for the order panel. */
   findForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' } })
     .sort({ createdAt: -1 })

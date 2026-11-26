@@ -123,6 +123,9 @@ export default function PaymentRequestForm({
   const clientId = useRef(newClientId());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Below the minimum margin (the server's answer, MARGIN_BELOW): its message, and procurement's reason.
+  const [marginBlock, setMarginBlock] = useState('');
+  const [marginReason, setMarginReason] = useState('');
   const [filling, setFilling] = useState(false);
 
   // The team's options and currencies, from the server. A supplier payment is
@@ -272,12 +275,18 @@ export default function PaymentRequestForm({
     }
     for (const f of bills) form.append('bill', f);
     for (const f of qr) form.append('qr', f);
+    if (paysSupplier && marginBlock && marginReason.trim()) form.append('marginReason', marginReason.trim());
     setBusy(true);
     try {
       const endpoint = setup ? '/payment-requests/deals' : paysSupplier ? '/payment-requests/supplier' : '/payment-requests/expenses';
       const res = await postForm<{ request: PaymentRequest }>(endpoint, form);
       onDone(res.request);
     } catch (err) {
+      // Below the minimum margin: show the numbers and ask why, instead of a plain error.
+      if ((err as { rawData?: { code?: string } })?.rawData?.code === 'MARGIN_BELOW') {
+        setMarginBlock(errorMessage(err, 'Margin is below the minimum.'));
+        return;
+      }
       setError(errorMessage(err, 'Could not send the request. Please try again.'));
     } finally {
       setBusy(false);
@@ -533,10 +542,20 @@ export default function PaymentRequestForm({
           label="Attach their payment QR" icon={<QrCode className="h-4 w-4" />} onError={setError} />
       </div>
 
+      {marginBlock && (
+        <div role="alert" aria-label="Below minimum margin" className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold">Below our minimum margin</p>
+          <p>{marginBlock}</p>
+          <label className="block font-medium text-red-900" htmlFor="pr-margin-reason">Why should we buy at this price?</label>
+          <textarea id="pr-margin-reason" className={`${input} min-h-[4rem] bg-white`} maxLength={500} value={marginReason}
+            onChange={(e) => setMarginReason(e.target.value)} placeholder="e.g. Only supplier with stock; customer needs it this week" />
+          <p className="text-xs text-red-700">Accounts will see this and must approve the lower margin before it is paid.</p>
+        </div>
+      )}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {setup ? 'Save and send advance for approval' : 'Send for approval'}
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {marginBlock ? 'Send to accounts with reason' : setup ? 'Save and send advance for approval' : 'Send for approval'}
         </button>
         {onCancel && <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>}
       </div>

@@ -26,7 +26,7 @@ import { companyInfo } from '../config/company.js';
 import { statesMatch } from '../config/gstStates.js';
 import counterRepository from '../repositories/counterRepository.js';
 import { variantDisplayName } from '../utils/orderLines.js';
-import { formatInvoiceNumber, invoiceFileName } from '../utils/invoiceFormat.js';
+import { formatInvoiceNumber, invoiceFileName, orderNumber as invoiceOrderNumber } from '../utils/invoiceFormat.js';
 import { formatLongDateIST } from '../utils/datetime.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import { describeEmiPlan } from '../utils/paymentMethodDetails.js';
@@ -248,9 +248,8 @@ export const assignInvoiceNumber = async (order) => {
   return order.invoiceNo;
 };
 
-/** Order reference shown on the invoice: WooCommerce number for migrated orders, else the _id suffix. */
-export const orderNumber = (order) =>
-  order.wpId ? `#${order.wpId}` : `#${order._id.toString().slice(-8).toUpperCase()}`;
+/** Order reference shown on the invoice — lives in utils/invoiceFormat.js (pure). */
+export const orderNumber = invoiceOrderNumber;
 
 /** Rupee formatting for the PDF (₹ when the Unicode font is embedded, else "Rs."). */
 const rs = (n) =>

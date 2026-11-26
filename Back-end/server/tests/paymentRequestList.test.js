@@ -13,6 +13,7 @@
  *     including ties (equal amounts); a cursor from another sort starts over
  *   - the first page says how many match and their total; a huge match is capped
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
 
@@ -383,3 +384,6 @@ describe('"What for" codes', () => {
     expect(numbers(await pr.list(admin, { category: 'x"; drop' }))).toHaveLength(3);
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

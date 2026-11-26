@@ -10,6 +10,7 @@ import PaymentRequestDetail from './PaymentRequestDetail';
 import { EntryRow } from './SupplierCredit';
 import { creditKeys, getPendingCredit } from './credit';
 import { EditedTag } from './EditHistory';
+import MarginBox from './MarginBox';
 import { actOn, billAmount, categoryName, errorMessage, listRequests, money, paymentKeys, type PaymentRequest } from './api';
 
 /**
@@ -86,10 +87,13 @@ function PaymentRow({ r, onOpen }: { r: PaymentRequest; onOpen: () => void }) {
       note = (window.prompt(`Why is ${r.number} declined? (the person who raised it sees this)`) || '').trim();
       if (note.length < 3) return;
     }
+    // Below the minimum margin: approving is an explicit "I accept the lower margin".
+    const below = action === 'approve' && Boolean(r.margin?.below);
+    if (below && !window.confirm(`${r.number} is below the minimum margin (${r.margin?.pct ?? '—'}%, minimum ${r.margin?.minPct}%).\n\nReason: ${r.margin?.reason || '—'}\n\nI accept the lower margin — approve it?`)) return;
     setBusy(true);
     setError('');
     try {
-      await actOn(r.id, action, note, r.rev);
+      await actOn(r.id, action, note, r.rev, below);
       await qc.invalidateQueries({ queryKey: paymentKeys.all });
     } catch (e) {
       setError(errorMessage(e, 'Could not save that. Please try again.'));
@@ -113,6 +117,7 @@ function PaymentRow({ r, onOpen }: { r: PaymentRequest; onOpen: () => void }) {
           </p>
           {r.description && <p className="text-sm text-gray-700">{r.description}</p>}
           {r.orderCancelled && <p className="text-xs font-semibold text-red-700">Its order was cancelled — decline it.</p>}
+          {r.margin?.below && <div className="mt-2"><MarginBox m={r.margin} compact /></div>}
         </div>
         <div className="flex flex-wrap gap-2">
           {r.can.approve && <button type="button" disabled={busy} className={approveBtn} onClick={() => act('approve')}>Approve</button>}

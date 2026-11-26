@@ -21,6 +21,7 @@
  *     "save as a new supplier" is refused when the name or phone is already saved
  */
 
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -401,3 +402,6 @@ describe('Supplier payment not for one order (stock)', () => {
     expect(res.status).toBe(400);
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();
