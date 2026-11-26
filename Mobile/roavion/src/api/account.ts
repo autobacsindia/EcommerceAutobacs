@@ -7,6 +7,8 @@
  * the body (its documented mobile path), we keep it as a belt-and-braces header.
  */
 import { api, resetGuestSession, setAccessToken } from './client';
+import type { OrderMomentData } from '../orders/momentCopy';
+import { parseMoment } from '../orders/momentParse';
 
 export interface Customer {
   id: string;
@@ -133,7 +135,22 @@ export async function fetchOrders(signal?: AbortSignal): Promise<Order[]> {
   return (res.orders ?? []).map(toOrder);
 }
 
-export async function fetchOrder(id: string, signal?: AbortSignal): Promise<Order> {
-  const res = await api.get<{ order?: RawOrder } & RawOrder>(`/orders/${id}`, signal);
-  return toOrder((res.order ?? res) as RawOrder);
+/** One order, plus the server-chosen picture for its latest update. */
+export interface OrderDetail extends Order {
+  /** null when the server sent none (or one this app version doesn't know). */
+  moment: OrderMomentData | null;
+  /** At least one parcel is with the courier (server `progress.parcels.shipped`). */
+  shipped: boolean;
+}
+
+type RawOrderDetail = RawOrder & { moment?: unknown; progress?: { parcels?: { shipped?: number } } };
+
+export async function fetchOrder(id: string, signal?: AbortSignal): Promise<OrderDetail> {
+  const res = await api.get<{ order?: RawOrderDetail } & RawOrderDetail>(`/orders/${encodeURIComponent(id)}`, signal);
+  const raw = (res.order ?? res) as RawOrderDetail;
+  return {
+    ...toOrder(raw),
+    moment: parseMoment(raw.moment),
+    shipped: (raw.progress?.parcels?.shipped ?? 0) > 0,
+  };
 }

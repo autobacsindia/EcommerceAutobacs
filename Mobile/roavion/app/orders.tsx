@@ -4,7 +4,7 @@
  * Status wording mirrors the website so an email, the site and the app never
  * describe the same parcel three different ways.
  */
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOrders, type Order } from '../src/api/account';
@@ -12,31 +12,15 @@ import { Photo } from '../src/components/ui';
 import { colors, font, inr, radius, spacing, type } from '../src/theme';
 import { EmptyState, ErrorState, ListSkeleton } from '../src/ui';
 import { useApp } from '../src/store';
-
-const STATUS: Record<string, { label: string; tone: 'green' | 'amber' | 'grey' | 'red' }> = {
-  awaiting_payment: { label: 'Awaiting payment', tone: 'amber' },
-  processing: { label: 'Processing', tone: 'amber' },
-  shipped: { label: 'Shipped', tone: 'green' },
-  delivered: { label: 'Delivered', tone: 'green' },
-  returned: { label: 'Returned', tone: 'grey' },
-  cancelled: { label: 'Cancelled', tone: 'red' },
-};
-
-const TONES = {
-  green: { bg: colors.greenSoft, fg: colors.green },
-  amber: { bg: colors.goldSoft, fg: colors.ink2 },
-  grey: { bg: colors.page, fg: colors.muted },
-  red: { bg: colors.redSoft, fg: colors.red },
-};
+import { orderStatus, paymentLabel } from '../src/orders/orderStatus';
 
 /**
  * One order as a WhatsApp-style chat row: round photo of the first item, the
  * item name, grey order number + status, and the date / amount on the right.
  * Amounts are the order's own stored total (a snapshot), never recomputed.
  */
-function OrderRow({ order, last }: { order: Order; last: boolean }) {
-  const status = STATUS[order.status] ?? { label: order.status, tone: 'grey' as const };
-  const tone = TONES[status.tone];
+function OrderRow({ order, last, onPress }: { order: Order; last: boolean; onPress?: () => void }) {
+  const { status, tone } = orderStatus(order.status);
   const when = order.placedAt
     ? new Date(order.placedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : '';
@@ -45,9 +29,12 @@ function OrderRow({ order, last }: { order: Order; last: boolean }) {
   const paid = order.paymentStatus === 'paid';
 
   return (
-    <View
-      style={[s.row, !last && s.rowDivider]}
-      accessible
+    <Pressable
+      style={({ pressed }) => [s.row, !last && s.rowDivider, pressed && onPress ? s.rowPressed : null]}
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityHint={onPress ? 'Opens this order' : undefined}
       accessibilityLabel={`Order ${order.code}, ${status.label}, ${inr(order.total)}${paid ? ' paid' : ''}, ${when}`}
     >
       <Photo uri={first?.image ?? ''} style={s.thumb} />
@@ -70,10 +57,10 @@ function OrderRow({ order, last }: { order: Order; last: boolean }) {
             <Text style={[s.pillText, { color: tone.fg }]}>{status.label}</Text>
           </View>
           {/* "Paid" only when the server says so. */}
-          <Text style={s.paidNote}>{paid ? 'Paid' : order.paymentStatus === 'refunded' ? 'Refunded' : 'Not paid'}</Text>
+          <Text style={s.paidNote}>{paymentLabel(order.paymentStatus)}</Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -134,7 +121,13 @@ export default function OrdersScreen() {
       refreshControl={
         <RefreshControl refreshing={orders.isFetching} onRefresh={() => { orders.refetch(); }} tintColor={colors.green} colors={[colors.green]} />
       }
-      renderItem={({ item, index }) => <OrderRow order={item} last={index === (orders.data?.length ?? 0) - 1} />}
+      renderItem={({ item, index }) => (
+        <OrderRow
+          order={item}
+          last={index === (orders.data?.length ?? 0) - 1}
+          onPress={() => router.push({ pathname: '/order/[id]', params: { id: item.id } })}
+        />
+      )}
     />
   );
 }
@@ -143,6 +136,7 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   list: { flex: 1, backgroundColor: colors.white },
   row: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.md, alignItems: 'flex-start' },
+  rowPressed: { opacity: 0.6 },
   rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   thumb: { width: 52, height: 52, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   rowBody: { flex: 1, gap: 3 },
