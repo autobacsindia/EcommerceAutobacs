@@ -33,8 +33,13 @@ const SalaryStructureSchema = new mongoose.Schema({
   pfCapAtCeiling: { type: Boolean, default: true },
   esiApplicable: { type: Boolean, default: true }, // still subject to the gross threshold
   ptState: { type: String, default: '', maxlength: 40 }, // key into HrSettings.ptSlabs
+  // Managers are usually not eligible (owner, 2026-11-26).
   overtimeEligible: { type: Boolean, default: true },
-  overtimeMultiplier: { type: Number, default: 1.5, min: 1, max: 3 },
+  // null = the company rate (HrSettings.overtimeMultiplier, 2.0 by default). A number
+  // here overrides it for this employee only.
+  overtimeMultiplier: { type: Number, default: null, min: 1, max: 3 },
+  // Monthly punctuality bonus (HrSettings.punctualityBonusPaise) — per employee.
+  punctualityBonusEligible: { type: Boolean, default: true },
   tdsMonthlyPaise: { type: Number, default: 0, min: 0 },
   reason: { type: String, required: true, trim: true, minlength: 3, maxlength: 500 },
   createdBy: { type: ObjectId, ref: 'User', required: true },
