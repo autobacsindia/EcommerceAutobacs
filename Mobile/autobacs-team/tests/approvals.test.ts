@@ -1,5 +1,6 @@
 import { canApproveAnything, clampOtMinutes, decisionError, NO_CAPS, visibleSections } from '../src/lib/approvals';
 import { pushTarget } from '../src/push/routes';
+import { toOvertimePage } from '../src/api/hr';
 
 const caps = (leave: boolean, fixDay: boolean, overtime: boolean) => ({ canApprove: { leave, fixDay, overtime }, isHr: false, isHead: false });
 
@@ -35,5 +36,18 @@ describe('notification taps', () => {
     expect(pushTarget({ path: '/face/check' })).toBeNull();
     expect(pushTarget(null)).toBeNull();
     expect(pushTarget({})).toBeNull();
+  });
+});
+
+describe('overtime list mapping (attendance-policy shape)', () => {
+  test('maps id/employee/day into the flat item the screen uses', () => {
+    const page = toOvertimePage({
+      items: [{ id: 'd1', employee: { id: 'e1', name: 'Sample Person', employeeCode: 'AB-1' }, day: { date: '2026-11-22', workedMinutes: 660, overtimeMinutes: 120 } }],
+      nextCursor: 'c',
+    });
+    expect(page).toEqual({
+      items: [{ dayId: 'd1', employeeId: 'e1', employeeName: 'Sample Person', employeeCode: 'AB-1', date: '2026-11-22', workedMinutes: 660, overtimeMinutes: 120 }],
+      nextCursor: 'c',
+    });
   });
 });

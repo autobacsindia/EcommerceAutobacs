@@ -147,6 +147,7 @@ export type MonthSummary = {
   lateCount?: number;
   earlyCount?: number;
   marks?: number;
+  marksPerHalfDayLop?: number;
   marksLopDays?: number;
   otApprovedMinutes?: number;
   otPendingMinutes?: number;
@@ -318,7 +319,7 @@ export type Holiday = { id: string; date: string; year: number; name: string; op
 
 // ── approvals (heads / HR) ───────────────────────────────────────────────────
 
-/** GET /hr/overtime/pending (attendance-policy contract). */
+/** One pending overtime day (mapped from GET /hr/overtime/pending, api/hr.ts). */
 export type OvertimeItem = {
   dayId: string;
   employeeId: string;
@@ -327,7 +328,6 @@ export type OvertimeItem = {
   date: string;
   workedMinutes: number;
   overtimeMinutes: number;
-  rev?: number;
 };
 
 export type Decision = 'approved' | 'rejected';

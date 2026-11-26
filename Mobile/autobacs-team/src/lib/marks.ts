@@ -54,7 +54,8 @@ export function ruleLines(s: MonthSummary): string[] {
   else lines.push('Coming in late = 1 mark.');
   if (r?.earlyGraceMinutes != null) lines.push(`Leaving more than ${r.earlyGraceMinutes} min before your shift ends = 1 mark.`);
   else lines.push('Leaving early = 1 mark.');
-  if (r?.marksPerHalfDayLop) lines.push(`Every ${r.marksPerHalfDayLop} marks in a month = ½ day of pay cut.`);
+  const perHalf = s.marksPerHalfDayLop ?? r?.marksPerHalfDayLop;
+  if (perHalf) lines.push(`Every ${perHalf} marks in a month = ½ day of pay cut.`);
   else lines.push('Marks can cut pay at the end of the month.');
   if (r?.overtimeAfterMinutes != null) {
     lines.push(`Work after ${hm(r.overtimeAfterMinutes)} in a day is overtime${r.overtimeMultiplier ? `, paid at ${r.overtimeMultiplier}x` : ''} — only when your head or HR approves it.`);

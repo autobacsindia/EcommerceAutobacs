@@ -73,6 +73,31 @@ export interface HrApi {
 
 const enc = encodeURIComponent;
 
+/** GET /hr/overtime/pending as the attendance-policy branch serves it. */
+export type RawOvertimePage = {
+  items: {
+    id: string;
+    employee: { id: string; name: string; employeeCode?: string };
+    day: { date: string; workedMinutes: number; overtimeMinutes: number };
+  }[];
+  nextCursor: string | null;
+};
+
+export function toOvertimePage(raw: RawOvertimePage): Page<OvertimeItem> {
+  return {
+    items: (raw.items ?? []).map((r) => ({
+      dayId: r.id,
+      employeeId: r.employee?.id,
+      employeeName: r.employee?.name,
+      employeeCode: r.employee?.employeeCode,
+      date: r.day.date,
+      workedMinutes: r.day.workedMinutes,
+      overtimeMinutes: r.day.overtimeMinutes,
+    })),
+    nextCursor: raw.nextCursor ?? null,
+  };
+}
+
 /** Turn local frames into multipart parts (React Native and web). */
 export async function appendFrames(form: FormData, frames: Frame[], isWeb: boolean): Promise<void> {
   let i = 0;
@@ -199,13 +224,15 @@ export function createHrApi({ http, isWeb, downloadPdf, baseUrl }: Deps): HrApi 
       const { employee } = await http.get<{ employee: { name: string; employeeCode: string } }>(`/hr/employees/${enc(employeeId)}`);
       return { name: employee.name, employeeCode: employee.employeeCode };
     },
-    pendingOvertime: () => http.get<Page<OvertimeItem>>('/hr/overtime/pending?limit=50'),
+    pendingOvertime: async () => toOvertimePage(await http.get<RawOvertimePage>('/hr/overtime/pending?limit=50')),
     decideOvertime: async (item, decision, approvedMinutes, note) => {
+      // No rev on this route: `overtimeMinutes` is the figure the approver saw,
+      // and the server answers 409 if the day's hours changed since.
       await http.post(`/hr/attendance/${enc(item.dayId)}/overtime/decide`, {
         decision,
-        approvedMinutes: decision === 'approved' ? approvedMinutes : 0,
+        ...(decision === 'approved' ? { minutes: approvedMinutes } : {}),
         note,
-        rev: item.rev,
+        overtimeMinutes: item.overtimeMinutes,
       });
     },
   };

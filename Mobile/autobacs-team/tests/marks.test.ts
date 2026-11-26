@@ -33,6 +33,9 @@ describe('marks wording (server counts, app words)', () => {
     expect(withRules.join(' ')).toMatch(/₹500/);
     expect(ruleLines(base).join(' ')).not.toMatch(/\d+ (min|marks)|\dx|₹/);
   });
+  test('marksPerHalfDayLop at the top of the summary (attendance-policy shape) is used', () => {
+    expect(ruleLines({ ...base, marksPerHalfDayLop: 3 }).join(' ')).toMatch(/Every 3 marks/);
+  });
   test('only late/early/overtime days are listed, newest first', () => {
     const rows = markRows([
       day({ date: '2026-11-02' }),
