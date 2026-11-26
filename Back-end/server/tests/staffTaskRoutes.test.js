@@ -261,6 +261,16 @@ describe('Staff task routes', () => {
     expect((await head.session.patch(`/staff/tasks/${id}/followers`, { add: ['nope'] })).status).toBe(400);
     expect((await head.session.patch(`/staff/tasks/${id}/followers`, { add: 'not-a-list' })).status).toBe(400);
     expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', shared: 'maybe' })).status).toBe(400);
+
+    // Followers picked on the New task form: someone also doing it only does it; bad ids are a 400.
+    const withFollowers = await head.session.post('/staff/tasks', {
+      dueOn: DUE, title: 'Keep Sam informed', assigneeIds: [String(member.user._id)], followerIds: [String(other.user._id), String(member.user._id)],
+    });
+    expect(withFollowers.status).toBe(201);
+    expect(withFollowers.body.task.followers.map((p) => p.name)).toEqual(['Sam']);
+    expect(withFollowers.body.task.assignees.map((p) => p.name)).toEqual(['Arun']);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', followerIds: ['nope'] })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { dueOn: DUE, title: 'x', followerIds: 'not-a-list' })).status).toBe(400);
   });
 
   it('sub-tasks over HTTP: make one, list them, turn a step into one, archive with the parent', async () => {

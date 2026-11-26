@@ -78,7 +78,7 @@ function HowItWorks({ onHide }: { onHide: () => void }) {
       <div>
         <p className="font-semibold text-gray-900">How tasks work</p>
         <p className="mt-0.5 leading-relaxed">
-          Press <strong>New task</strong> (or the N key), choose who should do it — yourself or anyone in the panel — and pick a due date.
+          Press <strong>New task</strong> (or the N key), choose who should do it — yourself or anyone in the panel — and pick a due date. To keep someone informed without giving them the work, add them as a <strong>follower</strong>.
           They get a pop-up and find it under <strong>My tasks</strong>; the tasks you gave to others are under <strong>Assigned by me</strong>. On the board, drag a card to change its status (on a phone, use <strong>Move to</strong>). Tick the circle when a job is done; open a task to comment, add steps or change it.
         </p>
       </div>

@@ -261,6 +261,60 @@ describe('changing who does it', () => {
   });
 });
 
+describe('followers picked on the New task form', () => {
+  const make = (actor, extra) => tasks.createTask(actor, { dueOn: DUE, title: 'Keep the admin informed', ...extra }, req);
+
+  it('a new task carries its followers: they see it under Following, not as theirs, and are not counted as doing it', async () => {
+    const { task } = await make(procHead, { assigneeIds: [String(procA._id)], followerIds: [String(admin._id), String(accountsA._id), String(admin._id)] });
+    expect(task.followers.map((p) => p.name).sort()).toEqual(['Bala', 'Owner']);
+    expect(task.assignees.map((p) => p.name)).toEqual(['Arun']);
+    const stored = await raw(task.id);
+    expect(stored.followers.map((p) => String(p.user)).sort()).toEqual(ids(admin, accountsA));
+    expect(stored.history.filter((h) => h.action === 'follower_added').map((h) => h.to).sort()).toEqual(['Bala', 'Owner']);
+    expect((await tasks.listTasks(accountsA, { view: 'following' })).tasks.map((x) => x.id)).toEqual([task.id]);
+    expect((await tasks.listTasks(accountsA, { view: 'mine' })).tasks).toHaveLength(0);
+    await refused(tasks.updateTask(accountsA, task.id, { rev: task.rev, status: 'in_progress' }), 403);
+  });
+
+  it('someone picked both to do it and to follow it only does it', async () => {
+    const { task } = await make(procHead, { assigneeIds: [String(procA._id), String(salesA._id)], shared: true, followerIds: [String(procA._id), String(admin._id)] });
+    expect(task.followers.map((p) => p.name)).toEqual(['Owner']);
+    expect(task.assignees.map((p) => p.name).sort()).toEqual(['Arun', 'Sam']);
+    // Only followers that overlap: no follower list at all.
+    const only = await make(procHead, { assigneeIds: [String(procA._id)], followerIds: [String(procA._id)], clientId: 'overlap-only' });
+    expect((await raw(only.task.id)).followers).toBeUndefined();
+  });
+
+  it('a copy each: every copy has the same followers', async () => {
+    const { tasks: made } = await make(procHead, { assigneeIds: [String(procA._id), String(salesA._id)], followerIds: [String(admin._id)] });
+    expect(made).toHaveLength(2);
+    for (const t of made) expect(t.followers.map((p) => p.name)).toEqual(['Owner']);
+  });
+
+  it('refuses bad ids, people outside the panel, too many, and followers on a personal task — before anything is saved', async () => {
+    const customer = await User.create({ name: 'Cust', email: 'cust@autobacs.test', phone: '9000000002', passwordHash: 'x', role: 'customer' });
+    await refused(make(procHead, { assigneeIds: [String(procA._id)], followerIds: ['nope'] }), 400);
+    await refused(make(procHead, { assigneeIds: [String(procA._id)], followerIds: 'not-a-list' }), 400);
+    await refused(make(procHead, { assigneeIds: [String(procA._id)], followerIds: [String(new mongoose.Types.ObjectId())] }), 400);
+    await refused(make(procHead, { assigneeIds: [String(procA._id)], followerIds: [String(customer._id)] }), 400); // a customer is not in the panel
+    const many = Array.from({ length: tasks.FOLLOWERS_MAX + 1 }, () => String(new mongoose.Types.ObjectId()));
+    await refused(make(procHead, { assigneeIds: [String(procA._id)], followerIds: many }), 400);
+    await refused(make(procA, { personal: true, followerIds: [String(admin._id)] }), 400);
+    expect(await StaffTask.countDocuments({})).toBe(0);
+    // An empty list is just no followers.
+    const { task } = await make(procA, { personal: true, followerIds: [] });
+    expect((await raw(task.id)).followers).toBeUndefined();
+  });
+
+  it('a retried create is one task with one set of followers', async () => {
+    const a = await make(procHead, { assigneeIds: [String(procA._id)], followerIds: [String(admin._id)], clientId: 'retry-followers' });
+    const b = await make(procHead, { assigneeIds: [String(procA._id)], followerIds: [String(admin._id)], clientId: 'retry-followers' });
+    expect(b.duplicate).toBe(true);
+    expect(b.task.id).toBe(a.task.id);
+    expect((await raw(a.task.id)).followers).toHaveLength(1);
+  });
+});
+
 describe('followers', () => {
   it('anyone who sees it follows and stops following themselves, without bumping rev', async () => {
     const t = await sharedTask();
