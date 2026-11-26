@@ -17,6 +17,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, ShoppingCart, Headphones } from 'lucide-react';
+import { reportClientError } from '@/lib/reportClientError';
 
 interface Props {
   children: ReactNode;
@@ -77,6 +78,11 @@ export class CheckoutErrorBoundary extends Component<Props, State> {
     }
 
     // Log to console (for debugging)
+    reportClientError({
+      feature: this.props.feature === 'payment' ? 'payment' : this.props.feature === 'cart' ? 'page-crash' : 'checkout',
+      step: 'component-crash',
+      error,
+    });
     console.error(`[${this.props.feature || 'checkout'}] Error:`, error);
     console.error('Component stack:', errorInfo.componentStack);
   }

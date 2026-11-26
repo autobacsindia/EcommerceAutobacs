@@ -19,6 +19,10 @@ jest.mock('@/lib/analytics', () => ({
   trackRazorpayDismissed: jest.fn(),
   trackPaymentFailed: jest.fn(),
 }));
+jest.mock('@/lib/reportClientError', () => ({
+  reportClientError: jest.fn(),
+  httpStatusOf: (e: { status?: number }) => (typeof e?.status === 'number' ? e.status : undefined),
+}));
 jest.mock('react-hot-toast', () => {
   const toast = Object.assign(jest.fn(), { success: jest.fn(), error: jest.fn() });
   return { __esModule: true, toast, default: toast };
@@ -27,6 +31,7 @@ jest.mock('react-hot-toast', () => {
 const post = apiClient.post as jest.Mock;
 const put = apiClient.put as jest.Mock;
 const analytics = jest.requireMock('@/lib/analytics') as Record<string, jest.Mock>;
+const reporter = jest.requireMock('@/lib/reportClientError') as { reportClientError: jest.Mock };
 
 type Opts = Record<string, any>;
 let opened: Opts[] = [];
@@ -53,6 +58,7 @@ beforeEach(() => {
   opened = [];
   instances = [];
   Object.values(analytics).forEach((m) => m.mockClear());
+  reporter.reportClientError.mockClear();
   put.mockReset();
   put.mockResolvedValue({});
   post.mockReset();
@@ -164,5 +170,56 @@ describe('useRazorpay funnel analytics', () => {
     });
     // The description can hold card/contact details: it never reaches analytics.
     expect(JSON.stringify(analytics.trackPaymentFailed.mock.calls)).not.toMatch(/4242|asha|9000000000/i);
+  });
+
+  /*
+    "Website errors" reports: what failed and the gateway's own codes, never the
+    payer's details. Reporting only — the payment flow is unchanged.
+  */
+  it('reports a failed payment once per payment id, with codes and the order, no PII', async () => {
+    await pay();
+    const failure = {
+      error: {
+        code: 'BAD_REQUEST_ERROR', description: 'Your card ending 4242 was declined', source: 'bank',
+        step: 'payment_authorization', reason: 'payment_failed', metadata: { payment_id: 'pay_A' },
+      },
+    };
+    await act(async () => {
+      await instances[0].handlers['payment.failed'](failure);
+      await instances[0].handlers['payment.failed'](failure);
+    });
+    expect(reporter.reportClientError).toHaveBeenCalledTimes(1);
+    expect(reporter.reportClientError.mock.calls[0][0]).toMatchObject({
+      feature: 'payment', step: 'payment-failed', orderId: 'ord_1',
+      context: { code: 'BAD_REQUEST_ERROR', reason: 'payment_failed', source: 'bank', gatewayStep: 'payment_authorization' },
+    });
+    expect(JSON.stringify(reporter.reportClientError.mock.calls)).not.toMatch(/4242|asha|9000000000/i);
+  });
+
+  it('reports a dismissed window as a warning, once', async () => {
+    const opts = await pay();
+    await act(async () => { await opts.modal.ondismiss(); await opts.modal.ondismiss(); });
+    expect(reporter.reportClientError).toHaveBeenCalledTimes(1);
+    expect(reporter.reportClientError.mock.calls[0][0]).toMatchObject({ feature: 'payment', step: 'dismissed', level: 'warning', orderId: 'ord_1' });
+  });
+
+  it('reports a failed create-order with its HTTP status, and still fails the payment as before', async () => {
+    post.mockReset();
+    post.mockRejectedValueOnce(Object.assign(new Error('Order already paid'), { status: 409 }));
+    const onFailure = jest.fn();
+    const { result } = renderHook(() => useRazorpay({ onSuccess: jest.fn(), onFailure }));
+    await act(async () => { await result.current.processPayment('ord_1', 1, USER); });
+    expect(onFailure).toHaveBeenCalled();
+    expect(opened).toHaveLength(0);
+    expect(reporter.reportClientError.mock.calls[0][0]).toMatchObject({ feature: 'payment', step: 'open', orderId: 'ord_1', context: expect.objectContaining({ httpStatus: 409 }) });
+  });
+
+  it('reports a failed verify', async () => {
+    post.mockResolvedValueOnce({
+      success: true, data: { keyId: 'rzp_live_aaaaaa', orderId: 'order_server1', amount: 20300000, currency: 'INR' },
+    }).mockRejectedValueOnce(Object.assign(new Error('Bad signature'), { status: 400 }));
+    const opts = await pay();
+    await act(async () => { await opts.handler({ razorpay_order_id: 'order_server1', razorpay_payment_id: 'pay_1', razorpay_signature: 's' }); });
+    expect(reporter.reportClientError.mock.calls[0][0]).toMatchObject({ feature: 'payment', step: 'verify', orderId: 'ord_1', context: { httpStatus: 400 } });
   });
 });

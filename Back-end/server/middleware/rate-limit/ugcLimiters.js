@@ -64,3 +64,14 @@ export const reelAttributeRateLimit = rateLimit({
   message: 'Too many requests. Please slow down.',
   keyGenerator: (req) => `rate_limit:reel_attr:${getClientIp(req)}`
 });
+
+// ── Customer-facing error reports (routes/clientErrors.js) ─────────────────────
+// Public, keyed on the real client IP (cf-connecting-ip). A broken page reports a
+// handful of errors; a loop or a script is cut off here, and the service caps the
+// database writes behind it anyway.
+export const clientErrorReportRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: 'Too many reports.',
+  keyGenerator: (req) => `rate_limit:client_error:${getClientIp(req)}`
+});

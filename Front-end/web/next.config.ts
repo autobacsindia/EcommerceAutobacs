@@ -229,6 +229,9 @@ const nextConfig: NextConfig = {
     // Baked in at build time. In production NEXT_PUBLIC_API_URL is already validated
     // above, so this is always defined when NODE_ENV === 'production'.
     API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080',
+    // The build's git commit, so the "Website errors" page can say which deploy an
+    // error came from. Both hosts set one at build time; '' when neither does.
+    NEXT_PUBLIC_RELEASE: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 12),
   },
   webpack(config) {
     // ─── Windows duplicate-module fix ────────────────────────────────────────

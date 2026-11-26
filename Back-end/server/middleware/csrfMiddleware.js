@@ -213,10 +213,14 @@ export const csrfProtection = async (req, res, next) => {
     // so they keep CSRF protection.
     '/api/v1/careers/applications',
   ];
+  // Exempt as an EXACT path only (no sub-paths). Customer-facing error reports from
+  // the storefront (routes/clientErrors.js): changes no account, answers 204 whatever
+  // is sent, rate-limited per IP. The staff resolve route under it keeps CSRF.
+  const exactExcludedPaths = ['/api/v1/client-errors'];
 
   // Exact match OR path is a strict prefix (followed by '/' to prevent
   // /api/v1/auth/login-evil matching /api/v1/auth/login)
-  if (excludedPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
+  if (exactExcludedPaths.includes(req.path) || excludedPaths.some(p => req.path === p || req.path.startsWith(p + '/'))) {
     return next();
   }
 

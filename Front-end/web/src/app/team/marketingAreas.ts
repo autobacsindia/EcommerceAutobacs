@@ -1,4 +1,4 @@
-import { BookOpen, Sparkles, Globe, Ticket, Megaphone, Gift, Image as ImageIcon, Target, MessageSquareText, ShoppingBag, Tag, FolderTree, Car, ReceiptText } from 'lucide-react';
+import { BookOpen, Sparkles, Globe, Ticket, Megaphone, Gift, Image as ImageIcon, Target, MessageSquareText, ShoppingBag, Tag, FolderTree, Car, ReceiptText, Bug } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MARKETING_BASE } from '@/lib/usePanel';
 
@@ -26,4 +26,6 @@ export const MARKETING_AREAS: MarketingArea[] = [
   { href: `${MARKETING_BASE}/festival-theme`, label: 'Festival theme', text: 'Diwali or Black Friday look, cursor and countdown — on/off with start and end dates.', icon: Sparkles },
   { href: `${MARKETING_BASE}/leads`, label: 'Leads', text: 'Every enquiry from ads and the website, and where each one is up to.', icon: Target },
   { href: `${MARKETING_BASE}/consultation`, label: 'Consultations', text: 'Specialist consultation requests from the website.', icon: MessageSquareText },
+  // Read only, payments / checkout / careers only (the API scopes it).
+  { href: `${MARKETING_BASE}/site-errors`, label: 'Website errors', text: 'Customers whose payment failed or whose job application upload failed, and why.', icon: Bug },
 ];

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark, Contact, Megaphone, Coins, Hourglass } from 'lucide-react';
+import { Bug, Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark, Contact, Megaphone, Coins, Hourglass } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MARKETING_AREAS } from './marketingAreas';
@@ -66,6 +66,8 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
       ];
     case 'operations':
       return [{ href: '/team/deliveries', title: 'Deliveries', text: 'Parcels on their way — follow up and mark them delivered.', icon: Truck }, PAID, DELIVERED];
+    case 'developer':
+      return [{ href: '/team/site-errors', title: 'Website errors', text: 'Problems customers hit on the website — crashed pages, failed payments, failed careers uploads — with what to fix. Mark each resolved once fixed.', icon: Bug }];
     case 'marketing':
       return MARKETING_AREAS.map(({ href, label, text, icon }) => ({ href, title: label, text, icon }));
     default:
