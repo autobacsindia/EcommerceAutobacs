@@ -58,7 +58,14 @@ function estimateText(estimate: CustomerProgress['estimate']): string | null {
   return `Expected delivery: ${windowDates(estimate, from)}`;
 }
 
-export default function CustomerOrderProgress({ progress }: { progress: CustomerProgress }) {
+export default function CustomerOrderProgress({
+  progress,
+  showHeadline = true,
+}: {
+  progress: CustomerProgress;
+  /** Off when the order-moment card above already says what is happening now. */
+  showHeadline?: boolean;
+}) {
   const delivered = progress.steps[progress.steps.length - 1]?.done === true;
   const partly = !delivered && progress.parcels.shipped > 0 && progress.parcels.total > progress.parcels.shipped;
   const headline = delivered
@@ -73,6 +80,7 @@ export default function CustomerOrderProgress({ progress }: { progress: Customer
   return (
     <section aria-label="Order progress" className="w-full">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between mb-5">
+        {showHeadline ? (
         <p className="font-display text-[15px] font-semibold text-ink flex items-center gap-2" data-testid="progress-headline">
           {!delivered && (
             <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
@@ -82,6 +90,7 @@ export default function CustomerOrderProgress({ progress }: { progress: Customer
           )}
           {headline}
         </p>
+        ) : <span />}
         {estimate && (
           <p className="font-display text-sm text-ink-muted" data-testid="progress-estimate">{estimate}</p>
         )}

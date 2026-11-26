@@ -770,3 +770,37 @@ html[data-festival-style='neon'] .st-h3::before {
 @container (min-width: 380px) {
   .zd-ribbon { top: 27px; right: -46px; width: 170px; padding: 6px 0; font-size: 12px; letter-spacing: 0.05em; }
 }
+
+/* ───────── Order moments (components/orders/OrderMoment.tsx, orderMomentScenes.ts) ─────────
+   An element's normal style IS its final frame; these keyframes only say where it
+   starts. So `.om-still` (already seen) and reduced motion simply turn animation off
+   and the finished picture remains. Each plays once (1.5–3 s); nothing loops forever. */
+.om-scene .om-a { animation-fill-mode: both; transform-box: fill-box; transform-origin: center; }
+.om-scene.om-still * { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .om-scene * { animation: none !important; } }
+@keyframes om-flap-l { from { transform: rotate(-150deg); } }
+@keyframes om-flap-r { from { transform: rotate(150deg); } }
+@keyframes om-scale-y { from { transform: scaleY(0); } }
+@keyframes om-pop { 0% { transform: scale(0); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes om-burst { 0% { opacity: 0; transform: translate(0, 0) scale(.3) rotate(0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r, 0deg)); } }
+@keyframes om-drop { 0% { transform: translateY(-95px); opacity: 0; } 15% { opacity: 1; } 70% { transform: translateY(4px); } 100% { transform: translateY(0); } }
+@keyframes om-draw { from { stroke-dashoffset: 1; } }
+@keyframes om-from-right { from { transform: translateX(60px); opacity: 0; } }
+@keyframes om-from-left-far { from { transform: translateX(-240px); } }
+@keyframes om-from-left-near { from { transform: translateX(-70px); } }
+@keyframes om-stamp { 0% { transform: scale(2.4) rotate(-12deg); opacity: 0; } 60% { transform: scale(.94) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-12deg); } }
+@keyframes om-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
+@keyframes om-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes om-spin-back { from { transform: rotate(-360deg); } }
+@keyframes om-slide-left { to { transform: translateX(-40px); } }
+@keyframes om-slide-left-long { to { transform: translateX(-160px); } }
+@keyframes om-fade-out { 0% { opacity: .9; } 100% { opacity: 0; } }
+@keyframes om-fade-in { from { opacity: 0; } }
+@keyframes om-rise-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes om-bow { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 50% { transform: rotate(0); } 75% { transform: rotate(-4deg); } }
+@keyframes om-blink { 0%, 90%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes om-dim-old { from { opacity: 1; } }
+@keyframes om-coin { 0% { opacity: 0; transform: translate(0, 0); } 12% { opacity: 1; } 50% { transform: translate(72px, -52px); } 88% { opacity: 1; } 100% { opacity: 0; transform: translate(144px, 0); } }
+@keyframes om-thump { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes om-typing { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes om-sway { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(8deg); } 65% { transform: rotate(-5deg); } }

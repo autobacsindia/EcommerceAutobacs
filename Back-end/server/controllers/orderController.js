@@ -27,6 +27,8 @@ import { resolveBuyerAndAcceptance } from '../services/buyerService.js';
 import { BUYER_TYPES } from '../config/buyer.js';
 import { contentIdForLineItem } from '../utils/metaCatalogId.js';
 import { customerOrderProgress } from '../utils/customerOrderProgress.js';
+import { orderMoment } from '../utils/orderMoment.js';
+import { IN_FLIGHT_RETURN_STATUSES } from '../config/returnPolicy.js';
 import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -352,14 +354,18 @@ export const getOrderById = async (req, res) => {
     Signing only the order-level one would work today (the admin page renders
     just that) and break silently the moment the parcel list grows a slip link.
   */
-  const [signedSlip, signedShipments] = await Promise.all([
+  const [signedSlip, signedShipments, movingReturns] = await Promise.all([
     withSignedSlip(order.shippingSlip),
     Array.isArray(order.shipments)
       ? Promise.all(shipmentsForViewer(order.shipments, { orderId: order._id, isAdmin }).map(async (sh) => ({
         ...sh, shippingSlip: await withSignedSlip(sh.shippingSlip),
       })))
       : Promise.resolve(order.shipments),
+    // Returns still moving, for the order-moment picture ({order:1} index; status only).
+    returnRequestRepository.find({ order: order._id, status: { $in: IN_FLIGHT_RETURN_STATUSES } })
+      .select('status').limit(20).lean(),
   ]);
+  const progress = customerOrderProgress(order);
 
   // Staff-only parts of the order — the team workflow (staff names, suppliers,
   // internal notes), who sold it and who credited it, and who confirmed a bank
@@ -395,7 +401,10 @@ export const getOrderById = async (req, res) => {
     // The customer's progress timeline (placed → preparing → packed → shipped →
     // delivered) with dates and the delivery estimate. Read from the FULL order
     // (workflow included) but only step keys and dates leave — see the util.
-    progress: customerOrderProgress(order),
+    progress,
+    // The one picture at the top of the order (utils/orderMoment.js), chosen from
+    // server-confirmed state only.
+    moment: orderMoment(order, progress, { returns: movingReturns }),
     // Shows the admin "Edit address" button; PATCH /:id/shipping-address re-checks.
     ...(isAdmin ? { addressEditable: isAddressEditable(order) } : {}),
     items: order.items.map(item => {

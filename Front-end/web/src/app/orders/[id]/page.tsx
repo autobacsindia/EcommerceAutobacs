@@ -24,6 +24,8 @@ import WriteReviewModal from '@/components/reviews/WriteReviewModal';
 import OrderServiceRatingCard from '@/components/orderRating/OrderServiceRatingCard';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import CustomerOrderProgress, { type CustomerProgress } from '@/components/orders/CustomerOrderProgress';
+import OrderMoment from '@/components/orders/OrderMoment';
+import { momentSignature, type OrderMomentData } from '@/components/orders/orderMomentCopy';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import { OrderStatus } from '@/types/tracking';
 import { productUrl, type OrderPaymentSummary } from '@/lib/types';
@@ -132,6 +134,8 @@ interface OrderDetail {
   deliveredAt?: string;
   /** Placed → Preparing → Packed → Shipped → Delivered, from real order state (server). Null when cancelled/unpaid. */
   progress?: CustomerProgress | null;
+  /** The picture + words at the top (server-chosen from confirmed state; Back-end utils/orderMoment.js). */
+  moment?: OrderMomentData | null;
   statusHistory?: Array<{
     status: string;
     timestamp: string;
@@ -534,11 +538,22 @@ export default function OrderDetailPage() {
               <PaymentStatusTag paymentStatus={order.paymentStatus} />
             </div>
           </div>
+          {/* One picture + words for where the order is now. Keyed by the update, so a
+              new update (e.g. after the payment-confirm poll) remounts and plays once. */}
+          {order.moment && (
+            <OrderMoment
+              key={momentSignature(order.moment)}
+              orderId={order._id}
+              moment={order.moment}
+              shipped={(order.progress?.parcels.shipped ?? 0) > 0}
+              className="mt-6"
+            />
+          )}
           <div className="mt-8">
             {/* The step-by-step timeline for a live order; cancelled, returned and
                 unpaid orders keep the simple status bar (the server sends no progress). */}
             {order.progress
-              ? <CustomerOrderProgress progress={order.progress} />
+              ? <CustomerOrderProgress progress={order.progress} showHeadline={!order.moment} />
               : <TimelineProgress currentStatus={order.status as OrderStatus} />}
           </div>
         </div>
