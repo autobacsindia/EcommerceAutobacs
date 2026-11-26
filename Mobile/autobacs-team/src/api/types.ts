@@ -16,7 +16,27 @@ export type Employee = {
   designation: string;
   team: string;
   joinDate: string | null;
+  // Profile details (GET /hr/me, services/hr/employeeService.js shapeEmployee).
+  // Optional: the demo data and older servers may leave them out.
+  workEmail?: string;
+  phone?: string;
+  employmentType?: string;
+  dob?: string | null;
+  address?: string;
+  emergencyContact?: { name: string; relation: string; phone: string };
+  panLast4?: string;
+  uan?: string;
+  bank?: { holderName: string; accountLast4: string; ifsc: string; hasUpi: boolean };
 };
+
+/** GET /hr/me/app — what this login may do. Only decides what the app SHOWS. */
+export type AppCapabilities = {
+  canApprove: { leave: boolean; fixDay: boolean; overtime: boolean };
+  isHr: boolean;
+  isHead: boolean;
+};
+
+export type PushRegistration = { deviceId: string; token: string; platform: 'ios' | 'android' };
 
 /** POST /auth/login → the staff login (email or company username). */
 export type LoginUser = {
@@ -80,7 +100,11 @@ export type AttendanceDay = {
   breakMinutes: number;
   lateMinutes: number;
   isLate: boolean;
+  earlyMinutes?: number;
+  isEarly?: boolean;
   overtimeMinutes: number;
+  overtimeApprovedMinutes?: number;
+  overtimeStatus?: 'none' | 'pending' | 'approved' | 'rejected' | string;
   autoClosed: boolean;
   needsReview: boolean;
 };
@@ -118,6 +142,25 @@ export type MonthSummary = {
   weeklyOffDays: number;
   lateMarks: number;
   unresolvedDays: number;
+  // Attendance policy (late/early marks, overtime) — optional until that
+  // server branch lands. The app only shows what the server counted.
+  lateCount?: number;
+  earlyCount?: number;
+  marks?: number;
+  marksLopDays?: number;
+  otApprovedMinutes?: number;
+  otPendingMinutes?: number;
+  rules?: MarkRules;
+};
+
+/** The pay rules as the server applies them (HrSettings). */
+export type MarkRules = {
+  graceMinutes?: number;
+  earlyGraceMinutes?: number;
+  marksPerHalfDayLop?: number;
+  overtimeAfterMinutes?: number;
+  overtimeMultiplier?: number;
+  punctualityBonusPaise?: number;
 };
 
 export type MonthView = { month: string; days: AttendanceDay[]; summary: MonthSummary };
@@ -170,6 +213,9 @@ export type CorrectionInput = {
 
 export type Correction = {
   id: string;
+  employee?: string;
+  rev?: number;
+  createdAt?: string;
   date: string;
   punchType: PunchType;
   at: string;
@@ -205,6 +251,10 @@ export type LeaveStatus = 'pending_head' | 'pending_hr' | 'approved' | 'rejected
 
 export type LeaveRequest = {
   id: string;
+  rev?: number;
+  employee?: string;
+  employeeName?: string;
+  employeeCode?: string;
   number?: string;
   leaveType: string;
   leaveTypeCode?: string;
@@ -231,7 +281,8 @@ export type LeaveInput = {
 
 // ── payslips (payroll not built yet — shape from the ADR, provisional) ────────
 
-export type PayslipLine = { label: string; amountPaise: number };
+/** `note` explains the figure, e.g. "4 marks → ½ day". */
+export type PayslipLine = { label: string; amountPaise: number; note?: string };
 
 export type PayslipSummary = {
   month: string;
@@ -250,3 +301,33 @@ export type Payslip = PayslipSummary & {
 };
 
 export type Page<T> = { items: T[]; nextCursor: string | null };
+
+// ── profile extras ───────────────────────────────────────────────────────────
+
+export type EmployeeDocument = {
+  id: string;
+  kind: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  note: string;
+  createdAt: string;
+};
+
+export type Holiday = { id: string; date: string; year: number; name: string; optional: boolean };
+
+// ── approvals (heads / HR) ───────────────────────────────────────────────────
+
+/** GET /hr/overtime/pending (attendance-policy contract). */
+export type OvertimeItem = {
+  dayId: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  date: string;
+  workedMinutes: number;
+  overtimeMinutes: number;
+  rev?: number;
+};
+
+export type Decision = 'approved' | 'rejected';

@@ -5,6 +5,12 @@
  */
 import type { Http } from './http';
 import type {
+  AppCapabilities,
+  Decision,
+  EmployeeDocument,
+  Holiday,
+  OvertimeItem,
+  PushRegistration,
   AttendanceStatus,
   Challenge,
   ChallengePurpose,
@@ -44,7 +50,28 @@ export interface HrApi {
   payslips(): Promise<Page<Payslip>>;
   /** Downloads the released payslip PDF to a local file; returns its uri. */
   payslipPdf(month: string): Promise<string>;
+
+  // profile
+  capabilities(): Promise<AppCapabilities>;
+  documents(employeeId: string): Promise<Page<EmployeeDocument>>;
+  /** A short-lived (5 min) link to open one document. */
+  documentUrl(docId: string): Promise<{ url: string; fileName: string; mimeType: string }>;
+  holidays(year: number): Promise<Holiday[]>;
+  registerPush(input: PushRegistration): Promise<void>;
+  unregisterPush(deviceId: string): Promise<void>;
+
+  // approvals — every decision is the server's; the app never assumes it worked
+  leaveInbox(): Promise<Page<LeaveRequest>>;
+  decideLeave(id: string, decision: Decision, note: string, rev: number | undefined): Promise<LeaveRequest>;
+  pendingCorrections(): Promise<Page<Correction>>;
+  decideCorrection(id: string, decision: Decision, note: string, rev: number | undefined): Promise<void>;
+  /** Name + code for one employee (HR sees all; used to label fix-day requests). */
+  employeeName(employeeId: string): Promise<{ name: string; employeeCode: string }>;
+  pendingOvertime(): Promise<Page<OvertimeItem>>;
+  decideOvertime(item: OvertimeItem, decision: Decision, approvedMinutes: number, note: string): Promise<void>;
 }
+
+const enc = encodeURIComponent;
 
 /** Turn local frames into multipart parts (React Native and web). */
 export async function appendFrames(form: FormData, frames: Frame[], isWeb: boolean): Promise<void> {
@@ -106,13 +133,7 @@ export function createHrApi({ http, isWeb, downloadPdf, baseUrl }: Deps): HrApi 
       });
       return r;
     },
-    async logout() {
-      try {
-        await http.request('/auth/logout', { method: 'POST', noAuthRetry: true });
-      } finally {
-        await http.clearTokens();
-      }
-    },
+    logout: () => http.logout(),
     me: async () => (await http.get<{ employee: Employee }>('/hr/me')).employee,
     status: () => http.get<AttendanceStatus>('/hr/me/attendance/status'),
     month: (month) => http.get<MonthView>(`/hr/me/attendance?month=${encodeURIComponent(month)}`),
@@ -153,6 +174,39 @@ export function createHrApi({ http, isWeb, downloadPdf, baseUrl }: Deps): HrApi 
         await http.authHeader(),
         `payslip-${month}.pdf`,
       );
+    },
+
+    capabilities: () => http.get<AppCapabilities>('/hr/me/app'),
+    documents: (employeeId) => http.get<Page<EmployeeDocument>>(`/hr/employees/${enc(employeeId)}/documents`),
+    documentUrl: (docId) => http.get<{ url: string; fileName: string; mimeType: string }>(`/hr/documents/${enc(docId)}/url`),
+    holidays: async (year) => (await http.get<Page<Holiday>>(`/hr/holidays?year=${year}&limit=50`)).items,
+    registerPush: async (input) => {
+      await http.put('/hr/me/push-token', input);
+    },
+    unregisterPush: async (deviceId) => {
+      await http.del('/hr/me/push-token', { deviceId });
+    },
+
+    leaveInbox: () => http.get<Page<LeaveRequest>>('/hr/leave/inbox?limit=50'),
+    decideLeave: async (id, decision, note, rev) =>
+      (await http.post<{ request: LeaveRequest }>(`/hr/leave/${enc(id)}/decide`, { decision, note, rev })).request,
+    pendingCorrections: () => http.get<Page<Correction>>('/hr/corrections?status=pending&limit=50'),
+    decideCorrection: async (id, decision, note, rev) => {
+      // The corrections route speaks 'approve' | 'reject'.
+      await http.post(`/hr/corrections/${enc(id)}/decide`, { decision: decision === 'approved' ? 'approve' : 'reject', note, rev });
+    },
+    employeeName: async (employeeId) => {
+      const { employee } = await http.get<{ employee: { name: string; employeeCode: string } }>(`/hr/employees/${enc(employeeId)}`);
+      return { name: employee.name, employeeCode: employee.employeeCode };
+    },
+    pendingOvertime: () => http.get<Page<OvertimeItem>>('/hr/overtime/pending?limit=50'),
+    decideOvertime: async (item, decision, approvedMinutes, note) => {
+      await http.post(`/hr/attendance/${enc(item.dayId)}/overtime/decide`, {
+        decision,
+        approvedMinutes: decision === 'approved' ? approvedMinutes : 0,
+        note,
+        rev: item.rev,
+      });
     },
   };
 }

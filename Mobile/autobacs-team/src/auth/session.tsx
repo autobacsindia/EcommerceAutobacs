@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, IS_MOCK, type Employee } from '../api';
+import { unregisterPush } from '../push/push';
 
 type Phase = 'loading' | 'signedOut' | 'signedIn';
 
@@ -76,6 +77,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (beforeClear?: () => Promise<void>) => {
       try {
         await beforeClear?.();
+        // Stop this phone's notifications BEFORE the token is revoked (the
+        // call needs the session). A shared phone must not get your payslip push.
+        if (!IS_MOCK) await unregisterPush();
         await api.logout();
       } catch {
         // Offline sign-out still forgets the session on this phone.

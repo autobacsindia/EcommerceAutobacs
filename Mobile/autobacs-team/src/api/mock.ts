@@ -8,7 +8,9 @@ import { ApiError } from './http';
 import type {
   AttendanceDay,
   AttendanceStatus,
+  Correction,
   LeaveBalance,
+  OvertimeItem,
   LeaveRequest,
   MonthView,
   Payslip,
@@ -57,6 +59,21 @@ export function createMockApi(): HrApi {
     },
   ];
 
+  // Approvals demo: sample people only.
+  const inbox: LeaveRequest[] = [
+    {
+      id: 'i1', rev: 0, employee: 'e2', employeeName: 'Ravi Sample', employeeCode: 'AB-0011', leaveType: 'cl', leaveTypeCode: 'CL',
+      leaveTypeName: 'Casual leave', from: '2026-12-08', to: '2026-12-09', firstHalfOnly: false, secondHalfOnly: false, halfDays: 4,
+      reason: 'Sister wedding', status: 'pending_hr', createdAt: '2026-11-25T09:00:00Z',
+    },
+  ];
+  const fixes: Correction[] = [
+    { id: 'f1', employee: 'e3', rev: 0, date: '2026-11-24', punchType: 'out', at: '2026-11-24T19:05:00+05:30', reason: 'Phone battery died', status: 'pending' },
+  ];
+  const ot: (OvertimeItem & { done?: boolean })[] = [
+    { dayId: 'o1', employeeId: 'e4', employeeName: 'Kiran Sample', employeeCode: 'AB-0014', date: '2026-11-22', workedMinutes: 660, overtimeMinutes: 120 },
+  ];
+
   const state = () => {
     const last = punches[punches.length - 1]?.type;
     return last === 'in' || last === 'break_end' ? 'in' : last === 'break_start' ? 'break' : last === 'out' ? 'out' : 'none';
@@ -71,7 +88,12 @@ export function createMockApi(): HrApi {
     logout: async () => {},
     async me() {
       await wait();
-      return { id: 'e1', employeeCode: 'AB-0007', status: 'active', name: 'Arjun Demo', designation: 'Service advisor', team: 'service', joinDate: '2024-04-01' };
+      return {
+        id: 'e1', employeeCode: 'AB-0007', status: 'active', name: 'Arjun Demo', designation: 'Service advisor', team: 'service', joinDate: '2024-04-01',
+        workEmail: 'arjun.demo@example.com', phone: '90000 00007', employmentType: 'full_time',
+        emergencyContact: { name: 'Demo Contact', relation: 'Brother', phone: '90000 00008' },
+        panLast4: '1234', uan: '', bank: { holderName: 'Arjun Demo', accountLast4: '4821', ifsc: 'DEMO0000001', hasUpi: true },
+      };
     },
     async status(): Promise<AttendanceStatus> {
       await wait();
@@ -102,7 +124,8 @@ export function createMockApi(): HrApi {
       const days = [
         day(`${month}-20`, 'present', '09:56', '19:04', 548),
         day(`${month}-19`, 'present', '10:22', '19:01', 519, 22),
-        day(`${month}-18`, 'present', '09:50', '18:58', 548),
+        { ...day(`${month}-18`, 'present', '09:50', '21:10', 670), overtimeMinutes: 130, overtimeApprovedMinutes: 120, overtimeStatus: 'approved' },
+        { ...day(`${month}-14`, 'present', '09:55', '18:30', 515), isEarly: true, earlyMinutes: 30 },
         day(`${month}-17`, 'leave', null, null, 0),
         day(`${month}-16`, 'present', '09:58', null, 0),
         day(`${month}-15`, 'weekly_off', null, null, 0),
@@ -110,7 +133,10 @@ export function createMockApi(): HrApi {
       return {
         month,
         days,
-        summary: { daysInMonth: 30, presentDays: 18, halfDays: 0, absentDays: 0, leaveDays: 1, holidayDays: 0, weeklyOffDays: 3, lateMarks: 2, unresolvedDays: 1 },
+        summary: { daysInMonth: 30, presentDays: 18, halfDays: 0, absentDays: 0, leaveDays: 1, holidayDays: 0, weeklyOffDays: 3, lateMarks: 2, unresolvedDays: 1,
+          lateCount: 2, earlyCount: 1, marks: 3, marksLopDays: 0.5, otApprovedMinutes: 120, otPendingMinutes: 0,
+          rules: { graceMinutes: 10, earlyGraceMinutes: 10, marksPerHalfDayLop: 3, overtimeAfterMinutes: 540, overtimeMultiplier: 2, punctualityBonusPaise: 50000 },
+        },
       };
     },
     async challenge(purpose) {
@@ -195,12 +221,13 @@ export function createMockApi(): HrApi {
           { label: 'Basic', amountPaise: 1500000 },
           { label: 'HRA', amountPaise: 750000 },
           { label: 'Other allowance', amountPaise: 750000 },
-          { label: 'Overtime (4 h)', amountPaise: 104000 },
+          { label: 'Overtime (4 h, approved)', amountPaise: 104000, note: '4 h × 2' },
+          { label: 'Punctuality bonus', amountPaise: 25000, note: '3 marks → half bonus' },
         ],
         deductions: [
           { label: 'PF (12% of basic)', amountPaise: 180000 },
           { label: 'Professional tax', amountPaise: 20000 },
-          { label: '1 day without pay', amountPaise: 100000 },
+          { label: 'Late/early marks', amountPaise: 50000, note: '3 marks → ½ day' },
         ],
         daysInMonth: 31, paidDays: 30, bankLast4: '4821',
       };
@@ -208,6 +235,58 @@ export function createMockApi(): HrApi {
     },
     async payslipPdf() {
       throw new ApiError('PDFs are not in the demo.', 400);
+    },
+
+    capabilities: async () => ({ canApprove: { leave: true, fixDay: true, overtime: true }, isHr: true, isHead: false }),
+    documents: async () => {
+      await wait();
+      return {
+        items: [
+          { id: 'd1', kind: 'offer_letter', fileName: 'offer-letter.pdf', mimeType: 'application/pdf', sizeBytes: 182000, note: '', createdAt: '2024-03-20T10:00:00Z' },
+          { id: 'd2', kind: 'aadhaar', fileName: 'aadhaar.jpg', mimeType: 'image/jpeg', sizeBytes: 420000, note: 'Front side', createdAt: '2024-04-01T10:00:00Z' },
+        ],
+        nextCursor: null,
+      };
+    },
+    documentUrl: async () => {
+      throw new ApiError('Files are not in the demo.', 400);
+    },
+    holidays: async (year) => [
+      { id: 'h1', date: `${year}-01-26`, year, name: 'Republic Day', optional: false },
+      { id: 'h2', date: `${year}-08-15`, year, name: 'Independence Day', optional: false },
+      { id: 'h3', date: `${year}-10-02`, year, name: 'Gandhi Jayanti', optional: false },
+      { id: 'h4', date: `${year}-11-08`, year, name: 'Diwali', optional: false },
+      { id: 'h5', date: `${year}-12-25`, year, name: 'Christmas', optional: true },
+    ],
+    registerPush: async () => {},
+    unregisterPush: async () => {},
+
+    leaveInbox: async () => {
+      await wait();
+      return {
+        items: inbox.filter((r) => r.status === 'pending_hr' || r.status === 'pending_head'),
+        nextCursor: null,
+      };
+    },
+    async decideLeave(id, decision) {
+      await wait();
+      const r = inbox.find((x) => x.id === id);
+      if (!r) throw new ApiError('Not found', 404);
+      r.status = decision;
+      return r;
+    },
+    pendingCorrections: async () => ({ items: fixes.filter((f) => f.status === 'pending'), nextCursor: null }),
+    async decideCorrection(id, decision) {
+      await wait();
+      const f = fixes.find((x) => x.id === id);
+      if (f) f.status = decision;
+    },
+    employeeName: async () => ({ name: 'Meera Sample', employeeCode: 'AB-0012' }),
+    pendingOvertime: async () => ({ items: ot.filter((o) => !o.done), nextCursor: null }),
+    async decideOvertime(item) {
+      await wait();
+      const o = ot.find((x) => x.dayId === item.dayId);
+      if (o) o.done = true;
     },
   };
 }

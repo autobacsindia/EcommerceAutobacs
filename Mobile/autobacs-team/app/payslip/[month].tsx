@@ -1,15 +1,17 @@
 /**
  * Payslip detail. Every figure is the server's snapshot (paise); the app only
- * formats it. The PDF downloads with the same login and opens the share sheet.
+ * formats it. The PDF downloads with the same Bearer login and opens in the
+ * phone's PDF viewer (src/lib/openPdf.ts). Each line may carry a note saying
+ * how it was counted (e.g. "4 marks → ½ day").
  */
 import { useState } from 'react';
-import { Platform, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import * as Sharing from 'expo-sharing';
 import { api, errorMessage, type PayslipLine } from '../../src/api';
 import { formatDay, formatMonth } from '../../src/lib/dates';
 import { formatPaise } from '../../src/lib/format';
+import { openPdf as showPdf } from '../../src/lib/openPdf';
 import { colors, font, spacing } from '../../src/theme';
 import { Button, Card, ErrorState, Li, Loading, Screen, T } from '../../src/ui';
 
@@ -27,9 +29,7 @@ export default function PayslipDetail() {
     setPdfError(null);
     try {
       const uri = await api.payslipPdf(month);
-      if (Platform.OS !== 'web' && (await Sharing.isAvailableAsync())) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: `Payslip ${formatMonth(month)}` });
-      }
+      await showPdf(uri, `Payslip ${formatMonth(month)}`);
     } catch (err) {
       setPdfError(errorMessage(err));
     } finally {
@@ -64,7 +64,7 @@ export default function PayslipDetail() {
             Days in month {slip.daysInMonth} · Paid days {slip.paidDays} · Payslip {slip.number}
           </T>
           {pdfError ? <T style={{ color: colors.bad }}>{pdfError}</T> : null}
-          <Button label="Download PDF" icon="download-outline" loading={pdfBusy} onPress={() => void openPdf()} />
+          <Button label="View PDF" icon="document-attach-outline" loading={pdfBusy} onPress={() => void openPdf()} />
         </>
       )}
     </Screen>
@@ -80,7 +80,10 @@ function Lines({ title, lines, negative }: { title: string; lines: PayslipLine[]
       </T>
       {lines.map((l, i) => (
         <Li key={`${l.label}-${i}`} last={i === lines.length - 1}>
-          <T>{l.label}</T>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <T>{l.label}</T>
+            {l.note ? <T kind="caption">{l.note}</T> : null}
+          </View>
           <T kind="bodyBold">{negative ? formatPaise(-l.amountPaise) : formatPaise(l.amountPaise)}</T>
         </Li>
       ))}
