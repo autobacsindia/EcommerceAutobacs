@@ -65,6 +65,22 @@ function describeOffers(doc) {
   return parts.length ? parts.join(' + ') : null;
 }
 
+const LABEL = { b2b: 'B2B', b2c: 'B2C' };
+
+const shapeChange = (c) => ({
+  at: c.at || null,
+  byName: c.byName || null,
+  role: c.role || null,
+  from: c.from,
+  to: c.to,
+  fromLabel: LABEL[c.from] || c.from,
+  toLabel: LABEL[c.to] || c.to,
+  reason: c.reason || '',
+  // What the change did to "Ship before payment" (see PAY_LATER_EFFECT_TEXT).
+  payLaterEffect: c.payLaterEffect || 'none',
+  payLaterNote: PAY_LATER_EFFECT_TEXT[c.payLaterEffect] || null,
+});
+
 const shapeCheck = (c) => (c?.status
   ? {
     status: c.status,
@@ -73,8 +89,68 @@ const shapeCheck = (c) => (c?.status
     role: c.role || null,
     at: c.at || null,
     note: c.note || '',
+    // Newest first, for the order view.
+    changes: (c.changes || []).map(shapeChange).reverse(),
   }
   : null);
+
+// ── Changing the type after accounts' check (owner 2026-11-26) ──────────────────
+
+/** The most changes one order may carry (a guard against a runaway loop, not a policy). */
+export const TYPE_CHANGE_MAX = 20;
+export const TYPE_CHANGE_REASON_MIN = 3;
+export const TYPE_CHANGE_REASON_MAX = 300;
+
+/** Order states in which the order has gone (closed, or the customer has it). */
+const CLOSED_STATUSES = ['cancelled', 'returned'];
+/** Parcels that have left the building. */
+export const LEFT_SHIPMENT_STATUSES = Object.freeze(['shipped', 'delivered', 'lost']);
+
+export const PAY_LATER_EFFECT_TEXT = Object.freeze({
+  withdrawn: 'Ship before payment was taken back: the order waits for payment again. Send the customer a payment link.',
+  kept_shipped_unpaid: 'Already shipped without payment, so ship before payment was left running. The admin was told.',
+});
+
+const hasLeft = (order) => !!order?.payLater?.dispatchedAt
+  || ['shipped', 'delivered'].includes(order?.status)
+  || (order?.shipments || []).some((s) => LEFT_SHIPMENT_STATUSES.includes(s.status));
+
+/**
+ * What changing this B2B order to B2C does to "Ship before payment":
+ *   'none'                 → not on, or the order is paid (nothing owed)
+ *   'withdrawn'            → on, unpaid, nothing has left → it is taken back
+ *   'kept_shipped_unpaid'  → on, unpaid, a parcel has left → left running, admin told
+ */
+export function payLaterEffectOf(order) {
+  if (!order?.payLater?.approvedAt || order.paymentStatus === 'paid') return 'none';
+  return hasLeft(order) ? 'kept_shipped_unpaid' : 'withdrawn';
+}
+
+/**
+ * Why this GTM order's type cannot be changed to `to` right now — or null.
+ * `to` is 'b2b' | 'b2c'. Pure; the service re-checks all of it in its write.
+ */
+export function typeChangeProblem(order, to) {
+  if (!order?.buyerTypeCheck?.status) return 'Only orders made in the sales panel (with a B2B / B2C check) can be changed.';
+  if (to !== SALES_TYPES.B2B && to !== SALES_TYPES.B2C) return 'Choose B2B or B2C.';
+  if (salesTypeOf(order) === to) return null; // the service treats this as "already done"
+  if (CLOSED_STATUSES.includes(order.status)) return `This order is ${order.status}. Its type can no longer be changed.`;
+  // The receipt already in the customer's inbox prints the company name and GSTIN
+  // (or not). Changing the type now would make our record disagree with their copy.
+  if (order.invoiceNo != null) {
+    return 'The receipt has already been emailed to the customer with this type, so it cannot be changed now. Speak to the admin about a corrected bill.';
+  }
+  if ((order.buyerTypeCheck.changeCount || 0) >= TYPE_CHANGE_MAX) {
+    return 'This order has been changed too many times. Speak to the admin.';
+  }
+  if (to === SALES_TYPES.B2B) {
+    // B2B gets no offers. We never reprice an existing order here: the customer
+    // agreed this total. If it carries offers it was sold as retail.
+    const offer = b2bOfferProblem({ discount: order.salesDiscount, lines: order.items });
+    if (offer) return `${offer} This order was sold with offers, so it cannot become B2B. Make a new B2B quotation instead.`;
+  }
+  return null;
+}
 
 /**
  * The badge and its short reason, for GTM, accounts and the admin.
@@ -83,6 +159,11 @@ const shapeCheck = (c) => (c?.status
 export function shapeSalesType(doc) {
   const b2b = isB2B(doc);
   const check = shapeCheck(doc?.buyerTypeCheck);
+  // Changed to B2C after it shipped unpaid: stays red until the customer pays.
+  const alert = doc?.paymentStatus !== 'paid'
+    && (doc?.buyerTypeCheck?.changes || []).some((c) => c.payLaterEffect === 'kept_shipped_unpaid')
+    ? 'Changed to B2C after it was shipped without payment. The customer still has to pay — follow up.'
+    : null;
   // A legacy order (no check at all) keeps working as before: B2B on it needs no check.
   const approved = !check || check.status === 'approved';
   if (b2b) {
@@ -95,6 +176,7 @@ export function shapeSalesType(doc) {
       shipBeforePayment: approved ? 'allowed' : 'needs_check',
       company: { legalName: doc.buyer.legalName || '', gstin: doc.buyer.gstin || '' },
       check,
+      alert,
     };
   }
   const offers = describeOffers(doc);
@@ -105,6 +187,7 @@ export function shapeSalesType(doc) {
     shipBeforePayment: 'not_b2c',
     company: null,
     check,
+    alert,
   };
 }
 

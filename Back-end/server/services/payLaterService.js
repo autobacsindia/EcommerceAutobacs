@@ -40,6 +40,7 @@ import { PAY_LATER, UNPAID_PAYMENT_STATUSES, payLaterDueFilter } from '../config
 import { publicEmail } from '../utils/customerContact.js';
 import { paise, istDayKey, dueAtFor, dispatchedAtOf, shapePayLater } from '../utils/payLater.js';
 import { payLaterTypeProblem, shapeSalesType } from '../utils/salesType.js';
+import { typeChangeOption } from './salesTypeService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -139,11 +140,16 @@ export async function approvePayLater(actor, orderId, input = {}, req) {
           : (result?.message || 'Could not turn on ship before payment.'), 409);
       }
       // The old link is dead (cancelled above); the "on hold" note no longer applies.
-      await orderRepository.model.updateOne(
-        { _id: order._id },
+      // Still B2B? Accounts may have changed it to B2C since we read it
+      // (salesTypeService.changeSalesType). A change committed after this
+      // transaction began conflicts with this write and the transaction is retried,
+      // so the retry sees it and stops here.
+      const still = await orderRepository.model.updateOne(
+        { _id: order._id, 'buyer.type': order.buyer?.type, 'buyerTypeCheck.changeCount': order.buyerTypeCheck?.changeCount || { $in: [0, null] } },
         { $unset: { paymentLinkId: '', paymentLinkUrl: '', paymentLinkExpiresAt: '', salesHold: '' } },
         { session },
       );
+      if (!still.matchedCount) throw fail('This order\'s B2B / B2C type was changed just now. Reload it.', 409);
     });
   } catch (err) {
     // Refused after the old link was cancelled: show it as expired (it is dead at
@@ -467,7 +473,12 @@ export async function payLaterOptionFor(actor, orderId) {
   if (!order) throw fail('Order not found.', 404);
   const now = new Date();
   // B2B / B2C badge + accounts' check, shown on the order page whatever else applies.
-  const base = { dueDays: PAY_LATER.DUE_DAYS, salesType: order.salesUser ? shapeSalesType(order) : null };
+  const base = {
+    dueDays: PAY_LATER.DUE_DAYS,
+    salesType: order.salesUser ? shapeSalesType(order) : null,
+    // The "Change to B2B / B2C" button on the order page (salesTypeService).
+    typeChange: order.salesUser && order.buyerTypeCheck?.status ? typeChangeOption(order) : null,
+  };
   if (order.payLater?.approvedAt) {
     const populated = await orderRepository.findById(order._id, [{ path: 'user', select: 'name email phone' }, { path: 'salesUser', select: 'name' }]);
     return { ...base, canApprove: false, approved: shapeRow(populated, now) };

@@ -9,6 +9,11 @@
  *
  * Approving changes nothing about money or order state; it is a once-only
  * compare-and-set on `pending`, so two clicks record one approval.
+ *
+ * CHANGING the type later (owner 2026-11-26: "she need an edit option") is
+ * changeSalesType below: a reason is required, every change is kept in
+ * `buyerTypeCheck.changes` (who, when, from → to, why, the replaced buyer block),
+ * and the money stays exactly as sold. See its comment for the rules.
  */
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
@@ -16,8 +21,15 @@ import auditLogger from './auditLogger.js';
 import orderRepository from '../repositories/orderRepository.js';
 import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS } from '../config/staff.js';
-import { shapeSalesType, isB2B } from '../utils/salesType.js';
+import {
+  shapeSalesType, isB2B, salesTypeOf, typeChangeProblem, payLaterEffectOf,
+  LEFT_SHIPMENT_STATUSES, TYPE_CHANGE_REASON_MIN, TYPE_CHANGE_REASON_MAX, SALES_TYPES,
+} from '../utils/salesType.js';
 import { shapePayLater } from '../utils/payLater.js';
+import { UNPAID_PAYMENT_STATUSES } from '../config/payLater.js';
+import { resolveBuyer } from './buyerService.js';
+import { BUYER_TYPES } from '../config/buyer.js';
+import { enqueueNotification } from '../queue/queues.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -40,6 +52,8 @@ const PAGE_SIZE = 25;
  *   check      → GTM orders waiting for accounts to approve their type
  *   b2b_unpaid → approved B2B orders not paid yet, that have not been let ship —
  *                where accounts / the admin can turn on "Ship before payment"
+ *   approved   → every GTM order whose type is approved — where accounts finds an
+ *                order to change B2B ↔ B2C (same index: status + createdAt)
  */
 export const SALES_TYPE_VIEWS = Object.freeze({
   check: () => ({ 'buyerTypeCheck.status': 'pending', status: { $ne: 'cancelled' } }),
@@ -50,10 +64,26 @@ export const SALES_TYPE_VIEWS = Object.freeze({
     paymentStatus: { $in: ['pending', 'failed'] },
     'payLater.approvedAt': { $exists: false },
   }),
+  approved: () => ({ 'buyerTypeCheck.status': 'approved' }),
 });
 
 const LIST_SELECT = 'orderNumber wpId createdAt status paymentStatus totalAmount subtotal shippingAddress user salesUser '
-  + 'buyer buyerTypeCheck salesDiscount items.name items.price items.listPrice items.custom items.quantity payLater bankTransferPendingAt';
+  + 'buyer buyerTypeCheck salesDiscount items.name items.price items.listPrice items.custom items.quantity payLater bankTransferPendingAt '
+  + 'invoiceNo shipments.status';
+
+/** Can this order be switched to the other type now — and if not, why (for the button). */
+export function typeChangeOption(o) {
+  const to = isB2B(o) ? SALES_TYPES.B2C : SALES_TYPES.B2B;
+  const why = typeChangeProblem(o, to);
+  return {
+    to,
+    toLabel: to === SALES_TYPES.B2B ? 'B2B' : 'B2C',
+    allowed: !why,
+    why,
+    // What switching to B2C would do to "Ship before payment", said before the click.
+    payLaterEffect: to === SALES_TYPES.B2C ? payLaterEffectOf(o) : 'none',
+  };
+}
 
 function shapeRow(o) {
   return {
@@ -71,6 +101,7 @@ function shapeRow(o) {
     salesPerson: o.salesUser?.name || '',
     bankTransferPending: !!o.bankTransferPendingAt,
     salesType: shapeSalesType(o),
+    typeChange: o.buyerTypeCheck?.status ? typeChangeOption(o) : null,
     payLater: shapePayLater(o),
   };
 }
@@ -149,4 +180,127 @@ export async function approveSalesType(actor, orderId, input = {}, req) {
   return { order: shapeRow(updated) };
 }
 
-export default { listSalesTypeChecks, approveSalesType, mayCheck };
+const POPULATE = [{ path: 'user', select: 'name phone' }, { path: 'salesUser', select: 'name' }];
+
+/**
+ * Accounts / the admin: change an order B2B ↔ B2C, with a reason.
+ *
+ * Choices (owner 2026-11-26), each also stated in the PR:
+ *   • The type is `buyer.type`, so the buyer block is what changes. B2C → B2B needs
+ *     the company name + a checksum-valid GSTIN + billing address (buyerService), as
+ *     on a quotation. B2B → B2C drops them (a consumer receipt carries no GSTIN).
+ *     The replaced block is kept in the history entry.
+ *   • Money is never touched. B2C → B2B is refused when the order was sold with
+ *     offers (B2B gets none) — make a new quotation instead of repricing.
+ *   • Refused once the receipt was emailed (`invoiceNo` set): the customer's copy
+ *     prints the company/GSTIN, and our record must not disagree with it.
+ *   • "Ship before payment" when going to B2C:
+ *       - on, unpaid, nothing has left → taken back in the SAME write: the order
+ *         returns to awaiting_payment and payLater is removed, so shipping is refused
+ *         until it is paid (shipmentService checks paid or isPayLaterDue). The team
+ *         workflow is kept, so it carries on once paid. Teams + admin are emailed.
+ *       - on, unpaid, already shipped → left running (the customer still owes; the
+ *         link and reminders continue). The admin is emailed and the order shows red.
+ *   • The legal-acceptance record is NOT touched: it records what was accepted.
+ *   • Same type asked again (a double click) → `unchanged`, no second entry.
+ *   • One atomic compare-and-set on type + change count + status + payment + the
+ *     pay-later state read: anything that moved meanwhile → 409 "reload".
+ *   • Changing a pending order also approves it (the change is accounts' decision).
+ */
+export async function changeSalesType(actor, orderId, input = {}, req) {
+  if (!mayCheck(actor)) throw fail('Only accounts or the admin can change B2B / B2C.', 403);
+  if (!mongoose.isValidObjectId(orderId)) throw fail('Order not found.', 404);
+  const to = String(input.to ?? '').trim().toLowerCase();
+  if (to !== SALES_TYPES.B2B && to !== SALES_TYPES.B2C) throw fail('Choose B2B or B2C.', 400);
+  const reason = String(input.reason ?? '').trim().replace(/\s+/g, ' ');
+  if (reason.length < TYPE_CHANGE_REASON_MIN) throw fail('Write why the type is changing.', 400);
+  if (reason.length > TYPE_CHANGE_REASON_MAX) throw fail(`Keep the reason under ${TYPE_CHANGE_REASON_MAX} characters.`, 400);
+
+  const order = await orderRepository.model.findById(orderId)
+    .select('buyer buyerTypeCheck status paymentStatus invoiceNo salesDiscount items.price items.listPrice items.custom payLater shipments.status')
+    .lean();
+  if (!order) throw fail('Order not found.', 404);
+  const from = salesTypeOf(order);
+  if (!order.buyerTypeCheck?.status) throw fail(typeChangeProblem(order, to), 409);
+  if (from === to) {
+    const same = await orderRepository.model.findById(order._id).select(LIST_SELECT).populate(POPULATE).lean();
+    return { order: shapeRow(same), unchanged: true };
+  }
+  const problem = typeChangeProblem(order, to);
+  if (problem) throw fail(problem, 409);
+
+  // Validated exactly as on a quotation; throws a 400 the user can read.
+  const buyer = to === SALES_TYPES.B2B
+    ? resolveBuyer({ ...(input.buyer || {}), type: BUYER_TYPES.ENTERPRISE })
+    : { type: BUYER_TYPES.INDIVIDUAL };
+
+  const effect = to === SALES_TYPES.B2C ? payLaterEffectOf(order) : 'none';
+  const now = new Date();
+  const role = isAdmin(actor) ? 'admin' : 'accounts';
+  const count = order.buyerTypeCheck.changeCount || 0;
+  const entry = {
+    at: now, by: actor._id, byName: actor.name || '', role, from, to, reason,
+    previousBuyer: order.buyer ?? null, payLaterEffect: effect,
+  };
+
+  const filter = {
+    _id: order._id,
+    'buyer.type': order.buyer?.type ?? null,
+    'buyerTypeCheck.status': order.buyerTypeCheck.status,
+    'buyerTypeCheck.changeCount': count ? count : { $in: [0, null] },
+    invoiceNo: null,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    'payLater.approvedAt': order.payLater?.approvedAt ? { $type: 'date' } : { $exists: false },
+  };
+  const $set = {
+    buyer,
+    'buyerTypeCheck.status': 'approved',
+    'buyerTypeCheck.type': to,
+    'buyerTypeCheck.changeCount': count + 1,
+  };
+  if (order.buyerTypeCheck.status !== 'approved') {
+    Object.assign($set, {
+      'buyerTypeCheck.by': actor._id, 'buyerTypeCheck.byName': actor.name || '',
+      'buyerTypeCheck.role': role, 'buyerTypeCheck.at': now, 'buyerTypeCheck.note': reason,
+    });
+  }
+  const update = { $set, $push: { 'buyerTypeCheck.changes': entry } };
+
+  if (effect === 'withdrawn') {
+    // Only while nothing has left and it is still unpaid; a parcel dispatched or a
+    // payment landing meanwhile fails the filter → 409, never a half-done change.
+    Object.assign(filter, {
+      status: 'processing',
+      paymentStatus: { $in: [...UNPAID_PAYMENT_STATUSES] },
+      'payLater.dispatchedAt': { $exists: false },
+      shipments: { $not: { $elemMatch: { status: { $in: [...LEFT_SHIPMENT_STATUSES] } } } },
+    });
+    $set.status = 'awaiting_payment';
+    update.$unset = { payLater: '' };
+    update.$push.statusHistory = {
+      status: 'awaiting_payment',
+      timestamp: now,
+      updatedBy: actor._id,
+      reason: 'pay_later_withdrawn',
+      notes: `Changed to B2C by ${actor.name || role}: ship before payment taken back. Reason: ${reason}`,
+    };
+    update.$inc = { __v: 1 };
+  }
+
+  const updated = await orderRepository.model.findOneAndUpdate(filter, update, { new: true })
+    .select(LIST_SELECT).populate(POPULATE).lean();
+  if (!updated) throw fail('This order changed just now. Reload it.', 409);
+
+  auditLogger.logAction(req, 'UPDATE', 'Order', order._id, {
+    change: 'sales_type_changed', from, to, reason, payLaterEffect: effect,
+  });
+  if (effect !== 'none') {
+    Promise.resolve()
+      .then(() => enqueueNotification('send-staff-sales-type-changed-alert', { orderId: String(order._id) }))
+      .catch(() => {});
+  }
+  return { order: shapeRow(updated), unchanged: false, payLaterEffect: effect };
+}
+
+export default { listSalesTypeChecks, approveSalesType, changeSalesType, mayCheck };

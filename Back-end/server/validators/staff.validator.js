@@ -202,13 +202,22 @@ export const validatePayLaterApprove = [
 
 // B2B / B2C check (services/salesTypeService.js)
 export const validateSalesTypeList = [
-  query('view').optional().isIn(['check', 'b2b_unpaid']),
+  query('view').optional().isIn(['check', 'b2b_unpaid', 'approved']),
   query('cursor').optional().isString().isLength({ max: 500 }),
 ];
 
 export const validateSalesTypeApprove = [
   param('id').custom(isObjectId).withMessage('Invalid order id'),
   body('note').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Write a short note (3–300 characters).'),
+];
+
+// Change B2B ↔ B2C after the check (services/salesTypeService.js changeSalesType).
+// The buyer block is validated by buyerService.resolveBuyer (GSTIN checksum etc.).
+export const validateSalesTypeChange = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  body('to').isIn(['b2b', 'b2c']).withMessage('Choose B2B or B2C.'),
+  body('reason').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Write why (3–300 characters).'),
+  body('buyer').optional().isObject(),
 ];
 
 export const validateOrderIdParam = [

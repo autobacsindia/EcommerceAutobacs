@@ -976,6 +976,44 @@ export const emailStaffPayLaterApprovedAlert = async (orderId) => {
   }, `Pay-later approved alert (order ${orderId})`);
 };
 
+/**
+ * Accounts / the admin changed a B2B order to B2C while "Ship before payment" was on
+ * (services/salesTypeService.js changeSalesType). Two cases, from the latest change:
+ *   withdrawn           → not shipped yet: it must NOT ship until paid. Teams + seller.
+ *   kept_shipped_unpaid → already shipped unpaid: left running. Admin + accounts.
+ */
+export const emailStaffSalesTypeChangedAlert = async (orderId) => {
+  const order = await teamOrder(orderId);
+  const last = (order?.buyerTypeCheck?.changes || []).at(-1);
+  if (!last || last.payLaterEffect === 'none' || !last.payLaterEffect) return { status: 'not-found' };
+  const ref = orderRef(order);
+  const withdrawn = last.payLaterEffect === 'withdrawn';
+  const subject = withdrawn
+    ? `Do not ship ${ref} yet — changed to B2C, must be paid first`
+    : `Check ${ref}: changed to B2C after it shipped unpaid — ${inr(order.totalAmount)} still owed`;
+  const intro = withdrawn
+    ? `${last.byName || 'Accounts'} changed this order from B2B to B2C. Retail orders cannot ship before payment, so that permission was taken back. `
+      + 'Procurement / operations: do not dispatch it until it is paid. Sales: send the customer a payment link.'
+    : `${last.byName || 'Accounts'} changed this order from B2B to B2C after it was shipped without payment. `
+      + 'Nothing was undone: the customer still has to pay the link they were sent. Please follow up.';
+  const rows = orderRows(order, [
+    ['Amount', `<strong>${escapeHtml(inr(order.totalAmount))}</strong> — ${order.paymentStatus === 'paid' ? 'paid' : 'NOT paid'}`],
+    ['Changed by', escapeHtml(`${last.byName || ''} (${last.role || 'accounts'})`)],
+    ['Why', escapeHtml(last.reason || '')],
+  ]);
+  const link = teamPanelLink('/team/pay-later');
+  const message = { subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Open team panel', link) };
+  const teams = withdrawn ? ['accounts', 'procurement', 'operations'] : ['accounts'];
+  const people = (await Promise.all(teams.map((t) => teamStaff(t, { headsOnly: true })))).flat();
+  const seller = order.salesUser;
+  if (seller?.role === 'staff' && seller.staff?.active) people.push(seller);
+  const [admins, staff] = await Promise.all([
+    sendToAdmins(message, `Sales type changed alert (order ${orderId})`),
+    sendToStaff(people, message, `Sales type changed alert (order ${orderId})`),
+  ]);
+  return { status: 'sent', admins, staff };
+};
+
 /** A "Ship before payment" order has been paid (verified webhook or confirmed transfer). */
 export const emailStaffPayLaterPaidAlert = async (orderId) => {
   const order = await teamOrder(orderId);
