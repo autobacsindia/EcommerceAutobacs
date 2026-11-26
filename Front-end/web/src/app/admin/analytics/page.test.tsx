@@ -7,6 +7,8 @@ import { analyticsApi } from '@/lib/analyticsApi';
 
 jest.mock('@/context/AuthContext');
 jest.mock('@/context/CurrencyContext');
+// The company figures card has its own test; here it is a placeholder.
+jest.mock('@/components/admin/analytics/CompanyFiguresCards', () => ({ __esModule: true, default: () => <section aria-label="Company figures" /> }));
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 // Stub the lazily-loaded recharts module so jsdom doesn't choke on SVG sizing.
