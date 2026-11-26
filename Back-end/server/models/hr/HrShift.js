@@ -12,9 +12,13 @@ const HrShiftSchema = new mongoose.Schema({
   start: { type: String, required: true, match: HHMM_RE },
   end: { type: String, required: true, match: HHMM_RE },
   graceMinutes: { type: Number, default: 10, min: 0, max: 120 },
-  // Late marks in a month that cost half a day of pay (0 = never).
+  // Leaving more than this many minutes before the shift end is an early-leave mark.
+  earlyGraceMinutes: { type: Number, default: 10, min: 0, max: 120 },
+  // Superseded by HrSettings.marksPerHalfDayLop (a month rule, not a shift rule); not read.
   latesPerHalfDayLop: { type: Number, default: 3, min: 0, max: 31 },
   halfDayMinMinutes: { type: Number, default: 270, min: 0, max: 1440 },
+  // Worked less than this (on a closed day) counts as absent, not as a half day.
+  absentBelowMinutes: { type: Number, default: 120, min: 0, max: 1440 },
   fullDayMinutes: { type: Number, default: 540, min: 1, max: 1440 },
   // Worked minutes beyond this count as overtime (before HR approval).
   overtimeAfterMinutes: { type: Number, default: 540, min: 1, max: 1440 },

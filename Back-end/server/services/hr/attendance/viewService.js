@@ -21,22 +21,28 @@ import { calendarFacts } from './calendar.js';
 import { shapePunch } from './punchService.js';
 import { listDevices } from './devices.js';
 import { istDate, monthDates } from './time.js';
+import { summariseAttendanceMonth, shiftLengthMinutes } from './monthRules.js';
+import { getHrSettings } from '../settings.js';
 
 const CHANGED_AFTER_LOCK_MAX = 5000;
 
-/** Every day of `month` up to today: stored rows, plus computed rows for days without one. */
-async function monthDays(employee, month, now = new Date()) {
+/**
+ * Every day of `month` up to today: stored rows, plus computed rows for days
+ * without one. Also returns the inputs it read (shift, leave/holiday facts), so
+ * the payroll summary does not read them twice.
+ */
+export async function loadMonth(employee, month, now = new Date()) {
   if (!MONTH_RE.test(String(month))) throw fail('month must look like 2026-12', 400);
   const today = istDate(now);
   const dates = monthDates(month).filter((d) => d <= today);
-  if (!dates.length) return [];
-  const [rows, shift, facts] = await Promise.all([
+  const shift = await shiftFor(employee);
+  if (!dates.length) return { days: [], shift, facts: { leaveByDate: new Map(), holidays: new Set() } };
+  const [rows, facts] = await Promise.all([
     attendanceDayRepository.listMonth(employee._id, month),
-    shiftFor(employee),
     calendarFacts(employee._id, dates[0], dates[dates.length - 1], employee.workSites || []),
   ]);
   const byDate = new Map(rows.map((r) => [r.date, r]));
-  return dates.map((date) => {
+  const days = dates.map((date) => {
     const stored = byDate.get(date);
     if (stored) return { ...shapeDay(stored), stored: true };
     const c = computeDay({
@@ -46,6 +52,11 @@ async function monthDays(employee, month, now = new Date()) {
       ...shapeDay({ ...c, date, overtimeApprovedMinutes: 0 }), stored: false,
     };
   });
+  return { days, shift, facts };
+}
+
+async function monthDays(employee, month, now = new Date()) {
+  return (await loadMonth(employee, month, now)).days;
 }
 
 const inEmployment = (employee, date) => (!employee.joinDate || date >= employee.joinDate)
@@ -61,6 +72,7 @@ function summarise(employee, month, days) {
     holidayDays: 0,
     weeklyOffDays: 0,
     lateMarks: 0,
+    earlyMarks: 0,
     overtimeApprovedMinutes: 0,
     unresolvedDays: 0,
   };
@@ -76,23 +88,50 @@ function summarise(employee, month, days) {
       case 'weekly_off': s.weeklyOffDays += 1; break;
       default: break;
     }
-    if (d.isLate) s.lateMarks += 1;
+    if (d.lateMark) s.lateMarks += 1;
+    if (d.earlyMark) s.earlyMarks += 1;
     s.overtimeApprovedMinutes += d.overtimeApprovedMinutes || 0;
     if (d.needsReview) s.unresolvedDays += 1;
   }
   return s;
 }
 
-/** The month screen (app "My attendance", HR employee page). */
+/**
+ * The month screen (app "My attendance", HR employee page). `summary` also
+ * carries the policy counts the employee is paid on: lateCount, earlyCount,
+ * marks, marksLopDays, otApprovedMinutes, otPendingMinutes (monthRules.js).
+ */
 export async function monthView(employee, month, now = new Date()) {
-  const days = await monthDays(employee, month, now);
-  return { month, days, summary: summarise(employee, month, days) };
+  const [{ days, shift, facts }, settings] = await Promise.all([loadMonth(employee, month, now), getHrSettings()]);
+  const policy = summariseAttendanceMonth({
+    month,
+    days,
+    leaveByDate: facts.leaveByDate,
+    employment: { joinDate: employee.joinDate, exitDate: employee.exitDate },
+    shiftMinutes: shiftLengthMinutes(shift),
+    marksPerHalfDayLop: settings.marksPerHalfDayLop ?? 3,
+  });
+  return {
+    month,
+    days,
+    summary: {
+      ...summarise(employee, month, days),
+      lateCount: policy.lateCount,
+      earlyCount: policy.earlyCount,
+      marks: policy.marks,
+      marksPerHalfDayLop: policy.marksPerHalfDayLop,
+      marksLopDays: policy.marksLopDays,
+      otApprovedMinutes: policy.otApprovedMinutes,
+      otPendingMinutes: policy.otPendingMinutes,
+    },
+  };
 }
 
 // ── Payroll exports (docs/ADR-hr-system.md §4) ───────────────────────────────
 /**
  * { daysInMonth, presentDays, halfDays, absentDays, leaveDays, holidayDays,
- *   weeklyOffDays, lateMarks, overtimeApprovedMinutes, unresolvedDays }
+ *   weeklyOffDays, lateMarks, earlyMarks, overtimeApprovedMinutes, unresolvedDays }
+ * (The app's month screen. Payroll uses monthAttendanceSummary — monthPolicy.js.)
  * Days before joinDate / after exitDate are not counted in any bucket (payroll
  * pro-rates on those dates). 'half_leave' counts ½ leave + ½ present;
  * 'holiday_worked' (a holiday or weekly off with punches) counts as a holiday —

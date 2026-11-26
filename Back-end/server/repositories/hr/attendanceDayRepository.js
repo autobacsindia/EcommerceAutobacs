@@ -21,7 +21,7 @@ const attendanceDayRepository = {
     { employee: employeeId, date },
     { $set: { computedAt: new Date() }, $setOnInsert: { month, status: 'absent' } },
     { upsert: true, new: false, session }, // returns the row as it was (null = just created)
-  ).select('payrollLocked changedAfterLock overtimeApprovedMinutes status workedMinutes isLate').lean(),
+  ).select('payrollLocked changedAfterLock overtimeApprovedMinutes overtimeStatus overtimeDecidedOn status workedMinutes isLate lateMark earlyMark').lean(),
   /** Insert or replace the computed fields of one day (unique {employee, date}). */
   upsert: (employeeId, date, set, session = null) => AttendanceDay.findOneAndUpdate(
     { employee: employeeId, date },
@@ -37,6 +37,29 @@ const attendanceDayRepository = {
     { employee: employeeId, date, overtimeMinutes: expectedOvertime },
     { $set: set },
     { new: true, session },
+  ).select(DAY_FIELDS).lean(),
+
+  // ── Overtime approval queue ──────────────────────────────────────────────
+  findById: (id, session = null) => AttendanceDay.findById(id).session(session).select(DAY_FIELDS).lean(),
+  /** Pending overtime rows (index hr_day_ot_pending), `filter` already holds the cursor clause. */
+  listOvertime: (filter, { sort, limit }) => AttendanceDay.find(filter)
+    .select('employee date status workedMinutes overtimeMinutes overtimeApprovedMinutes overtimeStatus autoClosed payrollLocked firstIn lastOut')
+    .sort(sort).limit(limit).lean(),
+  /**
+   * CAS: decide overtime only if the row is still exactly what the decider saw
+   * (same overtime minutes, same decision state) and payroll has not locked it.
+   * null = someone/something changed it first.
+   */
+  decideOvertime: (id, seen, set, session = null) => AttendanceDay.findOneAndUpdate(
+    {
+      _id: id,
+      overtimeMinutes: seen.overtimeMinutes,
+      overtimeStatus: seen.overtimeStatus ?? null,
+      overtimeApprovedMinutes: seen.overtimeApprovedMinutes || 0,
+      payrollLocked: { $ne: true },
+    },
+    { $set: set },
+    { new: true, runValidators: true, session },
   ).select(DAY_FIELDS).lean(),
 
   // ── Month locks (payroll) ────────────────────────────────────────────────

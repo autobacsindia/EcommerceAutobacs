@@ -16,13 +16,13 @@ import attendancePunchRepository from '../../../repositories/hr/attendancePunchR
 import attendanceSetupRepository from '../../../repositories/hr/attendanceSetupRepository.js';
 import AppError from '../../../utils/AppError.js';
 import { DATE_RE } from '../../../config/hr.js';
-import { computeDay, FALLBACK_SHIFT } from './dayRules.js';
+import { computeDay, overtimeStateAfter, FALLBACK_SHIFT } from './dayRules.js';
 import { calendarFacts } from './calendar.js';
 import { istDate, monthOf, addDays } from './time.js';
 
 const MAX_RECOMPUTE_DAYS = 62;
 // What payroll reads: a change to any of these after the lock is an arrears line.
-const PAYROLL_FIELDS = ['status', 'workedMinutes', 'isLate', 'overtimeApprovedMinutes'];
+const PAYROLL_FIELDS = ['status', 'workedMinutes', 'isLate', 'lateMark', 'earlyMark', 'overtimeApprovedMinutes'];
 
 /** The employee's shift, else the company default, else the built-in default. */
 export async function shiftFor(employee, session = null) {
@@ -62,8 +62,9 @@ export async function recomputeDay(employee, date, {
   const set = {
     ...fields,
     month: monthOf(date),
-    // HR approves overtime on a figure; if the hours later shrink, the approval shrinks with them.
-    overtimeApprovedMinutes: Math.min(before?.overtimeApprovedMinutes || 0, fields.overtimeMinutes),
+    // HR approves overtime on a figure; if the hours later shrink, the approval
+    // shrinks with them; if they grow, the day goes back to the approval queue.
+    ...overtimeStateAfter(before, fields.overtimeMinutes),
     computedAt: now,
   };
   if (locked) {
@@ -101,8 +102,13 @@ export const shapeDay = (d) => (d ? {
   breakMinutes: d.breakMinutes || 0,
   lateMinutes: d.lateMinutes || 0,
   isLate: !!d.isLate,
+  earlyMinutes: d.earlyMinutes || 0,
+  isEarly: !!d.isEarly,
+  lateMark: d.lateMark ?? (!!d.isLate && d.status === 'present'),
+  earlyMark: !!d.earlyMark,
   overtimeMinutes: d.overtimeMinutes || 0,
   overtimeApprovedMinutes: d.overtimeApprovedMinutes || 0,
+  overtimeStatus: d.overtimeStatus || ((d.overtimeMinutes || 0) > 0 ? 'pending' : 'none'),
   autoClosed: !!d.autoClosed,
   needsReview: !!d.needsReview,
   payrollLocked: !!d.payrollLocked,
