@@ -74,3 +74,68 @@ export function shapePayLater(order, now = new Date()) {
     reminders: p.chaseCount || 0,
   };
 }
+
+// ── Taking "Ship before payment" back (owner 2026-11-26) ─────────────────────────
+
+/** Parcels that have left the building: after this nothing can be taken back. */
+export const LEFT_SHIPMENT_STATUSES = Object.freeze(['shipped', 'delivered', 'lost']);
+
+/** Has any part of this order left (or been marked shipped)? */
+export const payLaterHasLeft = (order) => !!order?.payLater?.dispatchedAt
+  || ['shipped', 'delivered'].includes(order?.status)
+  || (order?.shipments || []).some((s) => LEFT_SHIPMENT_STATUSES.includes(s.status));
+
+/**
+ * The Mongo filter under which ship-before-payment may be taken back: on, still
+ * unpaid, nothing has left. A parcel dispatched or a payment landing between the
+ * read and the write fails it, so the take-back never half-happens.
+ */
+export const payLaterWithdrawFilter = () => ({
+  status: 'processing',
+  paymentStatus: { $in: ['pending', 'failed'] },
+  'payLater.approvedAt': { $type: 'date' },
+  'payLater.dispatchedAt': { $exists: false },
+  shipments: { $not: { $elemMatch: { status: { $in: [...LEFT_SHIPMENT_STATUSES] } } } },
+});
+
+/**
+ * The update that takes it back: the order waits for payment again and the
+ * permission is removed. The team workflow is KEPT, so the work carries on once
+ * it is paid (shipmentService refuses to ship it until then). The old permission
+ * is kept in the history entry's metadata — nothing is lost.
+ * Merge into a caller's update with mergeWithdraw().
+ */
+export function payLaterWithdrawUpdate({ actor, at, notes, previous }) {
+  return {
+    $set: { status: 'awaiting_payment' },
+    $unset: { payLater: '' },
+    $push: {
+      statusHistory: {
+        status: 'awaiting_payment',
+        timestamp: at,
+        updatedBy: actor?._id,
+        reason: 'pay_later_withdrawn',
+        notes,
+        metadata: previous ? {
+          payLater: {
+            approvedAt: previous.approvedAt, approvedByName: previous.approvedByName || '', reason: previous.reason || '',
+          },
+        } : undefined,
+      },
+    },
+    $inc: { __v: 1 },
+  };
+}
+
+/** Merge two update documents operator by operator. */
+export function mergeUpdates(a, b) {
+  const out = { ...a };
+  for (const [op, fields] of Object.entries(b)) out[op] = { ...(out[op] || {}), ...fields };
+  return out;
+}
+
+/** The latest take-back on this order, for the order page — or null. */
+export function lastWithdrawalOf(order) {
+  const h = [...(order?.statusHistory || [])].reverse().find((e) => e.reason === 'pay_later_withdrawn');
+  return h ? { at: h.timestamp || null, notes: h.notes || '' } : null;
+}

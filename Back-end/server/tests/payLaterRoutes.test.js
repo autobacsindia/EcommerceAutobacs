@@ -140,6 +140,20 @@ describe('Ship before payment routes', () => {
     expect(list.body.orders.map((o) => o.id)).toEqual([String(order._id)]);
   });
 
+  it('take back: seller 403, reason required, accounts takes it back', async () => {
+    const admin = await make('admin', undefined);
+    expect((await admin.session.post(url(), { reason: 'Regular dealer' })).status).toBe(200);
+    const back = `/staff/orders/${order._id}/pay-later/withdraw`;
+    expect((await seller.session.post(back, { reason: 'Customer pays first' })).status).toBe(403);
+    expect((await accounts.session.post(back, {})).status).toBe(400);
+    const r = await accounts.session.post(back, { reason: 'Customer pays first' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ alreadyOff: false, withdrawn: { notes: expect.stringMatching(/Customer pays first/) } });
+    const saved = await Order.findById(order._id).lean();
+    expect(saved.status).toBe('awaiting_payment');
+    expect(saved.payLater).toBeUndefined();
+  });
+
   it('a ₹70,250 order gets the button and can be approved (no amount limit — owner 2026-11-25)', async () => {
     await Order.updateOne({ _id: order._id }, { $set: { subtotal: 70250, totalAmount: 70250, 'items.0.price': 70250 } });
     const admin = await make('admin', undefined);

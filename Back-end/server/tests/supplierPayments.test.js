@@ -515,16 +515,27 @@ describe('Supplier directory and one-transfer payments', () => {
       expect(full.body.message).toBe('This record already has 50 files, the most it can hold.');
       expect(stored.size).toBe(before);
       const swap = (await PaymentRequest.findById(r.id).lean()).files.find((f) => f.name === 'old-0.jpg');
-      const ok = await admin.session.formPut(`/payment-requests/${r.id}/payment`, { removeFileIds: [String(swap._id)] }, [SHOT]);
+      const ok = await admin.session.formPut(`/payment-requests/${r.id}/payment`, { removeFileIds: [String(swap._id)], note: 'Swap the old slip' }, [SHOT]);
       expect(ok.status).toBe(200);
       expect((await PaymentRequest.findById(r.id).lean()).files).toHaveLength(50);
     });
 
+    it('a correction needs a reason; without one nothing changes', async () => {
+      const r = await paidOne();
+      const res = await admin.session.formPut(`/payment-requests/${r.id}/payment`, { reference: 'UTR999' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/Write why you are changing the payment record/);
+      expect((await PaymentRequest.findById(r.id).lean()).payment.reference).toBe('WRONG123');
+      const ok = await admin.session.formPut(`/payment-requests/${r.id}/payment`, { reference: 'UTR999', note: 'Bank statement shows UTR999' });
+      expect(ok.status).toBe(200);
+      expect((await PaymentRequest.findById(r.id).lean()).history.at(-1).note).toMatch(/WRONG123 → UTR999 — Bank statement shows UTR999/);
+    });
+
     it('only the admin, only once paid', async () => {
       const r = await paidOne();
-      expect((await accounts.session.formPut(`/payment-requests/${r.id}/payment`, { reference: 'X1234' })).status).toBe(403);
+      expect((await accounts.session.formPut(`/payment-requests/${r.id}/payment`, { reference: 'X1234', note: 'Wrong UTR' })).status).toBe(403);
       const notPaid = await approvedPayment({ amount: 500, payee: OTHER_BANK });
-      expect((await admin.session.formPut(`/payment-requests/${notPaid.id}/payment`, { reference: 'X1234' })).status).toBe(409);
+      expect((await admin.session.formPut(`/payment-requests/${notPaid.id}/payment`, { reference: 'X1234', note: 'Wrong UTR' })).status).toBe(409);
     });
 
     it('a payment made in one transfer with others is corrected together', async () => {
@@ -532,7 +543,7 @@ describe('Supplier directory and one-transfer payments', () => {
       const a = await approvedPayment({ amount: 1000, supplierId: s.id });
       const b = await approvedPayment({ amount: 2000, supplierId: s.id });
       expect((await payBatch(admin.session, [a.id, b.id], 3000)).status).toBe(200);
-      const res = await admin.session.formPut(`/payment-requests/${a.id}/payment`, { reference: 'UTR-FIXED-1' });
+      const res = await admin.session.formPut(`/payment-requests/${a.id}/payment`, { reference: 'UTR-FIXED-1', note: 'Bank gave a new UTR' });
       expect(res.status).toBe(200);
       const [da, db] = await Promise.all([PaymentRequest.findById(a.id).lean(), PaymentRequest.findById(b.id).lean()]);
       expect([da.payment.reference, db.payment.reference]).toEqual(['UTR-FIXED-1', 'UTR-FIXED-1']);
@@ -569,7 +580,7 @@ describe('Supplier directory and one-transfer payments', () => {
       expect(both.map((d) => new Date(d.payment.transactionAt).getTime())).toEqual([when.getTime(), when.getTime()]);
 
       const fixed = new Date(Date.now() - 5 * 3600 * 1000);
-      const res = await admin.session.formPut(`/payment-requests/${a.id}/payment`, { transactionAt: fixed.toISOString() });
+      const res = await admin.session.formPut(`/payment-requests/${a.id}/payment`, { transactionAt: fixed.toISOString(), note: 'Time was wrong' });
       expect(res.status).toBe(200);
       const after = await PaymentRequest.find({ _id: { $in: [a.id, b.id] } }).lean();
       expect(after.map((d) => new Date(d.payment.transactionAt).getTime())).toEqual([fixed.getTime(), fixed.getTime()]);

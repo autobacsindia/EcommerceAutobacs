@@ -46,6 +46,10 @@ export interface PayLaterOption {
   /** "Change to B2B / B2C" on the order page; null on a website order. */
   typeChange?: SalesTypeChangeOption | null;
   canApprove: boolean;
+  /** Ship before payment is on, unpaid and nothing sent: it can be taken back. */
+  canWithdraw?: boolean;
+  /** The latest take-back, if any (who and why are in `notes`). */
+  withdrawn?: { at: string | null; notes: string } | null;
   why?: string | null;
   approved?: PayLaterRow;
   dueDays: number;

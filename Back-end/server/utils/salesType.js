@@ -19,6 +19,7 @@
  * (they are B2C unless their buyer is an enterprise).
  */
 import { BUYER_TYPES } from '../config/buyer.js';
+import { payLaterHasLeft } from './payLater.js';
 
 export const SALES_TYPES = Object.freeze({ B2B: 'b2b', B2C: 'b2c' });
 
@@ -103,17 +104,10 @@ export const TYPE_CHANGE_REASON_MAX = 300;
 
 /** Order states in which the order has gone (closed, or the customer has it). */
 const CLOSED_STATUSES = ['cancelled', 'returned'];
-/** Parcels that have left the building. */
-export const LEFT_SHIPMENT_STATUSES = Object.freeze(['shipped', 'delivered', 'lost']);
-
 export const PAY_LATER_EFFECT_TEXT = Object.freeze({
   withdrawn: 'Ship before payment was taken back: the order waits for payment again. Send the customer a payment link.',
   kept_shipped_unpaid: 'Already shipped without payment, so ship before payment was left running. The admin was told.',
 });
-
-const hasLeft = (order) => !!order?.payLater?.dispatchedAt
-  || ['shipped', 'delivered'].includes(order?.status)
-  || (order?.shipments || []).some((s) => LEFT_SHIPMENT_STATUSES.includes(s.status));
 
 /**
  * What changing this B2B order to B2C does to "Ship before payment":
@@ -123,7 +117,7 @@ const hasLeft = (order) => !!order?.payLater?.dispatchedAt
  */
 export function payLaterEffectOf(order) {
   if (!order?.payLater?.approvedAt || order.paymentStatus === 'paid') return 'none';
-  return hasLeft(order) ? 'kept_shipped_unpaid' : 'withdrawn';
+  return payLaterHasLeft(order) ? 'kept_shipped_unpaid' : 'withdrawn';
 }
 
 /**

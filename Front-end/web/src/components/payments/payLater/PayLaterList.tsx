@@ -9,6 +9,7 @@ import { rupees } from '@/components/staff/sales/types';
 import { payLaterKeys, type PayLaterRow, type PayLaterSummary } from './api';
 import PayLaterBadge from './PayLaterBadge';
 import SalesTypeChecks, { type SalesTypeView } from './SalesTypeChecks';
+import { WithdrawPayLater } from './OrderPayLater';
 
 const TABS = [
   { value: 'check', label: 'B2B / B2C to approve' },
@@ -17,7 +18,7 @@ const TABS = [
   { value: 'due', label: 'Shipped – not paid yet' },
   { value: 'paid', label: 'Paid after dispatch' },
 ];
-type Page = { orders: PayLaterRow[]; nextCursor?: string | null; summary?: PayLaterSummary };
+type Page = { orders: PayLaterRow[]; nextCursor?: string | null; summary?: PayLaterSummary; canWithdraw?: boolean };
 
 /** B2B / B2C approvals, and orders let ship before payment. Keyset-paged by the server; the sum is the server's. */
 export default function PayLaterList({ orderHref }: { orderHref?: (id: string) => string }) {
@@ -32,6 +33,7 @@ export default function PayLaterList({ orderHref }: { orderHref?: (id: string) =
   });
   const rows = list.data?.pages.flatMap((p) => p.orders) ?? [];
   const summary = list.data?.pages[0]?.summary;
+  const canWithdraw = !!list.data?.pages[0]?.canWithdraw;
 
   return (
     <div className="space-y-4">
@@ -77,6 +79,9 @@ export default function PayLaterList({ orderHref }: { orderHref?: (id: string) =
             <div className="mt-2"><PayLaterBadge state={o.payLater} detail /></div>
             {o.bankTransferPending && <p className="mt-1 text-xs text-blue-800">A bank transfer is waiting for accounts to check.</p>}
             {o.payLater?.reason && <p className="mt-1 text-xs text-gray-500">Why: {o.payLater.reason} ({o.payLater.approvedBy || 'admin'})</p>}
+            {canWithdraw && view === 'due' && o.payLater && !o.payLater.dispatchedAt && o.paymentStatus !== 'paid' && o.status === 'processing' && (
+              <div className="mt-2"><WithdrawPayLater orderId={o.id} /></div>
+            )}
           </li>
         ))}
       </ul>

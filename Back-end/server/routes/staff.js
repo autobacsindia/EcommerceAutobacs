@@ -36,6 +36,7 @@ import {
   validateSalesTypeList,
   validateSalesTypeApprove,
   validateSalesTypeChange,
+  validatePayLaterWithdraw,
   validateSetSeller, validateCreditProofFile,
   validateOrderIdParam,
   validateSalesOrder,
@@ -597,6 +598,12 @@ router.get('/orders/:id/pay-later', validateOrderIdParam, validateRequest, async
 // @route  POST /staff/orders/:id/pay-later { reason } — admin / accounts: ship a B2B order before payment
 router.post('/orders/:id/pay-later', validatePayLaterApprove, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await payLater.approvePayLater(req.user, req.params.id, { reason: req.body.reason }, req)) });
+}));
+
+// @route  POST /staff/orders/:id/pay-later/withdraw { reason } — admin / accounts: take it back
+//         (only while unpaid and nothing has been sent)
+router.post('/orders/:id/pay-later/withdraw', validatePayLaterWithdraw, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await payLater.withdrawPayLater(req.user, req.params.id, { reason: req.body.reason }, req)) });
 }));
 
 // @route  GET /staff/pay-later?view=due|paid&cursor= — accounts, admin, GTM head
