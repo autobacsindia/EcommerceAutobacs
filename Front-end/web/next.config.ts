@@ -168,6 +168,9 @@ const nextConfig: NextConfig = {
       { source: '/media/videos', destination: '/blog/videos', permanent: true },
       // News was replaced by the Press Coverage page at /media.
       { source: '/media/news', destination: '/media', permanent: true },
+      // The footer calls this page "Press", so people (and journalists) type
+      // /press — which was a 404.
+      { source: '/press', destination: '/media', permanent: true },
       // `/conditions` was a second, shorter terms page that contradicted `/terms`
       // on whether prices include tax. It is deleted, not 404'd: it was linked
       // from the login and register page footers (so it has real inbound traffic
