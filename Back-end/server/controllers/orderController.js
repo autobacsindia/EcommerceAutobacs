@@ -362,8 +362,15 @@ export const getOrderById = async (req, res) => {
       })))
       : Promise.resolve(order.shipments),
     // Returns still moving, for the order-moment picture ({order:1} index; status only).
-    returnRequestRepository.find({ order: order._id, status: { $in: IN_FLIGHT_RETURN_STATUSES } })
-      .select('status').limit(20).lean(),
+    // Decoration only: a failed lookup must never fail the order page — it just
+    // means the picture falls back to the order's own state.
+    Promise.resolve()
+      .then(() => returnRequestRepository.find({ order: order._id, status: { $in: IN_FLIGHT_RETURN_STATUSES } })
+        .select('status').limit(20).lean())
+      .catch((err) => {
+        console.error(`[Order] order moment: could not load returns for ${order._id}: ${err?.message}`);
+        return [];
+      }),
   ]);
   const progress = customerOrderProgress(order);
 
