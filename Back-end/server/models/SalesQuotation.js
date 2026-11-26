@@ -83,6 +83,8 @@ const AddressSchema = new mongoose.Schema(
   {
     fullName: String,
     phone: String,
+    houseNumber: String, // optional: quotations made before the rule have none
+    landmark: String,
     addressLine1: String,
     addressLine2: String,
     city: String,

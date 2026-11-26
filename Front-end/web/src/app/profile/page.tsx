@@ -16,9 +16,26 @@ import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
 import MyReviewsCard from '@/components/profile/MyReviewsCard';
 import AffiliateCard from '@/components/profile/AffiliateCard';
 import PhotoEditor from '@/components/profile/PhotoEditor';
+import { ADDRESS_FIELD_TEXT, firstAddressProblem, isAddressComplete, streetLines } from '@/lib/deliveryAddress';
 
 const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg p-2 focus:outline-none focus:border-gold font-display text-sm';
 const labelClass = 'block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1';
+
+// Address boxes in courier order; the house no. / street / landmark wording is
+// the shared one from lib/deliveryAddress.ts.
+const ADDRESS_FORM_FIELDS = ['fullName', 'phone', 'houseNumber', 'addressLine1', 'landmark', 'addressLine2', 'city', 'state', 'postalCode', 'country'] as const;
+const ADDRESS_FORM_TEXT: Record<(typeof ADDRESS_FORM_FIELDS)[number], { label: string; placeholder?: string }> = {
+  fullName: { label: 'Full Name' },
+  phone: { label: 'Phone', placeholder: '10-digit mobile' },
+  houseNumber: ADDRESS_FIELD_TEXT.houseNumber,
+  addressLine1: ADDRESS_FIELD_TEXT.addressLine1,
+  landmark: ADDRESS_FIELD_TEXT.landmark,
+  addressLine2: { label: 'Address Line 2 (optional)' },
+  city: { label: 'City' },
+  state: { label: 'State' },
+  postalCode: { label: 'PIN Code', placeholder: '6 digits' },
+  country: { label: 'Country' },
+};
 
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout, refreshUser } = useAuth();
@@ -59,7 +76,9 @@ export default function ProfilePage() {
   const [newAddress, setNewAddress] = useState<Omit<Address, 'isDefault'>>({
     fullName: '',
     phone: '',
+    houseNumber: '',
     addressLine1: '',
+    landmark: '',
     addressLine2: '',
     city: '',
     state: '',
@@ -153,10 +172,15 @@ export default function ProfilePage() {
     setNewAddress(prev => ({ ...prev, [field]: value }));
   };
 
+  const [newAddressError, setNewAddressError] = useState<string | null>(null);
   const addNewAddress = () => {
+    // Same rule as the server (lib/deliveryAddress.ts); the server re-checks on save.
+    const problem = firstAddressProblem(newAddress);
+    if (problem) { setNewAddressError(problem); return; }
+    setNewAddressError(null);
     const addressToAdd = { ...newAddress, isDefault: formData.addresses.length === 0 };
     setFormData(prev => ({ ...prev, addresses: [...prev.addresses, addressToAdd] }));
-    setNewAddress({ fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', country: 'India' });
+    setNewAddress({ fullName: '', phone: '', houseNumber: '', addressLine1: '', landmark: '', addressLine2: '', city: '', state: '', postalCode: '', country: 'India' });
     setShowAddAddress(false);
   };
 
@@ -312,12 +336,13 @@ export default function ProfilePage() {
                 <div key={index} className="border border-hairline rounded-lg p-4 mb-4 bg-obsidian-raised">
                   <div className="flex justify-between items-start">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 grow">
-                      {(['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'] as const).map((field) => (
+                      {ADDRESS_FORM_FIELDS.map((field) => (
                         <div key={field}>
-                          <label className={labelClass}>{field === 'addressLine1' ? 'Address Line 1' : field === 'addressLine2' ? 'Address Line 2' : field === 'postalCode' ? 'Postal Code' : field === 'fullName' ? 'Full Name' : field.charAt(0).toUpperCase() + field.slice(1)}</label>
+                          <label className={labelClass}>{ADDRESS_FORM_TEXT[field].label}</label>
                           <input
                             type="text"
                             value={(address as any)[field] || ''}
+                            placeholder={ADDRESS_FORM_TEXT[field].placeholder}
                             onChange={(e) => handleAddressChange(index, field, e.target.value)}
                             className={inputClass}
                           />
@@ -335,18 +360,20 @@ export default function ProfilePage() {
                 <div className="border border-gold/30 rounded-lg p-4 mb-4 bg-obsidian-raised">
                   <h4 className="text-sm font-display font-bold text-gold uppercase tracking-[0.12em] mb-4">Add New Address</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'] as const).map((field) => (
+                    {ADDRESS_FORM_FIELDS.map((field) => (
                       <div key={field}>
-                        <label className={labelClass}>{field === 'addressLine1' ? 'Address Line 1' : field === 'addressLine2' ? 'Address Line 2' : field === 'postalCode' ? 'Postal Code' : field === 'fullName' ? 'Full Name' : field.charAt(0).toUpperCase() + field.slice(1)}</label>
+                        <label className={labelClass}>{ADDRESS_FORM_TEXT[field].label}</label>
                         <input
                           type="text"
                           value={(newAddress as any)[field] || ''}
+                          placeholder={ADDRESS_FORM_TEXT[field].placeholder}
                           onChange={(e) => handleNewAddressChange(field, e.target.value)}
                           className={inputClass}
                         />
                       </div>
                     ))}
                   </div>
+                  {newAddressError && <p role="alert" className="mt-3 text-sm font-display text-red-600">{newAddressError}</p>}
                   <div className="mt-4 flex gap-3">
                     <button onClick={addNewAddress} className="bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full transition-colors text-[15px]">
                       Add Address
@@ -374,8 +401,10 @@ export default function ProfilePage() {
                         <MapPin className="h-5 w-5 text-gold mt-0.5 shrink-0" />
                         <div className="font-display text-sm">
                           <p className="font-display text-ink tracking-[-0.01em] mb-1">{address.fullName}</p>
-                          <p className="text-ink/70">{address.addressLine1}</p>
-                          {address.addressLine2 && <p className="text-ink/70">{address.addressLine2}</p>}
+                          {streetLines(address).map((line, i) => <p key={i} className="text-ink/70">{line}</p>)}
+                          {!isAddressComplete(address) && (
+                            <p className="text-amber-700 text-xs mt-1">Please add your house / flat number — tap Edit.</p>
+                          )}
                           <p className="text-ink/70">{address.city}, {address.state} {address.postalCode}</p>
                           <p className="text-ink/70">{address.country}</p>
                           <p className="text-ink-muted">Phone: {address.phone}</p>

@@ -31,6 +31,7 @@ import {
   PROJECT_TEMPLATES, TEMPLATE_KEYS, FIELD_MAX,
   CUSTOM_FIELDS_MAX, CUSTOM_LABEL_MAX, CUSTOM_VALUE_MAX,
 } from '../config/projectTemplates.js';
+import { streetLines } from '../utils/deliveryAddress.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v && v._id ? String(v._id) : v ? String(v) : null);
@@ -209,7 +210,7 @@ export async function findOrder(raw, now = new Date()) {
   return rows.length === 1 ? rows[0] : null;
 }
 
-const addressOf = (a = {}) => [a.addressLine1, a.addressLine2, a.city, a.state, a.postalCode].map((x) => String(x || '').trim()).filter(Boolean).join(', ');
+const addressOf = (a = {}) => [...streetLines(a), a.city, a.state, a.postalCode].map((x) => String(x || '').trim()).filter(Boolean).join(', ');
 
 /** Customer fields an order fills in (the sales form's keys). */
 export function valuesFromOrder(order) {

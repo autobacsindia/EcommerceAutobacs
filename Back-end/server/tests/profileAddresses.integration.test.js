@@ -10,7 +10,7 @@ const cookie = (headers, name) => {
 };
 
 const addr = (over = {}) => ({
-  fullName: 'Tanveer Singh', phone: '+91 98765 43210', addressLine1: '12 MG Road',
+  fullName: 'Tanveer Singh', phone: '+91 98765 43210', houseNumber: 'Flat 4B', addressLine1: '12 MG Road',
   city: 'Kochi', state: 'Kerala', postalCode: '682001', ...over,
 });
 

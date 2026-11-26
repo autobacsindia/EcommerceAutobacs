@@ -36,6 +36,7 @@ import PanelOrderRating from '@/components/orderRating/PanelOrderRating';
 import FilePicker from '@/components/payments/FilePicker';
 import { money } from '@/components/payments/api';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
+import { streetLines } from '@/lib/deliveryAddress';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -253,7 +254,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Deliver to</p>
             <p className="text-gray-700">
-              {[a.addressLine1, a.addressLine2].filter(Boolean).join(', ')}<br />
+              {streetLines(a).join(', ')}<br />
               {[a.city, a.state, a.postalCode].filter(Boolean).join(', ')}
             </p>
           </div>

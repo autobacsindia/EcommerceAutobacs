@@ -55,6 +55,7 @@ import { isPayLaterDue, payLaterDueFilter } from '../config/payLater.js';
 import { publicEmail } from '../utils/customerContact.js';
 import { quotationDetailsForOrder } from './salesQuotationService.js';
 import { slipProvenance, markEdited } from './slipReader/slipReaderService.js';
+import { streetLines } from '../utils/deliveryAddress.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -756,7 +757,7 @@ export async function getBankTransfer(actor, id) {
 const ORDER_DETAIL_FIELDS = 'wpId salesUser user guestEmail shippingAddress buyer items subtotal shippingCost tax discount couponCode totalAmount status paymentStatus statusHistory createdAt';
 const addressOf = (a) => {
   if (!a) return null;
-  const lines = [a.addressLine1, a.addressLine2, [a.city, a.state].filter(Boolean).join(', '), a.postalCode, a.country].filter(Boolean);
+  const lines = [...streetLines(a), [a.city, a.state].filter(Boolean).join(', '), a.postalCode, a.country].filter(Boolean);
   return lines.length ? { lines, phone: a.phone || '' } : null;
 };
 const paiseTimes = (price, quantity) => (Math.round(Number(price) * 100) * Number(quantity)) / 100;

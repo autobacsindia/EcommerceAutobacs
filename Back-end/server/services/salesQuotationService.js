@@ -77,7 +77,9 @@ function cleanAddress(input = {}, customer) {
   return {
     fullName: String(input.fullName || customer.name).trim(),
     phone: String(input.phone || customer.phone).trim(),
+    houseNumber: String(input.houseNumber ?? '').trim(),
     addressLine1: String(input.addressLine1 ?? '').trim(),
+    landmark: String(input.landmark ?? '').trim(),
     addressLine2: String(input.addressLine2 ?? '').trim(),
     city: String(input.city ?? '').trim(),
     state: String(input.state ?? '').trim(),

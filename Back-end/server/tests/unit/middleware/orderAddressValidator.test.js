@@ -17,7 +17,7 @@ app.use(express.json());
 app.post('/orders', validateOrder, (req, res) => res.json({ success: true }));
 
 const address = (over = {}) => ({
-  fullName: 'Rahul Menon', phone: '9876543210', addressLine1: '12 MG Road',
+  fullName: 'Rahul Menon', phone: '9876543210', houseNumber: 'Flat 4B', addressLine1: '12 MG Road',
   city: 'Kochi', state: 'Kerala', postalCode: '682016', ...over,
 });
 const place = (over) => request(app).post('/orders')

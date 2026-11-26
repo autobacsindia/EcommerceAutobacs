@@ -16,6 +16,7 @@ import DiscountApprovalPanel from './DiscountApprovalPanel';
 import ProductLink from '@/components/staff/ProductLink';
 import { whatsappNumber } from './PaymentLinkCard';
 import { approvalBlocks, errorMessage, percentText, quotationPdfHref, rupees, type Quotation } from './types';
+import { streetLines } from '@/lib/deliveryAddress';
 
 export const QUOTATION_STATUS: Record<Quotation['status'], { text: string; cls: string }> = {
   open: { text: 'Shared — waiting for the client', cls: 'bg-sky-100 text-sky-800' },
@@ -186,7 +187,7 @@ export default function QuotationDetail({ id }: { id: string }) {
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Deliver to</p>
             <p className="text-gray-700">
-              {[a.addressLine1, a.addressLine2].filter(Boolean).join(', ')}<br />
+              {streetLines(a).join(', ')}<br />
               {[a.city, a.state, a.postalCode].filter(Boolean).join(', ')}
             </p>
           </div>

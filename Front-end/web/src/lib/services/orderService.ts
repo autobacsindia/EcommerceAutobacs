@@ -5,7 +5,11 @@ import { Order, PaginatedOrders } from '@/lib/types';
 export interface CreateOrderData {
   shippingAddress: {
     fullName: string;
+    /** House / Flat / Building no. — required for new orders (lib/deliveryAddress.ts). */
+    houseNumber: string;
+    /** Street / Area */
     addressLine1: string;
+    landmark?: string;
     city: string;
     state: string;
     postalCode: string;

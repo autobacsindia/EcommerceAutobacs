@@ -23,12 +23,16 @@ import { Photo } from '../src/components/ui';
 import { colors, elevation, font, inr, radius, spacing, type } from '../src/theme';
 import { Card, EmptyState, Overline, PremiumButton } from '../src/ui';
 import { useApp } from '../src/store';
+import { ADDRESS_FIELD_TEXT, ADDRESS_LIMITS, firstAddressProblem } from '../src/deliveryAddress';
 
 interface Address {
   fullName: string;
   phone: string;
+  /** House / Flat / Building no. (src/deliveryAddress.ts) */
+  houseNumber: string;
+  /** Street / Area */
   addressLine1: string;
-  addressLine2: string;
+  landmark: string;
   city: string;
   state: string;
   postalCode: string;
@@ -38,15 +42,16 @@ interface Address {
 const AUTOFILL: Record<keyof Address, Pick<TextInputProps, 'autoComplete' | 'textContentType' | 'autoCapitalize'>> = {
   fullName: { autoComplete: 'name', textContentType: 'name', autoCapitalize: 'words' },
   phone: { autoComplete: 'tel', textContentType: 'telephoneNumber', autoCapitalize: 'none' },
-  addressLine1: { autoComplete: 'address-line1', textContentType: 'streetAddressLine1', autoCapitalize: 'words' },
-  addressLine2: { autoComplete: 'address-line2', textContentType: 'streetAddressLine2', autoCapitalize: 'words' },
+  houseNumber: { autoComplete: 'address-line1', textContentType: 'streetAddressLine1', autoCapitalize: 'words' },
+  addressLine1: { autoComplete: 'address-line2', textContentType: 'streetAddressLine2', autoCapitalize: 'words' },
+  landmark: { autoComplete: 'off', autoCapitalize: 'words' },
   city: { autoComplete: 'postal-address-locality', textContentType: 'addressCity', autoCapitalize: 'words' },
   state: { autoComplete: 'postal-address-region', textContentType: 'addressState', autoCapitalize: 'words' },
   postalCode: { autoComplete: 'postal-code', textContentType: 'postalCode', autoCapitalize: 'none' },
 };
 
 const EMPTY: Address = {
-  fullName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '',
+  fullName: '', phone: '', houseNumber: '', addressLine1: '', landmark: '', city: '', state: '', postalCode: '',
 };
 
 /** Razorpay's own checkout page, built here so no third-party page is loaded. */
@@ -109,7 +114,8 @@ export default function CheckoutScreen() {
   const set = (key: keyof Address) => (value: string) => setAddress((a) => ({ ...a, [key]: value }));
 
   const missing = useMemo(() => {
-    const required: (keyof Address)[] = ['fullName', 'phone', 'addressLine1', 'city', 'state', 'postalCode'];
+    // House no. and street have their own rule (below); these just need text.
+    const required: (keyof Address)[] = ['fullName', 'phone', 'city', 'state', 'postalCode'];
     return required.filter((k) => !address[k].trim());
   }, [address]);
 
@@ -120,6 +126,10 @@ export default function CheckoutScreen() {
    */
   const placeOrder = async () => {
     setError('');
+    // Same rule as the server (which re-checks): house / flat no., a real
+    // street and area, optional landmark.
+    const streetProblem = firstAddressProblem(address);
+    if (streetProblem) return setError(streetProblem);
     if (missing.length) return setError('Please fill in every delivery field.');
     if (!/^\d{10}$/.test(address.phone.replace(/\D/g, '').slice(-10))) {
       return setError('Enter a valid 10-digit mobile number.');
@@ -132,8 +142,9 @@ export default function CheckoutScreen() {
         shippingAddress: {
           fullName: address.fullName.trim(),
           phone: address.phone.trim(),
+          houseNumber: address.houseNumber.trim(),
           addressLine1: address.addressLine1.trim(),
-          addressLine2: address.addressLine2.trim(),
+          ...(address.landmark.trim() ? { landmark: address.landmark.trim() } : {}),
           city: address.city.trim(),
           state: address.state.trim(),
           postalCode: address.postalCode.trim(),
@@ -277,8 +288,9 @@ export default function CheckoutScreen() {
               {([
                 ['fullName', 'Full name', 'e.g. Rahul Sharma'],
                 ['phone', 'Mobile number', '10-digit mobile number'],
-                ['addressLine1', 'Address', 'House / street'],
-                ['addressLine2', 'Landmark (optional)', 'Area, landmark'],
+                ['houseNumber', ADDRESS_FIELD_TEXT.houseNumber.label, ADDRESS_FIELD_TEXT.houseNumber.placeholder],
+                ['addressLine1', ADDRESS_FIELD_TEXT.addressLine1.label, ADDRESS_FIELD_TEXT.addressLine1.placeholder],
+                ['landmark', ADDRESS_FIELD_TEXT.landmark.label, ADDRESS_FIELD_TEXT.landmark.placeholder],
                 ['city', 'City', 'e.g. Kochi'],
                 ['state', 'State', 'e.g. Kerala'],
                 ['postalCode', 'PIN code', '6-digit PIN'],
@@ -295,7 +307,7 @@ export default function CheckoutScreen() {
                     placeholderTextColor={colors.steel}
                     selectionColor={colors.green}
                     keyboardType={key === 'phone' || key === 'postalCode' ? 'number-pad' : 'default'}
-                    maxLength={key === 'postalCode' ? 6 : key === 'phone' ? 16 : 120}
+                    maxLength={key === 'postalCode' ? 6 : key === 'phone' ? 16 : key === 'addressLine1' ? ADDRESS_LIMITS.street : 100}
                     accessibilityLabel={label}
                     {...AUTOFILL[key]}
                     returnKeyType={key === 'postalCode' ? 'done' : 'next'}

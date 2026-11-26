@@ -24,9 +24,10 @@ import orderRepository from '../repositories/orderRepository.js';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import { normalisePhone } from '../utils/addressBook.js';
+import { firstAddressProblem } from '../utils/deliveryAddress.js';
 
 export const ADDRESS_EDITABLE_STATUSES = Object.freeze(['awaiting_payment', 'processing']);
-export const EDITABLE_ADDRESS_FIELDS = Object.freeze(['fullName', 'phone', 'alternatePhone', 'addressLine1', 'addressLine2', 'city']);
+export const EDITABLE_ADDRESS_FIELDS = Object.freeze(['fullName', 'phone', 'alternatePhone', 'houseNumber', 'addressLine1', 'addressLine2', 'landmark', 'city']);
 export const LOCKED_ADDRESS_FIELDS = Object.freeze(['postalCode', 'state', 'country']);
 export const MAX_ADDRESS_CHANGES = 20;
 const MAX_FIELD = 200;
@@ -37,7 +38,8 @@ const fail = (message, status = 400) => new AppError(message, status, { expose: 
 
 const LABELS = {
   fullName: 'Full name', phone: 'Mobile number', alternatePhone: 'Alternate number',
-  addressLine1: 'Address line 1', addressLine2: 'Address line 2', city: 'City',
+  houseNumber: 'House / flat / building', addressLine1: 'Street / area', addressLine2: 'Address line 2',
+  landmark: 'Landmark', city: 'City',
   postalCode: 'PIN code', state: 'State', country: 'Country',
 };
 
@@ -96,7 +98,7 @@ export function buildNewAddress(current, input) {
     next[f] = v;
   }
 
-  for (const f of ['fullName', 'phone', 'addressLine1', 'city']) {
+  for (const f of ['fullName', 'phone', 'city']) {
     if (!clean(next[f])) throw fail(`${LABELS[f]} is required.`);
   }
   const phone = normalisePhone(next.phone);
@@ -109,7 +111,12 @@ export function buildNewAddress(current, input) {
     next.alternatePhone = alt === phone ? '' : alt;
   }
   if (!next.alternatePhone) delete next.alternatePhone;
+  // Correcting an address is exactly when a missing house number gets added:
+  // an old order without one must have it filled before the edit saves.
+  const addressProblem = firstAddressProblem(next);
+  if (addressProblem) throw fail(addressProblem);
   if (!next.addressLine2) next.addressLine2 = '';
+  if (!next.landmark) delete next.landmark;
 
   return next;
 }

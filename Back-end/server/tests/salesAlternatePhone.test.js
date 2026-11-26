@@ -47,7 +47,7 @@ const makeStaff = () => {
     passwordHash: 'x', role: 'staff', staff: { team: 'sales', isHead: false, active: true },
   });
 };
-const ADDRESS = { addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
+const ADDRESS = { houseNumber: 'Flat 4B', addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
 const body = (customer) => ({
   customer: { name: 'Alt Test', phone: '9820917286', ...customer },
   shippingAddress: ADDRESS,
@@ -143,7 +143,7 @@ describe('quotation → order', () => {
 describe('printed wherever the customer number is printed', () => {
   const order = {
     _id: '6af6ead781f50c3ebbdeb5dd', createdAt: new Date(), items: [], subtotal: 0, totalAmount: 0, discount: 0, shippingCost: 0,
-    shippingAddress: { fullName: 'Alt Test', phone: '9820911111', alternatePhone: '9820922222', addressLine1: 'x', city: 'Pune', state: 'Maharashtra', postalCode: '411001' },
+    shippingAddress: { fullName: 'Alt Test', phone: '9820911111', alternatePhone: '9820922222', houseNumber: 'Flat 4B', addressLine1: 'FC Road, Shivajinagar', city: 'Pune', state: 'Maharashtra', postalCode: '411001' },
   };
 
   it('invoice bill-to lines', async () => {

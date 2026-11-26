@@ -1,0 +1,23 @@
+{
+  "_comment": "One table, run by the server, website and mobile tests, so the three copies of the delivery-address rule cannot drift. ok=true means accepted; field names the field that must be rejected.",
+  "cases": [
+    { "name": "full address", "address": { "houseNumber": "Flat 4B, Jomer Symphony", "addressLine1": "MG Road, Edappally", "landmark": "Opp. Lulu Mall" }, "ok": true },
+    { "name": "landmark is optional", "address": { "houseNumber": "12/345", "addressLine1": "Kaloor Kadavanthra Road" }, "ok": true },
+    { "name": "short numeric house no.", "address": { "houseNumber": "7", "addressLine1": "Near St. Mary's Church, Aluva" }, "ok": true },
+    { "name": "missing house no.", "address": { "houseNumber": "", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
+    { "name": "house no. only spaces", "address": { "houseNumber": "   ", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
+    { "name": "house no. dash", "address": { "houseNumber": "-", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
+    { "name": "house no. NA", "address": { "houseNumber": "NA", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
+    { "name": "house no. 0", "address": { "houseNumber": "0", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
+    { "name": "one-word street", "address": { "houseNumber": "Flat 4B", "addressLine1": "Kochi" }, "ok": false, "field": "addressLine1" },
+    { "name": "missing street", "address": { "houseNumber": "Flat 4B", "addressLine1": "" }, "ok": false, "field": "addressLine1" },
+    { "name": "junk street aaaa", "address": { "houseNumber": "Flat 4B", "addressLine1": "aaaa" }, "ok": false, "field": "addressLine1" },
+    { "name": "junk street dash", "address": { "houseNumber": "Flat 4B", "addressLine1": "-" }, "ok": false, "field": "addressLine1" },
+    { "name": "junk street repeated word", "address": { "houseNumber": "Flat 4B", "addressLine1": "test test" }, "ok": false, "field": "addressLine1" },
+    { "name": "junk street long run", "address": { "houseNumber": "Flat 4B", "addressLine1": "aaaaaa bbbbbb" }, "ok": false, "field": "addressLine1" },
+    { "name": "street of numbers only", "address": { "houseNumber": "Flat 4B", "addressLine1": "123 456" }, "ok": false, "field": "addressLine1" },
+    { "name": "street placeholder words", "address": { "houseNumber": "Flat 4B", "addressLine1": "same address" }, "ok": false, "field": "addressLine1" },
+    { "name": "junk landmark", "address": { "houseNumber": "Flat 4B", "addressLine1": "MG Road, Edappally", "landmark": "...." }, "ok": false, "field": "landmark" },
+    { "name": "landmark na", "address": { "houseNumber": "Flat 4B", "addressLine1": "MG Road, Edappally", "landmark": "na" }, "ok": false, "field": "landmark" }
+  ]
+}

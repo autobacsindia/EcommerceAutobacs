@@ -121,8 +121,10 @@ export type SalesOrder = {
   shippingAddress: {
     fullName?: string;
     phone?: string;
+    houseNumber?: string;
     addressLine1?: string;
     addressLine2?: string;
+    landmark?: string;
     city?: string;
     state?: string;
     postalCode?: string;

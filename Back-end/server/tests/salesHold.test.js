@@ -79,7 +79,7 @@ const makeProduct = (over = {}) => {
   return Product.create({ name: `Seat Cover ${n}`, slug: `seat-cover-q${n}`, sku: `SKUQ-${n}`, description: 'x'.repeat(30), price: 5000, stock: 'in', isActive: true, ...over });
 };
 const CUSTOMER = { name: 'Big Build', email: 'bigbuild@example.com', phone: '9820917286' };
-const ADDRESS = { addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
+const ADDRESS = { houseNumber: 'Flat 4B', addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
 const quoteInput = (items, extra = {}) => ({ customer: CUSTOMER, shippingAddress: ADDRESS, items, ...extra });
 
 beforeEach(() => {

@@ -21,6 +21,7 @@ import { errorMessage, quotationHref, rupees, type SalesFilterOptions, type Sale
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import PinButton from '@/components/staff/PinButton';
 import CopyId from '@/components/ui/CopyId';
+import { streetLines } from '@/lib/deliveryAddress';
 
 type Mode = 'sales' | 'paid';
 /** Which half of the paid list to show: still being worked, or handed over. */
@@ -179,7 +180,7 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Deliver to</p>
                 <p className="text-gray-700">
-                  {[a.addressLine1, a.addressLine2].filter(Boolean).join(', ')}<br />
+                  {streetLines(a).join(', ')}<br />
                   {[a.city, a.state, a.postalCode].filter(Boolean).join(', ')}
                 </p>
               </div>

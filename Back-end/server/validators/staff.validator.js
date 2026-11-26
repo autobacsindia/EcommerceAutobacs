@@ -12,6 +12,7 @@ import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../config/commonPassw
 import { PARCEL_STEP_VALUES, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
 import { OVERDUE_REASON_CODES, MAX_OVERDUE_NOTE } from '../utils/parcelEta.js';
 import { CARRIERS, MAX_CUSTOM_CARRIER_URL } from '../services/orderTrackingService.js';
+import { addressFieldRules } from '../utils/deliveryAddress.js';
 
 /**
  * The "Delivery partner" dropdown: a known courier code, and for "Other" an optional
@@ -322,7 +323,8 @@ export const validateSalesOrder = [
   body('customer.whatsappOptIn').optional().isBoolean({ strict: true }).withMessage('Invalid WhatsApp choice').toBoolean(true),
   body('shippingAddress.fullName').optional().trim().isLength({ max: 100 }),
   body('shippingAddress.phone').optional({ values: 'falsy' }).customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit delivery mobile number'),
-  body('shippingAddress.addressLine1').trim().isLength({ min: 3, max: 200 }).withMessage('Enter the delivery address'),
+  // House / flat no. + Street / Area + optional Landmark: utils/deliveryAddress.js.
+  ...addressFieldRules(body, 'shippingAddress'),
   body('shippingAddress.addressLine2').optional().trim().isLength({ max: 200 }),
   body('shippingAddress.city').trim().isLength({ min: 2, max: 80 }).withMessage('Enter the city'),
   body('shippingAddress.state').trim().isLength({ min: 2, max: 80 }).withMessage('Enter the state'),

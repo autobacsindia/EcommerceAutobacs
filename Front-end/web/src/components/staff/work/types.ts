@@ -105,7 +105,7 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   inWorkflow: boolean;
   owesGoodie: boolean;
   shippingAddress: {
-    fullName?: string; phone?: string; addressLine1?: string; addressLine2?: string;
+    fullName?: string; phone?: string; houseNumber?: string; addressLine1?: string; addressLine2?: string; landmark?: string;
     city?: string; state?: string; postalCode?: string;
   } | null;
   payment: { razorpayPaymentId: string | null; method: string | null } | null;
