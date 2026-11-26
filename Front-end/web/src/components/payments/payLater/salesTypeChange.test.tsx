@@ -115,3 +115,35 @@ describe('change B2B ↔ B2C', () => {
     expect(screen.queryByRole('button', { name: /Change to/ })).toBeNull();
   });
 });
+
+describe('take back ship before payment', () => {
+  const approved = {
+    id: 'o1', orderNumber: '#AB12', status: 'processing', paymentStatus: 'pending', amount: 9000, paidAt: null,
+    customer: { name: 'Ravi', phone: '98200', city: 'Pune' }, salesPerson: 'Asha', bankTransferPending: false,
+    payLater: { label: 'Approved – not sent yet', due: false, approvedAt: '2026-11-25T06:00:00.000Z', approvedBy: 'Meera', reason: 'Regular dealer',
+      dispatchedAt: null, dueAt: null, overdueDays: 0, linkSentAt: null, payUrl: null, payUrlExpiresAt: null, linkBlocked: null, reminders: 0 },
+  };
+
+  it('order page: reason required, posts to the withdraw route', async () => {
+    get.mockResolvedValue({ canApprove: false, canWithdraw: true, dueDays: 3, salesType: B2B, typeChange: null, approved });
+    post.mockResolvedValue({ alreadyOff: false });
+    wrap(<OrderPayLater orderId="o1" hideType />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Take back ship before payment…' }));
+    const yes = screen.getByRole('button', { name: 'Yes, take it back' });
+    expect(yes).toBeDisabled();
+    fill(/Why are you taking it back/, 'Customer agreed to pay first');
+    fireEvent.click(yes);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/orders/o1/pay-later/withdraw', { reason: 'Customer agreed to pay first' }));
+  });
+
+  it('order page: no button once sent; the last take-back is shown when off', async () => {
+    get.mockResolvedValue({ canApprove: false, canWithdraw: false, dueDays: 3, salesType: B2B, typeChange: null, approved });
+    const { unmount } = wrap(<OrderPayLater orderId="o1" hideType />);
+    await screen.findByText(/Regular dealer/);
+    expect(screen.queryByRole('button', { name: /Take back/ })).toBeNull();
+    unmount();
+    get.mockResolvedValue({ canApprove: true, dueDays: 3, salesType: B2B, typeChange: null, withdrawn: { at: '2026-11-26T06:00:00.000Z', notes: 'Ship before payment taken back by Meera: Pays first' } });
+    wrap(<OrderPayLater orderId="o1" hideType />);
+    expect(await screen.findByText(/taken back by Meera: Pays first/)).toBeInTheDocument();
+  });
+});

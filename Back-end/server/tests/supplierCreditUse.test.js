@@ -201,7 +201,7 @@ describe('Using supplier credit on supplier payments', () => {
       expect(ok.body.request).toMatchObject({ status: 'paid', amount: 0, payment: expect.objectContaining({ method: 'credit', reference: 'Supplier credit' }) });
       // No payment record to "correct" (it would turn into a bank transfer that never happened); the receipt renders.
       expect(ok.body.request.can.editPayment).toBe(false);
-      expect((await admin.session.formPut(`/payment-requests/${res.body.request.id}/payment`, { method: 'bank', reference: 'X' })).status).toBe(409);
+      expect((await admin.session.formPut(`/payment-requests/${res.body.request.id}/payment`, { method: 'bank', reference: 'X', note: 'Wrong UTR' })).status).toBe(409);
       const slip = await accounts.session.get(`/payment-requests/${res.body.request.id}/slip`);
       expect(slip.status).toBe(200);
       // Not in the admin's "to pay" queue.

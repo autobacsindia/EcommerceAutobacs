@@ -1898,6 +1898,8 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   if (uploads.length) changes.push(`${uploads.length} screenshot${uploads.length === 1 ? '' : 's'} added`);
   const extra = String(note || '').trim().slice(0, 500);
   if (!changes.length && !extra) return shape(r0, actor);
+  // Every correction says why (owner 2026-11-26): the history shows old → new AND the reason.
+  if (changes.length && extra.length < 3) throw fail('Write why you are changing the payment record (kept in the history).', 400);
 
   // Checked before anything changes; room is what the record holds after the removals.
   const stored = uploads.length

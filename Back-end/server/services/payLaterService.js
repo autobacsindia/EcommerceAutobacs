@@ -38,7 +38,10 @@ import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS } from '../config/staff.js';
 import { PAY_LATER, UNPAID_PAYMENT_STATUSES, payLaterDueFilter } from '../config/payLater.js';
 import { publicEmail } from '../utils/customerContact.js';
-import { paise, istDayKey, dueAtFor, dispatchedAtOf, shapePayLater } from '../utils/payLater.js';
+import {
+  paise, istDayKey, dueAtFor, dispatchedAtOf, shapePayLater,
+  payLaterHasLeft, payLaterWithdrawFilter, payLaterWithdrawUpdate, lastWithdrawalOf,
+} from '../utils/payLater.js';
 import { payLaterTypeProblem, shapeSalesType } from '../utils/salesType.js';
 import { typeChangeOption } from './salesTypeService.js';
 
@@ -172,6 +175,49 @@ export async function approvePayLater(actor, orderId, input = {}, req) {
     { path: 'salesUser', select: 'name' },
   ]);
   return { order: shapeRow(fresh), alreadyApproved: false };
+}
+
+// ── 2b. Taking it back ──────────────────────────────────────────────────────────
+
+/**
+ * Admin / accounts: take "Ship before payment" back (owner 2026-11-26 — accounts
+ * needs an edit option on what it approves). Only while it is unpaid and nothing
+ * has left: then the order simply waits for payment again, and can be let ship
+ * before payment again later (a new approval, with its own reason).
+ *
+ * Once a parcel has left it CANNOT be taken back — the goods are with the
+ * customer; the payment link and the reminders are how the money is collected.
+ *
+ * Idempotent: a second click (nothing on any more) returns `alreadyOff`.
+ */
+export async function withdrawPayLater(actor, orderId, input = {}, req) {
+  if (!mayApprove(actor)) throw fail('Only the admin or accounts can take back ship before payment.', 403);
+  if (!mongoose.isValidObjectId(orderId)) throw fail('Order not found.', 404);
+  const reason = String(input.reason ?? '').trim().replace(/\s+/g, ' ');
+  if (reason.length < PAY_LATER.REASON_MIN) throw fail('Write why it is being taken back.', 400);
+  if (reason.length > PAY_LATER.REASON_MAX) throw fail(`Keep the reason under ${PAY_LATER.REASON_MAX} characters.`, 400);
+
+  const order = await orderRepository.model.findById(orderId)
+    .select('status paymentStatus payLater shipments.status statusHistory.reason statusHistory.timestamp statusHistory.notes').lean();
+  if (!order) throw fail('Order not found.', 404);
+  if (!order.payLater?.approvedAt) return { alreadyOff: true, withdrawn: lastWithdrawalOf(order) };
+  if (order.paymentStatus === 'paid') throw fail('This order is already paid — there is nothing to take back.', 409);
+  if (payLaterHasLeft(order)) {
+    throw fail('Part of this order has already been sent, so this cannot be taken back. The customer still has to pay the link they were sent.', 409);
+  }
+
+  const now = new Date();
+  const who = actor.name || (isAdmin(actor) ? 'the admin' : 'accounts');
+  const updated = await orderRepository.model.findOneAndUpdate(
+    { _id: order._id, ...payLaterWithdrawFilter() },
+    payLaterWithdrawUpdate({ actor, at: now, previous: order.payLater, notes: `Ship before payment taken back by ${who}: ${reason}` }),
+    { new: true },
+  ).lean();
+  if (!updated) throw fail('This order was paid or sent just now. Reload it.', 409);
+
+  auditLogger.logAction(req, 'UPDATE', 'Order', order._id, { change: 'pay_later_withdrawn', reason, approvedAt: order.payLater.approvedAt });
+  enqueue('send-staff-pay-later-withdrawn-alert', { orderId: String(order._id) });
+  return { alreadyOff: false, withdrawn: lastWithdrawalOf(updated) };
 }
 
 // ── 3. After dispatch ──────────────────────────────────────────────────────────
@@ -459,6 +505,8 @@ export async function listPayLater(actor, { cursor, view = 'due' } = {}) {
       dueDays: PAY_LATER.DUE_DAYS,
     };
   }
+  // Accounts / admin may take back one that has not been sent yet (withdrawPayLater).
+  out.canWithdraw = mayApprove(actor);
   return out;
 }
 
@@ -479,9 +527,12 @@ export async function payLaterOptionFor(actor, orderId) {
     // The "Change to B2B / B2C" button on the order page (salesTypeService).
     typeChange: order.salesUser && order.buyerTypeCheck?.status ? typeChangeOption(order) : null,
   };
+  // The latest take-back, shown on the order page so nobody wonders where it went.
+  base.withdrawn = lastWithdrawalOf(order);
   if (order.payLater?.approvedAt) {
     const populated = await orderRepository.findById(order._id, [{ path: 'user', select: 'name email phone' }, { path: 'salesUser', select: 'name' }]);
-    return { ...base, canApprove: false, approved: shapeRow(populated, now) };
+    const canWithdraw = order.paymentStatus !== 'paid' && !payLaterHasLeft(order);
+    return { ...base, canApprove: false, canWithdraw, approved: shapeRow(populated, now) };
   }
   const no = (why) => ({ ...base, canApprove: false, why });
   if (!order.salesUser) return no('Only for orders made in the sales panel.');

@@ -369,7 +369,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
         expect([rupees, (await pay(id, { rupees })).status]).toEqual([rupees, 400]);
       }
 
-      const res = await pay(id, { rupees: '56227' });
+      const res = await pay(id, { rupees: '56227', note: 'Bank statement' });
       expect(res.status).toBe(200);
       expect(res.body.request).toMatchObject({ status: 'paid', amount: 56227, fxRate: 2.449978, rupeesPending: false, currency: 'THB', foreignAmount: 22950 });
       expect(res.body.request.history.at(-1).note).toMatch(/₹56,227 debited for THB 22,950 \(₹2\.45 per THB\)/);
@@ -384,15 +384,15 @@ describe('Expense options per team, and foreign-currency bills', () => {
     it('the admin can correct a typo in the rupees afterwards — logged — but never a rupee payment\'s amount', async () => {
       const id = (await thb()).body.request.id;
       await pay(id, { rupees: '56227' });
-      const fixed = await admin.session.put(`/payment-requests/${id}/payment`, { rupees: '56272' });
+      const fixed = await admin.session.put(`/payment-requests/${id}/payment`, { rupees: '56272', note: 'Bank statement' });
       expect(fixed.status).toBe(200);
       expect(fixed.body.request).toMatchObject({ amount: 56272, fxRate: 2.451939 });
       expect(fixed.body.request.history.at(-1).note).toMatch(/rupees debited ₹56,227 → ₹56,272/);
-      expect((await admin.session.put(`/payment-requests/${id}/payment`, { rupees: '1' })).status).toBe(400);
+      expect((await admin.session.put(`/payment-requests/${id}/payment`, { rupees: '1', note: 'Bank statement' })).status).toBe(400);
 
       const inrId = (await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request.id;
       await pay(inrId);
-      const refused = await admin.session.put(`/payment-requests/${inrId}/payment`, { rupees: '900' });
+      const refused = await admin.session.put(`/payment-requests/${inrId}/payment`, { rupees: '900', note: 'Bank statement' });
       expect(refused.status).toBe(400);
       expect((await PaymentRequest.findById(inrId).lean()).amount).toBe(1000);
     });
@@ -559,7 +559,7 @@ describe('Expense options per team, and foreign-currency bills', () => {
       it('the record stays editable: UTR, time, account name — but there are no rupees to change', async () => {
         const id = (await thb()).body.request.id;
         await abroad(id);
-        const fixed = await admin.session.put(`/payment-requests/${id}/payment`, { reference: 'UTR2', accountLabel: 'Bangkok Bank (HR)' });
+        const fixed = await admin.session.put(`/payment-requests/${id}/payment`, { reference: 'UTR2', accountLabel: 'Bangkok Bank (HR)', note: 'Bank statement' });
         expect(fixed.status).toBe(200);
         expect(fixed.body.request.paidFrom).toMatchObject({ label: 'Bangkok Bank (HR)', amount: 22950 });
         expect(fixed.body.request.history.at(-1).note).toMatch(/reference UTR1 → UTR2, paid from HR's Thailand account → Bangkok Bank \(HR\)/);

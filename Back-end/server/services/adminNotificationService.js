@@ -1014,6 +1014,31 @@ export const emailStaffSalesTypeChangedAlert = async (orderId) => {
   return { status: 'sent', admins, staff };
 };
 
+/** Admin / accounts took "Ship before payment" back (payLaterService.withdrawPayLater). */
+export const emailStaffPayLaterWithdrawnAlert = async (orderId) => {
+  const order = await teamOrder(orderId);
+  const last = [...(order?.statusHistory || [])].reverse().find((h) => h.reason === 'pay_later_withdrawn');
+  if (!last || order.payLater?.approvedAt) return { status: 'not-found' };
+  const ref = orderRef(order);
+  const subject = `Do not ship ${ref} yet — ship before payment was taken back`;
+  const intro = 'This order may no longer ship before the customer pays. Procurement / operations: do not dispatch it until it is paid. '
+    + 'Sales: send the customer a payment link.';
+  const rows = orderRows(order, [
+    ['Amount', `<strong>${escapeHtml(inr(order.totalAmount))}</strong> — NOT paid`],
+    ['What happened', escapeHtml(last.notes || '')],
+  ]);
+  const link = teamPanelLink('/team/pay-later');
+  const message = { subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Open team panel', link) };
+  const people = (await Promise.all(['accounts', 'procurement', 'operations'].map((t) => teamStaff(t, { headsOnly: true })))).flat();
+  const seller = order.salesUser;
+  if (seller?.role === 'staff' && seller.staff?.active) people.push(seller);
+  const [admins, staff] = await Promise.all([
+    sendToAdmins(message, `Pay-later withdrawn alert (order ${orderId})`),
+    sendToStaff(people, message, `Pay-later withdrawn alert (order ${orderId})`),
+  ]);
+  return { status: 'sent', admins, staff };
+};
+
 /** A "Ship before payment" order has been paid (verified webhook or confirmed transfer). */
 export const emailStaffPayLaterPaidAlert = async (orderId) => {
   const order = await teamOrder(orderId);

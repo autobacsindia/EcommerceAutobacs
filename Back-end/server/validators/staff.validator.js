@@ -200,6 +200,9 @@ export const validatePayLaterApprove = [
   body('reason').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Write why (3–300 characters).'),
 ];
 
+// Take ship-before-payment back (payLaterService.withdrawPayLater)
+export const validatePayLaterWithdraw = validatePayLaterApprove;
+
 // B2B / B2C check (services/salesTypeService.js)
 export const validateSalesTypeList = [
   query('view').optional().isIn(['check', 'b2b_unpaid', 'approved']),

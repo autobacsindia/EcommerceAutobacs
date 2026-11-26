@@ -23,10 +23,9 @@ import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS } from '../config/staff.js';
 import {
   shapeSalesType, isB2B, salesTypeOf, typeChangeProblem, payLaterEffectOf,
-  LEFT_SHIPMENT_STATUSES, TYPE_CHANGE_REASON_MIN, TYPE_CHANGE_REASON_MAX, SALES_TYPES,
+  TYPE_CHANGE_REASON_MIN, TYPE_CHANGE_REASON_MAX, SALES_TYPES,
 } from '../utils/salesType.js';
-import { shapePayLater } from '../utils/payLater.js';
-import { UNPAID_PAYMENT_STATUSES } from '../config/payLater.js';
+import { shapePayLater, payLaterWithdrawFilter, payLaterWithdrawUpdate, mergeUpdates } from '../utils/payLater.js';
 import { resolveBuyer } from './buyerService.js';
 import { BUYER_TYPES } from '../config/buyer.js';
 import { enqueueNotification } from '../queue/queues.js';
@@ -267,28 +266,17 @@ export async function changeSalesType(actor, orderId, input = {}, req) {
   }
   const update = { $set, $push: { 'buyerTypeCheck.changes': entry } };
 
+  let finalUpdate = update;
   if (effect === 'withdrawn') {
-    // Only while nothing has left and it is still unpaid; a parcel dispatched or a
-    // payment landing meanwhile fails the filter → 409, never a half-done change.
-    Object.assign(filter, {
-      status: 'processing',
-      paymentStatus: { $in: [...UNPAID_PAYMENT_STATUSES] },
-      'payLater.dispatchedAt': { $exists: false },
-      shipments: { $not: { $elemMatch: { status: { $in: [...LEFT_SHIPMENT_STATUSES] } } } },
-    });
-    $set.status = 'awaiting_payment';
-    update.$unset = { payLater: '' };
-    update.$push.statusHistory = {
-      status: 'awaiting_payment',
-      timestamp: now,
-      updatedBy: actor._id,
-      reason: 'pay_later_withdrawn',
+    // Same filter and write as "Take back ship before payment" (utils/payLater.js).
+    Object.assign(filter, payLaterWithdrawFilter());
+    finalUpdate = mergeUpdates(update, payLaterWithdrawUpdate({
+      actor, at: now, previous: order.payLater,
       notes: `Changed to B2C by ${actor.name || role}: ship before payment taken back. Reason: ${reason}`,
-    };
-    update.$inc = { __v: 1 };
+    }));
   }
 
-  const updated = await orderRepository.model.findOneAndUpdate(filter, update, { new: true })
+  const updated = await orderRepository.model.findOneAndUpdate(filter, finalUpdate, { new: true })
     .select(LIST_SELECT).populate(POPULATE).lean();
   if (!updated) throw fail('This order changed just now. Reload it.', 409);
 

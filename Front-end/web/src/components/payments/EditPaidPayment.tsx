@@ -13,7 +13,7 @@ const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gra
 
 /**
  * Admin: correct a PAID payment's record — how it was paid, the reference / UTR,
- * the payment screenshots, a note. The amount and who was paid are not here on
+ * the payment screenshots, and why (a reason is required). The amount and who was paid are not here on
  * purpose: the money has left. The one exception is a foreign bill's rupees —
  * the admin's own record of the bank debit, so a typo in it can be fixed (logged).
  * A payment made in one transfer with others is corrected together with them
@@ -122,10 +122,10 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
           <p className="text-xs text-gray-600">This payment already has {MAX_ATTACHMENTS_PER_RECORD} files. Tick one to remove before adding another.</p>
         )}
       </div>
-      <textarea aria-label="Why the change" className={input} rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why the change (optional, kept in the history)" />
+      <textarea aria-label="Why the change" className={input} rows={2} required minLength={3} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why the change (required, kept in the history)" />
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={busy || note.trim().length < 3} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
           {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save changes
         </button>
         <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>

@@ -71,12 +71,17 @@ function PayLaterPart({ orderId, onChanged }: { orderId: string; onChanged?: () 
         <PayLaterBadge state={p} detail />
         <p className="text-xs text-gray-600">Approved by {p.approvedBy || 'the admin / accounts'} on {formatDateTimeIST(p.approvedAt)}: “{p.reason}”</p>
         {p.payUrl && <p className="text-xs text-gray-600">Payment link: <a className="text-blue-700 underline" href={p.payUrl} target="_blank" rel="noopener noreferrer">{p.payUrl}</a></p>}
+        {data.canWithdraw && <WithdrawPayLater orderId={orderId} onChanged={onChanged} />}
       </section>
     );
   }
 
+  const takenBack = data.withdrawn
+    ? <p className="text-xs text-gray-600">{data.withdrawn.notes}{data.withdrawn.at ? ` (${formatDateTimeIST(data.withdrawn.at)})` : ''}</p>
+    : null;
+
   if (!data.canApprove) {
-    if (!data.why) return null;
+    if (!data.why) return takenBack;
     return (
       <section aria-label="Ship before payment" className="text-xs text-gray-500">
         <span className="font-semibold text-gray-700">Ship before payment:</span> not available — {data.why.replace(/^Ship before payment: not available — /, '')}
@@ -87,6 +92,7 @@ function PayLaterPart({ orderId, onChanged }: { orderId: string; onChanged?: () 
   return (
     <section aria-label="Ship before payment" className="space-y-2">
       <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900"><Truck className="h-4 w-4" /> Ship before payment</h2>
+      {takenBack}
       <p className="text-xs text-gray-600">
         For a customer who will only pay after getting the tracking. The order goes to the team now, unpaid. When it is sent,
         the customer gets a payment link. It is due {data.dueDays} days after dispatch
@@ -109,5 +115,46 @@ function PayLaterPart({ orderId, onChanged }: { orderId: string; onChanged?: () 
         </form>
       )}
     </section>
+  );
+}
+
+/**
+ * Admin / accounts: take "Ship before payment" back, with a reason. Offered only
+ * while it is unpaid and nothing has been sent (the server checks again). The
+ * order then waits for payment; it can be let ship before payment again later.
+ */
+export function WithdrawPayLater({ orderId, onChanged }: { orderId: string; onChanged?: () => void }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const withdraw = useMutation({
+    mutationFn: () => apiClient.post(`/staff/orders/${encodeURIComponent(orderId)}/pay-later/withdraw`, { reason: reason.trim() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: payLaterKeys.all });
+      queryClient.invalidateQueries({ queryKey: staffKeys.orders() });
+      setOpen(false);
+      onChanged?.();
+    },
+    onError: (e) => setError(errorMessage(e, 'Could not take it back.')),
+  });
+  if (!open) {
+    return (
+      <button type="button" onClick={() => { setOpen(true); setError(''); }} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-gray-50">
+        Take back ship before payment…
+      </button>
+    );
+  }
+  return (
+    <form className="space-y-2 rounded-lg border border-red-200 bg-red-50/50 p-3" aria-label="Take back ship before payment" onSubmit={(e) => { e.preventDefault(); setError(''); withdraw.mutate(); }}>
+      <label htmlFor={`pay-later-withdraw-${orderId}`} className="block text-xs font-medium text-gray-700">Why are you taking it back?</label>
+      <textarea id={`pay-later-withdraw-${orderId}`} className={input} rows={2} required minLength={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Example: Customer agreed to pay first" />
+      <p className="text-xs text-gray-700">Nothing has been sent yet. The order will wait for payment again; the teams and the admin get an email. Sales sends the customer a payment link.</p>
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={withdraw.isPending || reason.trim().length < 3} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Yes, take it back</button>
+        <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold">Close</button>
+      </div>
+    </form>
   );
 }

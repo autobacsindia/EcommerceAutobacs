@@ -307,6 +307,9 @@ describe('admin corrects a paid payment', () => {
     fireEvent.change(screen.getByLabelText('Paid by'), { target: { value: 'bank' } });
     fireEvent.change(screen.getByLabelText('Reference / UTR'), { target: { value: 'UTR777888' } });
     fireEvent.click(screen.getByLabelText('Remove wrong.jpg'));
+    // A reason is required (kept in the history): Save stays off without one.
+    expect(screen.getByRole('button', { name: /Save changes/ })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Why the change'), { target: { value: 'Typed the wrong UTR' } });
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [url, init] = fetchMock.mock.calls[0];
@@ -315,6 +318,7 @@ describe('admin corrects a paid payment', () => {
     const form = init.body as FormData;
     expect(form.get('method')).toBe('bank');
     expect(form.get('reference')).toBe('UTR777888');
+    expect(form.get('note')).toBe('Typed the wrong UTR');
     expect(JSON.parse(form.get('removeFileIds') as string)).toEqual(['f9']);
     expect(form.get('amount')).toBeNull();
     expect(form.get('rupees')).toBeNull();
