@@ -52,7 +52,7 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
             {/* Vehicle Image */}
             <div className={`relative h-48 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} overflow-hidden`}>
               <Image
-                src={vehicle.image?.url || '/placeholder-product.jpg'}
+                src={vehicle.image?.url || '/images/fallback-product.webp'}
                 alt={vehicle.image?.alt || `${vehicle.make} ${vehicle.model}`}
                 fill
                 className="object-cover transition-transform duration-500 group-hover:scale-110"

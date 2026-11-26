@@ -109,6 +109,17 @@ describe('ClientPage', () => {
     (apiClient.get as jest.Mock).mockResolvedValue({ product: mockProduct });
   });
 
+  it('photo + buy box can shrink to a 375px phone (no sideways scroll)', async () => {
+    // jsdom has no layout, so pin the two CSS facts that prevent the overflow:
+    // a single minmax(0,1fr) column and min-width:0 on both grid items. Without
+    // them an 8-photo gallery's dots row widened the page to 404px on phones.
+    renderPDP(<ClientPage slug="p1" />);
+    const grid = await screen.findByTestId('pdp-main-grid');
+    expect(grid).toHaveClass('grid-cols-1');
+    expect(grid.children).toHaveLength(2);
+    for (const cell of Array.from(grid.children)) expect(cell).toHaveClass('min-w-0');
+  });
+
   describe('Black Friday ₹0 DELIVERY ribbon on the main photo (owner, 2026-11-20)', () => {
     afterEach(() => { mockFeeWaivers = null; mockFeeIds.length = 0; });
 
