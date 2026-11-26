@@ -107,7 +107,7 @@ function Gate() {
         <Stack.Screen name="face/consent" options={{ title: 'Set up face check' }} />
         <Stack.Screen name="face/check" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
         <Stack.Screen name="fix-day" options={{ title: 'Ask HR to fix a day', presentation: 'modal' }} />
-        <Stack.Screen name="payslip/[month]" options={{ title: 'Payslip' }} />
+        <Stack.Screen name="payslip/[id]" options={{ title: 'Payslip' }} />
         <Stack.Screen name="marks" options={{ title: 'Marks and overtime' }} />
         <Stack.Screen name="documents" options={{ title: 'My documents' }} />
         <Stack.Screen name="holidays" options={{ title: 'Holidays' }} />

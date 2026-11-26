@@ -280,25 +280,38 @@ export type LeaveInput = {
   reason: string;
 };
 
-// ── payslips (payroll not built yet — shape from the ADR, provisional) ────────
+// ── payslips (payroll branch shapes, mapped in api/hr.ts) ────────────────────
 
-/** `note` explains the figure, e.g. "4 marks → ½ day". */
+/** `note` explains the figure, e.g. "Late/early marks: 4 → ½ day LOP". */
 export type PayslipLine = { label: string; amountPaise: number; note?: string };
 
+/** One row of GET /hr/me/payslips. Only released payslips are listed. */
 export type PayslipSummary = {
-  month: string;
+  id: string;
   number: string;
+  month: string;
+  kind: 'monthly' | 'final_settlement';
+  grossPaise: number;
+  deductionsPaise: number;
   netPaise: number;
-  paidOn: string | null;
 };
 
+export type PayslipAttendance = {
+  daysInMonth?: number;
+  paidDays?: number;
+  lopDays?: number;
+  marks?: number;
+  lateCount?: number;
+  earlyCount?: number;
+  overtimeMinutes?: number;
+};
+
+/** GET /hr/me/payslips/:id, with lines split into earnings and deductions. */
 export type Payslip = PayslipSummary & {
-  grossPaise: number;
   earnings: PayslipLine[];
   deductions: PayslipLine[];
-  daysInMonth: number;
-  paidDays: number;
-  bankLast4?: string;
+  attendance: PayslipAttendance;
+  releasedAt: string | null;
 };
 
 export type Page<T> = { items: T[]; nextCursor: string | null };

@@ -43,6 +43,23 @@ function day(date: string, status: string, inAt: string | null, outAt: string | 
   };
 }
 
+const demoSlip: Payslip = {
+  id: 'ps1', number: 'PS-2026-10-0007', month: '2026-10', kind: 'monthly',
+  grossPaise: 3104000, deductionsPaise: 250000, netPaise: 2854000, releasedAt: '2026-11-05T09:00:00Z',
+  earnings: [
+    { label: 'Basic', amountPaise: 1500000 },
+    { label: 'HRA', amountPaise: 750000 },
+    { label: 'Other allowance', amountPaise: 750000 },
+    { label: 'Overtime', amountPaise: 104000, note: '4 h approved × 2' },
+  ],
+  deductions: [
+    { label: 'PF', amountPaise: 180000, note: '12% of basic' },
+    { label: 'Professional tax', amountPaise: 20000 },
+    { label: 'Late/early marks', amountPaise: 50000, note: 'Late/early marks: 3 → ½ day LOP' },
+  ],
+  attendance: { daysInMonth: 31, paidDays: 30.5, lopDays: 0.5, marks: 3, lateCount: 2, earlyCount: 1, overtimeMinutes: 240 },
+};
+
 export function createMockApi(): HrApi {
   const punches: Punch[] = [];
   const seen = new Map<string, Punch>();
@@ -215,23 +232,14 @@ export function createMockApi(): HrApi {
     },
     async payslips() {
       await wait();
-      const slip: Payslip = {
-        month: '2026-10', number: 'PS-2026-10-0007', netPaise: 2784000, paidOn: '2026-11-07', grossPaise: 3104000,
-        earnings: [
-          { label: 'Basic', amountPaise: 1500000 },
-          { label: 'HRA', amountPaise: 750000 },
-          { label: 'Other allowance', amountPaise: 750000 },
-          { label: 'Overtime (4 h, approved)', amountPaise: 104000, note: '4 h × 2' },
-          { label: 'Punctuality bonus', amountPaise: 25000, note: '3 marks → half bonus' },
-        ],
-        deductions: [
-          { label: 'PF (12% of basic)', amountPaise: 180000 },
-          { label: 'Professional tax', amountPaise: 20000 },
-          { label: 'Late/early marks', amountPaise: 50000, note: '3 marks → ½ day' },
-        ],
-        daysInMonth: 31, paidDays: 30, bankLast4: '4821',
-      };
-      return { items: [slip], nextCursor: null };
+      const { earnings, deductions, attendance, releasedAt, ...row } = demoSlip;
+      void earnings; void deductions; void attendance; void releasedAt;
+      return { items: [row], nextCursor: null };
+    },
+    async payslip(id) {
+      await wait();
+      if (id !== demoSlip.id) throw new ApiError('Not found', 404);
+      return demoSlip;
     },
     async payslipPdf() {
       throw new ApiError('PDFs are not in the demo.', 400);

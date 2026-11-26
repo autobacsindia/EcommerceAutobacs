@@ -26,6 +26,9 @@ import type {
   MonthView,
   Page,
   Payslip,
+  PayslipSummary,
+  PayslipAttendance,
+  PayslipLine,
   PunchInput,
   PunchResult,
 } from './types';
@@ -47,9 +50,10 @@ export interface HrApi {
   myLeave(cursor?: string | null): Promise<Page<LeaveRequest>>;
   applyLeave(input: LeaveInput): Promise<{ request: LeaveRequest; replay: boolean }>;
   cancelLeave(id: string): Promise<void>;
-  payslips(): Promise<Page<Payslip>>;
+  payslips(cursor?: string): Promise<Page<PayslipSummary>>;
+  payslip(id: string): Promise<Payslip>;
   /** Downloads the released payslip PDF to a local file; returns its uri. */
-  payslipPdf(month: string): Promise<string>;
+  payslipPdf(id: string): Promise<string>;
 
   // profile
   capabilities(): Promise<AppCapabilities>;
@@ -72,6 +76,53 @@ export interface HrApi {
 }
 
 const enc = encodeURIComponent;
+
+/** A payslip as the payroll branch serves it (list rows have no lines). */
+export type RawPayslip = {
+  id: string;
+  number: string;
+  month: string;
+  kind: 'monthly' | 'final_settlement';
+  grossPaise: number;
+  deductionsPaise: number;
+  netPaise: number;
+  attendance?: PayslipAttendance;
+  lines?: { code?: string; label: string; kind: 'earning' | 'deduction' | 'employer'; amountPaise: number; calc?: string }[];
+  releasedAt?: string | null;
+};
+
+function summary(r: RawPayslip): PayslipSummary {
+  return {
+    id: r.id,
+    number: r.number,
+    month: r.month,
+    kind: r.kind === 'final_settlement' ? 'final_settlement' : 'monthly',
+    grossPaise: r.grossPaise,
+    deductionsPaise: r.deductionsPaise,
+    netPaise: r.netPaise,
+  };
+}
+
+export function toPayslipPage(raw: Page<RawPayslip>): Page<PayslipSummary> {
+  return { items: (raw.items ?? []).map(summary), nextCursor: raw.nextCursor ?? null };
+}
+
+/** Employer-only lines (e.g. employer PF) are not part of take-home, so they are left out. */
+export function toPayslip(r: RawPayslip): Payslip {
+  const line = (l: NonNullable<RawPayslip['lines']>[number]): PayslipLine => ({
+    label: l.label,
+    amountPaise: l.amountPaise,
+    ...(l.calc ? { note: l.calc } : {}),
+  });
+  const lines = r.lines ?? [];
+  return {
+    ...summary(r),
+    earnings: lines.filter((l) => l.kind === 'earning').map(line),
+    deductions: lines.filter((l) => l.kind === 'deduction').map(line),
+    attendance: r.attendance ?? {},
+    releasedAt: r.releasedAt ?? null,
+  };
+}
 
 /** GET /hr/overtime/pending as the attendance-policy branch serves it. */
 export type RawOvertimePage = {
@@ -192,13 +243,11 @@ export function createHrApi({ http, isWeb, downloadPdf, baseUrl }: Deps): HrApi 
     cancelLeave: async (id) => {
       await http.post(`/hr/me/leave/${encodeURIComponent(id)}/cancel`);
     },
-    payslips: () => http.get<Page<Payslip>>('/hr/me/payslips'),
-    async payslipPdf(month) {
-      return downloadPdf(
-        `${baseUrl}/hr/me/payslips/${encodeURIComponent(month)}/pdf`,
-        await http.authHeader(),
-        `payslip-${month}.pdf`,
-      );
+    payslips: async (cursor) =>
+      toPayslipPage(await http.get<Page<RawPayslip>>(`/hr/me/payslips?limit=24${cursor ? `&cursor=${enc(cursor)}` : ''}`)),
+    payslip: async (id) => toPayslip((await http.get<{ payslip: RawPayslip }>(`/hr/me/payslips/${enc(id)}`)).payslip),
+    async payslipPdf(id) {
+      return downloadPdf(`${baseUrl}/hr/me/payslips/${enc(id)}/pdf`, await http.authHeader(), `payslip-${id}.pdf`);
     },
 
     capabilities: () => http.get<AppCapabilities>('/hr/me/app'),
