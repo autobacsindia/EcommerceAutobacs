@@ -12,8 +12,12 @@
  *   returning       a return is moving (raised, accepted, pickup booked, received)
  *   delivered       the last step is done
  *   on_hold         an item is out of stock and we are asking the customer
+ *   delivery_failed the newest update on a parcel in transit is the team's
+ *   out_for_delivery  "Delivery failed" / "Out for delivery" step (with its note)
  *   late            today (India) is past the date we promised — the courier's date
  *                   or the end of the 7–10 / 10–15 day window the page shows
+ *   date_moved      the newest parcel update is the team moving its expected date
+ *   in_transit      the newest parcel update is "Picked up" / "In transit" (+ note)
  *   partly          some parcels shipped, not all
  *   shipped | packed | preparing | placed   the last step that is done
  *
@@ -22,9 +26,17 @@
  * customer whose order is on time. There is no "new date" — nothing on the order
  * holds a revised promise, and inventing one would be worse than saying we're on it.
  *
+ * Delivery updates come from what operations records on a parcel in transit
+ * (`shipments[].trackingSteps`: status, note, time — the same three fields the
+ * customer already sees under the parcel, utils/shipmentView.js) and from a change
+ * of its expected day (`shipments[].etaHistory`, the day customerOrderProgress
+ * already shows as the courier estimate). Only the step, its note, the new day and
+ * the time leave here — never who recorded it, never an overdue reason.
+ *
  * Pure, no I/O.
  */
 import { STEPS } from './customerJourney.js';
+import { PARCEL_STEP } from './parcelSteps.js';
 
 export const MOMENT = Object.freeze({
   PAYMENT_FAILED: 'payment_failed',
@@ -33,7 +45,11 @@ export const MOMENT = Object.freeze({
   RETURNING: 'returning',
   DELIVERED: 'delivered',
   ON_HOLD: 'on_hold',
+  DELIVERY_FAILED: 'delivery_failed',
+  OUT_FOR_DELIVERY: 'out_for_delivery',
   LATE: 'late',
+  DATE_MOVED: 'date_moved',
+  IN_TRANSIT: 'in_transit',
   PARTLY: 'partly',
   SHIPPED: 'shipped',
   PACKED: 'packed',
@@ -83,6 +99,46 @@ export function promisedDay(estimate) {
   return null;
 }
 
+/** Team steps on a parcel in transit → the moment they show. */
+const STEP_MOMENT = Object.freeze({
+  [PARCEL_STEP.PICKED_UP]: MOMENT.IN_TRANSIT,
+  [PARCEL_STEP.IN_TRANSIT]: MOMENT.IN_TRANSIT,
+  [PARCEL_STEP.OUT_FOR_DELIVERY]: MOMENT.OUT_FOR_DELIVERY,
+  [PARCEL_STEP.DELIVERY_FAILED]: MOMENT.DELIVERY_FAILED,
+});
+const NOTE_MAX = 120;
+
+const timeOf = (v) => {
+  const t = v ? new Date(v).getTime() : NaN;
+  return Number.isFinite(t) ? t : null;
+};
+
+/**
+ * The newest thing the team recorded on a parcel still in transit, or null:
+ *   { key: in_transit | out_for_delivery | delivery_failed, note?, at }
+ *   { key: date_moved, newDay, at }   — a real change (it had a day before)
+ */
+export function latestParcelUpdate(order) {
+  let best = null;
+  const offer = (at, update) => {
+    if (at != null && (!best || at > best.t)) best = { t: at, update };
+  };
+  for (const s of order?.shipments || []) {
+    if (s?.status !== 'shipped') continue;
+    for (const step of s.trackingSteps || []) {
+      const key = STEP_MOMENT[step?.status];
+      if (!key) continue;
+      const note = typeof step.note === 'string' ? step.note.trim().slice(0, NOTE_MAX) : '';
+      offer(timeOf(step.at), { key, ...(note && { note }) });
+    }
+    for (const h of s.etaHistory || []) {
+      if (!h?.from || !DAY_RE.test(String(h.to || '')) || h.from === h.to) continue;
+      offer(timeOf(h.at), { key: MOMENT.DATE_MOVED, newDay: h.to });
+    }
+  }
+  return best ? { ...best.update, at: new Date(best.t).toISOString() } : null;
+}
+
 /** The furthest-along moving return, as a step (0–2), or null. */
 function returnStep(order, returns) {
   const statuses = (returns || []).map((r) => r?.status);
@@ -102,6 +158,9 @@ function returnStep(order, returns) {
  *   refund?: { amount: number } | null,  // refunded: the order-level refund amount (rupees), when recorded
  *   returnStep?: number,                 // returning: 0 requested, 1 pickup, 2 received
  *   late?: { dueDay: string },           // late: the date we promised, 'YYYY-MM-DD'
+ *   note?: string,                       // delivery updates: the team's note, as the customer sees it under the parcel
+ *   newDay?: string,                     // date_moved: the new expected day, 'YYYY-MM-DD'
+ *   at?: string,                         // delivery updates: when it was recorded (a new one replays)
  * }}
  */
 export function orderMoment(order, progress, { returns = [], now = Date.now() } = {}) {
@@ -130,8 +189,14 @@ export function orderMoment(order, progress, { returns = [], now = Date.now() } 
 
   if (progress.onHold) return { key: MOMENT.ON_HOLD };
 
+  // At the door beats "late": the customer needs to know the courier is (or was) there.
+  const update = latestParcelUpdate(order);
+  if (update && (update.key === MOMENT.DELIVERY_FAILED || update.key === MOMENT.OUT_FOR_DELIVERY)) return update;
+
   const due = promisedDay(progress.estimate);
   if (due && istDay(now) > due) return { key: MOMENT.LATE, late: { dueDay: due } };
+
+  if (update) return update;
 
   const parcels = progress.parcels || {};
   if (parcels.shipped > 0 && parcels.total > parcels.shipped) return { key: MOMENT.PARTLY };
@@ -140,4 +205,4 @@ export function orderMoment(order, progress, { returns = [], now = Date.now() } 
   return { key: lastDone || MOMENT.PLACED };
 }
 
-export default { MOMENT, RETURN_STEP, orderMoment, promisedDay, istDay, istDayPlus };
+export default { MOMENT, RETURN_STEP, orderMoment, latestParcelUpdate, promisedDay, istDay, istDayPlus };
