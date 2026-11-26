@@ -3,6 +3,7 @@
  * over HTTP with a real Mongo: who may, when, the reason and history, attachments,
  * on-hold / declined going back to accounts, the edit-vs-approve race, linked totals.
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -350,3 +351,6 @@ describe('Edit a payment until accounts approves it (owner 2026-11-21)', () => {
     });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

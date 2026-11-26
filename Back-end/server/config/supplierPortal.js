@@ -18,6 +18,10 @@ export const GST_RATES = Object.freeze([0, 5, 12, 18, 28]);
 export const DEFAULT_MARGIN_BP = 3000; // 30%
 export const DEFAULT_FLOOR_BP = 1000;  // 10% — selling below this needs an explicit override
 export const MAX_MARGIN_BP = 9000;
+// The minimum margin on what procurement BUYS for an order (models/MarginConfig.js):
+// customer's price (with GST, after coupon) vs the supplier's bill (with GST).
+// Below it needs a reason and accounts' approval. Owner, 2026-11-26: 30%.
+export const DEFAULT_BUY_MIN_BP = 3000;
 
 export const MAX_LISTING_IMAGES = 6;
 export const MAX_COST_PAISE = 100_000_000; // ₹10,00,000 per unit — anything above is a typo

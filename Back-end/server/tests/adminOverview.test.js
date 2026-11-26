@@ -11,6 +11,7 @@
  *   - a past IST day (?date=): that day's events only (00:00–23:59:59.999 IST),
  *     the month to that day, no live-only figures; future/invalid dates are a 400
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
 
@@ -249,3 +250,6 @@ describe('a past day (?date=YYYY-MM-DD, IST)', () => {
     expect((await companyOverview(admin, Date.now(), { date: yesterday })).overdue).toEqual([]);
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

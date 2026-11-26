@@ -651,3 +651,53 @@ describe('a product line', () => {
     expect(screen.queryByRole('button', { name: /Request supplier payment/ })).toBeNull();
   });
 });
+
+describe('minimum margin (owner, 2026-11-26)', () => {
+  const fillSupplier = () => {
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '75000' } });
+    fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'ARB Supplies' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Bank transfer' }));
+    fireEvent.change(screen.getByLabelText('Account holder'), { target: { value: 'ARB Supplies Pvt Ltd' } });
+    fireEvent.change(screen.getByLabelText('Account number'), { target: { value: '123456789012' } });
+    fireEvent.change(screen.getByLabelText('IFSC'), { target: { value: 'HDFC0001234' } });
+  };
+
+  it('procurement: the server says below margin → the numbers and a reason box; sending again carries the reason', async () => {
+    const onDone = jest.fn();
+    const below = 'Margin is 25% — below the 30% minimum. The customer paid ₹1,00,000 for this; supplier cost is ₹75,000.';
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ success: false, code: 'MARGIN_BELOW', message: below }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ request: { ...base, status: 'submitted' } }) });
+    wrap(<PaymentRequestForm onDone={onDone} supplier={{ orderId: 'o1', orderNumber: '#AB12', customer: 'Ravi', closedBy: 'Website', lines: [{ itemId: 'i1', name: 'Roof tent' }] }} />);
+    fillSupplier();
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    const box = await screen.findByRole('alert', { name: 'Below minimum margin' });
+    expect(box).toHaveTextContent(below);
+    expect(onDone).not.toHaveBeenCalled();
+    expect((fetchMock.mock.calls[0][1].body as FormData).get('marginReason')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Why should we buy at this price?'), { target: { value: 'Only supplier with stock' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to accounts with reason' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect((fetchMock.mock.calls[1][1].body as FormData).get('marginReason')).toBe('Only supplier with stock');
+  });
+
+  it('accounts: a below-margin payment shows the reason, and Approve needs "I accept the lower margin"', async () => {
+    const r: PaymentRequest = {
+      ...base, kind: 'supplier', status: 'submitted', statusLabel: 'Waiting for accounts',
+      can: { approve: true, decline: true, pay: false, hold: false, cancel: false }, rev: 2,
+      margin: { sale: 100000, cost: 75000, pct: 25, minPct: 30, below: true, reason: 'Only supplier with stock', acceptedByName: '', acceptedAt: null },
+    };
+    get.mockResolvedValue({ request: r });
+    post.mockResolvedValue({ request: { ...r, status: 'approved', statusLabel: 'Approved', can: { ...r.can, approve: false } } });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+    expect(await within(panel).findByLabelText('Below minimum margin')).toHaveTextContent('Only supplier with stock');
+    const approve = within(panel).getByRole('button', { name: 'Approve' });
+    expect(approve).toBeDisabled();
+    fireEvent.click(within(panel).getByLabelText(/I accept the lower margin/));
+    expect(approve).toBeEnabled();
+    fireEvent.click(approve);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/payment-requests/r1/approve', { note: '', rev: 2, acceptBelowMargin: true }));
+  });
+});

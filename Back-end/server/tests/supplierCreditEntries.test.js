@@ -9,6 +9,7 @@
  * nobody but the admin approves their own; an approved entry is corrected, never
  * overwritten; full who/when/why history.
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -342,3 +343,6 @@ describe('Supplier credit entries — query plans', () => {
     for (const p of [byKey, byNumber, balance]) expect(p).not.toMatch(/COLLSCAN/);
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

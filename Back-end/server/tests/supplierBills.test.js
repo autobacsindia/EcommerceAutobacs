@@ -13,6 +13,7 @@
  *   - the list is cursor-paginated; the daily overdue reminder posts once per day
  */
 
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -656,3 +657,6 @@ describe('We owe suppliers (supplier bills)', () => {
     });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

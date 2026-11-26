@@ -91,6 +91,9 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const qrKept = attached.some((f) => f.kind === 'qr' && !removed.includes(f.id));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // New figures below the minimum margin (the server's MARGIN_BELOW): its message, and the reason.
+  const [marginBlock, setMarginBlock] = useState('');
+  const [marginReason, setMarginReason] = useState(r.margin?.reason || '');
   const set = (k: keyof typeof payee) => (e: React.ChangeEvent<HTMLInputElement>) => setPayee({ ...payee, [k]: e.target.value });
   // A masked number (someone who may not see it in full) cannot be resent as is.
   const masked = /^X+\d{4}$/.test(payee.accountNumber);
@@ -134,9 +137,14 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
       if (removed.length) form.append('removeFileIds', JSON.stringify(removed));
       for (const f of bills) form.append('bill', f);
       if (qr) form.append('qr', qr);
+      if (marginBlock && marginReason.trim()) form.append('marginReason', marginReason.trim());
       const res = await postForm<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(r.id)}`, form, 'PUT');
       onDone(res.request);
     } catch (err) {
+      if ((err as { rawData?: { code?: string } })?.rawData?.code === 'MARGIN_BELOW') {
+        setMarginBlock(errorMessage(err, 'Margin is below the minimum.'));
+        return;
+      }
       setError(errorMessage(err, 'Could not save the changes. Please try again.'));
     } finally {
       setBusy(false);
@@ -258,6 +266,15 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
           onChange={(e) => setReason(e.target.value)} placeholder="e.g. Wrong amount — the bill says ₹1,800" />
         <p className="mt-1 text-xs text-gray-500">Accounts sees this and what changed before approving.</p></div>
 
+      {marginBlock && (
+        <div role="alert" aria-label="Below minimum margin" className="space-y-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold">Below our minimum margin</p>
+          <p>{marginBlock}</p>
+          <label className="block font-medium text-red-900" htmlFor="edit-margin-reason">Why should we buy at this price?</label>
+          <textarea id="edit-margin-reason" className={`${input} min-h-[4rem] bg-white`} maxLength={500} value={marginReason} onChange={(e) => setMarginReason(e.target.value)} />
+          <p className="text-xs text-red-700">Accounts will see this and must approve the lower margin before it is paid.</p>
+        </div>
+      )}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">

@@ -89,6 +89,7 @@ import securityRoutes from './security.js';
 import csrfTokenRoutes from './csrfToken.js';
 import adminStatsRoutes from './adminStats.js';
 import adminRevenueRoutes from './adminRevenue.js';
+import adminMarginRoutes from './adminMargins.js';
 import adminTeamActivityRoutes from './adminTeamActivity.js';
 import adminOverviewRoutes from './adminOverview.js';
 import adminSlipTemplateRoutes from './adminSlipTemplates.js';
@@ -263,6 +264,8 @@ apiRouter.use('/push', pushRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/admin', adminStatsRoutes);
 apiRouter.use('/admin', adminRevenueRoutes);
+// Margins on supplier buys (admin only, guarded in-route): /admin/margins/*
+apiRouter.use('/admin', adminMarginRoutes);
 
 // ============================================================================
 // CONTACT DOMAIN

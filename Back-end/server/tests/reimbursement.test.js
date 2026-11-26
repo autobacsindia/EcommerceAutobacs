@@ -18,6 +18,7 @@
  *   - Operations no longer offers the old typed Fuel/Food/Travel; old records still edit.
  */
 
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import { jest } from '@jest/globals';
 
@@ -403,3 +404,6 @@ describe('Reimbursements: fuel by km, food / transport / others, task links', ()
     });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

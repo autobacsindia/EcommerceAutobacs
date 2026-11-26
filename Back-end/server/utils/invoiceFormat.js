@@ -25,3 +25,7 @@ export const formatInvoiceNumber = (order) => {
 /** Attachment / download filename, e.g. "invoice-59.pdf" (matches the reference). */
 export const invoiceFileName = (order) =>
   `invoice-${order.invoiceNo != null ? order.invoiceNo : order._id.toString().slice(-8).toUpperCase()}.pdf`;
+
+/** Order reference shown on the invoice: WooCommerce number for migrated orders, else the _id suffix. */
+export const orderNumber = (order) =>
+  order.wpId ? `#${order.wpId}` : `#${order._id.toString().slice(-8).toUpperCase()}`;

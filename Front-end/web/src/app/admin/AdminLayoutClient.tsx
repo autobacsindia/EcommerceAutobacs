@@ -7,7 +7,7 @@ import { AlarmClock, BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ScanSearch, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
-  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer, Clapperboard, ClipboardCheck } from 'lucide-react';
+  Users, Wallet, Zap, Coins, ShieldCheck, Trophy, Calculator, MessageSquareQuote, Truck, ThumbsUp, Printer, Clapperboard, ClipboardCheck, Percent } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
@@ -41,6 +41,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/past-members', label: 'Past members', icon: UserMinus },
       { href: '/admin/analytics', label: 'Analytics', icon: ChartLine },
       { href: '/admin/revenue', label: 'Company revenue', icon: Landmark },
+      { href: '/admin/margins', label: 'Margins', icon: Percent },
     ],
   },
   {

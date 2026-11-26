@@ -12,6 +12,7 @@
  *   - an archived project's money stays with its owner, the admin and Accounts
  *   - each row says what it was for, and whether this person may open it
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -257,3 +258,6 @@ describe("A project's Money box", () => {
     expect(purposes.find((x) => x.startsWith('x'))).toHaveLength(PURPOSE_MAX);
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();
