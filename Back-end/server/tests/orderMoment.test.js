@@ -3,7 +3,7 @@
  * Every rule in the file header, the priority between them, and the "late" edge:
  * late only AFTER the promised day (India time), never on it.
  */
-import { orderMoment, promisedDay, istDayPlus, MOMENT } from '../utils/orderMoment.js';
+import { orderMoment, promisedDay, istDayPlus, latestParcelUpdate, MOMENT } from '../utils/orderMoment.js';
 
 const ist = (s) => new Date(`${s}+05:30`).getTime();
 const steps = (doneCount) => ['placed', 'preparing', 'packed', 'shipped', 'delivered']
@@ -120,6 +120,75 @@ describe('orderMoment — the scene for each order state', () => {
   test('no progress (legacy/unknown) and nothing else → no picture', () => {
     expect(orderMoment({ status: 'processing', paymentStatus: 'paid' }, null)).toBeNull();
     expect(orderMoment(null, null)).toBeNull();
+  });
+});
+
+describe('delivery updates from the team (parcel in transit)', () => {
+  const at = (s) => new Date(ist(s));
+  const parcel = (extra = {}) => ({ status: 'shipped', trackingSteps: [], etaHistory: [], ...extra });
+  const shippedOrder = (shipments) => ({ ...live, status: 'shipped', shipments });
+  const p4 = progress(4);
+
+  test('in transit with the team note; picked up reads the same', () => {
+    const o = shippedOrder([parcel({ trackingSteps: [
+      { status: 'picked_up', at: at('2026-11-24T10:00:00') },
+      { status: 'in_transit', note: '  Reached Bengaluru hub ', at: at('2026-11-25T09:00:00'), by: 'staff-id', byName: 'Ravi' },
+    ] })]);
+    const m = orderMoment(o, p4, { now: NOW });
+    expect(m).toEqual({ key: MOMENT.IN_TRANSIT, note: 'Reached Bengaluru hub', at: at('2026-11-25T09:00:00').toISOString() });
+    expect(JSON.stringify(m)).not.toMatch(/Ravi|staff-id/); // never who recorded it
+  });
+
+  test('the newest update wins, across parcels', () => {
+    const o = shippedOrder([
+      parcel({ trackingSteps: [{ status: 'out_for_delivery', at: at('2026-11-25T08:00:00') }] }),
+      parcel({ trackingSteps: [{ status: 'delivery_failed', note: 'Customer not reachable', at: at('2026-11-25T15:00:00') }] }),
+    ]);
+    expect(orderMoment(o, p4, { now: NOW })).toMatchObject({ key: MOMENT.DELIVERY_FAILED, note: 'Customer not reachable' });
+  });
+
+  test('out for delivery / delivery failed beat late; in transit does not', () => {
+    const late = ist('2026-12-05T12:00:00');
+    const ofd = shippedOrder([parcel({ trackingSteps: [{ status: 'out_for_delivery', at: at('2026-12-05T09:00:00') }] })]);
+    expect(orderMoment(ofd, p4, { now: late }).key).toBe(MOMENT.OUT_FOR_DELIVERY);
+    const moving = shippedOrder([parcel({ trackingSteps: [{ status: 'in_transit', at: at('2026-12-05T09:00:00') }] })]);
+    expect(orderMoment(moving, p4, { now: late }).key).toBe(MOMENT.LATE);
+  });
+
+  test('a moved date shows the new day; the first date set is not a "move"', () => {
+    const first = shippedOrder([parcel({ etaHistory: [{ from: null, to: '2026-11-28', at: at('2026-11-23T10:00:00'), byName: 'Ravi' }] })]);
+    expect(orderMoment(first, p4, { now: NOW }).key).toBe(MOMENT.SHIPPED);
+    const moved = shippedOrder([parcel({ etaHistory: [
+      { from: null, to: '2026-11-28', at: at('2026-11-23T10:00:00') },
+      { from: '2026-11-28', to: '2026-12-02', at: at('2026-11-25T11:00:00'), byName: 'Ravi' },
+    ] })]);
+    expect(orderMoment(moved, p4, { now: NOW })).toEqual({ key: MOMENT.DATE_MOVED, newDay: '2026-12-02', at: at('2026-11-25T11:00:00').toISOString() });
+  });
+
+  test('a step after the date change wins (newest first)', () => {
+    const o = shippedOrder([parcel({
+      etaHistory: [{ from: '2026-11-28', to: '2026-12-02', at: at('2026-11-25T11:00:00') }],
+      trackingSteps: [{ status: 'in_transit', at: at('2026-11-25T12:00:00') }],
+    })]);
+    expect(orderMoment(o, p4, { now: NOW }).key).toBe(MOMENT.IN_TRANSIT);
+  });
+
+  test('only parcels still in transit count; delivered/on hold/return beat updates', () => {
+    const steps = [{ status: 'delivery_failed', at: at('2026-11-25T15:00:00') }];
+    expect(latestParcelUpdate({ shipments: [{ status: 'delivered', trackingSteps: steps }] })).toBeNull();
+    expect(orderMoment(shippedOrder([parcel({ trackingSteps: steps })]), progress(4, { onHold: true }), { now: NOW }).key).toBe(MOMENT.ON_HOLD);
+    expect(orderMoment(shippedOrder([parcel({ trackingSteps: steps })]), progress(5), { now: NOW }).key).toBe(MOMENT.DELIVERED);
+  });
+
+  test('junk is ignored: unknown status, bad time, bad day, long note trimmed', () => {
+    const o = shippedOrder([parcel({
+      trackingSteps: [{ status: 'teleported', at: at('2026-11-25T15:00:00') }, { status: 'in_transit', at: 'nope' },
+        { status: 'in_transit', note: 'x'.repeat(500), at: at('2026-11-24T15:00:00') }],
+      etaHistory: [{ from: '2026-11-28', to: 'soon', at: at('2026-11-25T16:00:00') }],
+    })]);
+    const m = orderMoment(o, p4, { now: NOW });
+    expect(m.key).toBe(MOMENT.IN_TRANSIT);
+    expect(m.note).toHaveLength(120);
   });
 });
 
