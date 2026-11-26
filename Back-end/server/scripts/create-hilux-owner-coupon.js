@@ -6,7 +6,7 @@
  * owner on 2026-11-26:
  *
  *   - flat ₹5,000 off                         type 'fixed', value 5000
- *   - only on Toyota Hilux / Revo / Travo parts appliesTo.vehicles (live tags)
+ *   - only on Hilux Revo / Travo parts  appliesTo.vehicles (live tags)
  *   - those parts must add up to ₹25,000+     minCartValue 25000 (eligible subset)
  *   - once per customer account               usageLimitPerUser 1 (needs sign-in)
  *   - one shared code, no global cap          usageLimit null
@@ -40,13 +40,13 @@ import Coupon from '../models/Coupon.js';
 import Vehicle from '../models/Vehicle.js';
 
 export const HILUX_COUPON_CODE = 'HILUX5000';
-export const HILUX_VEHICLE_SLUGS = ['toyota-hilux', 'toyota-hilux-revo', 'toyota-hilux-travo'];
+export const HILUX_VEHICLE_SLUGS = ['toyota-hilux-revo', 'toyota-hilux-travo'];
 
 /** The rule document, given the resolved vehicle ids. Pure, so it is unit-tested. */
 export function buildHiluxCoupon(vehicleIds) {
   return {
     code: HILUX_COUPON_CODE,
-    description: 'Hilux owners card — ₹5,000 off Toyota Hilux / Revo / Travo parts (min ₹25,000), once per customer',
+    description: 'Hilux owners card — ₹5,000 off Toyota Hilux Revo / Travo parts (min ₹25,000), once per customer',
     type: 'fixed',
     value: 5000,
     maxDiscountAmount: null,

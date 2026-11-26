@@ -9,7 +9,7 @@ import Coupon from '../models/Coupon.js';
 import { buildHiluxCoupon, HILUX_COUPON_CODE, HILUX_VEHICLE_SLUGS } from '../scripts/create-hilux-owner-coupon.js';
 
 describe('Hilux owners card coupon', () => {
-  const ids = [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()];
+  const ids = [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()];
 
   test('matches the agreed rules', () => {
     const doc = buildHiluxCoupon(ids);
@@ -18,7 +18,7 @@ describe('Hilux owners card coupon', () => {
       usageLimitPerUser: 1, usageLimit: null, expiresAt: null, visibility: 'hidden', isActive: true,
     });
     expect(doc.appliesTo.vehicles).toEqual(ids);
-    expect(HILUX_VEHICLE_SLUGS).toEqual(['toyota-hilux', 'toyota-hilux-revo', 'toyota-hilux-travo']);
+    expect(HILUX_VEHICLE_SLUGS).toEqual(['toyota-hilux-revo', 'toyota-hilux-travo']);
   });
 
   test('the vehicle scope survives the Coupon schema', () => {

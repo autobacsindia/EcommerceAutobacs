@@ -39,8 +39,10 @@ describe('/hilux-owners', () => {
     expect(screen.getByTestId('hilux-signed-in')).toHaveTextContent('Anu');
     const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
     expect(hrefs).toEqual(expect.arrayContaining([
-      '/model/toyota-hilux-travo', '/model/toyota-hilux-revo', '/model/toyota-hilux',
+      '/model/toyota-hilux-travo', '/model/toyota-hilux-revo',
     ]));
+    // Generic Hilux parts are not covered, so the page must not send people there.
+    expect(hrefs).not.toContain('/model/toyota-hilux');
   });
 
   it('holds a spinner while auth settles (no signed-out flash)', () => {

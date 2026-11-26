@@ -183,6 +183,13 @@ const nextConfig: NextConfig = {
       // lands on that page. Temporary (not permanent) so the card can be re-pointed at
       // the next campaign without browsers having cached this redirect forever.
       { source: '/onam', destination: '/hilux-owners', permanent: false },
+      // The printed thank-you card in customers' hands encodes /festive (owner checked
+      // by scanning one, 2026-11-27). Owner decision the same day: switch it NOW to the
+      // Revo/Travo offer, even though the festive-2026 campaign is still running — new
+      // scanners stop seeing the festive page. Customers who already activated festive
+      // keep it (activation is stored server-side). The festive page code stays, so
+      // deleting this line restores it. Temporary so browsers don't cache it forever.
+      { source: '/festive', destination: '/hilux-owners', permanent: false },
       // Old WooCommerce theme pages Google still requests (Search Console, Sep 2026).
       // All four answered 404 here; each now points at its live equivalent. Query
       // strings are forwarded, so `/search?q=winch` lands on the product search.

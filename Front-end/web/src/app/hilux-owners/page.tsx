@@ -12,7 +12,7 @@ import { savePendingCoupon } from '@/lib/pendingCoupon';
  *
  * Its job: tell the cardholder what they get, keep the code for them so the cart applies
  * it on its own, and send them to the Hilux parts. It decides nothing about money — the
- * server checks the code (Hilux/Revo/Travo parts, ₹25,000 minimum, once per customer)
+ * server checks the code (Hilux Revo/Travo parts only, ₹25,000 minimum, once per customer)
  * when it is applied and again at checkout. The code is also shown in full, because
  * saving it on the device is best effort and the card may be scanned on a different
  * phone from the one used to buy.
@@ -92,7 +92,7 @@ export default function HiluxOwnersPage() {
             <p className="text-center text-ink-muted">
               {user?.name ? `You're signed in, ${user.name}. Pick your parts:` : "You're signed in. Pick your parts:"}
             </p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {HILUX_OFFER.shopLinks.map((l) => (
                 <Link
                   key={l.href}
@@ -125,7 +125,7 @@ export default function HiluxOwnersPage() {
         )}
 
         <p className="mt-10 text-center text-xs text-ink-muted">
-          Valid on Toyota Hilux, Hilux Revo and Hilux Travo parts only. The minimum counts those
+          Valid on Toyota Hilux Revo and Hilux Travo parts only. The minimum counts those
           parts alone. Cannot be combined with another coupon. One use per customer account.
         </p>
       </div>

@@ -19,6 +19,5 @@ export const HILUX_OFFER = Object.freeze({
   shopLinks: [
     { label: 'Hilux Travo parts', href: '/model/toyota-hilux-travo' },
     { label: 'Hilux Revo parts', href: '/model/toyota-hilux-revo' },
-    { label: 'All Hilux parts', href: '/model/toyota-hilux' },
   ],
 });
