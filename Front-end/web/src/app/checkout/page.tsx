@@ -22,7 +22,7 @@ import {
   razorpayStartMethodForChoice,
   type PaymentChoice,
 } from '@/lib/paymentChoices';
-import { streetLines, isAddressComplete, ADDRESS_FIELD_TEXT, ADDRESS_LIMITS } from '@/lib/deliveryAddress';
+import { streetLines, isAddressComplete, savedAddressStreet, ADDRESS_FIELD_TEXT, ADDRESS_LIMITS } from '@/lib/deliveryAddress';
 import { validateCheckoutAddress, firstAddressError, type AddressErrors, type AddressField } from '@/lib/checkout/addressValidation';
 import { BUYER_TYPES, checkGstin, normalizeGstin, type BuyerType } from '@/lib/legal/buyerTypes';
 import { enterpriseBlockError } from '@/lib/legal/checkoutBuyer';
@@ -42,6 +42,8 @@ import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { formatRupees } from '@/lib/formatRupees';
+import EnhancedImage from '@/components/layout/EnhancedImage';
+import { firstImageUrl } from '@/lib/firstImageUrl';
 import CheckoutDeliveryNote from '@/components/checkout/CheckoutDeliveryNote';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
@@ -85,14 +87,17 @@ interface SavedAddress {
   isDefault?: boolean;
 }
 
-/** A saved address as the form's fields (old ones have no house no. / landmark). */
-const fromSaved = (addr: SavedAddress): Address => ({
-  fullName: addr.fullName,
-  houseNumber: addr.houseNumber || '',
-  street: addr.addressLine1,
-  landmark: addr.landmark || '',
-  city: addr.city, state: addr.state, postalCode: addr.postalCode, country: addr.country, phone: addr.phone,
-});
+/** A saved address as the form's fields. Old two-line addresses keep both lines (lib/deliveryAddress.ts). */
+const fromSaved = (addr: SavedAddress): Address => {
+  const { houseNumber, addressLine1, landmark } = savedAddressStreet(addr);
+  return {
+    fullName: addr.fullName,
+    houseNumber,
+    street: addressLine1,
+    landmark,
+    city: addr.city, state: addr.state, postalCode: addr.postalCode, country: addr.country, phone: addr.phone,
+  };
+};
 
 const EMPTY_ADDRESS: Omit<Address, 'fullName'> = {
   houseNumber: '', street: '', landmark: '', city: '', state: '', postalCode: '', country: 'India', phone: '',
@@ -894,8 +899,17 @@ function CheckoutPageContent() {
             <div className="space-y-3 mb-8">
               {cart?.items.map((item: any) => (
                 <div key={`${item.product._id}-${item.variantId ?? ''}`} className="flex items-center gap-4 bg-obsidian border border-hairline rounded-lg p-4">
-                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-lg shrink-0" />
-                  <div className="flex-1">
+                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-lg shrink-0 overflow-hidden">
+                    <EnhancedImage
+                      src={firstImageUrl(item.product.images)}
+                      alt={item.product.name}
+                      width={64}
+                      height={64}
+                      context="product"
+                      className="object-cover w-full h-full"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-display text-ink tracking-[-0.01em] text-sm">{item.product.name}</h3>
                     {item.variantLabel && (
                       <p className="text-[12px] uppercase tracking-[0.12em] text-gold mt-0.5 font-semibold">{item.variantLabel}</p>
@@ -1154,7 +1168,7 @@ function CheckoutPageContent() {
                         {streetLines(addr).map((line, i) => (
                           <p key={i} className={`text-ink/70 font-display text-sm ${i === 0 ? 'mt-1' : ''}`}>{line}</p>
                         ))}
-                        {!isAddressComplete(addr) && (
+                        {!isAddressComplete(savedAddressStreet(addr)) && (
                           <p className="mt-1 inline-block rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-display text-amber-800">
                             Needs house / flat no. — you&apos;ll be asked to add it
                           </p>

@@ -60,7 +60,7 @@ jest.mock('@/context/CartContext', () => ({
             _id: 'p1',
             name: 'Test Item',
             price: 100,
-            images: [{ url: 'test.jpg' }],
+            images: [{ url: 'https://images.autobacsindia.com/test.jpg' }],
           },
           quantity: 1,
         },
@@ -293,6 +293,25 @@ describe('CheckoutPage', () => {
     const sent = (apiClient.put as jest.Mock).mock.calls[0][1].addresses;
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ houseNumber: 'Flat 4B, Jomer Symphony', addressLine1: 'MG Road, Edappally', isDefault: true });
+  });
+
+  it('an old two-line saved address (no house no. field) goes straight to payment and keeps both lines', async () => {
+    const old = { fullName: 'Two Line Customer', addressLine1: 'C64, 9th Floor', addressLine2: 'Jomer Symphony, Ponnurunni North', city: 'Kochi', state: 'Kerala', postalCode: '682019', country: 'India', phone: '9876543210', isDefault: true };
+    (apiClient.get as jest.Mock).mockResolvedValue({ success: true, user: { addresses: [old] } });
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByText('Two Line Customer')).toBeInTheDocument());
+    expect(screen.queryByText(/Needs house \/ flat no\./)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText(/deliver to this address/i));
+    await waitFor(() => expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument());
+    expect(screen.queryByText(/This saved address is missing some details/)).not.toBeInTheDocument();
+  });
+
+  it('shows each product photo on the Review Your Cart step', async () => {
+    render(<CheckoutPage />);
+    const img = await screen.findByAltText('Test Item');
+    expect(img.getAttribute('src')).toContain('test.jpg');
   });
 
   it('pays by EMI: records the Razorpay method and opens Razorpay on its EMI section', async () => {
