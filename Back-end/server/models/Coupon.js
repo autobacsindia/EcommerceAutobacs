@@ -51,7 +51,12 @@ const CouponSchema = new mongoose.Schema({
   appliesTo: {
     categories: [{ type: mongoose.Schema.Types.ObjectId, ref: "Category" }],
     brandSlugs: [{ type: String, trim: true }],
-    products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }]
+    products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+    // A line is in scope when its product is tagged compatible with ANY of these
+    // vehicles (Product.compatibleVehicles). Read live at price time, so a product
+    // tagged later is covered without editing the coupon — e.g. the Hilux owners'
+    // card coupon targets the Hilux / Hilux Revo / Hilux Travo vehicles.
+    vehicles: [{ type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" }]
   },
 
   /**

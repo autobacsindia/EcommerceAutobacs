@@ -297,3 +297,127 @@ describe('computeQuote honours an expired sale window', () => {
     expect(q.orderItems[0].price).toBe(800);
   });
 });
+
+/*
+  Vehicle-scoped coupon — the Hilux owners' card (HILUX5000): flat ₹5,000 off Hilux /
+  Revo / Travo parts, ₹25,000 minimum measured on those parts only, once per customer.
+  Scope is read from the LIVE product (compatibleVehicles), never from the client.
+*/
+describe('vehicle-scoped coupon (appliesTo.vehicles)', () => {
+  const HILUX = 'veh-hilux';
+  const TRAVO = 'veh-travo';
+  const OTHER = 'veh-thar';
+  const hiluxCoupon = (over = {}) => ({
+    _id: 'hx', code: 'HILUX5000', type: 'fixed', value: 5000, maxDiscountAmount: null,
+    isActive: true, minCartValue: 25000, maxCartValue: null, usedCount: 0, usageLimit: null,
+    usageLimitPerUser: 1, appliesTo: { vehicles: [HILUX, TRAVO] }, ...over,
+  });
+  const byId = (map) => (id) => Promise.resolve(map[id] ?? null);
+
+  test('takes ₹5,000 off when a Hilux part meets the minimum', async () => {
+    mockProductRepo.findActiveById.mockImplementation(byId({
+      roll: product('roll', 45000, { compatibleVehicles: [TRAVO] }),
+    }));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'roll', quantity: 1 }], couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(q.couponError).toBeNull();
+    expect(q.couponDiscount).toBe(5000);
+    expect(q.totalAmount).toBe(40000);
+  });
+
+  test('matches a populated vehicle ref as well as a bare id', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(
+      product('roll', 30000, { compatibleVehicles: [{ _id: HILUX, slug: 'toyota-hilux' }] }),
+    );
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'roll', quantity: 1 }], couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(q.couponDiscount).toBe(5000);
+  });
+
+  test('refuses a cart with no Hilux part', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(product('mat', 90000, { compatibleVehicles: [OTHER] }));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'mat', quantity: 1 }], couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(q.couponDiscount).toBe(0);
+    expect(q.appliedCoupon).toBeNull();
+    expect(q.couponError).toBeTruthy();
+  });
+
+  test('a product with no vehicle tags is out of scope', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(product('mat', 90000));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'mat', quantity: 1 }], couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(q.couponDiscount).toBe(0);
+  });
+
+  test('minimum counts only the Hilux parts, not the rest of the cart', async () => {
+    mockProductRepo.findActiveById.mockImplementation(byId({
+      bar: product('bar', 20000, { compatibleVehicles: [HILUX] }),
+      mat: product('mat', 60000, { compatibleVehicles: [OTHER] }),
+    }));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'bar', quantity: 1 }, { product: 'mat', quantity: 1 }],
+      couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(q.couponDiscount).toBe(0);
+    expect(q.couponError).toMatch(/minimum/i);
+  });
+
+  test('client-sent prices are ignored — the catalogue price decides', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(product('bar', 20000, { compatibleVehicles: [HILUX] }));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'bar', quantity: 1, price: 99999 }], couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(q.subtotal).toBe(20000);
+    expect(q.couponDiscount).toBe(0);
+  });
+
+  test('a guest is asked to log in (once-per-customer needs an account)', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(product('roll', 45000, { compatibleVehicles: [TRAVO] }));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'roll', quantity: 1 }], couponCode: 'HILUX5000',
+    });
+    expect(q.couponDiscount).toBe(0);
+    expect(q.couponError).toMatch(/log in/i);
+  });
+
+  test('second use by the same customer is refused', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(product('roll', 45000, { compatibleVehicles: [TRAVO] }));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    mockCouponUserUsageRepo.findByCouponUser.mockResolvedValue({ count: 1 });
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'roll', quantity: 1 }], couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(q.couponDiscount).toBe(0);
+    expect(q.couponError).toBeTruthy();
+  });
+
+  test('checkout refuses the order outright when the coupon does not apply', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(product('mat', 90000, { compatibleVehicles: [OTHER] }));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon());
+    const q = await pricingService.computeQuote({
+      items: [{ product: 'mat', quantity: 1 }], couponCode: 'HILUX5000', userId: 'u1',
+    });
+    expect(() => pricingService.assertCouponApplied(q, 'HILUX5000')).toThrow();
+  });
+
+  test('an empty vehicles list leaves an ordinary coupon whole-cart', async () => {
+    mockProductRepo.findActiveById.mockResolvedValue(product('a', 1000));
+    mockCouponRepo.findByCode.mockResolvedValue(hiluxCoupon({
+      code: 'ANY', value: 100, minCartValue: 0, usageLimitPerUser: null, appliesTo: { vehicles: [] },
+    }));
+    const q = await pricingService.computeQuote({ items: [{ product: 'a', quantity: 1 }], couponCode: 'ANY' });
+    expect(q.couponDiscount).toBe(100);
+  });
+});
