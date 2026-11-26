@@ -543,6 +543,47 @@ describe('new task', () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Task created'));
   });
 
+  it('followers: picked in the form, never someone doing it; picking them to do it moves them off followers', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    const dialog = await openForm({ canSeeTeam: true });
+    expect(within(dialog).getByText('Only the people doing the work. To keep someone informed, add them as a follower.')).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Supplier call' } });
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
+    const doers = await picker(dialog);
+    fireEvent.click(within(doers).getByRole('option', { name: /Arun/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+    // The followers list leaves out everyone doing it (me and Arun).
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose followers' }));
+    const watchers = screen.getByRole('listbox', { name: 'Followers' });
+    expect(within(watchers).queryByRole('option', { name: /Arun/ })).toBeNull();
+    expect(within(watchers).queryByRole('option', { name: /Me/ })).toBeNull();
+    fireEvent.click(within(watchers).getByRole('option', { name: /Bala/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search followers' }), { key: 'Escape' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u1', 'u2'], followerIds: ['u3'] })));
+  });
+
+  it('followers: someone then picked to do it is only an assignee; with no followers none are sent', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    const dialog = await openForm({ canSeeTeam: true });
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Supplier call' } });
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose followers' }));
+    const watchers = screen.getByRole('listbox', { name: 'Followers' });
+    fireEvent.click(within(watchers).getByRole('option', { name: /Bala/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search followers' }), { key: 'Escape' });
+    const doers = await picker(dialog);
+    fireEvent.click(within(doers).getByRole('option', { name: /Bala/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const sent = post.mock.calls[0][1];
+    expect(sent.assigneeIds).toEqual(['u1', 'u3']);
+    expect(sent).not.toHaveProperty('followerIds');
+  });
+
   it('"Own copy each" makes one task per person', async () => {
     serve({ list: [] });
     post.mockResolvedValue({ task: task(), tasks: [task(), task(), task()] });

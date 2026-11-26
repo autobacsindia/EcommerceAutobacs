@@ -338,7 +338,7 @@ router.put('/rules', validateTaskRules, validateRequest, asyncHandler(async (req
   res.json({ success: true, rules: await updateTaskRules(req.user, req.body, req) });
 }));
 
-// @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, orderId?, clientId? }
+// @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, followerIds?, orderId?, clientId? }
 // Several people → one copy each; `tasks` lists them all, `task` is the first.
 router.post('/', validateTaskCreate, validateRequest, asyncHandler(async (req, res) => {
   const { task, tasks, duplicate } = await createTask(req.user, req.body, req);

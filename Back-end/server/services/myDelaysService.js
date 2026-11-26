@@ -152,7 +152,7 @@ const teamOfUser = (u) => (u?.role === 'admin' ? 'admin' : u?.staff?.team || nul
 export function makeOwnerResolver(people, heads) {
   return (candidateId, team) => {
     const u = candidateId ? people.get(idOf(candidateId)) : null;
-    if (isActivePerson(u)) return { id: idOf(u._id), name: u.name || '', team: teamOfUser(u), via: 'moved' };
+    if (isActivePerson(u)) return { id: idOf(u._id), name: u.name || '', team: teamOfUser(u), via: 'moved', ...(u.role === 'admin' ? { admin: true } : {}) };
     const head = team ? heads.get(team) : null;
     if (head) return { id: idOf(head._id), name: head.name || '', team, via: 'head' };
     return { id: null, name: 'Admins (no team head)', team: team || 'admin', via: 'admins' };
@@ -490,15 +490,23 @@ export async function personDelays(viewer, personId, query = {}, opts = {}) {
 }
 
 /**
+ * A real admin as owner (their task, project or order step). Left out of the
+ * ranking and its totals: admins give the work and watch it, they are not ranked
+ * on it. The "Admins (no team head)" fallback (no person) stays, or steps whose
+ * mover left would vanish.
+ */
+const adminOwned = (i) => i.owner.admin === true;
+
+/**
  * The ranking: one row per owner, most late items first, then most office time
- * late. A head sees their own team only (the `team` filter cannot widen it); an
+ * late. Admin-owned items are not in it (see adminOwned). A head sees their own team only (the `team` filter cannot widen it); an
  * admin sees everyone and may filter by team. Plain staff are refused (403).
  */
 export async function teamDelays(viewer, query = {}, opts = {}) {
   if (!isAdmin(viewer) && !isHead(viewer)) throw fail('Only a team head or an admin can see the team’s delays.', 403);
   const team = isAdmin(viewer) ? (query.team || null) : viewer.staff.team;
   const { items, truncated, asOf } = await collectDelays(team ? { team } : {}, opts);
-  const filtered = applyFilters(items, query).filter((i) => !query.person || i.owner.id === String(query.person));
+  const filtered = applyFilters(items, query).filter((i) => !adminOwned(i) && (!query.person || i.owner.id === String(query.person)));
   const byOwner = new Map();
   for (const i of filtered) {
     const k = i.owner.id || `none:${i.owner.team}`;
