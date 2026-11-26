@@ -71,26 +71,11 @@ it('Dashboard, chat and tasks are always in the menu; a folded group opens on cl
   expect(screen.getByRole('link', { name: /^Brands$/ })).toHaveAttribute('href', '/admin/brands');
 });
 
-it('the header shows company revenue and sales, the breakdown on hover, the full list on click', () => {
+it('the header no longer shows company revenue or sales (they live in Analytics); website and chat stay', () => {
   shell();
-  const revenue = screen.getByRole('link', { name: /Revenue \(FY 26-27\)/ });
-  expect(revenue).toHaveAttribute('href', '/admin/revenue');
-  expect(revenue).toHaveTextContent('₹1.40 Cr');
-  expect(revenue).toHaveTextContent('incl. GST');
-  const rt = revenue.getAttribute('title') ?? '';
-  expect(rt).toMatch(/Zoho Books bills after refunds: ₹1,13,64,097\.00 \(₹96,36,000\.00 without GST\)/);
-  expect(rt).toMatch(/refunds taken off \(credit notes\): ₹8,27,599\.00/);
-  expect(rt).toMatch(/not yet billed in Zoho: ₹27,14,626\.00/);
-  expect(rt).toMatch(/3 Zoho bill\(s\) are probably website orders/);
-
-  const sales = screen.getByRole('link', { name: /Sales \(FY 26-27\)/ });
-  expect(sales).toHaveAttribute('href', '/admin/revenue#sales');
-  expect(sales).toHaveTextContent('306');
-  const st = sales.getAttribute('title') ?? '';
-  expect(st).toMatch(/Billed in Zoho Books: 232/);
-  expect(st).toMatch(/not yet in Zoho: 74 — delivered 35, shipped 30, processing 9/);
-  expect(sales).toHaveTextContent('39 on the way');
-  expect(st).toMatch(/12 Zoho bill\(s\) cancelled by credit note/);
+  expect(screen.queryByRole('link', { name: /Revenue \(FY/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /Sales \(FY/ })).toBeNull();
+  expect(screen.queryByText('₹1.40 Cr')).toBeNull();
   expect(screen.queryByRole('link', { name: /Pending orders/ })).toBeNull();
   const site = screen.getByRole('link', { name: /View website/ });
   expect(site).toHaveAttribute('href', '/');

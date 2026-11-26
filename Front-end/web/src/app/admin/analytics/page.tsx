@@ -26,6 +26,7 @@ import {
   ChartSkeleton,
   SimpleTable,
 } from '@/components/admin/analytics/primitives';
+import CompanyFiguresCards from '@/components/admin/analytics/CompanyFiguresCards';
 
 // Charts are lazy-loaded so recharts stays out of the initial admin bundle.
 const loadCharts = () => import('@/components/admin/analytics/charts');
@@ -140,6 +141,9 @@ export default function AdminAnalyticsPage() {
           ))}
         </div>
       </div>
+
+      {/* Whole-company revenue and sales (financial year, Zoho + panel) — moved here from the admin header. */}
+      <CompanyFiguresCards />
 
       {/* Overview KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

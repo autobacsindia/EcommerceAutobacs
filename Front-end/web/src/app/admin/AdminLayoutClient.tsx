@@ -11,9 +11,6 @@ import { AlarmClock, BookOpenCheck,
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
-import { useAdminStats } from '@/hooks/queries/useAdminStats';
-import { formatCurrency } from '@/lib/utils';
-import { compactRupees } from '@/lib/compactRupees';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
@@ -179,36 +176,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
       NAV_SECTIONS.filter((s) => s.title !== 'Main').map((s) => [s.title, false])
     )
   );
-  // Header counters. Polled + cached by TanStack Query (see useAdminStats).
-  const { stats, isError: statsFailed } = useAdminStats();
   const chatUnread = useChatUnreadTotal();
-
-  // Header figures. The fallback to the old website-only revenue only applies to a
-  // cached response from before `companyRevenue` existed.
-  const company = stats.companyRevenue;
-  const sales = stats.sales;
-  const n = (x: number) => x.toLocaleString('en-IN');
-  // Hover text: the breakdown behind each figure. Click opens the full list.
-  const revenueTitle = company
-    ? [
-        `Revenue ${company.period.label}: ${formatCurrency(company.total)} incl. GST`,
-        `• Zoho Books bills after refunds: ${formatCurrency(company.zoho)} (${formatCurrency(company.zohoExGst)} without GST)`,
-        `   refunds taken off (credit notes): ${formatCurrency(company.creditNotes)}`,
-        `• Website & sales-panel orders not yet billed in Zoho: ${formatCurrency(company.panelNotInZoho)}`,
-        'Each sale counted once; cancelled, refunded, draft and void are left out.',
-        ...(company.needsCheck.count ? [`${n(company.needsCheck.count)} Zoho bill(s) are probably website orders — counted once; please confirm on the page.`] : []),
-        'Click for every sale.',
-      ].join('\n')
-    : 'Realised revenue since the start of the financial year — excludes cancelled, returned and abandoned orders';
-  const salesTitle = sales
-    ? [
-        `Sales ${sales.fyLabel}: ${n(sales.total)}`,
-        `• Billed in Zoho Books: ${n(sales.zoho)}`,
-        `• Website orders not yet in Zoho: ${n(sales.website.total)} — delivered ${n(sales.website.delivered)}, shipped ${n(sales.website.shipped)}, processing ${n(sales.website.processing)}`,
-        `Not counted: ${n(sales.zohoCancelled)} Zoho bill(s) cancelled by credit note, and cancelled / returned / refunded orders.`,
-        'Click for every sale.',
-      ].join('\n')
-    : '';
 
   const navSections = NAV_SECTIONS;
 
@@ -298,37 +266,8 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{pageLabel || 'Admin'}</h2>}
         actions={
           <>
-            {/* Company figures (admin only — the API refuses everyone else). Both open
-                the Company revenue page, which shows where every rupee comes from. */}
-            <Link
-              href="/admin/revenue#sales"
-              title={salesTitle}
-              className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
-            >
-              <p className="text-xs text-gray-500">Sales{sales ? ` (${sales.fyLabel})` : ''}</p>
-              <p className="text-base font-bold tabular-nums text-blue-700">
-                {statsFailed || !sales ? '—' : n(sales.total)}
-              </p>
-              {sales && !statsFailed && (
-                <p className="text-[10px] leading-tight text-gray-400">{n(sales.website.shipped + sales.website.processing)} on the way</p>
-              )}
-            </Link>
-            <Link
-              href="/admin/revenue"
-              title={revenueTitle}
-              className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
-            >
-              <p className="text-xs text-gray-500">
-                Revenue{company ? ` (${company.period.label})` : stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
-              </p>
-              <p className="text-base font-bold tabular-nums text-green-700">
-                {statsFailed ? '—' : company ? compactRupees(company.total) : formatCurrency(stats.totalRevenue)}
-              </p>
-              {company && !statsFailed && (
-                <p className="text-[10px] leading-tight text-gray-400">incl. GST · all sales</p>
-              )}
-            </Link>
-            <span className="mx-1 hidden h-8 w-px bg-gray-200 sm:block" aria-hidden="true" />
+            {/* Company revenue and sales live in Analytics (CompanyFiguresCards), not here:
+                the owner wants them off the header that every admin page shows. */}
             <ViewWebsiteLink />
             {/* Chat has its own button so it is one click from anywhere in admin. */}
             <Link
