@@ -160,7 +160,8 @@ describe('Checkout Page Integration', () => {
 
     // Step 2: Fill Address -> Payment
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText('House / street address'), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText(/House \/ Flat/), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText(/Street \/ Area/), { target: { value: '123 Main St' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
     fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
