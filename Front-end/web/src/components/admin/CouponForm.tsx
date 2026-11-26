@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { usePanel } from '@/lib/usePanel';
+import { useAllVehicles } from '@/hooks/queries/useVehicleMakes';
 
 export interface CouponFormValues {
   code: string;
@@ -21,15 +22,26 @@ export interface CouponFormValues {
   usageLimit: string;
   usageLimitPerUser: string;
   isActive: boolean;
+  /** Vehicle ids — only parts tagged for one of these get the discount. Empty = no vehicle limit. */
+  vehicles: string[];
+  /**
+   * The rest of the saved scope (categories / brands / products), which this form does
+   * not edit. Carried through untouched: the API replaces `appliesTo` as a whole, so
+   * omitting these would silently widen a scoped coupon to the whole store.
+   */
+  appliesToRest: { categories: string[]; brandSlugs: string[]; products: string[] };
 }
 
 export const EMPTY_COUPON: CouponFormValues = {
   code: '', description: '', type: 'percentage', value: 10, maxDiscountAmount: '',
   visibility: 'hidden', minCartValue: '', maxCartValue: '', startsAt: '', expiresAt: '',
   firstOrderOnly: false, usageLimit: '', usageLimitPerUser: '', isActive: true,
+  vehicles: [], appliesToRest: { categories: [], brandSlugs: [], products: [] },
 };
 
 const num = (s: string): number | null => (s.trim() === '' ? null : Number(s));
+/** Ref arrays may arrive as ids or populated docs. */
+const ids = (a: any[] | undefined): string[] => (a || []).map((x) => String(x?._id ?? x));
 const toLocalInput = (iso?: string | null) => (iso ? new Date(iso).toISOString().slice(0, 16) : '');
 
 /** Maps an API coupon document into editable form values. */
@@ -45,6 +57,12 @@ export function couponToForm(c: any): CouponFormValues {
     usageLimit: c.usageLimit != null ? String(c.usageLimit) : '',
     usageLimitPerUser: c.usageLimitPerUser != null ? String(c.usageLimitPerUser) : '',
     isActive: c.isActive !== false,
+    vehicles: ids(c.appliesTo?.vehicles),
+    appliesToRest: {
+      categories: ids(c.appliesTo?.categories),
+      brandSlugs: (c.appliesTo?.brandSlugs || []).map(String),
+      products: ids(c.appliesTo?.products),
+    },
   };
 }
 
@@ -57,6 +75,23 @@ export default function CouponForm({ initial, couponId }: { initial: CouponFormV
   const [v, setV] = useState<CouponFormValues>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: allVehicles = [], isLoading: vehiclesLoading } = useAllVehicles();
+  const [vehicleFilter, setVehicleFilter] = useState('');
+  const vehicleName = useMemo(
+    () => new Map(allVehicles.map((x) => [x._id, `${x.make} ${x.model}`])),
+    [allVehicles],
+  );
+  const shownVehicles = useMemo(() => {
+    const q = vehicleFilter.trim().toLowerCase();
+    return q ? allVehicles.filter((x) => `${x.make} ${x.model} ${x.slug}`.toLowerCase().includes(q)) : allVehicles;
+  }, [allVehicles, vehicleFilter]);
+  const toggleVehicle = (id: string) =>
+    setV((prev) => ({
+      ...prev,
+      vehicles: prev.vehicles.includes(id) ? prev.vehicles.filter((x) => x !== id) : [...prev.vehicles, id],
+    }));
+  const hasOtherScope = v.appliesToRest.categories.length + v.appliesToRest.brandSlugs.length + v.appliesToRest.products.length > 0;
 
   const set = <K extends keyof CouponFormValues>(k: K, val: CouponFormValues[K]) => setV(prev => ({ ...prev, [k]: val }));
 
@@ -80,6 +115,7 @@ export default function CouponForm({ initial, couponId }: { initial: CouponFormV
       usageLimit: num(v.usageLimit),
       usageLimitPerUser: num(v.usageLimitPerUser),
       isActive: v.isActive,
+      appliesTo: { ...v.appliesToRest, vehicles: v.vehicles },
     };
     try {
       if (couponId) await apiClient.put(API_ENDPOINTS.COUPON_DETAIL(couponId), payload);
@@ -162,6 +198,48 @@ export default function CouponForm({ initial, couponId }: { initial: CouponFormV
           <input type="checkbox" checked={v.firstOrderOnly} onChange={(e) => set('firstOrderOnly', e.target.checked)} />
           First order only (requires the customer to be logged in)
         </label>
+      </fieldset>
+
+      <fieldset className="border border-gray-200 rounded-lg p-4" data-testid="coupon-vehicles">
+        <legend className="text-sm font-semibold text-gray-700 px-1">Only on parts for these vehicles</legend>
+        <p className="text-xs text-gray-500 mb-2">
+          Leave empty for no vehicle limit. When set, only parts tagged for a ticked vehicle get the
+          discount, and the min cart value counts those parts only.
+        </p>
+        {hasOtherScope && (
+          <p className="text-xs text-amber-700 mb-2">
+            This coupon is also limited to certain categories, brands or products (set elsewhere) — that limit is kept.
+          </p>
+        )}
+        {v.vehicles.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {v.vehicles.map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => toggleVehicle(id)}
+                className="text-xs bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2 py-0.5"
+                aria-label={`Remove ${vehicleName.get(id) || id}`}
+              >
+                {vehicleName.get(id) || id} ×
+              </button>
+            ))}
+          </div>
+        )}
+        <input
+          className={input}
+          placeholder={vehiclesLoading ? 'Loading vehicles…' : 'Search e.g. hilux'}
+          value={vehicleFilter}
+          onChange={(e) => setVehicleFilter(e.target.value)}
+        />
+        <div className="mt-2 max-h-48 overflow-y-auto border border-gray-100 rounded">
+          {shownVehicles.map((x) => (
+            <label key={x._id} className="flex items-center gap-2 px-2 py-1 text-sm text-gray-700 hover:bg-gray-50">
+              <input type="checkbox" checked={v.vehicles.includes(x._id)} onChange={() => toggleVehicle(x._id)} />
+              {x.make} {x.model}
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       <div className="grid grid-cols-2 gap-4">

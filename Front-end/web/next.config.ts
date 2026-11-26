@@ -178,11 +178,11 @@ const nextConfig: NextConfig = {
       // of /my-account) used to land on a 404. Temporary: /account may get a page.
       { source: '/account', destination: '/profile', permanent: false },
       { source: '/my-account', destination: '/profile', permanent: false },
-      // The Onam 2026 in-store offer has ended and its landing page is removed. The
-      // counter-card QR codes still point here and can't be reprinted, so send them
-      // home instead of to a 404. Temporary (not permanent) so a future campaign can
-      // reuse the path without browsers having cached this redirect forever.
-      { source: '/onam', destination: '/', permanent: false },
+      // The printed Roavion thank-you card QR (first sent at Onam 2026) encodes /onam
+      // and can't be reprinted. Since 2026-11 it carries the Hilux owners' offer, so it
+      // lands on that page. Temporary (not permanent) so the card can be re-pointed at
+      // the next campaign without browsers having cached this redirect forever.
+      { source: '/onam', destination: '/hilux-owners', permanent: false },
       // Old WooCommerce theme pages Google still requests (Search Console, Sep 2026).
       // All four answered 404 here; each now points at its live equivalent. Query
       // strings are forwarded, so `/search?q=winch` lands on the product search.
