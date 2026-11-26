@@ -93,6 +93,7 @@ class CronService {
     this.scheduleTaskAlerts();
     this.scheduleCustomerProgress();
     import('./hr/attendance/cronJobs.js').then((m) => m.scheduleHrAttendanceJobs(this)).catch((err) => console.error('[CronService] HR attendance jobs NOT scheduled:', err.message));
+    import('./hr/notify/cronJobs.js').then((m) => m.scheduleHrPushJobs(this)).catch((err) => console.error('[CronService] HR push jobs NOT scheduled:', err.message));
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');

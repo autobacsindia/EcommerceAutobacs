@@ -35,6 +35,7 @@ import { holidayDatesInRange } from './holidays.js';
 import {
   fail, isDup, isId, inTransaction, pageSize,
 } from './common.js';
+import { notifyLeaveDecided } from '../notify/index.js';
 
 /** Longest single request (inclusive days). Longer leave = several requests. */
 export const MAX_SPAN_DAYS = 62;
@@ -345,6 +346,11 @@ export async function decideLeave(actor, requestId, { decision, note = '', rev }
     throw fail('Someone else decided this request first. Reload to see it.', 409);
   }
   if (finalApprove) await notifyAttendance(employee._id, request.from, request.to);
+  // Phone push on the FINAL outcome only (a head's approval just moves it to HR).
+  // After commit, never throws; a replay returned above, so it is never re-sent.
+  if (finalApprove || decision === 'rejected') {
+    await notifyLeaveDecided({ employeeId: employee._id, requestId: request._id, from: request.from, to: request.to, decision });
+  }
   return { request: shapeRequest(updated), replay: false };
 }
 

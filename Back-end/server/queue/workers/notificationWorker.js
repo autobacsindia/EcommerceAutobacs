@@ -47,6 +47,7 @@ import { Worker } from 'bullmq';
 import { META_LEAD_SHEET_JOB, flushMetaLeadSheetWrites } from '../../services/metaLeadSheetWriter.js';
 import { hasChatUpdate, postBusinessUpdate, WORKFLOW_CHAT_JOB, RETURN_CHAT_JOB } from '../../services/chatBusinessUpdates.js';
 import { createConnection } from '../connection.js';
+import { HR_PUSH_JOB, deliverNotification as deliverHrPush } from '../../services/hr/notify/index.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice, emailExtraChargeReceipt } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
@@ -333,6 +334,10 @@ const handlers = {
   // Panel → Google Sheet. Idempotent: it writes whatever is still waiting, so a
   // retry or a duplicate job writes nothing twice.
   [META_LEAD_SHEET_JOB]: async () => flushMetaLeadSheetWrites(),
+
+  // Autobacs Team phone notification (services/hr/notify). Idempotent on the row
+  // (status + sentTo); throws only when Expo is unreachable, so BullMQ retries.
+  [HR_PUSH_JOB]: async (job) => deliverHrPush(job.data.id),
   'create-support-ticket': async (job) => {
     const { sourceModel, sourceId } = job.data;
 
