@@ -8,11 +8,12 @@ import { formatDateIST } from '@/lib/datetime';
 import { rupees } from '@/components/staff/sales/types';
 import { payLaterKeys, type PayLaterRow, type PayLaterSummary } from './api';
 import PayLaterBadge from './PayLaterBadge';
-import SalesTypeChecks from './SalesTypeChecks';
+import SalesTypeChecks, { type SalesTypeView } from './SalesTypeChecks';
 
 const TABS = [
   { value: 'check', label: 'B2B / B2C to approve' },
   { value: 'b2b_unpaid', label: 'B2B not paid — ship before payment' },
+  { value: 'approved', label: 'Approved B2B / B2C — change type' },
   { value: 'due', label: 'Shipped – not paid yet' },
   { value: 'paid', label: 'Paid after dispatch' },
 ];
@@ -21,7 +22,7 @@ type Page = { orders: PayLaterRow[]; nextCursor?: string | null; summary?: PayLa
 /** B2B / B2C approvals, and orders let ship before payment. Keyset-paged by the server; the sum is the server's. */
 export default function PayLaterList({ orderHref }: { orderHref?: (id: string) => string }) {
   const [view, setView] = useState('check');
-  const typeView = view === 'check' || view === 'b2b_unpaid';
+  const typeView = view === 'check' || view === 'b2b_unpaid' || view === 'approved';
   const list = useInfiniteQuery({
     enabled: !typeView,
     queryKey: payLaterKeys.list(view),
@@ -41,7 +42,7 @@ export default function PayLaterList({ orderHref }: { orderHref?: (id: string) =
         ))}
       </div>
 
-      {typeView && <SalesTypeChecks view={view as 'check' | 'b2b_unpaid'} orderHref={orderHref} />}
+      {typeView && <SalesTypeChecks view={view as SalesTypeView} orderHref={orderHref} />}
 
       {!typeView && <>
       {view === 'due' && summary && (

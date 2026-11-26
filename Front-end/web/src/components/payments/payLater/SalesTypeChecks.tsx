@@ -9,6 +9,7 @@ import { rupees } from '@/components/staff/sales/types';
 import SalesTypeBadge from '@/components/staff/sales/SalesTypeBadge';
 import { salesTypeKeys, type SalesTypeRow } from './api';
 import SalesTypeApprove from './SalesTypeApprove';
+import SalesTypeChange from './SalesTypeChange';
 import OrderPayLater from './OrderPayLater';
 
 type Page = { orders: SalesTypeRow[]; nextCursor?: string | null; canCheck?: boolean };
@@ -17,9 +18,12 @@ type Page = { orders: SalesTypeRow[]; nextCursor?: string | null; canCheck?: boo
  * Accounts (and the admin; the GTM head reads only):
  *   view=check      → GTM orders whose B2B / B2C accounts has not approved yet
  *   view=b2b_unpaid → approved B2B orders not paid yet — "Ship before payment" here
+ *   view=approved   → every approved GTM order — "Change to B2B / B2C" here
  * Keyset-paged by the server; every rule is the server's.
  */
-export default function SalesTypeChecks({ view, orderHref }: { view: 'check' | 'b2b_unpaid'; orderHref?: (id: string) => string }) {
+export type SalesTypeView = 'check' | 'b2b_unpaid' | 'approved';
+
+export default function SalesTypeChecks({ view, orderHref }: { view: SalesTypeView; orderHref?: (id: string) => string }) {
   const list = useInfiniteQuery({
     queryKey: salesTypeKeys.list(view),
     initialPageParam: '',
@@ -32,9 +36,9 @@ export default function SalesTypeChecks({ view, orderHref }: { view: 'check' | '
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-500">
-        {view === 'check'
-          ? 'GTM marked these orders B2B (business, no offers) or B2C (retail, offers allowed). Check the reason and approve with a note.'
-          : 'B2B orders accounts approved that are not paid yet. Accounts or the admin can let one ship before payment, with a reason.'}
+        {view === 'check' && 'GTM marked these orders B2B (business, no offers) or B2C (retail, offers allowed). Check the reason and approve with a note.'}
+        {view === 'b2b_unpaid' && 'B2B orders accounts approved that are not paid yet. Accounts or the admin can let one ship before payment, with a reason.'}
+        {view === 'approved' && 'Every approved B2B / B2C order, newest first. Approved the wrong type? Change it here with a reason — every change is kept.'}
       </p>
       {list.isLoading && <p className="text-sm text-gray-500">Loading…</p>}
       {list.isError && <p role="alert" className="text-sm text-red-700">Could not load the list.</p>}
@@ -64,8 +68,9 @@ function Row({ o, view, canCheck, orderHref }: { o: SalesTypeRow; view: string; 
         </div>
         <p className="text-base font-bold text-gray-900">{rupees(o.amount)}</p>
       </div>
-      <SalesTypeBadge info={o.salesType} detail={view === 'b2b_unpaid'} />
+      <SalesTypeBadge info={o.salesType} detail={view !== 'check'} />
       {view === 'check' && canCheck && <SalesTypeApprove orderId={o.id} label={o.salesType.label} />}
+      {canCheck && o.typeChange && (view === 'approved' || view === 'check') && <SalesTypeChange orderId={o.id} option={o.typeChange} />}
       {view === 'b2b_unpaid' && canCheck && (
         shipOpen
           ? <OrderPayLater orderId={o.id} hideType />

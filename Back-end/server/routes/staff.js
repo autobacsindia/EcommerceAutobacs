@@ -35,6 +35,7 @@ import {
   validatePayLaterApprove,
   validateSalesTypeList,
   validateSalesTypeApprove,
+  validateSalesTypeChange,
   validateSetSeller, validateCreditProofFile,
   validateOrderIdParam,
   validateSalesOrder,
@@ -569,7 +570,7 @@ router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRe
 
 // ── B2B / B2C check (scope enforced in salesTypeService: approve = accounts, admin) ─
 
-// @route  GET /staff/sales-type-checks?view=check|b2b_unpaid&cursor= — accounts, admin, GTM head
+// @route  GET /staff/sales-type-checks?view=check|b2b_unpaid|approved&cursor= — accounts, admin, GTM head
 router.get('/sales-type-checks', validateSalesTypeList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await salesType.listSalesTypeChecks(req.user, req.query)) });
 }));
@@ -577,6 +578,13 @@ router.get('/sales-type-checks', validateSalesTypeList, validateRequest, asyncHa
 // @route  POST /staff/orders/:id/sales-type-check { note } — accounts, admin: approve B2B / B2C
 router.post('/orders/:id/sales-type-check', validateSalesTypeApprove, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await salesType.approveSalesType(req.user, req.params.id, { note: req.body.note }, req)) });
+}));
+
+// @route  POST /staff/orders/:id/sales-type-change { to, reason, buyer? } — accounts, admin:
+//         change B2B ↔ B2C after the check; kept in the order's history
+router.post('/orders/:id/sales-type-change', validateSalesTypeChange, validateRequest, asyncHandler(async (req, res) => {
+  const { to, reason, buyer } = req.body;
+  res.json({ success: true, ...(await salesType.changeSalesType(req.user, req.params.id, { to, reason, buyer }, req)) });
 }));
 
 // ── Ship before payment (scope enforced in payLaterService: approve = admin, accounts; B2B only) ─

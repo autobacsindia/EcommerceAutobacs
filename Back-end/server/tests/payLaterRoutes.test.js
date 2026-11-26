@@ -120,6 +120,26 @@ describe('Ship before payment routes', () => {
     expect((await accounts.session.post(url(), { reason: 'Regular dealer' })).status).toBe(200);
   });
 
+  it('change B2B → B2C: 401 / 403 / 400, then accounts changes it with a reason; history on the order page', async () => {
+    const change = `/staff/orders/${order._id}/sales-type-change`;
+    expect((await request(app).post(`${BASE}${change}`).send({ to: 'b2c', reason: 'Retail' })).status).toBe(403);
+    expect((await seller.session.post(change, { to: 'b2c', reason: 'Retail customer' })).status).toBe(403);
+    expect((await accounts.session.post(change, { to: 'b2c' })).status).toBe(400);
+    expect((await accounts.session.post(change, { to: 'b2x', reason: 'Retail customer' })).status).toBe(400);
+    expect((await accounts.session.post('/staff/orders/nope/sales-type-change', { to: 'b2c', reason: 'Retail customer' })).status).toBe(400);
+    expect((await Order.findById(order._id).lean()).buyer.type).toBe('enterprise');
+
+    const r = await accounts.session.post(change, { to: 'b2c', reason: 'Retail customer' });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ unchanged: false, payLaterEffect: 'none', order: { salesType: { type: 'b2c' } } });
+    const opt = await accounts.session.get(url());
+    expect(opt.body.salesType.check.changes).toEqual([expect.objectContaining({ fromLabel: 'B2B', toLabel: 'B2C', reason: 'Retail customer' })]);
+    expect(opt.body.typeChange).toMatchObject({ to: 'b2b', allowed: true });
+    const list = await accounts.session.get('/staff/sales-type-checks?view=approved');
+    expect(list.status).toBe(200);
+    expect(list.body.orders.map((o) => o.id)).toEqual([String(order._id)]);
+  });
+
   it('a ₹70,250 order gets the button and can be approved (no amount limit — owner 2026-11-25)', async () => {
     await Order.updateOne({ _id: order._id }, { $set: { subtotal: 70250, totalAmount: 70250, 'items.0.price': 70250 } });
     const admin = await make('admin', undefined);

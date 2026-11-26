@@ -214,6 +214,30 @@ const OrderSchema = new mongoose.Schema({
       role: { type: String, enum: ["accounts", "admin"] },
       at: Date,
       note: String,
+      /*
+        Every later change of the type by accounts / the admin (owner 2026-11-26),
+        oldest first. Never rewritten: each entry is who, when, from → to, why, the
+        buyer details that were replaced (so a switch back can be checked against
+        them) and what it did to "Ship before payment". `changeCount` is the
+        compare-and-set guard (services/salesTypeService.js changeSalesType).
+      */
+      changeCount: Number,
+      changes: {
+        type: [new mongoose.Schema({
+          at: { type: Date, required: true },
+          by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          byName: String,
+          role: { type: String, enum: ["accounts", "admin"] },
+          from: { type: String, enum: ["b2b", "b2c"], required: true },
+          to: { type: String, enum: ["b2b", "b2c"], required: true },
+          reason: { type: String, required: true },
+          previousBuyer: { type: mongoose.Schema.Types.Mixed },
+          // none | withdrawn (unpaid, not shipped: ship-before-payment taken back)
+          // | kept_shipped_unpaid (already shipped unpaid: left running, admin told)
+          payLaterEffect: { type: String, enum: ["none", "withdrawn", "kept_shipped_unpaid"], default: "none" },
+        }, { _id: false })],
+        default: undefined,
+      },
     }, { _id: false }),
     default: undefined,
   },
@@ -559,6 +583,10 @@ const OrderSchema = new mongoose.Schema({
    * (/status, /cancel, /shipments/*, /return/status) and none of them touch
    * `buyer`. If you ever add an endpoint that edits this block, reject the edit
    * on an invoiced order and reissue instead.
+   *
+   * The one write path (2026-11-26): accounts / the admin changing a GTM order
+   * B2B ↔ B2C (services/salesTypeService.js changeSalesType). It refuses once
+   * `invoiceNo` is set, and keeps the replaced block in buyerTypeCheck.changes.
    */
   buyer: {
     type: {

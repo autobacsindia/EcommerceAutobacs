@@ -63,3 +63,12 @@ it('"B2B not paid" reads only approved orders, newest first, no in-memory sort',
   expect(stats(e).totalDocsExamined).toBeLessThanOrEqual(APPROVED);
   expect(stats(e).nReturned).toBe(APPROVED / 40);
 });
+
+it('"approved" (change B2B / B2C) reads one page of approved orders, no in-memory sort', async () => {
+  const e = await firstPage('approved');
+  expect(plan(e)).toContain('order_sales_type_check');
+  expect(plan(e)).not.toMatch(/"stage":"SORT"/);
+  // Index-only bounds on status: one page, never the 3,000 other orders.
+  expect(stats(e).totalDocsExamined).toBeLessThanOrEqual(26);
+  expect(stats(e).nReturned).toBe(26);
+});
