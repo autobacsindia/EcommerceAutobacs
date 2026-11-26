@@ -23,6 +23,8 @@ import { postEtaReminders } from './parcelEtaReminders.js';
 import { runSweep as runIncentiveSweep } from './incentives/ledgerService.js';
 import { closePreviousMonth as closeIncentiveMonth } from './incentives/monthService.js';
 import { runFollowUpSweep } from './followUp/sweep.js';
+import { runCustomerProgressSweep } from './orderProgressService.js';
+import { loadCustomerProgressConfig } from '../config/customerProgress.js';
 import { loadFollowUpConfig } from '../config/followUp.js';
 import { isOfficeTime } from './followUp/officeClock.js';
 import { runTaskAlertSweep } from './taskAlertService.js';
@@ -89,6 +91,7 @@ class CronService {
     this.scheduleCallSweep();
     this.scheduleFollowUpSweep();
     this.scheduleTaskAlerts();
+    this.scheduleCustomerProgress();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -498,6 +501,35 @@ class CronService {
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Follow-up sweep scheduled: "${schedule}" (mode ${loadFollowUpConfig().mode})`);
     }
+  }
+
+  /**
+   * Customer progress updates (services/orderProgressService.js): every 15 minutes,
+   * office time only, so a "still on it" note never lands at night. Lock-guarded;
+   * each message is keyed on the order too, so a double run sends once.
+   * CUSTOMER_PROGRESS_UPDATES=off stops it; CUSTOMER_PROGRESS_CRON overrides the schedule.
+   */
+  scheduleCustomerProgress() {
+    const { cron: schedule } = loadCustomerProgressConfig();
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid CUSTOMER_PROGRESS_CRON "${schedule}" — customer progress updates NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () => {
+      const cfg = loadCustomerProgressConfig();
+      if (!cfg.enabled || !isOfficeTime(new Date(), cfg.office)) return undefined;
+      return this.withDistributedLock('cron:lock:customerProgress', 10 * 60, () =>
+        runCustomerProgressSweep({ cfg }).catch(err =>
+          console.error('[CronService] Customer progress sweep failed:', err.message)
+        )
+      );
+    }, { scheduled: true, timezone: 'Asia/Kolkata' });
+    this.scheduledTasks.push({
+      name: 'customerProgress',
+      task,
+      schedule,
+      description: 'Customers: preparing / packed / courier booked, and one "still on it" note per slow step (office time)',
+    });
   }
 
   /**

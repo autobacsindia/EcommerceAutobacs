@@ -1,11 +1,24 @@
 /**
  * The rules both customer channels (email and WhatsApp) share for "which event is this"
- * and "is it still true". Pure functions with NO imports on purpose: the WhatsApp
- * service is loaded by many modules, and pulling the email service's mail/queue
- * dependencies in with it would couple the two channels at load time.
+ * and "is it still true". Pure functions; the only import is another pure util
+ * (utils/customerJourney.js) on purpose: the WhatsApp service is loaded by many
+ * modules, and pulling the email service's mail/queue dependencies in with it would
+ * couple the two channels at load time.
  *
  * orderStatusEmailService re-exports all three, so existing imports are unchanged.
  */
+
+import { customerJourney, reassuranceStage } from '../utils/customerJourney.js';
+
+/**
+ * Progress milestones between "confirmed" and "shipped", plus the "still on it" note
+ * (services/orderProgressService.js). Keys:
+ *   preparing                    once per order
+ *   packed:<shipmentId>          once per parcel (packed, no courier yet)
+ *   courier_booked:<shipmentId>  once per parcel (packed, AWB on it, not yet picked up)
+ *   still_on_it:<step>           once per order per step (placed | preparing | packed)
+ */
+export const PROGRESS_EVENTS = Object.freeze(new Set(['preparing', 'packed', 'courier_booked', 'still_on_it']));
 
 /**
  * The idempotency key stored in `Order.notifiedStatuses`.
@@ -41,18 +54,51 @@ export const notificationKey = (status, shipmentId = null, occurrence = null) =>
  *                     a customer who retried and paid in the meantime gets nothing.
  *   out_for_delivery / delivery_failed — only while the parcel is still in transit;
  *                     once it is delivered (or lost) the step is old news.
+ *   preparing / packed / courier_booked / still_on_it — see progressStillRelevant.
  * Every other status was true when it was enqueued and stays true.
+ * @param {string|number|null} [occurrence] - still_on_it: the step it is about
  * @returns {boolean}
  */
-export const stillRelevant = (order, status, shipment) => {
+export const stillRelevant = (order, status, shipment, occurrence = null) => {
   if (status === 'payment_failed') {
     return order.status === 'awaiting_payment' && order.paymentStatus !== 'paid';
   }
   if (status === 'out_for_delivery' || status === 'delivery_failed') {
     return shipment?.status === 'shipped';
   }
+  if (PROGRESS_EVENTS.has(status)) return progressStillRelevant(order, status, shipment, occurrence);
   return true;
 };
+
+/**
+ * The progress messages are only ever about what is happening NOW, so each re-checks
+ * the order the worker just loaded. A cancelled or returned order, or one that has
+ * moved past the step, gets nothing:
+ *   preparing       — still processing and nothing in a parcel yet (the packed,
+ *                     courier-booked or shipped message already says more).
+ *   packed          — this parcel is still packed and has no AWB (an AWB makes it
+ *                     "courier booked" instead, never both at once).
+ *   courier_booked  — this parcel is still packed (not yet picked up) and has an AWB.
+ *   still_on_it     — the order is still on exactly that step, nothing has shipped,
+ *                     and no item is out of stock (sales is talking to the customer).
+ */
+function progressStillRelevant(order, status, shipment, step) {
+  if (order?.status !== 'processing') return false;
+  const journey = customerJourney(order);
+  if (!journey) return false;
+  switch (status) {
+    case 'preparing':
+      return journey.parcels.total === 0 && journey.steps.find((s) => s.key === 'preparing')?.done === true;
+    case 'packed':
+      return shipment?.status === 'packed' && !String(shipment.trackingNumber || '').trim();
+    case 'courier_booked':
+      return shipment?.status === 'packed' && !!String(shipment.trackingNumber || '').trim();
+    case 'still_on_it':
+      return !!step && reassuranceStage(journey) === step;
+    default:
+      return false;
+  }
+}
 
 /**
  * How long after a failed payment we wait before emailing. Most failures are retried

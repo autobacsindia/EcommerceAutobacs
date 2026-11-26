@@ -8,6 +8,8 @@
  *   send-order-whatsapp      { orderId, status, shipmentId?, occurrence?, amount? } — WhatsApp twin of the
  *                            two jobs above; its own job + stamp (Order.whatsappNotified), see
  *                            services/whatsapp/orderWhatsAppService.js
+ *   send-order-progress-email { orderId, kind, shipmentId?, stage? } — preparing / packed / courier booked /
+ *                            "still on it" (services/orderProgressService.js), once per key
  *   send-delivery-update-email { orderId, shipmentId } — tracking/courier corrected after dispatch (once per change, ≤1 per parcel per 10 min)
  *   send-review-request      { orderId }          — delayed post-delivery review CTA (idempotent)
  *   send-magic-link-email    { email, token, orderId }
@@ -49,6 +51,7 @@ import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice, emailExtraChargeReceipt } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
 import { sendOrderWhatsApp, WHATSAPP_JOB } from '../../services/whatsapp/orderWhatsAppService.js';
+import { emailOrderProgress, PROGRESS_EMAIL_JOB } from '../../services/orderProgressService.js';
 import { emailDeliveryUpdate } from '../../services/deliveryUpdateEmailService.js';
 import { emailAffiliateApproved, emailAffiliatePayoutSent } from '../../services/affiliateEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
@@ -130,6 +133,13 @@ const handlers = {
       console.log(`[Notifications] ${WHATSAPP_JOB} ${orderId} ${status}: ${res.status}`);
     }
     return res;
+  },
+
+  // Progress between "confirmed" and "shipped", and the one "still on it" note per
+  // step. Idempotent on Order.notifiedStatuses; re-checks the order before sending.
+  [PROGRESS_EMAIL_JOB]: async (job) => {
+    const { orderId, kind, shipmentId, stage } = job.data;
+    return emailOrderProgress(orderId, kind, { shipmentId: shipmentId || null, stage: stage || null });
   },
 
   // A parcel's tracking/courier was corrected after it shipped. Idempotent per value

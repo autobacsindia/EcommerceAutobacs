@@ -56,7 +56,12 @@ const notificationLogSchema = new mongoose.Schema({
       'order_out_for_delivery',
       'order_delivery_failed',
       'payment_failed',
-      'refund_started'
+      'refund_started',
+      // Progress milestones (services/orderProgressService.js)
+      'order_preparing',
+      'order_packed',
+      'order_courier_booked',
+      'order_still_on_it'
     ],
     required: true
   },

@@ -13,6 +13,8 @@ import ConversionFallback from './ConversionFallback';
 import OrderCelebration from '@/components/festival/OrderCelebration';
 import { formatLongDateIST } from '@/lib/datetime';
 import { GENERAL_DELIVERY_COPY } from '@/lib/deliveryWindow';
+import OrderMoment from '@/components/orders/OrderMoment';
+import type { OrderMomentData } from '@/components/orders/orderMomentCopy';
 
 // Transactional, per-user page — never index it.
 export const metadata: Metadata = {
@@ -49,6 +51,8 @@ interface OrderResponse {
     items: OrderItem[];
     estimatedDelivery?: string;
     createdAt: string;
+    /** Server-chosen from confirmed state (Back-end utils/orderMoment.js); null while payment is unconfirmed. */
+    moment?: OrderMomentData | null;
   };
 }
 
@@ -130,7 +134,16 @@ export default async function OrderSuccessPage({
       />
 
       <div className="max-w-2xl mx-auto px-4">
-        {/* Header */}
+        {/* Header — the order-moment picture once the server has confirmed the order
+            (or its payment failed); the plain header while confirmation is pending. */}
+        {order.moment ? (
+          <div className="mb-10">
+            <OrderMoment orderId={order._id} moment={order.moment} replayable />
+            <p className="mt-4 text-center text-ink/70 font-display">
+              Order <span className="text-gold font-bold">#{(order.orderNumber || order._id.slice(-8)).toString().toUpperCase()}</span>
+            </p>
+          </div>
+        ) : (
         <div className="text-center mb-10">
           <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="h-12 w-12 text-green-700" />
@@ -143,6 +156,7 @@ export default async function OrderSuccessPage({
             Order <span className="text-gold font-bold">#{(order.orderNumber || order._id.slice(-8)).toString().toUpperCase()}</span> is being processed.
           </p>
         </div>
+        )}
 
         {/* Estimated delivery */}
         <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6 flex items-center gap-3">

@@ -55,6 +55,7 @@ import { getNotificationsQueue } from '../queue/queues.js';
 import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
 import { enqueueParcelStepEmail, CUSTOMER_EMAILED_STEPS } from './orderStatusEmailService.js';
 import { enqueueOrderWhatsApp } from './whatsapp/orderWhatsAppService.js';
+import { onStockDecision } from './orderProgressService.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from './orderTrackingService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
@@ -1089,6 +1090,8 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
   if (!updated) throw fail(RACE, 409);
 
   await refreshOpen(orderId);
+  // Tell the customer we are preparing it (once per order; skipped if it ships first).
+  onStockDecision(orderId, stock);
   if (stock === STOCK.OUT_OF_STOCK) enqueue('send-team-out-of-stock-alert', { orderId: String(orderId), itemId: String(itemId) });
   if (stock === STOCK.ORDERED) {
     enqueue(WORKFLOW_CHAT_JOB, { event: 'ordered', orderId: String(orderId), itemId: String(itemId), supplier, by: actor.name });
