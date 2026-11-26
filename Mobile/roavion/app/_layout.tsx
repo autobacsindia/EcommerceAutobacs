@@ -88,6 +88,7 @@ export default function RootLayout() {
             <Stack.Screen name="register" options={{ title: 'Create account' }} />
             <Stack.Screen name="checkout" options={{ title: 'Checkout' }} />
             <Stack.Screen name="orders" options={{ title: 'My orders' }} />
+            <Stack.Screen name="order/[id]" options={{ title: 'Order' }} />
             <Stack.Screen name="garage" options={{ headerShown: false }} />
             <Stack.Screen name="reels/new" options={{ title: 'Post a reel', presentation: 'modal' }} />
             <Stack.Screen name="reels/mine" options={{ title: 'My reels' }} />
