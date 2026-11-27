@@ -733,6 +733,15 @@ export async function ensureCriticalIndexes() {
     await db.collection('zohocreditnotes').createIndex({ invoiceNumber: 1 }, { name: 'zoho_credit_note_invoice', background: true });
     console.log('✓ ZohoInvoice / ZohoCreditNote indexes confirmed');
 
+    // "Paid, no sale bill yet" (models/UnbilledReceipt.js) — same names as the schema.
+    await db.collection('unbilledreceipts').createIndex(
+      { zohoPaymentId: 1 },
+      { unique: true, partialFilterExpression: { zohoPaymentId: { $type: 'string' } }, name: 'unbilled_zoho_payment_id', background: true }
+    );
+    await db.collection('unbilledreceipts').createIndex({ state: 1, receivedAt: -1, _id: -1 }, { name: 'unbilled_state_recent', background: true });
+    await db.collection('unbilledreceipts').createIndex({ receivedAt: 1 }, { name: 'unbilled_received', background: true });
+    console.log('✓ UnbilledReceipt indexes confirmed');
+
     // Personal order pins (models/OrderPin.js) — same names as the schema.
     await db.collection('orderpins').createIndex({ user: 1, order: 1 }, { unique: true, name: 'order_pin_user_order', background: true });
     await db.collection('orderpins').createIndex({ user: 1, pinnedAt: -1 }, { name: 'order_pin_user_recent', background: true });

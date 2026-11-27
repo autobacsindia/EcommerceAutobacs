@@ -2,7 +2,8 @@
  * Company revenue — the admin-only "how much did the whole company sell" figure.
  *
  *   Revenue = Zoho Books invoices, net of credit notes
- *           + panel orders (website + old WooCommerce + sales panel) not billed in Zoho.
+ *           + panel orders (website + old WooCommerce + sales panel) not billed in Zoho
+ *           + money received with no sale bill yet (services/unbilledReceiptService.js).
  *
  * Every sale is counted once (config/companyRevenue.js). Both parts are
  * INCLUDING GST: Order.totalAmount is what the customer paid, and the Zoho
@@ -18,7 +19,7 @@ import Order from '../models/Order.js';
 import ZohoInvoice from '../models/ZohoInvoice.js';
 import ZohoCreditNote from '../models/ZohoCreditNote.js';
 import AppError from '../utils/AppError.js';
-import { SALE_STATUSES } from '../utils/orderStatusGroups.js';
+import { countedOrderFilter } from './revenueOrderFilter.js';
 import { currentFiscalYear } from '../utils/storeTime.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 import { MATCH_TOLERANCE, MATCH_ORDER_SCAN_CAP, ZOHO_REPLACES_ORDER_STATES } from '../config/companyRevenue.js';
@@ -27,18 +28,14 @@ import orderExtraChargeRepository from '../repositories/orderExtraChargeReposito
 import {
   readZohoCsv, zohoExportKind, parseZohoInvoiceCsv, parseZohoCreditNoteCsv, matchInvoicesToOrders, nameKey,
 } from './zohoInvoiceInput.js';
+import { unbilledRevenue, importZohoPayments } from './unbilledReceiptService.js';
 
 const DAY_MS = 864e5;
 const TZ = '+05:30';
 const PANEL_SOURCES = ['web', 'woocommerce', 'offline'];
 const round2 = (n) => Math.round((n || 0) * 100) / 100;
 
-/** A panel order that counts as revenue: a real sale, not refunded. */
-export const countedOrderFilter = (from) => ({
-  status: { $in: [...SALE_STATUSES] },
-  paymentStatus: { $ne: 'refunded' },
-  ...(from ? { createdAt: { $gte: from } } : {}),
-});
+export { countedOrderFilter };
 
 /** Resolve the window: 'fy' (default, current Indian financial year) or 'all'. */
 export function resolvePeriod(kind = 'fy') {
@@ -121,9 +118,10 @@ async function zohoRevenue(from, { months }) {
 export async function companyRevenueSummary({ period = 'fy', months = true } = {}) {
   const p = resolvePeriod(period);
   const billed = await ordersBilledInZoho();
-  const [panel, zoho, lastImport] = await Promise.all([
+  const [panel, zoho, unbilled, lastImport] = await Promise.all([
     panelRevenue(p.from, billed, { months }),
     zohoRevenue(p.from, { months }),
+    unbilledRevenue(p.from, { months }),
     months
       ? ZohoInvoice.findOne({ importedAt: { $type: 'date' } }).sort({ importedAt: -1 }).select('importedAt importedByName').lean()
         .maxTimeMS(QUERY_TIMEOUTS.listing)
@@ -156,7 +154,7 @@ export async function companyRevenueSummary({ period = 'fy', months = true } = {
     period: { kind: p.kind, label: p.label, startDate: p.startDate },
     basis: 'incl_gst',
     revenue: {
-      total: round2(websiteTotal + counted.total),
+      total: round2(websiteTotal + counted.total + unbilled.summary.total),
       website: {
         total: round2(websiteTotal),
         extraCharges: round2(panel.extraCharges),
@@ -169,12 +167,15 @@ export async function companyRevenueSummary({ period = 'fy', months = true } = {
         unpaid: round2(counted.unpaid),
         count: counted.count,
       },
+      // Money in, no Zoho invoice yet — counted, shown apart (config/companyRevenue.js).
+      unbilled: unbilled.summary,
     },
     sales: {
-      total: panelCount + counted.count,
+      total: panelCount + counted.count + unbilled.summary.count,
       website: { total: panelCount, ...byStatus },
       zoho: counted.count,
       zohoCancelled: counted.cancelled,
+      unbilled: unbilled.summary.count,
     },
     ordersFulfilled: { total: byStatus.delivered + counted.count, website: byStatus.delivered, zoho: counted.count },
     // Zoho bills that stand for a panel order (that order is not added again).
@@ -187,7 +188,7 @@ export async function companyRevenueSummary({ period = 'fy', months = true } = {
   if (months) {
     const map = new Map();
     const row = (m) => {
-      if (!map.has(m)) map.set(m, { month: m, website: 0, zoho: 0, total: 0, sales: 0, ordersFulfilled: 0, needsCheck: 0 });
+      if (!map.has(m)) map.set(m, { month: m, website: 0, zoho: 0, unbilled: 0, total: 0, sales: 0, ordersFulfilled: 0, needsCheck: 0 });
       return map.get(m);
     };
     for (const r of panel.rows) {
@@ -201,8 +202,14 @@ export async function companyRevenueSummary({ period = 'fy', months = true } = {
       m.zoho += r.total; m.sales += r.count; m.ordersFulfilled += r.count;
       if (r._id.state === 'needs_check') m.needsCheck += r.count;
     }
+    for (const r of unbilled.rows) {
+      const m = row(r._id.month);
+      m.unbilled += r.total; m.sales += r.count;
+    }
     out.months = [...map.values()]
-      .map((m) => ({ ...m, website: round2(m.website), zoho: round2(m.zoho), total: round2(m.website + m.zoho) }))
+      .map((m) => ({
+        ...m, website: round2(m.website), zoho: round2(m.zoho), unbilled: round2(m.unbilled), total: round2(m.website + m.zoho + m.unbilled),
+      }))
       .sort((x, y) => x.month.localeCompare(y.month));
     out.lastImport = lastImport ? { at: lastImport.importedAt, byName: lastImport.importedByName || null } : null;
   }
@@ -219,6 +226,7 @@ export async function companyHeaderFigures() {
       zohoExGst: fy.revenue.zoho.exGst,
       panelNotInZoho: fy.revenue.website.total,
       creditNotes: fy.revenue.zoho.creditNotes,
+      unbilled: fy.revenue.unbilled.total,
       basis: 'incl_gst',
       period: fy.period,
       needsCheck: fy.zohoMatched.needsCheck,
@@ -423,12 +431,15 @@ async function importCreditNotes(rows, user) {
 }
 
 /**
- * Import a Zoho export — the invoice list or the credit-note list (told apart by
- * their columns). Same file twice = same rows (upsert by Zoho id).
+ * Import a Zoho export — the invoice, credit-note or payments-received list (told
+ * apart by their columns). Same file twice = same rows (upsert by Zoho id).
  */
 export async function importZohoExport(buffer, user) {
   const rows = readZohoCsv(buffer);
-  return zohoExportKind(rows) === 'credit_notes' ? importCreditNotes(rows, user) : importInvoices(rows, user);
+  const kind = zohoExportKind(rows);
+  if (kind === 'credit_notes') return importCreditNotes(rows, user);
+  if (kind === 'payments') return importZohoPayments(rows, user);
+  return importInvoices(rows, user);
 }
 
 /** Invoices the matcher held back, plus the panel order it thinks they are. Bounded, cursor-paged. */

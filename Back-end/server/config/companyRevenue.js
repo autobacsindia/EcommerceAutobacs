@@ -46,3 +46,31 @@ export const MATCH_TOLERANCE = Object.freeze({
 export const ZOHO_IMPORT_MAX_BYTES = 5 * 1024 * 1024;
 export const ZOHO_IMPORT_MAX_INVOICES = 5000;
 export const MATCH_ORDER_SCAN_CAP = 50000;
+
+/**
+ * "Paid, no sale bill yet" (owner's decision, 2026-11-27): money the company has
+ * received for a sale that has no Zoho invoice yet. It IS revenue, shown apart
+ * so accounts can see what still needs a bill. Two sources:
+ *   zoho_payment — a Zoho "Payments Received" row with an Unused Amount (money in,
+ *                  not applied to any invoice). When accounts later raises the
+ *                  invoice, Zoho applies the payment, Unused drops to 0 on the next
+ *                  upload and it stops counting here — the invoice counts instead.
+ *   manual       — money Zoho never recorded (e.g. a project paid in full, seen
+ *                  only in ClickUp). An admin adds it with proof, and marks it
+ *                  "billed as AUTO/…" once the invoice exists.
+ *
+ * Count-once against the panel: a Zoho payment that IS a website / sales-panel
+ * order already counted (its Razorpay id, or same customer + amount + date) is
+ * not counted again. A doubtful one is held back until an admin decides.
+ *
+ *   open        — counted
+ *   in_panel    — the same money as a counted panel order → not counted
+ *   needs_check — might be a panel order → not counted until an admin decides
+ *   billed      — a Zoho invoice now carries it → not counted here
+ *   removed     — an admin took it out (wrong entry) → not counted
+ */
+export const UNBILLED_SOURCES = Object.freeze(['zoho_payment', 'manual']);
+export const UNBILLED_STATES = Object.freeze(['open', 'in_panel', 'needs_check', 'billed', 'removed']);
+/** Zoho payment statuses that are not money received. */
+export const ZOHO_PAYMENT_EXCLUDED_STATUSES = Object.freeze(['draft', 'void']);
+export const UNBILLED_MAX_AMOUNT = 1e8; // ₹10 Cr — a typo guard on the manual form

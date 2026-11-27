@@ -8,7 +8,9 @@
  */
 import { parse } from 'csv-parse/sync';
 import AppError from '../utils/AppError.js';
-import { MATCH_TOLERANCE, ZOHO_EXCLUDED_STATUSES, ZOHO_IMPORT_MAX_INVOICES } from '../config/companyRevenue.js';
+import {
+  MATCH_TOLERANCE, ZOHO_EXCLUDED_STATUSES, ZOHO_IMPORT_MAX_INVOICES, ZOHO_PAYMENT_EXCLUDED_STATUSES,
+} from '../config/companyRevenue.js';
 
 const DAY_MS = 864e5;
 const IST_OFFSET_MS = 5.5 * 3600e3;
@@ -81,8 +83,12 @@ export function readZohoCsv(buffer) {
   return rows;
 }
 
-/** Which Zoho export this is: 'credit_notes' or 'invoices' (the default, validated by its parser). */
-export const zohoExportKind = (rows) => ('Credit Note Number' in rows[0] ? 'credit_notes' : 'invoices');
+/** Which Zoho export this is: 'credit_notes', 'payments' or 'invoices' (the default, validated by its parser). */
+export const zohoExportKind = (rows) => {
+  if ('Credit Note Number' in rows[0]) return 'credit_notes';
+  if ('CustomerPayment ID' in rows[0]) return 'payments';
+  return 'invoices';
+};
 
 export function parseZohoInvoiceCsv(buffer, preRead) {
   const rows = preRead || readZohoCsv(buffer);
@@ -190,6 +196,72 @@ export function parseZohoCreditNoteCsv(buffer, preRead) {
   }
   return { creditNotes, skipped, errors };
 }
+
+const PAYMENT_COLUMNS = ['CustomerPayment ID', 'Payment Number', 'Date', 'Customer Name', 'Amount', 'Unused Amount'];
+
+/**
+ * Parse a Zoho "Payments Received → Export → Invoice Payments" CSV. One row per
+ * invoice the payment was applied to; the payment fields (Amount, Unused Amount)
+ * repeat on every row, so we group by "CustomerPayment ID".
+ *
+ * Returns every confirmed payment with its Unused Amount — including 0, so a
+ * re-upload can zero out a payment that has since been applied to an invoice.
+ */
+export function parseZohoPaymentCsv(buffer, preRead) {
+  const rows = preRead || readZohoCsv(buffer);
+  const missing = PAYMENT_COLUMNS.filter((c) => !(c in rows[0]));
+  if (missing.length) {
+    throw new AppError(
+      `This is not a Zoho payments export — missing column(s): ${missing.join(', ')}. In Zoho Books use Payments Received → ⋯ → Export → Invoice Payments.`,
+      400,
+      { expose: true }
+    );
+  }
+  const byId = new Map();
+  for (const row of rows) {
+    const id = str(row['CustomerPayment ID']);
+    if (id && !byId.has(id)) byId.set(id, row);
+  }
+  if (byId.size > ZOHO_IMPORT_MAX_INVOICES) {
+    throw new AppError(`Too many payments in one file (${byId.size}). Export at most ${ZOHO_IMPORT_MAX_INVOICES} at a time.`, 400, { expose: true });
+  }
+  const payments = [];
+  const errors = [];
+  const skipped = { draft: 0, void: 0 };
+  for (const [id, row] of byId) {
+    const number = str(row['Payment Number']) || id;
+    const status = str(row['Payment Status']).toLowerCase();
+    if (ZOHO_PAYMENT_EXCLUDED_STATUSES.includes(status)) { skipped[status] += 1; continue; }
+    const currency = str(row['Currency Code']).toUpperCase();
+    if (currency && currency !== 'INR') { errors.push(`Payment ${number}: currency ${currency} is not INR — skipped.`); continue; }
+    const receivedAt = parseInvoiceDate(row.Date);
+    const amount = parseMoney(row.Amount);
+    const unused = parseMoney(row['Unused Amount']);
+    if (!receivedAt) { errors.push(`Payment ${number}: date "${str(row.Date)}" is not a date — skipped.`); continue; }
+    if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(unused) || unused < 0) {
+      errors.push(`Payment ${number}: amount is not a number — skipped.`);
+      continue;
+    }
+    const customerName = str(row['Customer Name']).slice(0, 200) || 'Unknown customer';
+    payments.push({
+      zohoPaymentId: id.slice(0, 40),
+      paymentNumber: number.slice(0, 60),
+      zohoStatus: status.slice(0, 30) || 'paid',
+      receivedAt,
+      customerName,
+      customerKey: nameKey(customerName).slice(0, 200),
+      mode: str(row.Mode).slice(0, 60),
+      reference: str(row['Reference Number']).slice(0, 200),
+      paymentTotal: amount,
+      // Zoho prints the unused part to 3 decimals; never more than the payment itself.
+      amount: Math.min(Math.round(unused * 100) / 100, amount),
+    });
+  }
+  return { payments, skipped, errors };
+}
+
+/** Razorpay payment ids ("pay_…") in a Zoho reference — the website order it is. */
+export const razorpayIdsIn = (reference) => [...str(reference).matchAll(/\bpay_[A-Za-z0-9]{8,30}\b/g)].map((m) => m[0]);
 
 /**
  * The count-once matcher. Decides, for every invoice an admin has not decided,
