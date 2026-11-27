@@ -37,6 +37,7 @@
     "backfill-payment-method-details": "node --import=dotenv/config scripts/backfill-payment-method-details.js",
     "backfill-order-list-date": "node --import=dotenv/config scripts/backfill-order-list-date.js",
     "create-order-rating-indexes": "node --import=dotenv/config scripts/create-order-rating-indexes.js",
+    "create-client-error-indexes": "node --import=dotenv/config scripts/create-client-error-indexes.js",
     "create-chat-call-indexes": "node --import=dotenv/config scripts/create-chat-call-indexes.js",
     "create-followup-indexes": "node --import=dotenv/config scripts/create-followup-indexes.js",
     "create-whatsapp-indexes": "node --import=dotenv/config scripts/create-whatsapp-indexes.js",

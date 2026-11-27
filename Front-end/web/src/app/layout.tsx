@@ -23,6 +23,7 @@ import { FestivalOfferProvider } from "@/components/festival/FestivalOfferContex
 import FestivalEffectsLoader from "@/components/festival/FestivalEffectsLoader";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
+import ClientErrorReporter from "@/components/layout/ClientErrorReporter";
 import ThemeScript from "@/components/theme/ThemeScript";
 import ThemeSync from "@/components/theme/ThemeSync";
 import ContactFab from "@/components/layout/ContactFab";
@@ -360,6 +361,8 @@ export default async function RootLayout({
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
                       <SessionExpiredPrompt />
+                      {/* Customer-facing errors → the "Website errors" panel page. Renders nothing. */}
+                      <ClientErrorReporter />
                       <ThemeSync />
                       <HelpWidget />
                       <ContactFab />

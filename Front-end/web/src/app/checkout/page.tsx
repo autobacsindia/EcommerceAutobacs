@@ -31,6 +31,7 @@ import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
+import { httpStatusOf, reportClientError } from '@/lib/reportClientError';
 import { useStepScroll } from '@/hooks/useStepScroll';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
@@ -702,6 +703,8 @@ function CheckoutPageContent() {
         toast.error(err.message || 'The Black Friday offer has ended. Please review your new total.', { duration: 8000 });
       } else {
         toast.error(err.message || 'Failed to place order');
+        // Report only (the "Website errors" page): the HTTP status and message, no cart or address.
+        reportClientError({ feature: 'checkout', step: 'place-order', error: err, message: err?.message || 'Failed to place order', context: { httpStatus: httpStatusOf(err), paymentMethod } });
       }
     } finally {
       setLoading(false);

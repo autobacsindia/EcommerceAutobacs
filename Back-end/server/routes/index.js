@@ -81,6 +81,7 @@ import contactRoutes from './contact.js';
 import consultationRoutes from './consultation.js';
 import supportRoutes from './support.js';
 import careersRoutes from './careers.js';
+import clientErrorRoutes from './clientErrors.js';
 
 import rateLimitDashboardRoutes from './rateLimitDashboard.js';
 import adaptiveThrottlingRoutes from './adaptiveThrottling.js';
@@ -281,6 +282,9 @@ apiRouter.use('/support', supportRoutes);
 // Careers: public open-roles read + admin CRUD (guarded in-route). Applications
 // (Phase 3) attach their own stricter limiter on the submit sub-route.
 apiRouter.use('/careers', publicBrowsingRateLimit, careersRoutes);
+// Customer-facing website errors: public POST (own per-IP limiter, always 204) and the
+// staff/admin reads (protect + access check in-route). See routes/clientErrors.js.
+apiRouter.use('/client-errors', clientErrorRoutes);
 
 // ============================================================================
 // SECURITY DOMAIN
