@@ -4,6 +4,10 @@
  */
 
 import Order from '../models/Order.js';
+import returnRequestRepository from '../repositories/returnRequestRepository.js';
+import { IN_FLIGHT_RETURN_STATUSES } from '../config/returnPolicy.js';
+import { customerOrderProgress } from '../utils/customerOrderProgress.js';
+import { orderMoment, publicOrderMoment } from '../utils/orderMoment.js';
 import crypto from 'crypto';
 import { enqueueDeliveryUpdateEmail, customerVisibleChange } from './deliveryUpdateEmailService.js';
 
@@ -521,13 +525,29 @@ class OrderTrackingService {
    */
   async trackByNumber(trackingNumber) {
     try {
+      // The extra fields feed the order-moment picture only (customerOrderProgress +
+      // orderMoment); none of them is copied into the response below.
       const order = await Order.findOne({ trackingNumber })
-        .select('trackingNumber carrier trackingEvents status estimatedDelivery deliveredAt shippingAddress')
+        .select([
+          'trackingNumber carrier trackingEvents status estimatedDelivery deliveredAt shippingAddress',
+          'paymentStatus paidAt createdAt items.product returnRequest.status returnRequest.requestedAt',
+          // Parcel fields the journey and delivery updates read — not who recorded them
+          // (byName / setByName) nor the staff-only overdue reasons.
+          'shipments._id shipments.status shipments.shippedAt shipments.deliveredAt shipments.estimatedDelivery',
+          'shipments.eta.day shipments.trackingSteps.status shipments.trackingSteps.note shipments.trackingSteps.at',
+          'shipments.etaHistory.from shipments.etaHistory.to shipments.etaHistory.at',
+          'refundDetails.status refundDetails.requestedAt',
+          'workflow.enteredAt workflow.history.action workflow.history.at workflow.lines.stock',
+        ].join(' '))
+        // Size fields only: they set the 7–10 vs 10–15 day window the "late" check uses.
+        .populate('items.product', 'shippingSize listedSize shippingClass')
         .lean();
 
       if (!order) {
         throw new Error('Tracking number not found');
       }
+
+      const moment = await this.publicMomentFor(order);
 
       // Sort events by timestamp (newest first)
       const events = (order.trackingEvents || []).sort((a, b) => 
@@ -547,13 +567,40 @@ class OrderTrackingService {
           state: order.shippingAddress?.state,
           postalCode: order.shippingAddress?.postalCode
         },
-        events
+        events,
+        moment
       };
     } catch (error) {
       return {
         success: false,
         message: error.message
       };
+    }
+  }
+
+  /**
+   * The order-moment picture for the public tracking page, trimmed to the public
+   * allowlist (publicOrderMoment: no refund amount, nothing staff-only).
+   * Decoration only: any failure returns null and the page shows no picture,
+   * never a failed lookup.
+   * @param {object} order - lean order with the fields trackByNumber selects
+   * @returns {Promise<object|null>}
+   */
+  async publicMomentFor(order) {
+    try {
+      // A failed returns lookup only loses the "returning" scene, like GET /orders/:id.
+      const returns = await Promise.resolve()
+        .then(() => returnRequestRepository
+          .find({ order: order._id, status: { $in: IN_FLIGHT_RETURN_STATUSES } })
+          .select('status').limit(20).lean())
+        .catch((err) => {
+          console.error(`[Tracking] order moment: could not load returns for ${order?._id}: ${err?.message}`);
+          return [];
+        });
+      return publicOrderMoment(orderMoment(order, customerOrderProgress(order), { returns }));
+    } catch (err) {
+      console.error(`[Tracking] order moment failed for ${order?._id}: ${err?.message}`);
+      return null;
     }
   }
 

@@ -1,5 +1,7 @@
 // Types for order tracking functionality
 
+import type { OrderMomentData } from '@/components/orders/orderMomentCopy';
+
 export interface TrackingEvent {
   timestamp: string;
   status: EventStatus;
@@ -52,6 +54,11 @@ export interface TrackingData {
   estimatedDelivery: string;
   destination: TrackingDestination;
   events: TrackingEvent[];
+  /**
+   * The order-moment picture, chosen by the server from confirmed order state.
+   * Public payload: key, refundDue, returnStep, late.dueDay only — never an amount.
+   */
+  moment?: OrderMomentData | null;
 }
 
 export interface CarrierInfo {
@@ -70,6 +77,7 @@ export interface TrackingAPIResponse {
   estimatedDelivery?: string;
   destination?: TrackingDestination;
   events?: TrackingEvent[];
+  moment?: OrderMomentData | null;
   message?: string;
 }
 

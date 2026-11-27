@@ -205,4 +205,32 @@ export function orderMoment(order, progress, { returns = [], now = Date.now() } 
   return { key: lastDone || MOMENT.PLACED };
 }
 
-export default { MOMENT, RETURN_STEP, orderMoment, latestParcelUpdate, promisedDay, istDay, istDayPlus };
+/**
+ * The moment trimmed for a PUBLIC page (guest /track — no login, anyone holding a
+ * tracking number). An allowlist, not a denylist: a field added to orderMoment()
+ * later stays private until it is added here on purpose.
+ *
+ * Leaves out `refund` (the amount) — the page then says "We have refunded your
+ * payment." without a figure. `refundDue` stays as a plain boolean. Delivery
+ * updates keep their customer-facing note (capped), new day and time — never who
+ * recorded them (orderMoment never carries that either).
+ *
+ * @param {ReturnType<typeof orderMoment>} moment
+ * @returns {null | { key: string, refundDue?: boolean, returnStep?: number, late?: { dueDay: string },
+ *   note?: string, newDay?: string, at?: string }}
+ */
+export function publicOrderMoment(moment) {
+  if (!moment || typeof moment.key !== 'string') return null;
+  const out = { key: moment.key };
+  if (typeof moment.refundDue === 'boolean') out.refundDue = moment.refundDue;
+  if (Number.isInteger(moment.returnStep)) out.returnStep = moment.returnStep;
+  if (typeof moment.late?.dueDay === 'string' && DAY_RE.test(moment.late.dueDay)) {
+    out.late = { dueDay: moment.late.dueDay };
+  }
+  if (typeof moment.note === 'string' && moment.note) out.note = moment.note.slice(0, NOTE_MAX);
+  if (typeof moment.newDay === 'string' && DAY_RE.test(moment.newDay)) out.newDay = moment.newDay;
+  if (typeof moment.at === 'string' && Number.isFinite(Date.parse(moment.at))) out.at = moment.at;
+  return out;
+}
+
+export default { MOMENT, RETURN_STEP, orderMoment, latestParcelUpdate, publicOrderMoment, promisedDay, istDay, istDayPlus };

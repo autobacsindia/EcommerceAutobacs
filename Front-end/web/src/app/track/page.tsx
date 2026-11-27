@@ -8,6 +8,18 @@ import trackingService from '@/services/trackingService';
 import { TrackingData } from '@/types/tracking';
 import { TrackingTimeline } from '@/components/tracking/TrackingTimeline';
 import { getStatusBadgeColor } from '@/utils/trackingHelpers';
+import OrderMoment from '@/components/orders/OrderMoment';
+import { momentSignature } from '@/components/orders/orderMomentCopy';
+
+/** Event statuses that mean the parcel is with the courier (words the "late" picture). */
+const WITH_COURIER = new Set(['picked_up', 'in_transit', 'out_for_delivery', 'delivered', 'failed_delivery']);
+
+/** At least one parcel has left us, from server-confirmed status and courier scans. */
+function parcelWithCourier(data: TrackingData): boolean {
+  return data.currentStatus === 'shipped'
+    || data.currentStatus === 'delivered'
+    || data.events.some((e) => WITH_COURIER.has(e.status));
+}
 
 function TrackOrderPageInner() {
   const searchParams = useSearchParams();
@@ -53,7 +65,8 @@ function TrackOrderPageInner() {
           currentStatus: response.currentStatus!,
           estimatedDelivery: response.estimatedDelivery!,
           destination: response.destination!,
-          events: response.events || []
+          events: response.events || [],
+          moment: response.moment ?? null
         });
         
         // Update URL with tracking number
@@ -195,6 +208,18 @@ function TrackOrderPageInner() {
           /* Tracking Results Section */
           <section aria-labelledby="results-heading">
             <h2 id="results-heading" className="sr-only">Tracking Results</h2>
+            {/* One picture + words for where the order is now (server-chosen). This page
+                fetches in the browser, so the result is never server-rendered and the
+                play-once memory is safe to read. Keyed by the update: a new one plays. */}
+            {trackingData.moment && (
+              <OrderMoment
+                key={momentSignature(trackingData.moment)}
+                orderId={`track:${trackingData.trackingNumber}`}
+                moment={trackingData.moment}
+                shipped={parcelWithCourier(trackingData)}
+                className="mb-6"
+              />
+            )}
             {/* Order Details Card */}
             <div className="bg-obsidian rounded-lg shadow-md p-6">
               <h2 className="text-xl font-bold text-ink mb-4">Order Details</h2>
