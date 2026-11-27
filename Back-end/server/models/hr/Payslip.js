@@ -18,7 +18,10 @@ const LineSchema = new mongoose.Schema({
   kind: { type: String, enum: ['earning', 'deduction', 'employer'], required: true },
   amountPaise: { type: Number, required: true, min: 0 },
   calc: { type: String, default: '', maxlength: 300 }, // "30 of 31 days × ₹15,000"
-}, { _id: false });
+  // The counts behind the figure (days, marks, minutes, rate…), so every line can be
+  // explained and re-checked: { lopDays: 2.5, perDayPaise: 50000, … }.
+  basis: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+}, { _id: false, minimize: false });
 
 const PayslipSchema = new mongoose.Schema({
   run: { type: ObjectId, ref: 'PayrollRun', required: true },
@@ -49,6 +52,15 @@ const PayslipSchema = new mongoose.Schema({
       leaveDays: Number,
       lateMarks: Number,
       overtimeMinutes: Number,
+      // Owner rules 2026-11-26 (late + early leaving = marks; marks → ½-day LOP).
+      marks: Number,
+      lateCount: Number,
+      earlyCount: Number,
+      marksLopDays: Number,
+      absentUnapproved: Number,
+      notEmployedDays: Number, // before the join date / after the last day
+      dayDivisor: Number, // calendar days or 30 (HrSettings.monthDayBasis)
+      shiftMinutes: Number,
     }, { _id: false }),
     required: true,
   },
@@ -56,6 +68,9 @@ const PayslipSchema = new mongoose.Schema({
   grossPaise: { type: Number, required: true, min: 0 },
   deductionsPaise: { type: Number, required: true, min: 0 },
   netPaise: { type: Number, required: true, min: 0 },
+  employerPaise: { type: Number, default: 0, min: 0 }, // employer PF + ESI (not paid to the employee)
+  // Problems HR must fix before the run can lock (e.g. deductions above earnings).
+  warnings: { type: [String], default: [] },
   payoutRequest: { type: ObjectId, ref: 'PaymentRequest', default: null },
   releasedAt: { type: Date, default: null }, // visible to the employee from here
 }, { timestamps: true });
