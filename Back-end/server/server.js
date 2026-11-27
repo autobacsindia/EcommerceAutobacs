@@ -10,6 +10,7 @@ import { startNotificationWorker } from "./queue/workers/notificationWorker.js";
 import { startOrderWorker } from "./queue/workers/orderWorker.js";
 import { startMediaWorker } from "./queue/workers/mediaWorker.js";
 import { closeQueues } from "./queue/queues.js";
+import { createShutdownHandler } from "./utils/gracefulShutdown.js";
 import mongoose from "mongoose";
 import { verifyRedisAtStartup } from "./utils/redisStartupCheck.js";
 
@@ -196,10 +197,10 @@ async function bootstrap() {
     }
 
     // 5. Start queue workers (non-fatal — disabled when REDIS_URL is absent)
+    // Kept so SIGTERM can let in-flight jobs finish (see utils/gracefulShutdown.js).
+    const workers = [];
     try {
-      startNotificationWorker();
-      startOrderWorker();
-      startMediaWorker();
+      workers.push(startNotificationWorker(), startOrderWorker(), startMediaWorker());
       console.log('✓ Queue workers started');
     } catch (e) {
       console.warn('⚠ Queue workers skipped:', e.message);
@@ -228,30 +229,15 @@ async function bootstrap() {
     server.timeout = 30000;
     server.headersTimeout = 31000;
 
-    // Graceful shutdown
-    const shutdown = async (signal) => {
-      console.log(`⏹ ${signal} received, shutting down gracefully...`);
-      server.close(async () => {
-        try {
-          await closeQueues();
-          console.log('✓ Queues closed');
-        } catch (_) {}
-        try {
-          await mongoose.connection.close();
-          console.log('✓ DB connection closed');
-        } catch (_) {}
-        process.exit(0);
-      });
-      // Force exit if close hangs. MUST stay above the platform's draining window
-      // (railway.json drainingSeconds) — exiting first would kill in-flight
-      // requests the load balancer is still finishing, which is the very thing
-      // draining exists to prevent.
-      const graceMs = (parseInt(process.env.SHUTDOWN_GRACE_SECONDS, 10) || 30) * 1000;
-      setTimeout(() => {
-        console.error(`✗ Graceful shutdown exceeded ${graceMs}ms — forcing exit`);
-        process.exit(1);
-      }, graceMs);
-    };
+    // Graceful shutdown — must finish inside railway.json drainingSeconds (25s).
+    const shutdown = createShutdownHandler({
+      server,
+      workers,
+      closers: [
+        async () => { await closeQueues(); console.log('✓ Queues closed'); },
+        async () => { await mongoose.connection.close(); console.log('✓ DB connection closed'); },
+      ],
+    });
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
