@@ -106,6 +106,8 @@ export const shapeShift = (s) => ({
   start: s.start,
   end: s.end,
   graceMinutes: s.graceMinutes,
+  earlyGraceMinutes: s.earlyGraceMinutes ?? 10,
+  absentBelowMinutes: s.absentBelowMinutes ?? 120,
   latesPerHalfDayLop: s.latesPerHalfDayLop,
   halfDayMinMinutes: s.halfDayMinMinutes,
   fullDayMinutes: s.fullDayMinutes,
@@ -117,7 +119,7 @@ export const shapeShift = (s) => ({
   rev: s.rev || 0,
 });
 
-const SHIFT_NUMBERS = ['graceMinutes', 'latesPerHalfDayLop', 'halfDayMinMinutes', 'fullDayMinutes', 'overtimeAfterMinutes', 'breakAllowanceMinutes'];
+const SHIFT_NUMBERS = ['graceMinutes', 'earlyGraceMinutes', 'absentBelowMinutes', 'latesPerHalfDayLop', 'halfDayMinMinutes', 'fullDayMinutes', 'overtimeAfterMinutes', 'breakAllowanceMinutes'];
 
 function shiftSet(input, { creating }) {
   const set = {};
