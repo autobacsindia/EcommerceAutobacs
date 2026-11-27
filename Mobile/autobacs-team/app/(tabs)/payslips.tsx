@@ -26,11 +26,11 @@ export default function Payslips() {
       ) : q.data.items.length ? (
         <Card style={{ paddingVertical: 4 }}>
           {q.data.items.map((p, i) => (
-            <Pressable key={p.month} onPress={() => router.push({ pathname: '/payslip/[month]', params: { month: p.month } })} accessibilityRole="button">
+            <Pressable key={p.id} onPress={() => router.push({ pathname: '/payslip/[id]', params: { id: p.id } })} accessibilityRole="button">
               <Li last={i === q.data.items.length - 1}>
                 <View>
                   <T kind="bodyBold">{formatMonth(p.month)}</T>
-                  <T kind="small">{p.paidOn ? 'Paid' : 'Not paid yet'}</T>
+                  <T kind="small">{p.kind === 'final_settlement' ? 'Final settlement' : 'Monthly salary'}</T>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <T kind="bodyBold">{formatPaise(p.netPaise)}</T>

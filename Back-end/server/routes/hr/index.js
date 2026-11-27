@@ -15,6 +15,7 @@ import settingsRoutes from './settings.js';
 import attendanceRoutes from './attendance.js';
 import leaveRoutes from './leave.js';
 import payrollRoutes from './payroll.js';
+import appRoutes from './app.js';
 import overtimeRoutes from './overtime.js';
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.use(settingsRoutes);
 router.use(attendanceRoutes);
 router.use(leaveRoutes);
 router.use(payrollRoutes);
+router.use(appRoutes);
 router.use(overtimeRoutes);
 
 export default router;

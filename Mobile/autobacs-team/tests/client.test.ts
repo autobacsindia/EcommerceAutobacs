@@ -14,10 +14,16 @@ type Reply = { status: number; body?: unknown; raw?: string } | 'network';
 function harness(replies: Record<string, Reply[]>, start: Partial<TokenPair> = {}) {
   let saved: TokenPair = { accessToken: null, refreshToken: null, signedIn: false, ...start };
   const tokens: TokenStore = { load: async () => saved, save: async (p) => void (saved = p) };
-  const calls: { path: string; method: string; headers: Record<string, string> }[] = [];
+  const calls: { path: string; method: string; headers: Record<string, string>; credentials?: string; body?: string }[] = [];
   const fetchFn = (async (url: string, init: RequestInit = {}) => {
     const path = url.replace('https://api.test/api/v1', '');
-    calls.push({ path, method: (init.method as string) ?? 'GET', headers: (init.headers ?? {}) as Record<string, string> });
+    calls.push({
+      path,
+      method: (init.method as string) ?? 'GET',
+      headers: (init.headers ?? {}) as Record<string, string>,
+      credentials: init.credentials as string | undefined,
+      body: init.body as string | undefined,
+    });
     const queue = replies[path] ?? [];
     const r = queue.length > 1 ? queue.shift()! : queue[0];
     if (!r) throw new Error(`unexpected call ${path}`);
@@ -138,5 +144,57 @@ describe('API client', () => {
     const h = harness({ '/a': [{ status: 502, raw: 'Bad gateway' }], '/b': [{ status: 429 }] });
     expect((await failure(h.http.get('/a'))).message).toMatch(/server had a problem/);
     expect((await failure(h.http.get('/b'))).message).toMatch(/Too many tries/);
+  });
+
+  describe('Bearer mode (X-Client: autobacs-team)', () => {
+    test('every call says it is the app; with a token: no cookie jar, no CSRF fetch', async () => {
+      const h = harness({ '/hr/me/leave': [{ status: 201, body: { request: {} } }], '/hr/me': [{ status: 200, body: {} }] }, { accessToken: 'a1', refreshToken: 'r1', signedIn: true });
+      await h.http.get('/hr/me');
+      await h.http.post('/hr/me/leave', {});
+      expect(h.calls.map((c) => c.path)).toEqual(['/hr/me', '/hr/me/leave']); // no /csrf-token
+      for (const c of h.calls) {
+        expect(c.headers['X-Client']).toBe('autobacs-team');
+        expect(c.headers.Authorization).toBe('Bearer a1');
+        expect(c.credentials).toBe('omit');
+        expect(c.headers['X-XSRF-TOKEN']).toBeUndefined();
+      }
+    });
+
+    test('refresh sends the stored refresh token in the body, without cookies', async () => {
+      const h = harness(
+        { '/hr/me': [{ status: 401 }, { status: 200, body: {} }], '/auth/refresh': [{ status: 200, body: { accessToken: 'a2', refreshToken: 'r2' } }] },
+        { accessToken: 'a1', refreshToken: 'r1', signedIn: true },
+      );
+      await h.http.get('/hr/me');
+      const r = h.calls.find((c) => c.path === '/auth/refresh')!;
+      expect(JSON.parse(r.body!)).toEqual({ refreshToken: 'r1' });
+      expect(r.credentials).toBe('omit');
+      expect(r.headers['X-Client']).toBe('autobacs-team');
+      expect(h.saved()).toMatchObject({ accessToken: 'a2', refreshToken: 'r2' });
+    });
+
+    test('logout revokes the refresh token on the server and forgets it, even if the call fails', async () => {
+      const ok = harness({ '/auth/logout': [{ status: 200, body: {} }] }, { accessToken: 'a1', refreshToken: 'r1', signedIn: true });
+      await ok.http.logout();
+      expect(JSON.parse(ok.calls[0].body!)).toEqual({ refreshToken: 'r1' });
+      expect(ok.saved()).toEqual({ accessToken: null, refreshToken: null, signedIn: false });
+
+      const offline = harness({ '/auth/logout': ['network'] }, { accessToken: 'a1', refreshToken: 'r1', signedIn: true });
+      await expect(offline.http.logout()).rejects.toBeInstanceOf(ApiError);
+      expect(offline.saved().accessToken).toBeNull();
+    });
+
+    test('authHeader for downloads carries the token and the client header', async () => {
+      const h = harness({}, { accessToken: 'a1', signedIn: true });
+      expect(await h.http.authHeader()).toEqual({ 'X-Client': 'autobacs-team', Authorization: 'Bearer a1' });
+    });
+
+    test('without a token (older cookie-only server) it falls back to cookies + CSRF', async () => {
+      const h = harness({ '/csrf-token': [{ status: 200, body: { csrfToken: 'c' } }], '/hr/me/leave': [{ status: 201, body: {} }] }, { signedIn: true });
+      await h.http.post('/hr/me/leave', {});
+      const w = h.calls.find((c) => c.path === '/hr/me/leave')!;
+      expect(w.credentials).toBe('include');
+      expect(w.headers['X-XSRF-TOKEN']).toBe('c');
+    });
   });
 });

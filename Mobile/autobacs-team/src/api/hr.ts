@@ -5,6 +5,12 @@
  */
 import type { Http } from './http';
 import type {
+  AppCapabilities,
+  Decision,
+  EmployeeDocument,
+  Holiday,
+  OvertimeItem,
+  PushRegistration,
   AttendanceStatus,
   Challenge,
   ChallengePurpose,
@@ -20,6 +26,9 @@ import type {
   MonthView,
   Page,
   Payslip,
+  PayslipSummary,
+  PayslipAttendance,
+  PayslipLine,
   PunchInput,
   PunchResult,
 } from './types';
@@ -41,9 +50,103 @@ export interface HrApi {
   myLeave(cursor?: string | null): Promise<Page<LeaveRequest>>;
   applyLeave(input: LeaveInput): Promise<{ request: LeaveRequest; replay: boolean }>;
   cancelLeave(id: string): Promise<void>;
-  payslips(): Promise<Page<Payslip>>;
+  payslips(cursor?: string): Promise<Page<PayslipSummary>>;
+  payslip(id: string): Promise<Payslip>;
   /** Downloads the released payslip PDF to a local file; returns its uri. */
-  payslipPdf(month: string): Promise<string>;
+  payslipPdf(id: string): Promise<string>;
+
+  // profile
+  capabilities(): Promise<AppCapabilities>;
+  documents(employeeId: string): Promise<Page<EmployeeDocument>>;
+  /** A short-lived (5 min) link to open one document. */
+  documentUrl(docId: string): Promise<{ url: string; fileName: string; mimeType: string }>;
+  holidays(year: number): Promise<Holiday[]>;
+  registerPush(input: PushRegistration): Promise<void>;
+  unregisterPush(deviceId: string): Promise<void>;
+
+  // approvals — every decision is the server's; the app never assumes it worked
+  leaveInbox(): Promise<Page<LeaveRequest>>;
+  decideLeave(id: string, decision: Decision, note: string, rev: number | undefined): Promise<LeaveRequest>;
+  pendingCorrections(): Promise<Page<Correction>>;
+  decideCorrection(id: string, decision: Decision, note: string, rev: number | undefined): Promise<void>;
+  /** Name + code for one employee (HR sees all; used to label fix-day requests). */
+  employeeName(employeeId: string): Promise<{ name: string; employeeCode: string }>;
+  pendingOvertime(): Promise<Page<OvertimeItem>>;
+  decideOvertime(item: OvertimeItem, decision: Decision, approvedMinutes: number, note: string): Promise<void>;
+}
+
+const enc = encodeURIComponent;
+
+/** A payslip as the payroll branch serves it (list rows have no lines). */
+export type RawPayslip = {
+  id: string;
+  number: string;
+  month: string;
+  kind: 'monthly' | 'final_settlement';
+  grossPaise: number;
+  deductionsPaise: number;
+  netPaise: number;
+  attendance?: PayslipAttendance;
+  lines?: { code?: string; label: string; kind: 'earning' | 'deduction' | 'employer'; amountPaise: number; calc?: string }[];
+  releasedAt?: string | null;
+};
+
+function summary(r: RawPayslip): PayslipSummary {
+  return {
+    id: r.id,
+    number: r.number,
+    month: r.month,
+    kind: r.kind === 'final_settlement' ? 'final_settlement' : 'monthly',
+    grossPaise: r.grossPaise,
+    deductionsPaise: r.deductionsPaise,
+    netPaise: r.netPaise,
+  };
+}
+
+export function toPayslipPage(raw: Page<RawPayslip>): Page<PayslipSummary> {
+  return { items: (raw.items ?? []).map(summary), nextCursor: raw.nextCursor ?? null };
+}
+
+/** Employer-only lines (e.g. employer PF) are not part of take-home, so they are left out. */
+export function toPayslip(r: RawPayslip): Payslip {
+  const line = (l: NonNullable<RawPayslip['lines']>[number]): PayslipLine => ({
+    label: l.label,
+    amountPaise: l.amountPaise,
+    ...(l.calc ? { note: l.calc } : {}),
+  });
+  const lines = r.lines ?? [];
+  return {
+    ...summary(r),
+    earnings: lines.filter((l) => l.kind === 'earning').map(line),
+    deductions: lines.filter((l) => l.kind === 'deduction').map(line),
+    attendance: r.attendance ?? {},
+    releasedAt: r.releasedAt ?? null,
+  };
+}
+
+/** GET /hr/overtime/pending as the attendance-policy branch serves it. */
+export type RawOvertimePage = {
+  items: {
+    id: string;
+    employee: { id: string; name: string; employeeCode?: string };
+    day: { date: string; workedMinutes: number; overtimeMinutes: number };
+  }[];
+  nextCursor: string | null;
+};
+
+export function toOvertimePage(raw: RawOvertimePage): Page<OvertimeItem> {
+  return {
+    items: (raw.items ?? []).map((r) => ({
+      dayId: r.id,
+      employeeId: r.employee?.id,
+      employeeName: r.employee?.name,
+      employeeCode: r.employee?.employeeCode,
+      date: r.day.date,
+      workedMinutes: r.day.workedMinutes,
+      overtimeMinutes: r.day.overtimeMinutes,
+    })),
+    nextCursor: raw.nextCursor ?? null,
+  };
 }
 
 /** Turn local frames into multipart parts (React Native and web). */
@@ -106,13 +209,7 @@ export function createHrApi({ http, isWeb, downloadPdf, baseUrl }: Deps): HrApi 
       });
       return r;
     },
-    async logout() {
-      try {
-        await http.request('/auth/logout', { method: 'POST', noAuthRetry: true });
-      } finally {
-        await http.clearTokens();
-      }
-    },
+    logout: () => http.logout(),
     me: async () => (await http.get<{ employee: Employee }>('/hr/me')).employee,
     status: () => http.get<AttendanceStatus>('/hr/me/attendance/status'),
     month: (month) => http.get<MonthView>(`/hr/me/attendance?month=${encodeURIComponent(month)}`),
@@ -146,13 +243,46 @@ export function createHrApi({ http, isWeb, downloadPdf, baseUrl }: Deps): HrApi 
     cancelLeave: async (id) => {
       await http.post(`/hr/me/leave/${encodeURIComponent(id)}/cancel`);
     },
-    payslips: () => http.get<Page<Payslip>>('/hr/me/payslips'),
-    async payslipPdf(month) {
-      return downloadPdf(
-        `${baseUrl}/hr/me/payslips/${encodeURIComponent(month)}/pdf`,
-        await http.authHeader(),
-        `payslip-${month}.pdf`,
-      );
+    payslips: async (cursor) =>
+      toPayslipPage(await http.get<Page<RawPayslip>>(`/hr/me/payslips?limit=24${cursor ? `&cursor=${enc(cursor)}` : ''}`)),
+    payslip: async (id) => toPayslip((await http.get<{ payslip: RawPayslip }>(`/hr/me/payslips/${enc(id)}`)).payslip),
+    async payslipPdf(id) {
+      return downloadPdf(`${baseUrl}/hr/me/payslips/${enc(id)}/pdf`, await http.authHeader(), `payslip-${id}.pdf`);
+    },
+
+    capabilities: () => http.get<AppCapabilities>('/hr/me/app'),
+    documents: (employeeId) => http.get<Page<EmployeeDocument>>(`/hr/employees/${enc(employeeId)}/documents`),
+    documentUrl: (docId) => http.get<{ url: string; fileName: string; mimeType: string }>(`/hr/documents/${enc(docId)}/url`),
+    holidays: async (year) => (await http.get<Page<Holiday>>(`/hr/holidays?year=${year}&limit=50`)).items,
+    registerPush: async (input) => {
+      await http.put('/hr/me/push-token', input);
+    },
+    unregisterPush: async (deviceId) => {
+      await http.del('/hr/me/push-token', { deviceId });
+    },
+
+    leaveInbox: () => http.get<Page<LeaveRequest>>('/hr/leave/inbox?limit=50'),
+    decideLeave: async (id, decision, note, rev) =>
+      (await http.post<{ request: LeaveRequest }>(`/hr/leave/${enc(id)}/decide`, { decision, note, rev })).request,
+    pendingCorrections: () => http.get<Page<Correction>>('/hr/corrections?status=pending&limit=50'),
+    decideCorrection: async (id, decision, note, rev) => {
+      // The corrections route speaks 'approve' | 'reject'.
+      await http.post(`/hr/corrections/${enc(id)}/decide`, { decision: decision === 'approved' ? 'approve' : 'reject', note, rev });
+    },
+    employeeName: async (employeeId) => {
+      const { employee } = await http.get<{ employee: { name: string; employeeCode: string } }>(`/hr/employees/${enc(employeeId)}`);
+      return { name: employee.name, employeeCode: employee.employeeCode };
+    },
+    pendingOvertime: async () => toOvertimePage(await http.get<RawOvertimePage>('/hr/overtime/pending?limit=50')),
+    decideOvertime: async (item, decision, approvedMinutes, note) => {
+      // No rev on this route: `overtimeMinutes` is the figure the approver saw,
+      // and the server answers 409 if the day's hours changed since.
+      await http.post(`/hr/attendance/${enc(item.dayId)}/overtime/decide`, {
+        decision,
+        ...(decision === 'approved' ? { minutes: approvedMinutes } : {}),
+        note,
+        overtimeMinutes: item.overtimeMinutes,
+      });
     },
   };
 }

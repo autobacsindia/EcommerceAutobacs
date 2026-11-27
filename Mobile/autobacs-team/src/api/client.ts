@@ -3,11 +3,10 @@
  * SecureStore, PDF downloads through expo-file-system.
  *
  * Auth: the app signs in with the existing staff login (POST /auth/login, email
- * or company username). If the server returns a Bearer pair it is kept in
- * SecureStore and sent as `Authorization: Bearer`; today the server answers
- * with httpOnly cookies, which React Native's native cookie jar keeps — the app
- * then remembers only "signed in" (also in SecureStore). Either way, a dead
- * session ends in a 401 → refresh once → Login screen.
+ * or company username) and sends `X-Client: autobacs-team`, so the server
+ * answers with a Bearer pair in the body (no cookies). The pair lives in
+ * SecureStore and goes out as `Authorization: Bearer`. A dead session ends in
+ * a 401 → one refresh → Login screen.
  */
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
@@ -24,6 +23,11 @@ function resolveApiUrl(): string {
   const fromConfig = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
   const url = (fromEnv || fromConfig || '').replace(/\/+$/, '');
   if (!url) throw new Error('Autobacs Team: set EXPO_PUBLIC_API_URL or expo.extra.apiUrl');
+  // Release builds talk to https only; plain http only in dev or the "lan" test APK.
+  const allowHttp = (Constants.expoConfig?.extra as { allowHttp?: boolean } | undefined)?.allowHttp === true;
+  if (!url.startsWith('https://') && !__DEV__ && !allowHttp) {
+    throw new Error(`Autobacs Team: the API URL must be https (got ${url})`);
+  }
   return url;
 }
 

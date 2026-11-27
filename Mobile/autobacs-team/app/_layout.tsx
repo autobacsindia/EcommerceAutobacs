@@ -18,10 +18,13 @@ import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-googl
 import { SessionProvider, useSession } from '../src/auth/session';
 import { ApiError, errorMessage, IS_MOCK } from '../src/api';
 import { PunchProvider } from '../src/punch/PunchProvider';
+import { registerForPush, setForegroundHandler, usePushTaps } from '../src/push/push';
+import { useOtaUpdate } from '../src/updates/useOtaUpdate';
 import { colors, font, spacing } from '../src/theme';
 import { Button, Card, Logo, Screen, T } from '../src/ui';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+setForegroundHandler();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +43,7 @@ export default function RootLayout() {
         <SessionProvider>
           <StatusBar style="dark" />
           <Gate />
+          <UpdateBanner />
           {IS_MOCK ? <DemoRibbon /> : null}
         </SessionProvider>
       </QueryClientProvider>
@@ -62,6 +66,14 @@ function Gate() {
   useEffect(() => {
     if (phase !== 'loading') SplashScreen.hideAsync().catch(() => {});
   }, [phase]);
+
+  // Phone notifications: (re-)register on every signed-in launch — the token
+  // can change, and the server moves it if someone else used this phone.
+  const ready = phase === 'signedIn' && !!employee;
+  useEffect(() => {
+    if (ready && !IS_MOCK) void registerForPush();
+  }, [ready, employee?.id]);
+  usePushTaps(ready);
 
   if (phase === 'loading') return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
@@ -95,11 +107,33 @@ function Gate() {
         <Stack.Screen name="face/consent" options={{ title: 'Set up face check' }} />
         <Stack.Screen name="face/check" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
         <Stack.Screen name="fix-day" options={{ title: 'Ask HR to fix a day', presentation: 'modal' }} />
-        <Stack.Screen name="payslip/[month]" options={{ title: 'Payslip' }} />
+        <Stack.Screen name="payslip/[id]" options={{ title: 'Payslip' }} />
+        <Stack.Screen name="marks" options={{ title: 'Marks and overtime' }} />
+        <Stack.Screen name="documents" options={{ title: 'My documents' }} />
+        <Stack.Screen name="holidays" options={{ title: 'Holidays' }} />
       </Stack.Protected>
     </Stack>
   );
   return signedIn ? <PunchProvider employeeId={employee!.id}>{stack}</PunchProvider> : stack;
+}
+
+/** A new version was downloaded over the air: one tap to use it now. */
+function UpdateBanner() {
+  const { ready, restart } = useOtaUpdate();
+  if (!ready) return null;
+  return (
+    <View
+      style={{
+        position: 'absolute', left: 12, right: 12, bottom: 96, backgroundColor: colors.ink, borderRadius: 14,
+        padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+      }}
+    >
+      <Text style={{ fontFamily: font.medium, fontSize: 14, color: colors.white, flex: 1 }}>A new version of the app is ready.</Text>
+      <Text onPress={restart} accessibilityRole="button" style={{ fontFamily: font.bold, fontSize: 14, color: colors.greenOnDark }}>
+        Restart now
+      </Text>
+    </View>
+  );
 }
 
 /** Makes it impossible to mistake demo data for the real thing. */

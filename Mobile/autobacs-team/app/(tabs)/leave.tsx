@@ -15,6 +15,7 @@ import { estimateHalfDays, validateLeave, type DayPart, type LeaveErrors } from 
 import { leaveChip } from '../../src/lib/labels';
 import { colors, font, spacing } from '../../src/theme';
 import { Button, Card, Chip, ComingSoon, ErrorState, Field, Li, Loading, Row, Screen, Segmented, T } from '../../src/ui';
+import { DateField } from '../../src/ui/DateField';
 
 const year = () => Number(istDate().slice(0, 4));
 
@@ -133,8 +134,14 @@ function ApplyForm({ balances }: { balances: LeaveBalance[] }) {
         options={types.slice(0, 4).map((t) => ({ value: t.id, label: t.name.replace(/ leave$/i, '') }))}
       />
       {errors.leaveType ? <T style={{ color: colors.bad }}>{errors.leaveType}</T> : null}
-      <Field label="From (YYYY-MM-DD)" value={from} onChangeText={(v) => { setFrom(v); if (to < v) setTo(v); }} error={errors.from} keyboardType="numbers-and-punctuation" autoCapitalize="none" />
-      <Field label="To (YYYY-MM-DD)" value={to} onChangeText={setTo} error={errors.to} keyboardType="numbers-and-punctuation" autoCapitalize="none" />
+      <Row style={{ gap: spacing.md, alignItems: 'flex-start' }}>
+        <View style={{ flex: 1 }}>
+          <DateField label="From" value={from} onChange={(v) => { setFrom(v); if (to < v) setTo(v); }} error={errors.from} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <DateField label="To" value={to} min={from} onChange={setTo} error={errors.to} />
+        </View>
+      </Row>
       <Segmented
         value={part}
         onChange={setPart}

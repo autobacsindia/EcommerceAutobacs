@@ -9,9 +9,13 @@
  * - 401 → one silent refresh (POST /auth/refresh), then one replay. If that
  *   fails the session is over: `onSignedOut` fires (the app goes to Login) and
  *   the error carries code SIGNED_OUT. Auth failure is never treated as success.
- * - Writes carry a CSRF token from /csrf-token (the server exempts Bearer
- *   requests but cookie sessions need it). A 403 with no code = stale token →
- *   refetch once and replay.
+ * - Auth is a Bearer pair: every call sends `X-Client: autobacs-team`, so
+ *   login/refresh answer with the tokens in the body (kept in SecureStore) and
+ *   set no cookies. With a token the request goes out `credentials: 'omit'`
+ *   (no cookie jar at all) and needs no CSRF token (the server exempts Bearer).
+ * - Fallback for an older server that answers with cookies only: cookie jar +
+ *   a CSRF token from /csrf-token on writes. A 403 with no code = stale CSRF
+ *   token → refetch once and replay.
  * - A 404 "Route not found" (or 501) means the endpoint is not deployed yet:
  *   code NOT_AVAILABLE, so screens can show "coming soon" instead of an error.
  *   A 404 from a REAL route (e.g. "profile not set up") keeps its own message.
@@ -78,6 +82,9 @@ export type RequestOptions = {
 
 const AUTH_FREE = ['/auth/login', '/auth/refresh', '/csrf-token'];
 
+/** Tells the server this is the app: tokens in the body, not cookies. */
+export const CLIENT_HEADERS = { 'X-Client': 'autobacs-team' } as const;
+
 export function createHttp(deps: HttpDeps) {
   const timeoutMs = deps.timeoutMs ?? 20_000;
   const uploadTimeoutMs = deps.uploadTimeoutMs ?? 60_000;
@@ -109,11 +116,16 @@ export function createHttp(deps: HttpDeps) {
     }
   }
 
-  async function raw(path: string, init: RequestInit, ms: number): Promise<Response> {
+  async function raw(path: string, init: RequestInit, ms: number, withCookies: boolean): Promise<Response> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), ms);
     try {
-      return await deps.fetch(`${deps.baseUrl}${path}`, { ...init, credentials: 'include', signal: ctrl.signal });
+      return await deps.fetch(`${deps.baseUrl}${path}`, {
+        ...init,
+        headers: { ...CLIENT_HEADERS, ...(init.headers as Record<string, string>) },
+        credentials: withCookies ? 'include' : 'omit',
+        signal: ctrl.signal,
+      });
     } catch {
       // Network down, DNS, TLS, or our own timeout: all mean "try again later".
       throw new ApiError(OFFLINE_MESSAGE, 0, 'OFFLINE');
@@ -125,7 +137,7 @@ export function createHttp(deps: HttpDeps) {
   async function getCsrf(force: boolean): Promise<string | null> {
     if (csrf && !force) return csrf;
     try {
-      const res = await raw('/csrf-token', { headers: { Accept: 'application/json' } }, timeoutMs);
+      const res = await raw('/csrf-token', { headers: { Accept: 'application/json' } }, timeoutMs, true);
       if (!res.ok) return null;
       const data = (await res.json()) as { csrfToken?: string };
       csrf = data.csrfToken ?? null;
@@ -149,6 +161,7 @@ export function createHttp(deps: HttpDeps) {
               body: JSON.stringify(refreshToken ? { refreshToken } : {}),
             },
             timeoutMs,
+            !refreshToken,
           );
           if (!res.ok) return false;
           const data = (await parse(res)) as { accessToken?: string; refreshToken?: string } | null;
@@ -200,7 +213,7 @@ export function createHttp(deps: HttpDeps) {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-    if (writes) {
+    if (writes && !accessToken) {
       const t = await getCsrf(attempt.csrf);
       if (t) headers['X-XSRF-TOKEN'] = t;
     }
@@ -209,6 +222,7 @@ export function createHttp(deps: HttpDeps) {
       path,
       { method, headers, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined) },
       form ? uploadTimeoutMs : timeoutMs,
+      !accessToken,
     );
     const data = await parse(res);
     const code = (data as { code?: unknown } | null)?.code;
@@ -234,6 +248,15 @@ export function createHttp(deps: HttpDeps) {
     request,
     setTokens,
     clearTokens: () => setTokens(EMPTY),
+    /** Ends the session on the server (revokes the refresh token), then forgets it here. */
+    async logout(): Promise<void> {
+      const { refreshToken } = await tokens();
+      try {
+        await request('/auth/logout', { method: 'POST', body: refreshToken ? { refreshToken } : {}, noAuthRetry: true });
+      } finally {
+        await setTokens(EMPTY);
+      }
+    },
     isSignedIn: async () => {
       const t = await tokens();
       return t.signedIn || !!t.accessToken;
@@ -241,11 +264,12 @@ export function createHttp(deps: HttpDeps) {
     /** For file downloads that need the same auth header. */
     authHeader: async (): Promise<Record<string, string>> => {
       const { accessToken } = await tokens();
-      return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+      return accessToken ? { ...CLIENT_HEADERS, Authorization: `Bearer ${accessToken}` } : { ...CLIENT_HEADERS };
     },
     get: <T>(path: string) => request<T>(path),
     post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
-    del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+    put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
+    del: <T>(path: string, body?: unknown) => request<T>(path, { method: 'DELETE', body }),
     upload: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', form }),
   };
 }
