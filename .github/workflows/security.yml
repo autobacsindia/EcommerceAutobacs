@@ -13,6 +13,10 @@ on:
   push:
   pull_request:
     branches: ["**"]
+  # Started by release-slots.yml on the Release PR's head (a PR opened by
+  # GITHUB_TOKEN triggers no pull_request runs). No "before" commit → the
+  # change detection falls back to the full suite.
+  workflow_dispatch:
 
 jobs:
   secrets:

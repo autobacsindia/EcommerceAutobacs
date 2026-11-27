@@ -1,0 +1,129 @@
+# Release slots — the live site changes twice a day, not on every merge.
+#
+# How it works (owner guide: docs/HOW-TO-RELEASE.md):
+#   • Day-to-day PRs merge into `develop`. That deploys only the TEST tier
+#     (Railway env "test", Vercel preview) — customers see nothing.
+#   • At ~1:30 PM and ~9:30 PM IST this workflow opens (or refreshes) ONE
+#     "Release" PR  develop → main  listing everything inside, and starts the
+#     full CI suites on it.
+#   • The owner merges that PR at 2 PM / 10 PM ("Create a merge commit").
+#     That single merge is the single production deploy.
+#   • Urgent fix: a PR straight into `main` still works (hotfix). After ANY
+#     push to main, `sync-develop` merges main back into develop so the two
+#     never drift.
+#
+# Nothing here merges to main or bypasses branch protection: the Release PR
+# needs the same required checks as every other PR, and a human merges it.
+
+name: Release slots
+
+on:
+  schedule:
+    # GitHub cron is UTC and may start a few minutes late; IST = UTC+5:30.
+    - cron: "0 8 * * *"    # 1:30 PM IST → ready for the 2 PM slot
+    - cron: "0 16 * * *"   # 9:30 PM IST → ready for the 10 PM slot
+  workflow_dispatch:        # "Run workflow" button = open a release PR now
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-slots
+  cancel-in-progress: false
+
+jobs:
+  open-release:
+    name: Open / refresh the Release PR
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: write        # to start CI on the release head (see below)
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect what is waiting on develop
+        id: pending
+        run: |
+          set -euo pipefail
+          git fetch -q origin main develop
+          # Real changes only — sync merges from main are not "new work".
+          git log --no-merges --format='- %s' origin/main..origin/develop > pending.txt || true
+          count=$(grep -c . pending.txt || true)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "$count change(s) waiting on develop"
+
+      - name: Open or refresh the PR
+        if: steps.pending.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          slot=$(TZ=Asia/Kolkata date +'%-d %b, %-I %p IST')
+          title="Release — $slot (${{ steps.pending.outputs.count }} change(s))"
+          {
+            echo "## What goes live when this is merged"
+            echo
+            cat pending.txt
+            echo
+            echo "## How to release"
+            echo "1. Wait for the checks below to go green."
+            echo "2. Merge with **Create a merge commit** (not squash — squash makes develop and main drift)."
+            echo "3. The live site updates in about 5 minutes. To undo: docs/HOW-TO-RELEASE.md → Rollback."
+            echo
+            echo "_Opened by the release-slots workflow. Changes merged into develop after this was opened ride along automatically._"
+          } > body.md
+          existing=$(gh pr list --base main --head develop --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "$title" --body-file body.md
+            echo "Refreshed release PR #$existing"
+          else
+            gh pr create --base main --head develop --title "$title" --body-file body.md
+          fi
+
+      # A PR opened with GITHUB_TOKEN triggers no pull_request workflows, so the
+      # required checks would never report. workflow_dispatch is allowed from
+      # GITHUB_TOKEN; with no "before" commit each CI falls back to its FULL
+      # suite, and the check runs land on develop's head — the Release PR's head.
+      - name: Start full CI on the release head
+        if: steps.pending.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          for wf in ci.yml ci-frontend.yml security.yml; do
+            gh workflow run "$wf" --ref develop
+          done
+
+  sync-develop:
+    name: Carry main back into develop
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      - name: Merge main into develop
+        run: |
+          set -euo pipefail
+          git config user.name  "release-slots[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "develop already contains main"; exit 0
+          fi
+          if git merge --ff-only -q origin/main 2>/dev/null; then
+            echo "Fast-forwarded develop to main"
+          elif git merge --no-edit -q -m "chore(release): carry main back into develop" origin/main; then
+            echo "Merged main (hotfix) into develop"
+          else
+            git merge --abort || true
+            echo "::error::main and develop conflict — open a PR main → develop and resolve by hand."
+            exit 1
+          fi
+          git push origin HEAD:develop
