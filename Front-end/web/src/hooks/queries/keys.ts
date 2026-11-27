@@ -186,6 +186,7 @@ export const adminKeys = {
   companyRevenueAll: () => [...adminKeys.all, 'company-revenue'] as const,
   companyRevenue: (period: string) => [...adminKeys.companyRevenueAll(), period] as const,
   companySales: (period: string, source: string) => [...adminKeys.companyRevenueAll(), 'sales', period, source] as const,
+  unbilled: (state: string, period: string) => [...adminKeys.companyRevenueAll(), 'unbilled', state, period] as const,
   zohoInvoicesAll: () => [...adminKeys.all, 'zoho-invoices'] as const,
   zohoInvoices: (state: string) => [...adminKeys.zohoInvoicesAll(), state] as const,
   /** GTM head + leads an order can be credited to ("Sold by"). */

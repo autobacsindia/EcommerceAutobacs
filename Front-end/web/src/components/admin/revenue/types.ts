@@ -8,6 +8,8 @@ export interface RevenueMonth {
   month: string;
   website: number;
   zoho: number;
+  /** Paid, no sale bill yet */
+  unbilled: number;
   total: number;
   sales: number;
   ordersFulfilled: number;
@@ -25,12 +27,15 @@ export interface CompanyRevenueSummary {
       bySource: Record<'web' | 'woocommerce' | 'offline', { total: number; count: number }>;
     };
     zoho: { total: number; exGst: number; creditNotes: number; unpaid: number; count: number };
+    /** Money received with no Zoho invoice yet — counted in `total`, shown apart. */
+    unbilled: UnbilledSummary;
   };
   sales: {
     total: number;
     website: { total: number; delivered: number; shipped: number; processing: number };
     zoho: number;
     zohoCancelled: number;
+    unbilled: number;
   };
   ordersFulfilled: { total: number; website: number; zoho: number };
   /** Zoho bills that stand for a panel order (that order is not added again). */
@@ -81,8 +86,55 @@ export interface SaleRow {
   unpaid?: number;
 }
 
+export interface UnbilledSummary {
+  total: number;
+  count: number;
+  /** From the Zoho Payments Received export (its unused amount). */
+  zoho: number;
+  /** Added by an admin with proof. */
+  manual: number;
+  /** Looks like a website / sales-panel order — not counted until an admin decides. */
+  needsCheck: { count: number; total: number };
+}
+
+export type UnbilledState = 'open' | 'in_panel' | 'needs_check' | 'billed' | 'removed';
+export type UnbilledDecision = 'count' | 'same_as_panel' | 'billed' | 'remove';
+
+/** One row of GET /admin/revenue/unbilled. */
+export interface UnbilledRow {
+  _id: string;
+  source: 'zoho_payment' | 'manual';
+  paymentNumber?: string;
+  /** Paid-sales sheet reference (its re-upload key). */
+  saleRef?: string;
+  receivedAt: string;
+  customerName: string;
+  mode?: string;
+  reference?: string;
+  /** Counted rupees: the unused part of a Zoho payment, or the manual amount. */
+  amount: number;
+  paymentTotal?: number;
+  proof?: string;
+  note?: string;
+  state: UnbilledState;
+  stateBy: 'auto' | 'admin';
+  reason?: string;
+  billedAs?: string;
+  addedByName?: string | null;
+  order?: {
+    _id: string;
+    totalAmount: number;
+    createdAt: string;
+    status: string;
+    source?: string;
+    shippingAddress?: { fullName?: string };
+  } | null;
+}
+
 export interface ZohoImportResult {
-  kind: 'invoices' | 'credit_notes';
+  kind: 'invoices' | 'credit_notes' | 'payments' | 'paid_sales';
+  /** Payments export only: payments Zoho has since applied to an invoice. */
+  billed?: number;
   batchId?: string;
   inserted: number;
   updated: number;

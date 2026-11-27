@@ -18,6 +18,7 @@ import {
   type ZohoImportResult,
   type ZohoInvoiceRow,
 } from './types';
+import UnbilledSection from './UnbilledSection';
 
 const SOURCE_LABELS = { web: 'Website', woocommerce: 'Old website (WooCommerce)', offline: 'Sales panel' } as const;
 const dateIN = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
@@ -71,12 +72,19 @@ export default function CompanyRevenuePage() {
               <p className="mt-2 text-sm text-green-50">
                 Zoho Books bills {compactRupees(s.revenue.zoho.total)} · Website orders not yet in Zoho {compactRupees(s.revenue.website.total)}
               </p>
+              <p className="mt-1 text-sm text-amber-100">
+                <a href="#unbilled" className="underline decoration-amber-200/60 hover:decoration-amber-100">
+                  Paid, no sale bill yet {compactRupees(s.revenue.unbilled.total)}
+                </a>
+                {s.revenue.unbilled.needsCheck.count > 0 && ` · ${s.revenue.unbilled.needsCheck.count.toLocaleString('en-IN')} to check, not counted`}
+              </p>
             </div>
             <div className="rounded-2xl bg-gradient-to-br from-blue-700 to-indigo-600 p-5 text-white shadow-sm">
               <p className="text-sm text-blue-100">Sales · {s.period.label}</p>
               <p className="mt-1 text-4xl font-bold tabular-nums">{s.sales.total.toLocaleString('en-IN')}</p>
               <p className="mt-2 text-sm text-blue-50">
                 {s.sales.zoho.toLocaleString('en-IN')} billed in Zoho · {s.sales.website.total.toLocaleString('en-IN')} website orders not yet in Zoho ({s.sales.website.delivered.toLocaleString('en-IN')} delivered, {(s.sales.website.shipped + s.sales.website.processing).toLocaleString('en-IN')} on the way)
+                {s.sales.unbilled > 0 && ` · ${s.sales.unbilled.toLocaleString('en-IN')} paid, no sale bill yet`}
               </p>
               {s.sales.zohoCancelled > 0 && (
                 <p className="mt-1 text-xs text-blue-100">{s.sales.zohoCancelled.toLocaleString('en-IN')} Zoho bill(s) cancelled by credit note — not counted</p>
@@ -125,6 +133,7 @@ export default function CompanyRevenuePage() {
                   <th scope="col" className="px-4 py-2 text-left">Month</th>
                   <th scope="col" className="px-4 py-2 text-right">Website (not in Zoho)</th>
                   <th scope="col" className="px-4 py-2 text-right">Zoho bills</th>
+                  <th scope="col" className="px-4 py-2 text-right">Paid, no bill yet</th>
                   <th scope="col" className="px-4 py-2 text-right">Total</th>
                   <th scope="col" className="px-4 py-2 text-right">Sales</th>
                   <th scope="col" className="px-4 py-2 text-right">To check</th>
@@ -132,13 +141,14 @@ export default function CompanyRevenuePage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {s.months.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">No sales in this period.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">No sales in this period.</td></tr>
                 )}
                 {s.months.map((m) => (
                   <tr key={m.month}>
                     <th scope="row" className="px-4 py-2 text-left font-medium text-gray-800">{monthLabel(m.month)}</th>
                     <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(m.website)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{formatCurrency(m.zoho)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-amber-800">{m.unbilled ? formatCurrency(m.unbilled) : ''}</td>
                     <td className="px-4 py-2 text-right font-semibold tabular-nums">{formatCurrency(m.total)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{m.sales.toLocaleString('en-IN')}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-amber-700">{m.needsCheck || ''}</td>
@@ -153,6 +163,7 @@ export default function CompanyRevenuePage() {
       <SalesList period={period} />
       <ZohoUpload />
       <NeedsCheck />
+      <UnbilledSection period={period} />
     </div>
   );
 }
@@ -165,6 +176,8 @@ function useRefreshFigures() {
     qc.invalidateQueries({ queryKey: adminKeys.stats() }),
   ]);
 }
+
+const IMPORT_LABELS = { invoices: 'Bills', credit_notes: 'Credit notes', payments: 'Payments with no bill', paid_sales: 'Paid sales without bill' } as const;
 
 function ZohoUpload() {
   const [file, setFile] = useState<File | null>(null);
@@ -186,8 +199,13 @@ function ZohoUpload() {
     <section className="rounded-2xl border border-gray-200 bg-white p-5">
       <h2 className="font-semibold text-gray-900">Upload Zoho Books bills</h2>
       <p className="mt-1 text-sm text-gray-600">
-        In Zoho Books export <strong>Sales → Invoices</strong> and <strong>Sales → Credit Notes</strong> (CSV) and upload each file here.
+        In Zoho Books export <strong>Sales → Invoices</strong>, <strong>Sales → Credit Notes</strong> and{' '}
+        <strong>Payments Received → Export → Invoice Payments</strong> (CSV) and upload each file here.
         Zoho exports at most 6 months at a time. Uploading the same file again updates it — nothing is counted twice.
+        From the payments file only money <em>not yet on any bill</em> is added, as &ldquo;Paid, no sale bill yet&rdquo;.
+        You can also upload our own <strong>paid-sales sheet</strong> (money seen only in ClickUp or the bank) with the columns{' '}
+        <code className="rounded bg-gray-100 px-1 text-xs">Sale Reference, Customer, Amount Received, Date Received, Mode, Proof, Note</code>{' '}
+        — each Sale Reference is counted once, and uploading the sheet again updates it.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <input
@@ -209,7 +227,8 @@ function ZohoUpload() {
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
       {result && (
         <div role="status" className="mt-3 rounded-lg bg-green-50 p-3 text-sm text-green-800">
-          {result.kind === 'credit_notes' ? 'Credit notes' : 'Bills'}: {result.inserted} new, {result.updated} updated. Left out: {result.skipped.draft} draft, {result.skipped.void} void.
+          {IMPORT_LABELS[result.kind]}: {result.inserted} new, {result.updated} updated. Left out: {result.skipped.draft} draft, {result.skipped.void} void.
+          {result.kind === 'payments' && !!result.billed && ` ${result.billed} now on a bill in Zoho — no longer counted here.`}
           {result.creditsUnmatched > 0 && ` ${result.creditsUnmatched} credit note(s) wait for their bill to be uploaded.`}
           {result.errors.length > 0 && (
             <ul className="mt-2 list-disc pl-5 text-amber-800">{result.errors.slice(0, 20).map((e) => <li key={e}>{e}</li>)}</ul>
