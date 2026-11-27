@@ -21,6 +21,7 @@ import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { usePendingCouponAutoApply } from '@/hooks/usePendingCouponAutoApply';
 import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
@@ -219,6 +220,8 @@ function CartPageContent() {
     }
   };
   const { isAuthenticated } = useAuth();
+  // A code handed over by a QR landing page (e.g. the Hilux owners' card).
+  usePendingCouponAutoApply(cart, isAuthenticated, applyCoupon);
   const { formatPrice } = useCurrency();
   const offerLabel = useFestivalOfferLabel();
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
