@@ -12,6 +12,8 @@
  * - Multiple backend support (A/B testing, migration)
  */
 
+import { safeLocal } from './safeStorage';
+
 // ==================== Contact Repository ====================
 
 export interface ContactSubmission {
@@ -252,13 +254,13 @@ export class OfflineContactRepository implements ContactRepository {
 
   private getStoredMessages(): ContactMessage[] {
     if (typeof window === 'undefined') return [];
-    const data = localStorage.getItem(this.STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    const data = safeLocal.getJSON<unknown>(this.STORAGE_KEY, []);
+    return Array.isArray(data) ? (data as ContactMessage[]) : [];
   }
 
   private saveMessages(messages: ContactMessage[]) {
     if (typeof window === 'undefined') return;
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(messages));
+    safeLocal.setJSON(this.STORAGE_KEY, messages);
   }
 
   async submit(data: ContactSubmission) {

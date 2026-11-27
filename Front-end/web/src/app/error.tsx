@@ -15,6 +15,8 @@
 
 import { useEffect } from 'react';
 import { reportClientError } from '@/lib/reportClientError';
+import { useChunkErrorReload } from '@/hooks/useChunkErrorReload';
+import ReloadingNotice from '@/components/layout/ReloadingNotice';
 
 export default function GlobalError({
   error,
@@ -23,6 +25,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const reloading = useChunkErrorReload(error);
   useEffect(() => {
     // Log to Sentry
     if (typeof window !== 'undefined' && (window as any).Sentry) {
@@ -43,6 +46,8 @@ export default function GlobalError({
 
     console.error('[Global Error] Uncaught server error:', error);
   }, [error]);
+
+  if (reloading) return <ReloadingNotice />;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-obsidian-deep">

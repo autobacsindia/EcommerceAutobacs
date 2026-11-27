@@ -1,5 +1,7 @@
 'use client';
 
+import { safeLocal } from '@/lib/safeStorage';
+
 const SESSION_ID_KEY = 'autobacs_session_id';
 
 export class TokenManager {
@@ -83,10 +85,11 @@ export class TokenManager {
 
   getSessionId(): string {
     if (typeof window === 'undefined') return '';
-    let sessionId = localStorage.getItem(SESSION_ID_KEY);
+    let sessionId = safeLocal.get(SESSION_ID_KEY);
     if (!sessionId) {
       sessionId = this.generateSessionId();
-      localStorage.setItem(SESSION_ID_KEY, sessionId);
+      // Blocked storage: a fresh id per call is the best we can do — never throw.
+      safeLocal.set(SESSION_ID_KEY, sessionId);
     }
     return sessionId;
   }

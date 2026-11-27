@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import productService from '@/lib/services/productService';
@@ -45,27 +46,12 @@ const parsePriceValue = (value: string | null, defaultValue: number): number => 
 
 // Helper function to save filter preferences to localStorage
 const saveFilterPreferences = (preferences: any) => {
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem('productFilterPreferences', JSON.stringify(preferences));
-    } catch (e) {
-      console.error('Failed to save filter preferences', e);
-    }
-  }
+  safeLocal.setJSON('productFilterPreferences', preferences);
 };
 
 // Helper function to load filter preferences from localStorage
 const loadFilterPreferences = () => {
-  if (typeof window !== 'undefined') {
-    try {
-      const savedPreferences = localStorage.getItem('productFilterPreferences');
-      return savedPreferences ? JSON.parse(savedPreferences) : null;
-    } catch (e) {
-      console.error('Failed to load filter preferences', e);
-      return null;
-    }
-  }
-  return null;
+  return safeLocal.getJSON<any>('productFilterPreferences', null);
 };
 
 export default function ProductFilters() {
@@ -178,8 +164,8 @@ export default function ProductFilters() {
 
     const fetchCategories = async () => {
       // Try cache first (10-minute expiry)
-      const cached = localStorage.getItem(cacheKey);
-      const timestamp = localStorage.getItem(cacheTimestampKey);
+      const cached = safeLocal.get(cacheKey);
+      const timestamp = safeLocal.get(cacheTimestampKey);
       
       if (cached && timestamp) {
         const age = Date.now() - parseInt(timestamp);
@@ -199,12 +185,8 @@ export default function ProductFilters() {
         setLoadingCategories(true);
         const response: any = await apiClient.get('/categories', { signal: controller.signal });
         // Cache the response
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify(response.categories || []));
-          localStorage.setItem(cacheTimestampKey, Date.now().toString());
-        } catch (e) {
-          console.warn('Failed to cache categories:', e);
-        }
+        safeLocal.setJSON(cacheKey, response.categories || []);
+        safeLocal.set(cacheTimestampKey, Date.now().toString());
       } catch (err: any) {
         if (err.name === 'AbortError') return;
         // Silently fail on 429

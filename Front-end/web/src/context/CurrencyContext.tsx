@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { formatRupees } from '@/lib/formatRupees';
 
 type Currency = 'INR' | 'USD';
@@ -45,20 +46,19 @@ export function CurrencyProvider({ children }: CurrencyProviderProps) {
 
   // Load currency preference from localStorage on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedCurrency = localStorage.getItem('preferred_currency') as Currency;
-      if (savedCurrency === 'INR' || savedCurrency === 'USD') {
-        setCurrencyState(savedCurrency);
-      }
+    // safeLocal: in-app browsers (Instagram/Facebook) throw on merely reading
+    // localStorage, and this provider wraps every page — an unguarded read here
+    // crashed whole product pages.
+    const savedCurrency = safeLocal.get('preferred_currency');
+    if (savedCurrency === 'INR' || savedCurrency === 'USD') {
+      setCurrencyState(savedCurrency);
     }
   }, []);
 
   // Save currency preference to localStorage when it changes
   const setCurrency = (newCurrency: Currency) => {
     setCurrencyState(newCurrency);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('preferred_currency', newCurrency);
-    }
+    safeLocal.set('preferred_currency', newCurrency);
   };
 
   // Format price based on current currency

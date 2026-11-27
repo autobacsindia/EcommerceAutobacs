@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { productUrl } from '@/lib/types';
@@ -27,8 +28,8 @@ const RecentlyViewed = () => {
     setMounted(true);
     try {
       const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
-      const stored = localStorage.getItem(storageKey);
-      setProducts(stored ? JSON.parse(stored) : []);
+      const stored = safeLocal.getJSON<unknown>(storageKey, []);
+      setProducts(Array.isArray(stored) ? (stored as RecentProduct[]) : []);
     } catch (e) {
       console.error('Failed to load recently viewed products', e);
     }
@@ -36,7 +37,7 @@ const RecentlyViewed = () => {
 
   const clearHistory = () => {
     const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
-    localStorage.removeItem(storageKey);
+    safeLocal.remove(storageKey);
     setProducts([]);
     toast.success('Recently viewed history cleared');
   };

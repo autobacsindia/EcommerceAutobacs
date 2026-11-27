@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { useRouter } from 'next/navigation';
 import useIsMounted from '@/lib/hooks/useIsMounted';
 import apiClient from '@/lib/api';
@@ -47,8 +48,8 @@ export default function SearchSuggestions() {
   })();
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedHistory = localStorage.getItem(storageKey);
+    {
+      const savedHistory = safeLocal.get(storageKey);
       if (savedHistory) {
         try {
           setHistory(JSON.parse(savedHistory).slice(0, 10));
@@ -60,8 +61,8 @@ export default function SearchSuggestions() {
   }, [storageKey]);
 
   useEffect(() => {
-    if (history.length > 0 && typeof window !== 'undefined') {
-      localStorage.setItem(storageKey, JSON.stringify(history));
+    if (history.length > 0) {
+      safeLocal.setJSON(storageKey, history);
     }
   }, [history, storageKey]);
 
@@ -143,7 +144,7 @@ export default function SearchSuggestions() {
   };
 
   const handleHistoryItemClick = (term: string) => { setQuery(term); handleSearch(term); };
-  const clearHistory = () => { setHistory([]); if (typeof window !== 'undefined') localStorage.removeItem(storageKey); };
+  const clearHistory = () => { setHistory([]); safeLocal.remove(storageKey); };
   const removeFromHistory = (term: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setHistory(prev => prev.filter(i => i.term !== term));

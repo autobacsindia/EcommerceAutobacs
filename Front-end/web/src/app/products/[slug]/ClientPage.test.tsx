@@ -8,6 +8,7 @@ import { useWishlist } from '@/context/WishlistContext';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { blockStorage } from '@/test-utils/blockStorage';
 jest.mock('@/hooks/queries/useDeliveryEstimates', () => ({
   useDeliveryEstimates: () => ({ estimates: null, pending: false }),
 }));
@@ -141,6 +142,26 @@ describe('ClientPage', () => {
       renderPDP(<ClientPage slug="p1" />);
       await waitFor(() => expect(screen.getByTestId('gallery')).toHaveAttribute('data-zero-delivery', 'no'));
       expect(mockFeeIds.at(-1)).toEqual([]);
+    });
+  });
+
+  /* Regression (Website errors, 2026-11-27): Instagram/Facebook in-app browsers
+     throw on merely READING window.localStorage. The product page saves "recently
+     viewed" there; it must keep working (just not remember) instead of crashing. */
+  describe('storage blocked (in-app browsers)', () => {
+    let restore: () => void;
+    beforeEach(() => { restore = blockStorage(); });
+    afterEach(() => restore());
+
+    it('renders the product and does not throw', async () => {
+      expect(() => window.localStorage.getItem('x')).toThrow();
+      const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+      renderPDP(<ClientPage slug="p1" />);
+      expect(await screen.findByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add to cart/i })).toBeInTheDocument();
+      // The recently-viewed save ran and failed quietly — nothing was logged as a crash.
+      expect(errors.mock.calls.flat().join(' ')).not.toMatch(/localStorage|Access is denied/);
+      errors.mockRestore();
     });
   });
 
