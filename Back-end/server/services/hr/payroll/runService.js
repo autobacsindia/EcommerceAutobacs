@@ -35,6 +35,7 @@ import { monthAttendanceSummary, markMonthLocked, markMonthUnlocked } from './at
 import { computePayslip, daysInMonth, BLOCKING_WARNINGS, EARNING_ADJUSTMENTS } from './calculate.js';
 import { payrollRules } from './rules.js';
 import { withTx, isDuplicateKey } from './tx.js';
+import { mapLimit } from './concurrency.js';
 import { createPayouts, payslipNumber } from './payouts.js';
 import { notifyPayslipsReleased } from './notify.js';
 
@@ -86,15 +87,6 @@ async function roster(month) {
   if (rows.length >= ROSTER_MAX) throw fail(`More than ${ROSTER_MAX} employees — payroll needs batching first.`, 500);
   // An 'exited' profile without a last day has nothing to pay this month.
   return rows.filter((e) => !(e.status === 'exited' && !e.exitDate));
-}
-
-async function mapLimit(items, n, fn) {
-  const out = new Array(items.length);
-  let i = 0;
-  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
-    while (i < items.length) { const k = i; i += 1; out[k] = await fn(items[k]); }
-  }));
-  return out;
 }
 
 const sortKeys = (v) => {

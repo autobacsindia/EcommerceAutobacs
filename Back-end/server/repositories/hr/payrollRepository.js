@@ -75,7 +75,7 @@ const payrollRepository = {
   ).lean(),
 
   // ── Employee pay details for the payout (encrypted fields, read once) ──────
-  employeePayee: (employeeId) => EmployeeProfile.findById(employeeId)
+  employeePayees: (employeeIds) => EmployeeProfile.find({ _id: { $in: employeeIds } })
     .select('name bank.holderName bank.ifsc bank.accountLast4 +bank.accountEnc +bank.upiEnc').lean(),
 };
 
