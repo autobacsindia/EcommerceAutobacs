@@ -18,12 +18,14 @@
  * limiter (120–300 per window).
  */
 import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
 
 const API = process.env.PROBE_API || 'https://api.autobacsindia.com';
 const WEB = process.env.PROBE_WEB || 'https://www.autobacsindia.com';
 const SLUG = process.env.PROBE_SLUG || 'byd-sealion-7-aerokit';
 
-// A 10-slot rotation at 1 req/s → each target once every 10 seconds.
+// A 12-slot rotation at 1 req/s → each target once every 12 seconds.
 const TARGETS = [
   ['api:health', `${API}/health`],
   ['web:home', `${WEB}/`],
@@ -35,6 +37,10 @@ const TARGETS = [
   ['web:cart', `${WEB}/cart`],
   ['proxy:categories', `${WEB}/api/v1/categories`],
   ['proxy:product', `${WEB}/api/v1/products/slug/${SLUG}`],
+  // Rarely visited product pages: not prerendered, so the first visit after a
+  // storefront release renders from scratch. Shows the "first click is slow" cost.
+  ['web:pdp-cold1', `${WEB}/products/jeep-wrangler-metal-side-steps`],
+  ['web:pdp-cold2', `${WEB}/products/wheel-spacers-for-jeep-wrangler-jk-2007-2018`],
 ];
 
 const TIMEOUT_MS = 15000;
@@ -44,26 +50,44 @@ const arg = (name, dflt) => {
   return i >= 0 ? args[i + 1] : dflt;
 };
 
+/**
+ * One GET on a FRESH connection (agent: false). Node's fetch() reuses pooled
+ * keep-alive sockets; on a laptop those die silently (sleep, NAT, Wi-Fi) and
+ * every request to that host then queues behind the dead socket for ~15s —
+ * the first version of this probe "measured" outages the live site never had.
+ * A fresh connection per request is also what a new visitor actually gets.
+ */
+function get(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https:') ? https : http;
+    const req = lib.get(url, {
+      agent: false,
+      headers: { 'user-agent': 'autobacs-deploy-probe/2 (read-only)', 'cache-control': 'no-cache', connection: 'close' },
+      timeout: TIMEOUT_MS,
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }));
+      res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(Object.assign(new Error('timeout'), { name: 'TimeoutError' })));
+    req.on('error', reject);
+  });
+}
+
 async function probeOnce(name, url) {
   const t0 = performance.now();
   const rec = { ts: new Date().toISOString(), target: name };
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      redirect: 'manual',
-      headers: { 'user-agent': 'autobacs-deploy-probe/1 (read-only)', 'cache-control': 'no-cache' },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    const body = await res.text();
+    const res = await get(url);
+    const body = res.body;
     rec.status = res.status;
     rec.ms = Math.round(performance.now() - t0);
     rec.bytes = body.length;
     for (const h of ['x-railway-request-id', 'x-vercel-id', 'x-vercel-cache', 'x-cache', 'retry-after']) {
-      const v = res.headers.get(h);
+      const v = res.headers[h];
       if (v) rec[h] = v;
     }
-    // Which deploy served it: Next embeds its buildId in the HTML; the backend
-    // reports its uptime on /health (a reset means a new instance).
     // App Router HTML: Vercel deployment id rides on every asset as ?dpl=…
     // (present only with Skew Protection on), and the Next build id as "b":"…".
     const dpl = body.match(/dpl=(dpl_[A-Za-z0-9]+)/);
@@ -82,7 +106,7 @@ async function probeOnce(name, url) {
     if (res.status >= 400) rec.note = body.slice(0, 160).replace(/\s+/g, ' ');
   } catch (err) {
     rec.ms = Math.round(performance.now() - t0);
-    rec.error = err.name === 'TimeoutError' ? 'timeout' : `${err.name}: ${err.cause?.code || err.message}`;
+    rec.error = err.name === 'TimeoutError' ? 'timeout' : `${err.name}: ${err.code || err.message}`;
   }
   return rec;
 }
