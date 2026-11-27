@@ -211,6 +211,31 @@ describe('the Tasks page', () => {
     expect(replace).toHaveBeenLastCalledWith('/team/tasks', { scroll: false });
   });
 
+  // Regression: on a wide screen the board is `position: sticky`, which makes its
+  // own layer, so a window rendered inside it painted UNDER the panel's side menu
+  // and top bar (title and left column cut off). The windows render on <body>,
+  // carrying the theme classes their colours come from.
+  it('the task window renders on <body>, outside the sticky board', async () => {
+    serve();
+    const { rerender } = workspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open T-7: Call Bosch' }));
+    rerender(<QueryClientProvider client={new QueryClient()}><TasksWorkspace base="/team/tasks" canSeeTeam={false} /></QueryClientProvider>);
+    const panel = await screen.findByRole('dialog', { name: 'Task' });
+    const layer = panel.parentElement!;
+    expect(layer.parentElement).toBe(document.body);
+    expect(document.querySelector('.tk-edge')!.contains(panel)).toBe(false);
+    expect(layer).toHaveClass('panel-theme', 'tk-theme', 'fixed', 'inset-0', 'z-50');
+  });
+
+  it('the new-task form renders on <body> too', async () => {
+    serve({ list: [] });
+    workspace();
+    fireEvent.click((await screen.findAllByRole('button', { name: /New task/ })).at(-1)!);
+    const form = await screen.findByRole('dialog', { name: 'New task' });
+    expect(form.parentElement!.parentElement).toBe(document.body);
+    expect(form.parentElement).toHaveClass('panel-theme', 'tk-theme', 'z-50');
+  });
+
   it('says plainly when a list is empty, and offers to add one', async () => {
     serve({ list: [] });
     workspace();

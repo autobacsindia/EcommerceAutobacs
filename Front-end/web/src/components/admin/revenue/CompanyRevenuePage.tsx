@@ -195,7 +195,7 @@ function ZohoUpload() {
           accept=".csv,text/csv"
           aria-label="Zoho CSV file"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm"
+          className="min-w-0 max-w-full text-sm"
         />
         <button
           type="button"
