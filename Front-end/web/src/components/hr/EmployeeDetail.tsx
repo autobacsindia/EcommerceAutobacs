@@ -10,6 +10,7 @@ import { describeHrError } from '@/lib/hr/errors';
 import { dayLabel, halfDaysNumber } from '@/lib/hr/format';
 import type { Employee, EmployeeInput } from '@/lib/hr/types';
 import EmployeeForm from './EmployeeForm';
+import SalaryPanel from './SalaryPanel';
 import StatusChip from './StatusChip';
 import Initials from './Initials';
 import { STATUS_CHIP, teamLabel } from './EmployeesList';
@@ -159,6 +160,7 @@ export default function EmployeeDetail({ id }: { id: string }) {
             <OnboardingChecklist employee={e} />
             <LeaveBalances employeeId={e.id} />
           </div>
+          <div className="lg:col-span-2"><SalaryPanel employeeId={e.id} readOnly={e.status === 'exited'} /></div>
         </div>
       )}
     </div>

@@ -67,3 +67,12 @@ export function shiftMonth(month: string, delta: number): string {
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
   return d.toISOString().slice(0, 7);
 }
+
+/** Server day counts (0.5 steps) → "½ day", "1 day", "1½ days", "0 days". */
+export function daysLabel(days: number | null | undefined): string {
+  const n = Number(days) || 0;
+  const whole = Math.floor(n);
+  const half = n - whole >= 0.5;
+  const text = half ? (whole ? `${whole}½` : '½') : String(whole);
+  return `${text} ${n > 0 && n <= 1 ? 'day' : 'days'}`;
+}

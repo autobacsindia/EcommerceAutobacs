@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { MapPin, Plus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hrApi } from '@/lib/hr/api';
@@ -100,12 +101,13 @@ function Shifts() {
                 <span className="flex gap-1">{s.isDefault && <StatusChip tone="info">Default</StatusChip>}{!s.active && <StatusChip tone="muted">Off</StatusChip>}</span>
               </div>
               <p className="mt-1 text-gray-700">{s.start} – {s.end} · {s.graceMinutes} min grace</p>
-              <p className="text-gray-500">Weekly off: {s.weeklyOff.length ? s.weeklyOff.map((d) => WEEKDAYS[d]).join(', ') : 'none'} · {s.latesPerHalfDayLop} lates = ½ day cut</p>
+              <p className="text-gray-500">Weekly off: {s.weeklyOff.length ? s.weeklyOff.map((d) => WEEKDAYS[d]).join(', ') : 'none'}</p>
             </li>
           ))}
         </ul>
       )}
       <HrLoadMore hasMore={!!list.hasNextPage} loading={list.isFetchingNextPage} onClick={() => list.fetchNextPage()} />
+      <p className="mt-2 text-xs text-gray-500">Grace, half day, overtime and marks are set on <Link href="/hr/rules" className="font-semibold text-emerald-700 underline">Attendance rules</Link>.</p>
     </section>
   );
 }

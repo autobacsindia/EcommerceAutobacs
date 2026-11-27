@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CalendarCheck, CalendarDays, IndianRupee, MapPin, Users } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, CalendarDays, ClipboardList, Hourglass, IndianRupee, MapPin, Scale, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import PanelShell from '@/components/panel/PanelShell';
@@ -18,7 +18,10 @@ export const HR_NAV: readonly NavItem[] = [
   { href: '/hr', label: "Today's attendance", icon: CalendarCheck },
   { href: '/hr/employees', label: 'Employees', icon: Users },
   { href: '/hr/leave', label: 'Leave requests', icon: CalendarDays },
+  { href: '/hr/overtime', label: 'Overtime approvals', icon: Hourglass },
+  { href: '/hr/late-early', label: 'Late & early report', icon: ClipboardList },
   { href: '/hr/payroll', label: 'Payroll', icon: IndianRupee },
+  { href: '/hr/rules', label: 'Attendance rules', icon: Scale },
   { href: '/hr/settings', label: 'Work sites & settings', icon: MapPin },
 ];
 
