@@ -44,6 +44,9 @@ const payrollRepository = {
   findEmployeePayslip: (id, employeeId, { releasedOnly }) => Payslip.findOne({
     _id: id, employee: employeeId, ...(releasedOnly ? { releasedAt: { $type: 'date' } } : {}),
   }).select('-__v').lean(),
+  findEmployeePayslipByMonth: (month, employeeId, { releasedOnly }) => Payslip.findOne({
+    employee: employeeId, month, kind: 'monthly', ...(releasedOnly ? { releasedAt: { $type: 'date' } } : {}),
+  }).select('-__v').lean(),
   /** Newest month first; keyset (month, _id). */
   listEmployeePayslips: (employeeId, { releasedOnly, after, limit }) => Payslip.find({
     employee: employeeId,

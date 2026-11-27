@@ -35,7 +35,8 @@ import { monthAttendanceSummary, markMonthLocked, markMonthUnlocked } from './at
 import { computePayslip, daysInMonth, BLOCKING_WARNINGS, EARNING_ADJUSTMENTS } from './calculate.js';
 import { payrollRules } from './rules.js';
 import { withTx, isDuplicateKey } from './tx.js';
-import { createPayouts } from './payouts.js';
+import { createPayouts, payslipNumber } from './payouts.js';
+import { notifyPayslipsReleased } from './notify.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const ROSTER_MAX = 2000;
@@ -333,6 +334,8 @@ export async function approveRun(actor, month, { rev, fingerprint, req = null } 
     });
   });
   const payouts = await createPayouts(actor, month, { req });
+  // After commit: tell each employee their payslip is ready (idempotent per payslip).
+  await notifyPayslipsReleased(await payrollRepository.listRunPayslips(run._id));
   return { run: await getRun(month), payouts, replay: false };
 }
 
@@ -388,6 +391,7 @@ const shapeRun = (r) => ({
 
 export const shapePayslipRow = (p) => ({
   id: String(p._id),
+  number: payslipNumber(p),
   month: p.month,
   kind: p.kind,
   employee: String(p.employee),

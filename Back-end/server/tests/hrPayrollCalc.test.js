@@ -100,6 +100,17 @@ describe('punctuality bonus (₹500)', () => {
   test('not eligible → no line at all', () => {
     expect(lineOf(run({ structure: { punctualityBonusEligible: false } }), 'punctuality_bonus')).toBeUndefined();
   });
+  test('HR settings (HrSettings names, PR #658) move the mark limits: full ≤ 0, half ≤ 1', () => {
+    const tight = rules({ punctualityFullMaxMarks: 0, punctualityHalfMaxMarks: 1 });
+    expect(amt(run({ rules: tight, summary: { marks: 0 } }), 'punctuality_bonus')).toBe(R(500));
+    expect(amt(run({ rules: tight, summary: { marks: 1 } }), 'punctuality_bonus')).toBe(R(250));
+    expect(amt(run({ rules: tight, summary: { marks: 2 } }), 'punctuality_bonus')).toBe(0);
+  });
+  test('half an unapproved absence still loses the bonus', () => {
+    const r = run({ summary: { absentUnapproved: 0.5 } });
+    expect(amt(r, 'punctuality_bonus')).toBe(0);
+    expect(lineOf(r, 'punctuality_bonus').calc).toMatch(/none: ½ unapproved absence/);
+  });
   test('HR setting changes the amount; half of an odd amount rounds up', () => {
     expect(amt(run({ rules: rules({ punctualityBonusPaise: 50001 }), summary: { marks: 3 } }), 'punctuality_bonus')).toBe(25001);
   });

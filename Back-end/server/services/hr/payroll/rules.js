@@ -6,7 +6,7 @@
  * Fields read from HrSettings (added by the attendance-policy session or the
  * lead; until then the defaults below apply):
  *   marksPerHalfDayLop, overtimeMultiplier, punctualityBonusPaise,
- *   punctualityBonusFullMaxMarks, punctualityBonusHalfMaxMarks
+ *   punctualityFullMaxMarks, punctualityHalfMaxMarks (names as in HrSettings, PR #658)
  * and the statutory ones HrSettings already has (PF/ESI/PT, monthDayBasis).
  */
 export const PAYROLL_DEFAULTS = Object.freeze({
@@ -40,9 +40,9 @@ export function payrollRules(settings = {}) {
     esiGrossThresholdPaise: Math.round(num(settings.esiGrossThresholdPaise, 2100000)),
     ptSlabs,
     marksPerHalfDayLop: Math.round(num(settings.marksPerHalfDayLop, PAYROLL_DEFAULTS.marksPerHalfDayLop, { max: 31 })),
-    overtimeMultiplier: num(settings.overtimeMultiplier, PAYROLL_DEFAULTS.overtimeMultiplier, { min: 1, max: 3 }),
+    overtimeMultiplier: num(settings.overtimeMultiplier, PAYROLL_DEFAULTS.overtimeMultiplier, { min: 1, max: 5 }),
     punctualityBonusPaise: Math.round(num(settings.punctualityBonusPaise, PAYROLL_DEFAULTS.punctualityBonusPaise)),
-    punctualityBonusFullMaxMarks: Math.round(num(settings.punctualityBonusFullMaxMarks, PAYROLL_DEFAULTS.punctualityBonusFullMaxMarks)),
-    punctualityBonusHalfMaxMarks: Math.round(num(settings.punctualityBonusHalfMaxMarks, PAYROLL_DEFAULTS.punctualityBonusHalfMaxMarks)),
+    punctualityBonusFullMaxMarks: Math.round(num(settings.punctualityFullMaxMarks, PAYROLL_DEFAULTS.punctualityBonusFullMaxMarks)),
+    punctualityBonusHalfMaxMarks: Math.round(num(settings.punctualityHalfMaxMarks, PAYROLL_DEFAULTS.punctualityBonusHalfMaxMarks)),
   };
 }

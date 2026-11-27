@@ -61,6 +61,8 @@ const line = (code, label, kind, amountPaise, calc, basis = {}) => ({
 });
 
 const intOf = (v) => Math.max(0, Math.round(Number(v) || 0));
+// Absences may be ½ (an un-worked half of a half-leave day): kept as the number given.
+const daysOf = (v) => Math.max(0, Number(v) || 0);
 
 /**
  * @param {object} p
@@ -109,7 +111,7 @@ export function computePayslip({ month, structure, summary, employee = {}, rules
     const amt = ratio([proratable, lopHalf], [D2]);
     lines.push(line('lop', 'Loss of pay (absences + unpaid leave)', 'deduction', amt,
       `${dayText(fromHalfDays(lopHalf))} days × (${perDayText})`,
-      { lopDays: fromHalfDays(lopHalf), absentUnapproved: intOf(summary.absentUnapproved), perDayPaise, dayDivisor: D }));
+      { lopDays: fromHalfDays(lopHalf), absentUnapproved: daysOf(summary.absentUnapproved), perDayPaise, dayDivisor: D }));
   }
 
   const marks = intOf(summary.marks);
@@ -149,12 +151,12 @@ export function computePayslip({ month, structure, summary, employee = {}, rules
 
   // ── 6. Punctuality bonus ─────────────────────────────────────────────────
   if (structure.punctualityBonusEligible !== false && rules.punctualityBonusPaise > 0) {
-    const absent = intOf(summary.absentUnapproved);
+    const absent = daysOf(summary.absentUnapproved);
     const full = rules.punctualityBonusPaise;
     let amt;
     let why;
     let share;
-    if (absent > 0) { amt = 0; share = 'none'; why = `none: ${absent} unapproved absence${absent > 1 ? 's' : ''}`; }
+    if (absent > 0) { amt = 0; share = 'none'; why = `none: ${dayText(absent)} unapproved absence${absent > 1 ? 's' : ''}`; }
     else if (marks <= rules.punctualityBonusFullMaxMarks) { amt = full; share = 'full'; why = `full: ${marks} marks (0–${rules.punctualityBonusFullMaxMarks})`; }
     else if (marks <= rules.punctualityBonusHalfMaxMarks) { amt = ratio([full], [2]); share = 'half'; why = `half: ${marks} marks (${rules.punctualityBonusFullMaxMarks + 1}–${rules.punctualityBonusHalfMaxMarks})`; }
     else { amt = 0; share = 'none'; why = `none: ${marks} marks (${rules.punctualityBonusHalfMaxMarks + 1}+)`; }
@@ -245,7 +247,7 @@ export function computePayslip({ month, structure, summary, employee = {}, rules
       lateCount: intOf(summary.lateCount),
       earlyCount: intOf(summary.earlyCount),
       marksLopDays,
-      absentUnapproved: intOf(summary.absentUnapproved),
+      absentUnapproved: daysOf(summary.absentUnapproved),
       notEmployedDays: fromHalfDays(notEmployedHalf),
       shiftMinutes,
     },

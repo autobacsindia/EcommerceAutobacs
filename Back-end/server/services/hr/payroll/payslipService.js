@@ -12,6 +12,7 @@ import AppError from '../../../utils/AppError.js';
 import payrollRepository from '../../../repositories/hr/payrollRepository.js';
 import { companyInfo } from '../../../config/company.js';
 import { loadLogo, pdfFonts } from '../../invoiceService.js';
+import { MONTH_RE } from '../../../config/hr.js';
 import { shapePayslipRow } from './runService.js';
 import { payslipNumber } from './payouts.js';
 
@@ -20,7 +21,6 @@ const notFound = () => fail('Payslip not found', 404);
 
 export const shapePayslip = (p) => ({
   ...shapePayslipRow(p),
-  number: payslipNumber(p),
   snapshot: { ...p.snapshot, salaryStructure: p.snapshot?.salaryStructure ? String(p.snapshot.salaryStructure) : null },
   attendance: p.attendance,
   lines: (p.lines || []).map(({ code, label, kind, amountPaise, calc, basis }) => ({ code, label, kind, amountPaise, calc, basis })),
@@ -42,9 +42,13 @@ export async function listPayslips(employeeId, { releasedOnly, cursor, limit } =
   return { items, nextCursor: rows.length > lim ? `${last.month}|${last._id}` : null };
 }
 
+/** By id, or by month ('YYYY-MM' → that month's monthly payslip, as the ADR's /:month/pdf). */
 export async function getPayslip(employeeId, id, { releasedOnly }) {
-  if (!mongoose.isValidObjectId(id)) throw notFound();
-  const p = await payrollRepository.findEmployeePayslip(id, employeeId, { releasedOnly });
+  const byMonth = MONTH_RE.test(String(id));
+  if (!byMonth && !mongoose.isValidObjectId(id)) throw notFound();
+  const p = byMonth
+    ? await payrollRepository.findEmployeePayslipByMonth(String(id), employeeId, { releasedOnly })
+    : await payrollRepository.findEmployeePayslip(id, employeeId, { releasedOnly });
   if (!p) throw notFound();
   return p;
 }

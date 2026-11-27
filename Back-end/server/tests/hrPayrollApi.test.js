@@ -61,6 +61,9 @@ const { default: PayrollAdjustment } = await import('../models/hr/PayrollAdjustm
 const { default: SalaryStructure } = await import('../models/hr/SalaryStructure.js');
 const { default: PaymentRequest } = await import('../models/PaymentRequest.js');
 const { loadHrModels } = await import('../scripts/create-hr-indexes.js');
+const { setNotifyLoader } = await import('../services/hr/payroll/notify.js');
+const pushed = [];
+setNotifyLoader(async () => ({ notifyPayslipReady: async (x) => { pushed.push(x); } }));
 
 const PW = 'SecurePass123!';
 const MONTH = '2025-10'; // a past month whatever the clock says (31 days)
@@ -114,6 +117,7 @@ describe('HR payroll API', () => {
     const cols = await mongoose.connection.db.collections();
     await Promise.all(cols.map((c) => c.deleteMany({})));
     summaries.clear();
+    pushed.length = 0;
     admin = await makeUser('Admin', 'admin');
     admin2 = await makeUser('Second Admin', 'admin');
     hr = await makeUser('Hema HR', 'staff', team('hr'));
@@ -343,8 +347,13 @@ describe('HR payroll API', () => {
       expect((await alice.agent.get(`/api/v1/hr/me/payslips/${aliceSlip}`)).status).toBe(404);
       expect((await alice.agent.get(`/api/v1/hr/employees/${aliceP.id}/payslips`)).body.items).toEqual([]);
 
+      expect(pushed).toEqual([]);
       expect((await admin.agent.post(`/api/v1/hr/payroll/${MONTH}/approve`).send({ rev: locked.rev })).status).toBe(200);
+      // One "payslip ready" push per payslip, after approval.
+      expect(pushed.map((x) => x.payslipId).sort()).toEqual([aliceSlip, bobSlip].sort());
+      expect(pushed.find((x) => x.payslipId === aliceSlip)).toEqual({ employeeId: aliceP.id, month: MONTH, payslipId: aliceSlip });
       const list = await alice.agent.get('/api/v1/hr/me/payslips');
+      expect(list.body.items[0].number).toBe(`PS-${MONTH}-${aliceP.employeeCode}`);
       expect(list.body.items.map((i) => i.id)).toEqual([aliceSlip]);
       expect(list.headers['cache-control']).toMatch(/no-store/);
       const one = await alice.agent.get(`/api/v1/hr/me/payslips/${aliceSlip}`);
@@ -357,6 +366,9 @@ describe('HR payroll API', () => {
       expect(pdf.status).toBe(200);
       expect(pdf.headers['content-type']).toMatch(/application\/pdf/);
       expect(pdf.body.slice(0, 4).toString()).toBe('%PDF');
+      // The ADR's by-month address works too.
+      expect((await alice.agent.get(`/api/v1/hr/me/payslips/${MONTH}/pdf`)).status).toBe(200);
+      expect((await alice.agent.get('/api/v1/hr/me/payslips/2025-09/pdf')).status).toBe(404);
 
       // Someone else's payslip, by id, from every door: 404.
       expect((await alice.agent.get(`/api/v1/hr/me/payslips/${bobSlip}`)).status).toBe(404);
