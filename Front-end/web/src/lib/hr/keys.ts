@@ -23,6 +23,12 @@ export const hrKeys = {
   leaveBadge: () => [...hrKeys.leave(), 'badge'] as const,
   payroll: () => [...hrKeys.all, 'payroll'] as const,
   payrollMonth: (month: string) => [...hrKeys.payroll(), month] as const,
+  payslip: (id: string) => [...hrKeys.payroll(), 'payslip', id] as const,
+  salary: (employeeId: string) => [...hrKeys.employees(), 'salary', employeeId] as const,
+  overtime: () => [...hrKeys.all, 'overtime'] as const,
+  /** Paged list of employees for the report (useInfiniteQuery). */
+  reportPeople: (month: string) => [...hrKeys.all, 'report', month, 'people'] as const,
+  employeeMonth: (id: string, month: string) => [...hrKeys.employees(), 'month', id, month] as const,
   sites: () => [...hrKeys.all, 'sites'] as const,
   shifts: () => [...hrKeys.all, 'shifts'] as const,
   settings: () => [...hrKeys.all, 'settings'] as const,

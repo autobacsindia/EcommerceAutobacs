@@ -40,6 +40,8 @@ it('renders the leave page inside the panel with the waiting badge, without cras
   expect(await screen.findByRole('link', { name: 'Leave requests (1)' })).toHaveAttribute('aria-current', 'page');
 });
 
-it('lists the five HR screens', () => {
-  expect(HR_NAV.map((n) => n.href)).toEqual(['/hr', '/hr/employees', '/hr/leave', '/hr/payroll', '/hr/settings']);
+it('lists the HR screens', () => {
+  expect(HR_NAV.map((n) => n.href)).toEqual([
+    '/hr', '/hr/employees', '/hr/leave', '/hr/overtime', '/hr/late-early', '/hr/payroll', '/hr/rules', '/hr/settings',
+  ]);
 });

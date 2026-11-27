@@ -1,24 +1,23 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Lock, Send, ShieldCheck, RefreshCw } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { hrApi } from '@/lib/hr/api';
+import { useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, FileDown, Lock, RefreshCw, RotateCcw, Send, ShieldCheck } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { hrApi, payslipPdfUrl } from '@/lib/hr/api';
 import { hrKeys } from '@/lib/hr/keys';
 import { describeHrError } from '@/lib/hr/errors';
 import { currentMonthIST, monthLabel, paise, shiftMonth } from '@/lib/hr/format';
-import type { PayrollMonth as PayrollMonthData, PayrollRun, PayslipRow } from '@/lib/hr/types';
+import type { PayrollRun, PayslipLine, PayslipRow } from '@/lib/hr/types';
 import StatusChip from './StatusChip';
 import { PersonCell } from './Initials';
-import { useHrList } from './useHrList';
 import {
-  HrEmpty, HrErrorState, HrLoadMore, HrLoading, HrPageHeader, hrBtnGhost, hrBtnPrimary, hrCard, hrField, hrInput, hrTable, hrTd, hrTh,
+  HrEmpty, HrErrorState, HrLoading, HrPageHeader, hrBtnGhost, hrBtnPrimary, hrCard, hrField, hrTable, hrTd, hrTh,
 } from './HrStates';
 
 const STEPS = [
-  { key: 'draft', title: '1. Draft', note: 'Numbers update as attendance changes' },
+  { key: 'draft', title: '1. Draft', note: 'HR checks it. Recalculate after attendance changes' },
   { key: 'locked', title: '2. Locked', note: 'Frozen and sent to admin for approval' },
-  { key: 'approved', title: '3. Approved', note: 'Admin approved, then payouts' },
+  { key: 'approved', title: '3. Approved', note: 'Payslips released, salary payments raised' },
 ] as const;
 
 export function PayrollSteps({ status }: { status: PayrollRun['status'] | null }) {
@@ -42,71 +41,103 @@ export function PayrollSteps({ status }: { status: PayrollRun['status'] | null }
   );
 }
 
-/**
- * The step buttons. Each one waits for the server; the run shown afterwards is
- * the server's. Lock and approve need a second click to confirm.
- */
-function RunActions({ month, run, isAdmin }: { month: string; run: PayrollRun | null; isAdmin: boolean }) {
-  const qc = useQueryClient();
-  const [confirm, setConfirm] = useState<null | 'lock' | 'approve'>(null);
-  const [unlocking, setUnlocking] = useState(false);
+/** A reason box (unlock / re-open): the reason is logged with the action. */
+function ReasonForm({ id, label, busy, cta, onSubmit, onBack, onInvalid }: {
+  id: string; label: string; busy: boolean; cta: string; onSubmit: (reason: string) => void; onBack: () => void; onInvalid: (m: string) => void;
+}) {
   const [reason, setReason] = useState('');
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(e) => { e.preventDefault(); if (reason.trim().length < 3) { onInvalid('Say why (it is logged).'); return; } onSubmit(reason.trim()); }}
+    >
+      <label className="sr-only" htmlFor={id}>{label}</label>
+      <input id={id} className={`${hrField} w-64`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={`${label} (logged)`} disabled={busy} />
+      <button type="submit" className={hrBtnPrimary} disabled={busy}>{busy ? 'Saving…' : cta}</button>
+      <button type="button" className={hrBtnGhost} disabled={busy} onClick={onBack}>Back</button>
+    </form>
+  );
+}
+
+/**
+ * The step buttons. Each one waits for the server and the screen then shows the
+ * server's run. Lock and approve need a second click. Approve, payouts and
+ * re-open are shown to admins only; the server refuses them for anyone else.
+ */
+function RunActions({ month, run, isAdmin, monthEnded }: { month: string; run: PayrollRun | null; isAdmin: boolean; monthEnded: boolean }) {
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<null | 'lock' | 'approve' | 'unlock' | 'reopen'>(null);
   const [error, setError] = useState<string | null>(null);
   const act = useMutation({
     mutationFn: (fn: () => Promise<unknown>) => fn(),
-    onSuccess: () => {
-      setError(null); setConfirm(null); setUnlocking(false); setReason('');
-      qc.invalidateQueries({ queryKey: hrKeys.payrollMonth(month) });
-    },
-    onError: (err) => {
-      setError(describeHrError(err).message);
-      qc.invalidateQueries({ queryKey: hrKeys.payrollMonth(month) });
-    },
+    onSuccess: () => { setError(null); setMode(null); qc.invalidateQueries({ queryKey: hrKeys.payrollMonth(month) }); },
+    onError: (err) => { setError(describeHrError(err).message); qc.invalidateQueries({ queryKey: hrKeys.payrollMonth(month) }); },
   });
   const busy = act.isPending;
-  const label = monthLabel(month).split(' ')[0];
+  const name = monthLabel(month).split(' ')[0];
+  const back = () => { setMode(null); setError(null); };
 
-  let body: React.ReactNode = null;
+  let body: ReactNode = null;
   if (!run) {
-    body = <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => act.mutate(() => hrApi.preparePayroll(month))}>{busy ? 'Preparing…' : `Prepare ${label}`}</button>;
+    body = monthEnded
+      ? <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => act.mutate(() => hrApi.preparePayroll(month))}>{busy ? 'Preparing…' : `Prepare ${name}`}</button>
+      : <StatusChip tone="muted">Payroll runs after the month ends</StatusChip>;
   } else if (run.status === 'draft') {
-    body = confirm === 'lock' ? (
+    body = mode === 'lock' ? (
       <>
-        <span className="text-sm text-gray-700">Lock {label} and send it to admin? Numbers stop changing.</span>
+        <span className="text-sm text-gray-700">Lock {name} and send it to admin? Numbers stop changing.</span>
         <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => act.mutate(() => hrApi.lockPayroll(month, run.rev))}>{busy ? 'Locking…' : 'Yes, lock and send'}</button>
-        <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => setConfirm(null)}>Not yet</button>
+        <button type="button" className={hrBtnGhost} disabled={busy} onClick={back}>Not yet</button>
       </>
     ) : (
       <>
-        <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => act.mutate(() => hrApi.recomputePayroll(month, run.rev))}><RefreshCw className="h-4 w-4" aria-hidden="true" /> Recalculate</button>
-        <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => setConfirm('lock')}><Lock className="h-4 w-4" aria-hidden="true" /> Check and lock {label}</button>
+        <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => act.mutate(() => hrApi.recomputePayroll(month, run.rev))}>
+          <RefreshCw className="h-4 w-4" aria-hidden="true" /> {busy ? 'Recalculating…' : 'Recalculate'}
+        </button>
+        <button type="button" className={hrBtnPrimary} disabled={busy || run.blockedCount > 0 || !run.employeeCount} onClick={() => setMode('lock')}>
+          <Lock className="h-4 w-4" aria-hidden="true" /> Check and lock {name}
+        </button>
       </>
     );
   } else if (run.status === 'locked') {
-    body = isAdmin && confirm === 'approve' ? (
+    if (mode === 'approve' && isAdmin) {
+      body = (
+        <>
+          <span className="text-sm text-gray-700">Approve {name} payroll, take-home {paise(run.totals.netPaise)}? Payslips are released and salary payments raised.</span>
+          <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => act.mutate(() => hrApi.approvePayroll(month, run.rev, run.fingerprint))}>{busy ? 'Approving…' : 'Yes, approve'}</button>
+          <button type="button" className={hrBtnGhost} disabled={busy} onClick={back}>Not yet</button>
+        </>
+      );
+    } else if (mode === 'unlock') {
+      body = <ReasonForm id="unlock-reason" label="Why unlock?" cta="Unlock" busy={busy} onBack={back} onInvalid={setError} onSubmit={(r) => act.mutate(() => hrApi.unlockPayroll(month, run.rev, r))} />;
+    } else {
+      body = (
+        <>
+          <StatusChip tone="info">Sent to admin for approval</StatusChip>
+          <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => setMode('unlock')}>Unlock</button>
+          {isAdmin && <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => setMode('approve')}><ShieldCheck className="h-4 w-4" aria-hidden="true" /> Approve</button>}
+        </>
+      );
+    }
+  } else if (mode === 'reopen' && isAdmin) {
+    body = <ReasonForm id="reopen-reason" label="Why re-open?" cta="Re-open" busy={busy} onBack={back} onInvalid={setError} onSubmit={(r) => act.mutate(() => hrApi.reopenPayroll(month, run.rev, r))} />;
+  } else {
+    const missing = run.payoutsCount < run.employeeCount;
+    body = (
       <>
-        <span className="text-sm text-gray-700">Approve {label} payroll of {paise(run.totals.netPaise)}?</span>
-        <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => act.mutate(() => hrApi.approvePayroll(month, run.rev, run.inputsFingerprint || ''))}>{busy ? 'Approving…' : 'Yes, approve'}</button>
-        <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => setConfirm(null)}>Not yet</button>
-      </>
-    ) : unlocking ? (
-      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (reason.trim().length < 3) { setError('Say why it is being unlocked.'); return; } act.mutate(() => hrApi.unlockPayroll(month, run.rev, reason.trim())); }}>
-        <label className="sr-only" htmlFor="unlock-reason">Reason for unlocking</label>
-        <input id="unlock-reason" className={`${hrField} w-64`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why unlock? (logged)" disabled={busy} />
-        <button type="submit" className={hrBtnPrimary} disabled={busy}>{busy ? 'Unlocking…' : 'Unlock'}</button>
-        <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => setUnlocking(false)}>Back</button>
-      </form>
-    ) : (
-      <>
-        <StatusChip tone="info">Sent to admin for approval</StatusChip>
-        <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => setUnlocking(true)}>Unlock</button>
-        {isAdmin && <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => setConfirm('approve')}><ShieldCheck className="h-4 w-4" aria-hidden="true" /> Approve</button>}
+        <StatusChip tone={missing ? 'warn' : 'ok'}>
+          {missing ? `Approved · ${run.payoutsCount} of ${run.employeeCount} salary payments raised` : 'Approved · salary payments are in Payments'}
+        </StatusChip>
+        {isAdmin && missing && (
+          <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => act.mutate(() => hrApi.createPayouts(month))}>
+            <Send className="h-4 w-4" aria-hidden="true" /> {busy ? 'Sending…' : 'Raise the missing payments'}
+          </button>
+        )}
+        {isAdmin && run.payoutsCount === 0 && (
+          <button type="button" className={hrBtnGhost} disabled={busy} onClick={() => setMode('reopen')}><RotateCcw className="h-4 w-4" aria-hidden="true" /> Re-open</button>
+        )}
       </>
     );
-  } else if (run.payoutsCreatedAt) {
-    body = <StatusChip tone="ok">Approved · payouts are in Payments</StatusChip>;
-  } else {
-    body = <button type="button" className={hrBtnPrimary} disabled={busy} onClick={() => act.mutate(() => hrApi.createPayouts(month))}><Send className="h-4 w-4" aria-hidden="true" /> {busy ? 'Sending…' : 'Send payouts to Payments'}</button>;
   }
 
   return (
@@ -117,15 +148,93 @@ function RunActions({ month, run, isAdmin }: { month: string; run: PayrollRun | 
   );
 }
 
+const KIND_TITLE: Record<PayslipLine['kind'], string> = { earning: 'Earnings', deduction: 'Deductions', employer: 'Paid by the company (not in take-home)' };
+
+/** The lines of one payslip, each with the server's working ("4 marks → ½ day LOP"). */
+export function PayslipExplain({ row }: { row: PayslipRow }) {
+  const q = useQuery({ queryKey: hrKeys.payslip(row.id), queryFn: () => hrApi.payslip(row.employee, row.id), retry: false });
+  if (q.isPending) return <HrLoading label="Loading payslip…" />;
+  if (q.isError) return <HrErrorState error={q.error} onRetry={() => q.refetch()} />;
+  const p = q.data.payslip;
+  const groups = (['earning', 'deduction', 'employer'] as const).map((k) => [k, p.lines.filter((l) => l.kind === k)] as const).filter(([, ls]) => ls.length);
+  return (
+    <div className="space-y-3 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-gray-900">Payslip {p.number}</p>
+        <a href={payslipPdfUrl(row.employee, row.id)} className={hrBtnGhost} target="_blank" rel="noopener noreferrer">
+          <FileDown className="h-4 w-4" aria-hidden="true" /> Payslip PDF
+        </a>
+      </div>
+      {groups.map(([kind, lines]) => (
+        <div key={kind}>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{KIND_TITLE[kind]}</p>
+          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+            {lines.map((l) => (
+              <li key={l.code} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+                <span className="min-w-0">
+                  <span className="block font-medium text-gray-900">{l.label}</span>
+                  {l.calc && <span className="block text-xs text-gray-600">{l.calc}</span>}
+                </span>
+                <span className={`shrink-0 tabular-nums ${kind === 'deduction' ? 'text-red-700' : 'text-gray-900'}`}>{kind === 'deduction' ? '− ' : ''}{paise(l.amountPaise)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <p className="flex justify-between border-t border-gray-200 pt-2 text-sm font-bold text-gray-900"><span>Take-home</span><span className="tabular-nums">{paise(p.netPaise)}</span></p>
+    </div>
+  );
+}
+
+function PayslipTable({ rows }: { rows: PayslipRow[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <div className={`${hrCard} overflow-x-auto`}>
+      <table className={hrTable}>
+        <thead>
+          <tr>
+            <th className={hrTh}>Employee</th><th className={`${hrTh} text-right`}>Gross</th><th className={`${hrTh} text-right`}>Deductions</th>
+            <th className={`${hrTh} text-right`}>Take-home</th><th className={hrTh}>Check</th><th className={hrTh}><span className="sr-only">Details</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => {
+            const isOpen = open === p.id;
+            return [
+              <tr key={p.id}>
+                <td className={hrTd}><PersonCell name={p.name} sub={p.employeeCode} /></td>
+                <td className={`${hrTd} text-right tabular-nums`}>{paise(p.grossPaise)}</td>
+                <td className={`${hrTd} text-right tabular-nums`}>{paise(p.deductionsPaise)}</td>
+                <td className={`${hrTd} text-right font-semibold tabular-nums`}>{paise(p.netPaise)}</td>
+                <td className={hrTd}>{p.warnings.length ? <StatusChip tone="warn">{p.warnings.join(' · ')}</StatusChip> : <StatusChip tone="ok">OK</StatusChip>}</td>
+                <td className={hrTd}>
+                  <button type="button" className={hrBtnGhost} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : p.id)}>
+                    {isOpen ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />} Explain<span className="sr-only"> {p.name}</span>
+                  </button>
+                </td>
+              </tr>,
+              isOpen && (
+                <tr key={`${p.id}-x`}><td colSpan={6} className="border-b border-gray-100 bg-gray-50"><PayslipExplain row={p} /></td></tr>
+              ),
+            ];
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /**
- * `isAdmin` comes from the server layout's session check (not the client auth
- * context, which added ~85 kB to this page). It only decides whether the Approve
- * button shows; the API refuses approval from anyone but admin regardless.
+ * `isAdmin` comes from the server layout's session check. It only decides
+ * whether admin buttons show; the API refuses them for anyone else regardless.
+ * Every rupee here is a server figure; nothing is added up in the browser.
  */
 export default function PayrollMonth({ isAdmin = false }: { isAdmin?: boolean }) {
-  const [month, setMonth] = useState(() => currentMonthIST());
-  const list = useHrList<PayslipRow, PayrollMonthData>(hrKeys.payrollMonth(month), (cursor) => hrApi.payrollMonth(month, cursor));
-  const run = list.first?.run ?? null;
+  // Payroll runs for a month that has ended, so open on last month.
+  const [month, setMonth] = useState(() => shiftMonth(currentMonthIST(), -1));
+  const q = useQuery({ queryKey: hrKeys.payrollMonth(month), queryFn: () => hrApi.payrollRun(month), retry: false });
+  const run = q.data ?? null;
+  const monthEnded = month < currentMonthIST();
 
   return (
     <div className="max-w-6xl">
@@ -139,12 +248,20 @@ export default function PayrollMonth({ isAdmin = false }: { isAdmin?: boolean })
         )}
       />
 
-      {list.isError ? <HrErrorState error={list.error} onRetry={() => list.refetch()} /> : list.isPending ? <HrLoading /> : (
+      {q.isError ? <HrErrorState error={q.error} onRetry={() => q.refetch()} /> : q.isPending ? <HrLoading /> : (
         <>
           <PayrollSteps status={run?.status ?? null} />
-          <div className="mb-4 flex justify-end"><RunActions month={month} run={run} isAdmin={isAdmin} /></div>
-          {run?.changedAfterLock && (
-            <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Attendance or leave changed after this month was locked. The difference is paid as arrears next month.</p>
+          <div className="mb-4 flex justify-end"><RunActions key={`${month}:${run?.rev ?? 'none'}`} month={month} run={run} isAdmin={isAdmin} monthEnded={monthEnded} /></div>
+          {run && run.blockedCount > 0 && (
+            <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              {run.blockedCount} payslip(s) have deductions above earnings. Fix the adjustment, then recalculate. It cannot be locked until then.
+            </p>
+          )}
+          {run && run.skipped.length > 0 && (
+            <div role="status" className="mb-3 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
+              <p className="font-semibold">Left out of this month</p>
+              <ul className="mt-1 list-disc pl-5">{run.skipped.map((s) => <li key={s.employee}>{s.name}: {s.reason}</li>)}</ul>
+            </div>
           )}
           {run && (
             <dl className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -162,37 +279,17 @@ export default function PayrollMonth({ isAdmin = false }: { isAdmin?: boolean })
             </dl>
           )}
           {!run ? (
-            <HrEmpty title={`${monthLabel(month)} isn't prepared yet`}>Prepare it to see each person&rsquo;s pay. Nothing is paid until admin approves.</HrEmpty>
-          ) : !list.rows.length ? (
-            <HrEmpty title="No payslips in this run" />
+            <HrEmpty title={`${monthLabel(month)} isn't prepared yet`}>
+              {monthEnded ? <>Prepare it to see each person&rsquo;s pay. Nothing is paid until admin approves.</> : 'Payroll can be prepared once this month is over.'}
+            </HrEmpty>
+          ) : !run.payslips.length ? (
+            <HrEmpty title="No payslips in this run">Add a salary for each employee, then recalculate.</HrEmpty>
           ) : (
-            <div className={`${hrCard} overflow-x-auto`}>
-              <table className={hrTable}>
-                <thead>
-                  <tr>
-                    <th className={hrTh}>Employee</th><th className={hrTh}>Paid days</th><th className={`${hrTh} text-right`}>Gross</th>
-                    <th className={`${hrTh} text-right`}>Deductions</th><th className={`${hrTh} text-right`}>Take-home</th><th className={hrTh}>Check</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.rows.map((p) => (
-                    <tr key={p.id}>
-                      <td className={hrTd}><PersonCell name={p.snapshot.name} sub={p.snapshot.employeeCode} /></td>
-                      <td className={hrTd}>{p.attendance.paidDays} / {p.attendance.daysInMonth}</td>
-                      <td className={`${hrTd} text-right tabular-nums`}>{paise(p.grossPaise)}</td>
-                      <td className={`${hrTd} text-right tabular-nums`}>{paise(p.deductionsPaise)}</td>
-                      <td className={`${hrTd} text-right font-semibold tabular-nums`}>{paise(p.netPaise)}</td>
-                      <td className={hrTd}>{p.notes?.length ? <StatusChip tone="warn">{p.notes.join(' · ')}</StatusChip> : <StatusChip tone="ok">OK</StatusChip>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <HrLoadMore hasMore={!!list.hasNextPage} loading={list.isFetchingNextPage} onClick={() => list.fetchNextPage()} />
-            </div>
+            <PayslipTable rows={run.payslips} />
           )}
         </>
       )}
-      <p className="mt-3 text-xs text-gray-500">The server works out every number. HR can add a one-off bonus or deduction with a reason; each change is logged.</p>
+      <p className="mt-3 text-xs text-gray-500">The server works out every number. Open &ldquo;Explain&rdquo; to see how each line was worked out.</p>
     </div>
   );
 }

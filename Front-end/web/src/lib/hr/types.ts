@@ -94,8 +94,21 @@ export type HrSettings = {
   payday: number;
   includeIncentives: boolean;
   onboardingItems: { key: string; label: string }[];
+  /** Month rules (attendance policy, 2026-11-26). Every N marks = ½ day cut; 0 = never. */
+  marksPerHalfDayLop: number;
+  /** Approved overtime is paid at this × the hourly rate (payroll works the amount out). */
+  overtimeMultiplier: number;
+  punctualityBonusPaise: number;
+  /** Full bonus at or below this many marks… */
+  punctualityFullMaxMarks: number;
+  /** …half bonus at or below this many; none above. */
+  punctualityHalfMaxMarks: number;
   rev: number;
 };
+
+/** The month-level policy rules HR edits on the Attendance rules page. */
+export type PolicySettingsInput = Partial<Pick<HrSettings,
+  'marksPerHalfDayLop' | 'overtimeMultiplier' | 'punctualityBonusPaise' | 'punctualityFullMaxMarks' | 'punctualityHalfMaxMarks'>>;
 
 /** The settings HR edits from the panel (the statutory rates stay with the owner/CA). */
 export type HrSettingsInput = Partial<Pick<HrSettings,
@@ -116,6 +129,13 @@ export type AttendanceDay = {
   overtimeMinutes: number;
   autoClosed: boolean;
   needsReview: boolean;
+  breakMinutes?: number;
+  earlyMinutes?: number;
+  isEarly?: boolean;
+  lateMark?: boolean;
+  earlyMark?: boolean;
+  overtimeApprovedMinutes?: number;
+  overtimeStatus?: 'none' | 'pending' | 'approved' | 'rejected';
 };
 
 export type TodayRow = {
@@ -136,6 +156,16 @@ export type Shift = {
   start: string;
   end: string;
   graceMinutes: number;
+  /** Leaving earlier than end − this = 1 mark. */
+  earlyGraceMinutes?: number;
+  /** Worked less than this = absent. */
+  absentBelowMinutes?: number;
+  /** Worked less than this = half day. */
+  halfDayMinMinutes?: number;
+  fullDayMinutes?: number;
+  /** Worked minutes beyond this are overtime (paid only once approved). */
+  overtimeAfterMinutes?: number;
+  /** Superseded by HrSettings.marksPerHalfDayLop; not read by the server any more. */
   latesPerHalfDayLop: number;
   weeklyOff: number[];
   isDefault: boolean;
@@ -181,42 +211,127 @@ export type LeaveBalance = {
   available: number;
 };
 
-// ── Payroll (not built yet: shapes follow the PayrollRun / Payslip models) ──
+// ── Overtime approvals (hr-attendance-policy, PR #658) ───────────────────
+export type OvertimeItem = {
+  id: string;
+  employee: { id: string; name: string; employeeCode: string; team: string; designation: string };
+  day: AttendanceDay;
+};
+export type OvertimeDecision = 'approve' | 'reject';
+
+/** GET /hr/employees/:id/attendance?month — the counts the employee is paid on (server-computed). */
+export type MonthSummary = {
+  daysInMonth: number;
+  presentDays: number;
+  halfDays: number;
+  absentDays: number;
+  leaveDays: number;
+  lateCount?: number;
+  earlyCount?: number;
+  marks?: number;
+  marksPerHalfDayLop?: number;
+  marksLopDays?: number;
+  otApprovedMinutes?: number;
+  otPendingMinutes?: number;
+  unresolvedDays?: number;
+};
+export type EmployeeMonth = { month: string; days: AttendanceDay[]; summary: MonthSummary };
+
+// ── Payroll (hr-payroll, branch claude/hr-payroll-47d2ad) ────────────────────
 export type PayrollRunStatus = 'draft' | 'locked' | 'approved';
 
-export type PayrollRun = {
-  month: string;
-  status: PayrollRunStatus;
-  employeeCount: number;
-  totals: {
-    grossPaise: number;
-    deductionsPaise: number;
-    netPaise: number;
-    employeePfPaise?: number;
-    ptPaise?: number;
-  };
-  inputsFingerprint?: string;
-  lockedAt: string | null;
-  approvedAt: string | null;
-  payoutsCreatedAt: string | null;
-  /** Server-detected: attendance or leave changed after lock. */
-  changedAfterLock?: boolean;
-  rev: number;
-};
-
+/** One row of the run's payslip list (headcount-bounded, no paging). */
 export type PayslipRow = {
   id: string;
+  month: string;
+  kind?: string;
   employee: string;
-  snapshot: { name: string; employeeCode: string; team?: string };
-  attendance: { daysInMonth: number; paidDays: number; lateMarks?: number };
+  name: string;
+  employeeCode: string;
   grossPaise: number;
   deductionsPaise: number;
   netPaise: number;
-  /** Server-written notes for HR ("Joined 14 Nov", "2 late = ½ day cut"). */
-  notes?: string[];
+  /** Server-written checks ("2 days need HR review"). */
+  warnings: string[];
+  released: boolean;
+  payoutRequest: string | null;
 };
 
-export type PayrollMonth = Page<PayslipRow> & { run: PayrollRun | null };
+export type PayrollRun = {
+  id: string;
+  month: string;
+  status: PayrollRunStatus;
+  rev: number;
+  employeeCount: number;
+  totals: { grossPaise: number; deductionsPaise: number; netPaise: number; employerPfPaise?: number; employerEsiPaise?: number };
+  /** Payslips whose deductions are above earnings: lock is refused while > 0. */
+  blockedCount: number;
+  skipped: { employee: string; name: string; reason: string }[];
+  /** Taken at compute; approve sends it back so the server can refuse a changed month. */
+  fingerprint: string;
+  computedAt: string | null;
+  lockedAt: string | null;
+  approvedAt: string | null;
+  payoutsCreatedAt: string | null;
+  payoutsCount: number;
+  history: { action: string; at: string; byName: string; reason: string }[];
+  payslips: PayslipRow[];
+};
+
+export type PayslipLine = {
+  code: string;
+  label: string;
+  kind: 'earning' | 'deduction' | 'employer';
+  amountPaise: number;
+  /** The working, written by the server ("4 marks → ½ day LOP"). */
+  calc: string;
+  basis?: unknown;
+};
+
+export type Payslip = PayslipRow & {
+  number: string;
+  snapshot: { name: string; employeeCode: string; [k: string]: unknown };
+  attendance: Record<string, unknown> | null;
+  lines: PayslipLine[];
+  employerPaise: number;
+  releasedAt: string | null;
+};
+
+export type SalaryComponent = { code: string; label: string; kind: 'earning' | 'deduction'; monthlyPaise: number; prorate: boolean };
+
+export type SalaryStructure = {
+  id: string;
+  employee: string;
+  effectiveFrom: string;
+  components: SalaryComponent[];
+  /** Server sum of the earnings. */
+  grossMonthlyPaise: number;
+  pfApplicable: boolean;
+  pfCapAtCeiling: boolean;
+  esiApplicable: boolean;
+  ptState: string;
+  overtimeEligible: boolean;
+  overtimeMultiplier: number | null;
+  punctualityBonusEligible: boolean;
+  tdsMonthlyPaise: number;
+  reason: string;
+  createdAt: string;
+};
+
+/** What HR types for a new salary row. Gross, net and statutory figures are never sent. */
+export type SalaryInput = {
+  effectiveFrom: string;
+  components: SalaryComponent[];
+  pfApplicable: boolean;
+  pfCapAtCeiling: boolean;
+  esiApplicable: boolean;
+  ptState: string;
+  overtimeEligible: boolean;
+  overtimeMultiplier: number | null;
+  punctualityBonusEligible: boolean;
+  tdsMonthlyPaise: number;
+  reason: string;
+};
 
 // ── Session ──────────────────────────────────────────────────────────────────
 /** The subset of /auth/me the HR panel decides on. */
