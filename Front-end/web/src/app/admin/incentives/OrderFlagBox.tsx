@@ -60,21 +60,23 @@ export default function OrderFlagBox() {
             <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Note (optional)" className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm" />
             <button disabled={busy} onClick={() => toggle(!on)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">{on ? 'Turn off' : 'Turn on'}</button>
           </div>
-          <table className="min-w-full text-xs">
-            <thead className="text-left text-gray-500"><tr><th className="py-1 pr-3">Month</th><th className="py-1 pr-3">Seller</th><th className="py-1 pr-3">What</th><th className="py-1 text-right">Points</th></tr></thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r._id} className="border-t border-gray-100">
-                  <td className="py-1 pr-3">{r.month}</td>
-                  <td className="py-1 pr-3">{r.earnerName}</td>
-                  <td className="py-1 pr-3">{describeRow(r)}</td>
-                  <td className={`py-1 text-right ${r.points < 0 ? 'text-red-600' : ''}`}>{r.points.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
-                </tr>
-              ))}
-              {!rows.length && <tr><td colSpan={4} className="py-2 text-gray-400">This order has no points (not a verified-paid sales order, or not swept yet).</td></tr>}
-            </tbody>
-            {rows.length > 0 && <tfoot><tr className="border-t border-gray-300 font-semibold"><td colSpan={3} className="py-1">Net</td><td className="py-1 text-right">{total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr></tfoot>}
-          </table>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead className="text-left text-gray-500"><tr><th className="py-1 pr-3">Month</th><th className="py-1 pr-3">Seller</th><th className="py-1 pr-3">What</th><th className="py-1 text-right">Points</th></tr></thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r._id} className="border-t border-gray-100">
+                    <td className="py-1 pr-3">{r.month}</td>
+                    <td className="py-1 pr-3">{r.earnerName}</td>
+                    <td className="py-1 pr-3">{describeRow(r)}</td>
+                    <td className={`py-1 text-right ${r.points < 0 ? 'text-red-600' : ''}`}>{r.points.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+                {!rows.length && <tr><td colSpan={4} className="py-2 text-gray-400">This order has no points (not a verified-paid sales order, or not swept yet).</td></tr>}
+              </tbody>
+              {rows.length > 0 && <tfoot><tr className="border-t border-gray-300 font-semibold"><td colSpan={3} className="py-1">Net</td><td className="py-1 text-right">{total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td></tr></tfoot>}
+            </table>
+          </div>
         </div>
       )}
       {msg && <p className="text-sm text-gray-700" role="status">{msg}</p>}
