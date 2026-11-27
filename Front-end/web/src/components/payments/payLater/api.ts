@@ -1,5 +1,5 @@
 import { staffKeys } from '@/hooks/queries/keys';
-import type { SalesTypeInfo } from '@/components/staff/sales/types';
+import type { SalesTypeChangeOption, SalesTypeInfo } from '@/components/staff/sales/types';
 
 /** The pay-later block the server puts on an order (Back-end utils/payLater.js shapePayLater). */
 export interface PayLaterState {
@@ -43,6 +43,8 @@ export interface PayLaterSummary {
 export interface PayLaterOption {
   /** B2B / B2C + accounts' check; null on a website order. */
   salesType?: SalesTypeInfo | null;
+  /** "Change to B2B / B2C" on the order page; null on a website order. */
+  typeChange?: SalesTypeChangeOption | null;
   canApprove: boolean;
   why?: string | null;
   approved?: PayLaterRow;
@@ -68,6 +70,7 @@ export interface SalesTypeRow {
   salesPerson: string;
   bankTransferPending: boolean;
   salesType: SalesTypeInfo;
+  typeChange?: SalesTypeChangeOption | null;
   payLater: PayLaterState | null;
 }
 

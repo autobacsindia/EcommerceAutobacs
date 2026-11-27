@@ -13,6 +13,7 @@ jest.mock('@/lib/api', () => ({
   default: {
     get: jest.fn(),
     post: jest.fn(),
+    put: jest.fn(),
   },
 }));
 
@@ -59,7 +60,7 @@ jest.mock('@/context/CartContext', () => ({
             _id: 'p1',
             name: 'Test Item',
             price: 100,
-            images: [{ url: 'test.jpg' }],
+            images: [{ url: 'https://images.autobacsindia.com/test.jpg' }],
           },
           quantity: 1,
         },
@@ -173,6 +174,14 @@ describe('CheckoutPage', () => {
     });
   });
 
+  // "Buy now" skips the cart page, so the first checkout step must take a promo code.
+  it('offers a promo code box on the first step', async () => {
+    render(<CheckoutPage />);
+    await screen.findByText('Review Your Cart');
+    expect(screen.getByTestId('checkout-promo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Promo code')).toBeInTheDocument();
+  });
+
   it('shows address form when no saved addresses exist', async () => {
     render(<CheckoutPage />);
 
@@ -191,7 +200,8 @@ describe('CheckoutPage', () => {
 
     const fill = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fill('Full name', 'Rahul Menon');
-    fill('House / street address', '12 MG Road');
+    fill('House / Flat / Building no.', 'Flat 4B');
+    fill('Street / Area', '12 MG Road');
     fill('City', 'Kochi');
     fill('State', 'Kerala');
     fill('PIN code', '12');
@@ -235,7 +245,8 @@ describe('CheckoutPage', () => {
         addresses: [
           {
             fullName: 'Saved User',
-            addressLine1: 'Saved St',
+            houseNumber: 'Flat 9',
+            addressLine1: 'Saved Street, Kaloor',
             city: 'Saved City',
             state: 'Saved State',
             postalCode: '123456',
@@ -254,7 +265,7 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Saved User')).toBeInTheDocument();
-      expect(screen.getByText('Saved St')).toBeInTheDocument();
+      expect(screen.getByText('Saved Street, Kaloor')).toBeInTheDocument();
     });
 
     // Click on the address to select it
@@ -268,6 +279,49 @@ describe('CheckoutPage', () => {
     });
   });
 
+  it('asks to complete an old saved address with no house no., then replaces it (no duplicate)', async () => {
+    const old = { fullName: 'Old Customer', addressLine1: 'Kochi', city: 'Kochi', state: 'Kerala', postalCode: '682016', country: 'India', phone: '9876543210', isDefault: true };
+    (apiClient.get as jest.Mock).mockResolvedValue({ success: true, user: { addresses: [old] } });
+    (apiClient.put as jest.Mock).mockResolvedValue({ success: true });
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByText('Old Customer')).toBeInTheDocument());
+    expect(screen.getByText(/Needs house \/ flat no\./)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Old Customer'));
+    fireEvent.click(screen.getByText(/deliver to this address/i));
+    expect(await screen.findByText(/This saved address is missing some details/)).toBeInTheDocument();
+    expect(screen.queryByTestId('payment-method-selector')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B, Jomer Symphony' } });
+    fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: 'MG Road, Edappally' } });
+    fireEvent.click(screen.getByText(/continue to payment/i));
+
+    await waitFor(() => expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument());
+    const sent = (apiClient.put as jest.Mock).mock.calls[0][1].addresses;
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ houseNumber: 'Flat 4B, Jomer Symphony', addressLine1: 'MG Road, Edappally', isDefault: true });
+  });
+
+  it('an old two-line saved address (no house no. field) goes straight to payment and keeps both lines', async () => {
+    const old = { fullName: 'Two Line Customer', addressLine1: 'C64, 9th Floor', addressLine2: 'Jomer Symphony, Ponnurunni North', city: 'Kochi', state: 'Kerala', postalCode: '682019', country: 'India', phone: '9876543210', isDefault: true };
+    (apiClient.get as jest.Mock).mockResolvedValue({ success: true, user: { addresses: [old] } });
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByText('Two Line Customer')).toBeInTheDocument());
+    expect(screen.queryByText(/Needs house \/ flat no\./)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText(/deliver to this address/i));
+    await waitFor(() => expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument());
+    expect(screen.queryByText(/This saved address is missing some details/)).not.toBeInTheDocument();
+  });
+
+  it('shows each product photo on the Review Your Cart step', async () => {
+    render(<CheckoutPage />);
+    const img = await screen.findByAltText('Test Item');
+    expect(img.getAttribute('src')).toContain('test.jpg');
+  });
+
   it('pays by EMI: records the Razorpay method and opens Razorpay on its EMI section', async () => {
     // There is no COD. EMI is a display choice only — the order must still record
     // 'razorpay' and the amount must still be the server's, so the choice cannot
@@ -279,7 +333,8 @@ describe('CheckoutPage', () => {
        expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
     fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
@@ -329,7 +384,8 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
     fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
@@ -363,7 +419,8 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
     fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
@@ -392,7 +449,8 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
     fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
@@ -430,7 +488,8 @@ describe('CheckoutPage', () => {
        expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
     fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });
@@ -497,7 +556,8 @@ describe('CheckoutPage — purchase attribution', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
     fireEvent.change(screen.getByLabelText('PIN code'), { target: { value: '400001' } });

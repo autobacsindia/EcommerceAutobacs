@@ -126,6 +126,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '9876543210',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -163,6 +164,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '533201',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -194,6 +196,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '9876543210',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -230,6 +233,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '9876543210',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -263,6 +267,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '9876543210',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -297,6 +302,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '9876543210',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -344,6 +350,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Other User',
           phone: '9876501234',
+          houseNumber: 'Flat 4B',
           addressLine1: '456 Other St',
           city: 'Other City',
           state: 'Other State',
@@ -373,6 +380,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '9876543210',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',
@@ -400,6 +408,7 @@ describe('Orders Integration API', () => {
       shippingAddress: {
         fullName: 'Test User',
         phone: '9876543210',
+        houseNumber: 'Flat 4B',
         addressLine1: '123 Test St',
         city: 'Test City',
         state: 'Test State',
@@ -489,6 +498,7 @@ describe('Orders Integration API', () => {
         shippingAddress: {
           fullName: 'Test User',
           phone: '9876543210',
+          houseNumber: 'Flat 4B',
           addressLine1: '123 Test St',
           city: 'Test City',
           state: 'Test State',

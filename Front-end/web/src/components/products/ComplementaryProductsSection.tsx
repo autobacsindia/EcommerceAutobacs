@@ -217,13 +217,13 @@ export default function ComplementaryProductsSection({ productId }: Complementar
           {products.map((product) => {
             const getImageUrl = () => {
               if (!product.images || product.images.length === 0) {
-                return '/placeholder-product.jpg';
+                return '/images/fallback-product.webp';
               }
               
               const firstImage = product.images[0];
               return typeof firstImage === 'string' 
                 ? firstImage 
-                : firstImage?.url || '/placeholder-product.jpg';
+                : firstImage?.url || '/images/fallback-product.webp';
             };
 
             const getImageAlt = () => {

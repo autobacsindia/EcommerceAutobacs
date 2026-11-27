@@ -1,5 +1,6 @@
 'use client';
 
+import MarginBox from './MarginBox';
 import CopyId from '@/components/ui/CopyId';
 import EntityLink from '@/components/ui/EntityLink';
 import { useState } from 'react';
@@ -220,6 +221,8 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
     },
   });
   const [error, setError] = useState('');
+  // Below the minimum margin: accounts ticks "I accept the lower margin" before Approve works.
+  const [acceptMargin, setAcceptMargin] = useState(false);
 
   const done = (r: PaymentRequest) => {
     qc.setQueryData(paymentKeys.one(id), { request: r });
@@ -229,7 +232,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
   };
   const act = useMutation({
     mutationFn: async (a: 'approve' | 'decline' | 'hold' | 'release' | 'cancel' | 'pay') => {
-      if (a !== 'pay') return (await actOn(id, a, note, q.data?.request.rev)).request;
+      if (a !== 'pay') return (await actOn(id, a, note, q.data?.request.rev, a === 'approve' && acceptMargin)).request;
       const form = new FormData();
       form.append('method', pay.method);
       form.append('reference', pay.reference.trim());
@@ -291,6 +294,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 This order (or the item) was cancelled, so this supplier payment cannot be paid. Decline it.
               </p>
             )}
+            {r.margin && <MarginBox m={r.margin} />}
             {r.deal && <DealSummaryBox d={r.deal} />}
             {r.bankNotice && r.status !== 'paid' && (
               <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
@@ -376,7 +380,13 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                         <Pencil className="h-4 w-4" /> {r.status === 'submitted' ? 'Edit' : 'Edit & send again'}
                       </button>
                     )}
-                    {r.can.approve && <button type="button" disabled={act.isPending} onClick={() => act.mutate('approve')} className={`${btn} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
+                    {r.can.approve && r.margin?.below && (
+                      <label className="flex w-full items-center gap-2 text-sm font-medium text-red-800">
+                        <input type="checkbox" checked={acceptMargin} onChange={(e) => setAcceptMargin(e.target.checked)} />
+                        I accept the lower margin ({r.margin.pct ?? '—'}%, minimum {r.margin.minPct}%)
+                      </label>
+                    )}
+                    {r.can.approve && <button type="button" disabled={act.isPending || (Boolean(r.margin?.below) && !acceptMargin)} onClick={() => act.mutate('approve')} className={`${btn} bg-green-600 text-white hover:bg-green-700 disabled:opacity-50`}>Approve</button>}
                     {r.can.pay && <button type="button" onClick={() => setMode('pay')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>Record payment</button>}
                     {r.can.hold && <button type="button" onClick={() => setMode('hold')} className={`${btn} border border-orange-300 text-orange-800 hover:bg-orange-50`}>Put on hold</button>}
                     {/* A held payment cannot be paid: releasing it is the way back to "approved". */}

@@ -51,6 +51,8 @@ export const validateTaskCreate = [
   optionalId('assigneeId'),
   body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
+  body('followerIds').optional().isArray({ max: 50 }).withMessage('Add at most 50 followers'),
+  body('followerIds.*').custom(isObjectId).withMessage('Invalid person'),
   body('shared').optional().isBoolean().withMessage('Invalid choice'),
   body('personal').optional().isBoolean().withMessage('Invalid choice'),
   body('estimateMinutes').optional({ values: 'null' }).isInt({ min: 1, max: 60000 }).withMessage('Enter an estimate between 1 minute and 1000 hours'),

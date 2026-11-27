@@ -5,6 +5,7 @@
  *   - the to-pay queue reads payment_request_status and examines only the
  *     approved / on-hold supplier rows, however many paid ones pile up
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import mongoose from 'mongoose';
 import * as dbHandler from './db-handler.js';
 import Supplier from '../models/Supplier.js';
@@ -48,3 +49,6 @@ it('the to-pay queue examines only the open supplier rows, not the paid history'
   expect(indexOf(explain)).toBe('payment_request_status');
   expect(explain.executionStats.totalDocsExamined).toBe(12);
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

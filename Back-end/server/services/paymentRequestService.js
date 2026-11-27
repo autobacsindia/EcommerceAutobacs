@@ -59,6 +59,7 @@ import * as bills from './supplierBillService.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
 import { partForRequest, requestPartReplaced } from '../utils/supplierParts.js';
 import * as credit from './supplierLedgerService.js';
+import * as margins from './supplierMarginService.js';
 import { projectForLink, projectCode } from './staffProjectService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import { cleanRichTextWithin, richTextLength } from '../utils/richText.js';
@@ -637,6 +638,13 @@ export function shape(r, viewer) {
     supplier: r.supplier ? { id: idOf(r.supplier) } : null,
     // Supplier credit used: the bill = what is transferred + this.
     credit: r.credit?.amount ? { amount: r.credit.amount, entryId: idOf(r.credit.entry) } : null,
+    // Our margin on a supplier payment for an order (supplierMarginService), as checked by the server.
+    margin: r.margin ? {
+      sale: fromPaise(r.margin.salePaise), cost: fromPaise(r.margin.costPaise),
+      pct: r.margin.bp == null ? null : r.margin.bp / 100, minPct: r.margin.minBp / 100,
+      below: Boolean(r.margin.below), reason: r.margin.reason || '',
+      acceptedByName: r.margin.acceptedByName || '', acceptedAt: r.margin.acceptedAt || null,
+    } : null,
     bill: r.credit?.amount ? deals.unitsOf(r) : null,
     // Supplier credit pays all of it: nothing to transfer (approving closes it as paid).
     paidByCredit: creditCovers(r),
@@ -1005,6 +1013,17 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const description = cleanDetails(input.description);
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
+  // Our margin on these items, worked out here from the order and every live supplier
+  // payment on them — never from the browser. Below the minimum needs a reason
+  // (refused with MARGIN_BELOW otherwise) and accounts' explicit approval.
+  const margin = await margins.checkRequest({
+    order, deal,
+    request: {
+      itemIds: wanted, partId: target?.part._id, deal: deal?._id || null, amount, currency: money.currency,
+      foreignAmount: money.foreignAmount, credit: creditPaise ? { amount: fromPaise(creditPaise) } : null, payee,
+    },
+    reason: input.marginReason,
+  });
 
   // The lock on the agreed total, taken last, just before saving, and given back if
   // anything after it fails: no overpaying, even with two people at once.
@@ -1054,8 +1073,10 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     supplier: supplierId,
     bankNotice,
     ...(deal ? { deal: deal._id, part: deals.partFor(before, amountPaise) } : {}),
+    margin,
     files: stored,
     history: [entry(actor, 'submitted', [
+      margins.marginNote(margin),
       deal ? `${deals.PART_LABELS[deals.partFor(before, amountPaise)]} of the agreed ${deals.moneyOf(before.agreedPaise, before.currency)}` : '',
       creditPaise ? `bill ${deals.moneyOf(amountPaise, money.currency)} − ${deals.moneyOf(creditPaise, money.currency)} supplier credit` : '',
     ].filter(Boolean).join('; '))],
@@ -1094,9 +1115,12 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   }
   // Credit pays all of it and accounts / the admin raised it: nothing to transfer and
   // nobody else to ask — closed as paid now, recorded with the credit used.
-  if (creditCovers(doc) && mayDecide(actor)) return shape(await closeByCredit(actor, doc, req, 'raised'), actor);
+  await margins.refreshOrder(order._id);
+  // Below the minimum margin it always waits for an explicit approval.
+  if (creditCovers(doc) && mayDecide(actor) && !doc.margin?.below) return shape(await closeByCredit(actor, doc, req, 'raised'), actor);
+  const below = doc.margin?.below ? ` ${margins.marginNote(doc.margin)}.` : '';
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
-  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}.${creditLine(doc)} Accounts: please approve or decline.${warn}`);
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}.${creditLine(doc)}${below} Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
 }
 
@@ -1285,6 +1309,8 @@ async function followOnOrder(r, actor, outcome) {
   } catch (err) {
     console.error(`[PaymentRequest] ${r.number}: order lines not updated after ${outcome}:`, err.message);
   }
+  // A declined / cancelled payment no longer counts as the items' cost (Margins report).
+  if (outcome !== 'paid') await margins.refreshOrder(r.order);
 }
 
 // ── Decide / pay ─────────────────────────────────────────────────────────────
@@ -1354,14 +1380,37 @@ function alreadyPaidSet(r, now) {
 
 const EDITED_SINCE = 'This payment was edited since you opened it. Check the new details, then approve again.';
 
+/** "25% — minimum 30%" */
+const marginText = (m) => `${m?.bp == null ? '—' : `${Number((m.bp / 100).toFixed(2))}%`} — minimum ${Number((m.minBp / 100).toFixed(2))}%`;
+
+/** A credit-covered below-margin payment closes as paid on approval: record who accepted the margin first. */
+async function acceptMargin(actor, r0) {
+  const r = await paymentRequestRepository.transition(r0._id, ['submitted'],
+    { 'margin.acceptedBy': actor._id, 'margin.acceptedByName': actor.name || '', 'margin.acceptedAt': new Date() },
+    entry(actor, 'edited', `accepted the lower margin (${marginText(r0.margin)})`));
+  if (!r) throw fail(MOVED, 409);
+}
+
+/** A below-margin payment is paid only after accounts (or the admin) approved it — never in the same step. */
+function assertMarginApproved(r) {
+  if (r.margin?.below && r.status === 'submitted') {
+    throw fail(`${r.number} is below the minimum margin (${marginText(r.margin)}) — accounts must approve it before it is paid.`, 409);
+  }
+}
+
 /**
  * `rev` (optional): the version accounts was shown. When sent, an edit that
  * landed in between makes this fail with EDITED_SINCE instead of approving
  * figures nobody looked at; the edit and the approval cannot both win.
  */
-export async function approve(actor, id, { note, rev } = {}, req) {
+export async function approve(actor, id, { note, rev, acceptBelowMargin } = {}, req) {
   const r0 = await loadVisible(actor, id);   // 404s a request this person may not see
   if (!mayDecide(actor)) throw fail('Only accounts (or an admin) approves payments.', 403);
+  // Below the minimum margin: approving says so out loud, and who said it is recorded.
+  const belowMargin = Boolean(r0.margin?.below);
+  if (belowMargin && !(acceptBelowMargin === true || acceptBelowMargin === 'true')) {
+    throw fail(`${r0.number} is below the minimum margin (${marginText(r0.margin)}). Tick “I accept the lower margin” to approve it, or decline it.`, 400);
+  }
   if (ownSubscriptionExpense(actor, r0)) throw fail('You marked this one paid yourself — someone else in accounts (or the admin) approves it.', 403);
   const pinned = rev != null && rev !== '';
   if (pinned && Number(rev) !== (r0.rev || 0)) throw fail(EDITED_SINCE, 409);
@@ -1370,6 +1419,7 @@ export async function approve(actor, id, { note, rev } = {}, req) {
   // so it never goes to the admin to pay (owner, 2026-11-25).
   if (creditCovers(r0) && r0.status === 'submitted') {
     if (pinned && Number(rev) !== (r0.rev || 0)) throw fail(EDITED_SINCE, 409);
+    if (belowMargin) await acceptMargin(actor, r0);
     const r = await closeByCredit(actor, r0, req, 'approved', String(note || '').trim().slice(0, 300));
     await tellChat(r, 'approved', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)} — paid fully from supplier credit, nothing to transfer. Closed as paid.`, { mentionRequester: true });
     return shape(r, actor);
@@ -1378,9 +1428,12 @@ export async function approve(actor, id, { note, rev } = {}, req) {
   // Paid already (company card, auto-debit): approving it closes it as paid — the
   // admin is not asked to pay money that has already left.
   const settled = alreadyPaidSet(r0, now);
-  const r = await paymentRequestRepository.transitionInSession(id, ['submitted'], pinned ? revIs(rev) : {},
-    { status: 'approved', approvedBy: actor._id, approvedAt: now, decisionNote: String(note || '').slice(0, 1000), ...settled },
-    entry(actor, settled ? 'approved — already paid' : 'approved', note), {}, undefined);
+  // The margin accounts accepted is pinned: an edit landing in between (new figures) refuses this approval.
+  const marginPin = belowMargin ? { 'margin.costPaise': r0.margin.costPaise, 'margin.below': true } : {};
+  const accepted = belowMargin ? { 'margin.acceptedBy': actor._id, 'margin.acceptedByName': actor.name || '', 'margin.acceptedAt': now } : {};
+  const r = await paymentRequestRepository.transitionInSession(id, ['submitted'], { ...(pinned ? revIs(rev) : {}), ...marginPin },
+    { status: 'approved', approvedBy: actor._id, approvedAt: now, decisionNote: String(note || '').slice(0, 1000), ...settled, ...accepted },
+    entry(actor, settled ? 'approved — already paid' : 'approved', [belowMargin ? `accepted the lower margin (${marginText(r0.margin)})` : '', note].filter(Boolean).join(' — ')), {}, undefined);
   if (!r) {
     const cur = pinned ? await paymentRequestRepository.findById(id) : null;
     throw fail(cur && cur.status === 'submitted' && (cur.rev || 0) !== Number(rev) ? EDITED_SINCE : MOVED, 409);
@@ -1475,6 +1528,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   if (r0.status === 'on_hold') throw fail(heldMessage(await paymentRequestRepository.findById(id) || r0), 409);
   if (r0.subscription?.alreadyPaid) throw fail(`${r0.number} was paid already (${r0.requestedByName} marked it paid) — accounts approves it, which closes it as paid.`, 409);
   if (creditCovers(r0)) throw fail(`${r0.number} is paid fully from supplier credit — there is nothing to transfer. Approve it to close it as paid.`, 409);
+  assertMarginApproved(r0);
   await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   const fromForeign = paidFrom === 'foreign';
@@ -1721,6 +1775,29 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
     target = await checkPayableLines(actor, order, view, (r0.itemIds || []).map(idOf), { partId: r0.partId ? idOf(r0.partId) : undefined, exceptId: idOf(r0._id) });
   }
 
+  // New figures (or sent back to accounts): the margin is worked out again on the
+  // server, and a lower-margin acceptance does not carry over to figures nobody accepted.
+  let margin = r0.margin;
+  const marginChanged = r0.kind === 'supplier' && r0.order
+    && (amount !== r0.amount || fxChanged || creditBack > 0 || backToAccounts || !r0.margin);
+  if (marginChanged) {
+    const forOrder = order || await orderRepository.findForWorkflow(idOf(r0.order));
+    if (forOrder) {
+      margin = await margins.checkRequest({
+        order: forOrder,
+        exceptId: r0._id,
+        request: {
+          itemIds: r0.itemIds || [], partId: r0.partId, deal: r0.deal || null, amount, currency: money.currency,
+          foreignAmount: money.foreignAmount, credit: money.credit || r0.credit || null, payee, number: r0.number,
+        },
+        reason: input.marginReason,
+        keptReason: r0.margin?.reason,
+      });
+      if (r0.margin && margin.bp !== r0.margin.bp) change('Margin', marginText(r0.margin), marginText(margin));
+      else if (!r0.margin && margin.below) change('Margin', '', marginText(margin));
+    }
+  }
+
   const note = [reason, changes.length ? changes.map((c) => `${c.field}${c.from || c.to ? `: ${c.from || '—'} → ${c.to || '—'}` : ''}`).join('; ') : '']
     .filter(Boolean).join(' — ') + (backToAccounts ? ' — sent back to accounts' : '');
   // A deal part's new amount must still fit the agreed total: move the lock by the difference first.
@@ -1774,6 +1851,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
     ...(claimChanged ? { reimbursement: claimNow } : {}),
     ...(creditBack ? { credit: money.credit } : {}),
     ...(r0.deal ? { part } : {}),
+    ...(marginChanged && margin ? { margin } : {}),
     ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
   };
   let r;
@@ -1829,6 +1907,7 @@ export async function update(actor, id, input = {}, uploaded = {}, req) {
       }
     }
   }
+  if (marginChanged) await margins.refreshOrder(r0.order);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: backToAccounts ? 'resubmitted' : 'edited', fields: changes.map((c) => c.field), fromStatus: r0.status });
   const said = changes.length ? changes.map((c) => c.field.toLowerCase()).join(', ') : 'no changes';
   await tellChat(r, backToAccounts ? 'resubmitted' : 'edited', backToAccounts
@@ -2245,7 +2324,8 @@ export async function setCredit(actor, id, input = {}, req) {
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'credit', fromPaise: hadPaise, toPaise: wantPaise, currency });
   // Accounts / the admin made credit cover all of it: nothing to transfer and they are
   // the approvers — closed as paid now (the bill, order lines and deal follow).
-  if (creditCovers(r) && mayDecide(actor)) {
+  // A below-margin payment still waiting for approval is not closed here: approving it is its own step.
+  if (creditCovers(r) && mayDecide(actor) && !(r.margin?.below && r.status === 'submitted')) {
     const closed = await closeByCredit(actor, r, req, r.status === 'submitted' ? 'approved' : r.status === 'on_hold' ? 'hold ended' : 'already approved');
     await tellChat(closed, 'paid', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} used ${closed.payee?.name || 'the supplier'}'s credit on ${what(closed)} — paid fully from supplier credit, nothing to transfer. Closed as paid.`, { mentionRequester: true });
     return shape(closed, actor);

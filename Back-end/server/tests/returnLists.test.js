@@ -13,6 +13,7 @@
  *     amount; filter by supplier and kind; oldest / newest / amount; the per-supplier
  *     totals stay whole, the summary is what matches
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
 
@@ -290,3 +291,6 @@ describe('Suppliers owe us', () => {
     await expect(svc.suppliersOweUs(ops, {})).rejects.toMatchObject({ statusCode: 403 });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

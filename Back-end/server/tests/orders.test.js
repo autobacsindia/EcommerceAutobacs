@@ -35,7 +35,7 @@ describe('Orders API', () => {
 
   const testAddress = {
     fullName: 'Order Test User',
-    addressLine1: '123 Test St',
+    houseNumber: 'Flat 4B', addressLine1: '123 Test St',
     city: 'Test City',
     state: 'Test State',
     postalCode: '682001',

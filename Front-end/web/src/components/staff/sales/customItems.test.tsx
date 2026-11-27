@@ -28,7 +28,7 @@ function fillCustomer(phone: string) {
   fill(/^Name$/, 'Ravi Kumar');
   fill(/Mobile/, phone);
   fill(/Email/, 'ravi@example.com');
-  fill(/House \/ street/, '12 MG Road');
+  fill(/House \/ Flat/, 'Flat 4B'); fill(/Street \/ Area/, '12 MG Road');
   fill(/^City$/, 'Pune');
   fill(/^State$/, 'Maharashtra');
   fill(/PIN code/, '411001');

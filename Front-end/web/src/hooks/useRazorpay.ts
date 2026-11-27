@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
 import type { RazorpayStartMethod } from '@/lib/paymentChoices';
 import { trackPaymentFailed, trackRazorpayDismissed, trackRazorpayOpened } from '@/lib/analytics';
+import { httpStatusOf, reportClientError } from '@/lib/reportClientError';
 
 interface RazorpayOptions {
   key: string;
@@ -169,6 +170,8 @@ export const useRazorpay = ({
         const error = new Error('Payment gateway failed to load. Please check your connection or disable ad blockers.');
         setPaymentError(error);
         toast.error(error.message);
+        // Report only (the "Website errors" page) — changes nothing about the payment.
+        reportClientError({ feature: 'payment', step: 'gateway-load', error, orderId });
         if (onFailure) onFailure(error);
         return;
       }
@@ -235,12 +238,14 @@ export const useRazorpay = ({
               onSuccess(orderId);
             } else {
               const error = new Error(verifyResponse.message || 'Payment verification failed');
+              reportClientError({ feature: 'payment', step: 'verify', error, orderId });
               setPaymentError(error);
               toast.error(error.message);
               if (onFailure) onFailure(error);
             }
           } catch (err: any) {
             const error = new Error(err.message || 'Payment verification failed');
+            reportClientError({ feature: 'payment', step: 'verify', error: err ?? error, message: error.message, orderId, context: { httpStatus: httpStatusOf(err) } });
             setPaymentError(error);
             toast.error(error.message);
             if (onFailure) onFailure(error);
@@ -252,7 +257,13 @@ export const useRazorpay = ({
         modal: {
           ondismiss: async function () {
             if (isPaymentProcessed) return;
-            if (!dismissTracked) { dismissTracked = true; trackRazorpayDismissed(funnel); }
+            if (!dismissTracked) {
+              dismissTracked = true;
+              trackRazorpayDismissed(funnel);
+              // The customer closed the window: a warning, not a failure — a run of
+              // these on one step still points at a problem worth a look.
+              reportClientError({ feature: 'payment', step: 'dismissed', level: 'warning', message: 'Customer closed the payment window before paying', orderId, context: { method: funnel.method } });
+            }
 
             toast('Payment cancelled', { icon: 'ℹ️' });
 
@@ -308,6 +319,20 @@ export const useRazorpay = ({
             errorSource: response?.error?.source ?? null,
             errorStep: response?.error?.step ?? null,
           });
+          // Razorpay's own codes only — never the payer's details.
+          reportClientError({
+            feature: 'payment',
+            step: 'payment-failed',
+            message: `Payment failed: ${response?.error?.reason || response?.error?.code || 'unknown reason'}`,
+            orderId,
+            context: {
+              code: response?.error?.code,
+              reason: response?.error?.reason,
+              source: response?.error?.source,
+              gatewayStep: response?.error?.step,
+              method: funnel.method,
+            },
+          });
         }
         const reason =
           (response && (response.error?.description || response.error?.reason)) ||
@@ -334,6 +359,7 @@ export const useRazorpay = ({
 
     } catch (err: any) {
       const error = new Error(err.message || 'Failed to initiate Razorpay payment');
+      reportClientError({ feature: 'payment', step: 'open', error: err ?? error, message: error.message, orderId, context: { httpStatus: httpStatusOf(err), online: typeof navigator !== 'undefined' ? navigator.onLine : undefined } });
       setPaymentError(error);
       toast.error(error.message);
       if (onFailure) onFailure(err);

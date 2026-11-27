@@ -1,4 +1,5 @@
 /** The Admin's whole-order answer: money sums, the plain timeline, permissions, and that it stays read-only. */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -223,3 +224,6 @@ describe('GET /orders/:id/overview', () => {
     expect(res.body.overview.customer).toEqual({ name: 'Asha Buyer', accountDeleted: true });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

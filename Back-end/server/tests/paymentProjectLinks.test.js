@@ -11,6 +11,7 @@
  *   - a double-submitted expense (same clientId) is saved once, and its spare files dropped
  *   - the lookup is admin-only, finds a project / order / other ID, pages every list
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -320,3 +321,6 @@ describe('Payment links and the admin lookup', () => {
     });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

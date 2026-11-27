@@ -183,7 +183,7 @@ export default function SimilarProductsSection({ productId }: SimilarProductsSec
                     <Image
                       src={typeof product.images[0] === 'string' 
                         ? product.images[0] 
-                        : product.images[0].url || '/placeholder.jpg'}
+                        : product.images[0].url || '/images/fallback-product.webp'}
                       alt={product.name || 'Product image'}
                       fill
                       sizes={RAIL_IMAGE_SIZES}

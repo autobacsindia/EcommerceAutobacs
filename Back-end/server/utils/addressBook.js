@@ -23,15 +23,22 @@
  *     both states the UI would have to guess about.
  */
 
+import { firstAddressProblem } from './deliveryAddress.js';
+
 export const MAX_ADDRESSES = 10;
 
-const FIELDS = ['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode'];
-const REQUIRED = ['fullName', 'phone', 'addressLine1', 'city', 'state', 'postalCode'];
+const FIELDS = ['fullName', 'phone', 'houseNumber', 'addressLine1', 'addressLine2', 'landmark', 'city', 'state', 'postalCode'];
+const REQUIRED = ['fullName', 'phone', 'city', 'state', 'postalCode'];
+// Compared to decide whether an address is an unchanged old one (see below).
+const IDENTITY = ['fullName', 'phone', 'houseNumber', 'addressLine1', 'addressLine2', 'landmark', 'city', 'state', 'postalCode'];
 
 const LABELS = {
   fullName: 'Full name',
   phone: 'Mobile number',
-  addressLine1: 'Address line 1',
+  houseNumber: 'House / flat / building',
+  addressLine1: 'Street / area',
+  addressLine2: 'Address line 2',
+  landmark: 'Landmark',
   city: 'City',
   state: 'State',
   postalCode: 'PIN code',
@@ -55,13 +62,25 @@ export function normalisePhone(raw) {
   return /^[6-9]\d{9}$/.test(digits) ? digits : null;
 }
 
+const key = (a) => IDENTITY.map((f) => String(a?.[f] ?? '').trim()).join('\u0001');
+
 /**
  * Validate and clean a full address list, ready to replace user.addresses.
+ *
+ * The list is replaced wholesale, so editing ONE address re-sends all of them.
+ * An address saved before the house-number rule (utils/deliveryAddress.js) is
+ * therefore let through UNCHANGED — matched field-for-field against `existing`
+ * — so a customer is never blocked from managing their other addresses.
+ * Any new or edited address must meet the rule; checkout asks them to
+ * complete an old one before it is used for an order.
+ *
  * @param {unknown} input
+ * @param {Array<object>} [existing]  the user's currently saved addresses
  * @returns {Array<object>}
  * @throws {AddressBookError}
  */
-export function normaliseAddressBook(input) {
+export function normaliseAddressBook(input, existing = []) {
+  const grandfathered = new Set((Array.isArray(existing) ? existing : []).map(key));
   if (!Array.isArray(input)) throw new AddressBookError('addresses must be a list.');
   if (input.length > MAX_ADDRESSES) {
     throw new AddressBookError(`You can save up to ${MAX_ADDRESSES} addresses.`);
@@ -85,9 +104,16 @@ export function normaliseAddressBook(input) {
       throw new AddressBookError(`PIN code must be 6 digits (address ${i + 1}).`);
     }
 
+    const problem = firstAddressProblem(a);
+    if (problem && !grandfathered.has(key(a))) {
+      throw new AddressBookError(`${problem} (address ${i + 1})`);
+    }
+
     for (const f of FIELDS) {
       if (a[f].length > 200) throw new AddressBookError(`${LABELS[f] ?? f} is too long (address ${i + 1}).`);
     }
+    if (!a.houseNumber) delete a.houseNumber;
+    if (!a.landmark) delete a.landmark;
 
     a.country = 'India';
     a.isDefault = raw.isDefault === true;

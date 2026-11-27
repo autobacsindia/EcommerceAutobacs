@@ -87,6 +87,12 @@ describe('legal links: one document, one name, one route', () => {
     expect(config).toMatch(/source:\s*'\/my-account',\s*destination:\s*'\/profile'/)
   })
 
+  it('/press (the footer calls the page "Press") lands on /media, not a 404', () => {
+    const config = fs.readFileSync(NEXT_CONFIG, 'utf8')
+    expect(fs.existsSync(path.join(SRC_DIR, 'app', 'press'))).toBe(false)
+    expect(config).toMatch(/source:\s*'\/press',\s*destination:\s*'\/media'/)
+  })
+
   it('the storefront footer carries a Legal column', () => {
     // Before this, Terms and Privacy were reachable ONLY from /login and
     // /register — i.e. never from a page a signed-in shopper was actually on.

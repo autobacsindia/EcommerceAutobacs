@@ -36,6 +36,8 @@ const couponRules = (partial = false) => {
     body('appliesTo.products').optional().isArray(),
     body('appliesTo.products.*').optional().custom(isObjectId).withMessage('Invalid product id'),
     body('appliesTo.brandSlugs').optional().isArray(),
+    body('appliesTo.vehicles').optional().isArray(),
+    body('appliesTo.vehicles.*').optional().custom(isObjectId).withMessage('Invalid vehicle id'),
     // Percentage coupons must carry a 0–100 value.
     body('value').if(body('type').equals('percentage'))
       .isFloat({ min: 0, max: 100 }).withMessage('Percentage value must be between 0 and 100')

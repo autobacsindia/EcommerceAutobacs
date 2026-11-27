@@ -52,3 +52,24 @@ export function useVehicleModels(make: string) {
     staleTime: 24 * 60 * 60 * 1000,
   });
 }
+
+export interface VehicleListItem {
+  _id: string;
+  make: string;
+  model: string;
+  slug: string;
+}
+
+async function fetchAllVehicles(): Promise<VehicleListItem[]> {
+  const res = await apiClient.get<{ vehicles?: VehicleListItem[] }>('/vehicles');
+  return (res?.vehicles ?? []).map(({ _id, make, model, slug }) => ({ _id, make, model, slug }));
+}
+
+/** Every active vehicle (≈100) — for admin pickers such as a coupon's vehicle scope. */
+export function useAllVehicles() {
+  return useQuery({
+    queryKey: ['vehicles', 'all'],
+    queryFn: fetchAllVehicles,
+    staleTime: 60 * 60 * 1000,
+  });
+}

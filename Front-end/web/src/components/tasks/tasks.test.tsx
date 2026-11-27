@@ -211,6 +211,31 @@ describe('the Tasks page', () => {
     expect(replace).toHaveBeenLastCalledWith('/team/tasks', { scroll: false });
   });
 
+  // Regression: on a wide screen the board is `position: sticky`, which makes its
+  // own layer, so a window rendered inside it painted UNDER the panel's side menu
+  // and top bar (title and left column cut off). The windows render on <body>,
+  // carrying the theme classes their colours come from.
+  it('the task window renders on <body>, outside the sticky board', async () => {
+    serve();
+    const { rerender } = workspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open T-7: Call Bosch' }));
+    rerender(<QueryClientProvider client={new QueryClient()}><TasksWorkspace base="/team/tasks" canSeeTeam={false} /></QueryClientProvider>);
+    const panel = await screen.findByRole('dialog', { name: 'Task' });
+    const layer = panel.parentElement!;
+    expect(layer.parentElement).toBe(document.body);
+    expect(document.querySelector('.tk-edge')!.contains(panel)).toBe(false);
+    expect(layer).toHaveClass('panel-theme', 'tk-theme', 'fixed', 'inset-0', 'z-50');
+  });
+
+  it('the new-task form renders on <body> too', async () => {
+    serve({ list: [] });
+    workspace();
+    fireEvent.click((await screen.findAllByRole('button', { name: /New task/ })).at(-1)!);
+    const form = await screen.findByRole('dialog', { name: 'New task' });
+    expect(form.parentElement!.parentElement).toBe(document.body);
+    expect(form.parentElement).toHaveClass('panel-theme', 'tk-theme', 'z-50');
+  });
+
   it('says plainly when a list is empty, and offers to add one', async () => {
     serve({ list: [] });
     workspace();
@@ -541,6 +566,47 @@ describe('new task', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u1', 'u3', 'u2'], shared: true })));
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Task created'));
+  });
+
+  it('followers: picked in the form, never someone doing it; picking them to do it moves them off followers', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    const dialog = await openForm({ canSeeTeam: true });
+    expect(within(dialog).getByText('Only the people doing the work. To keep someone informed, add them as a follower.')).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Supplier call' } });
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
+    const doers = await picker(dialog);
+    fireEvent.click(within(doers).getByRole('option', { name: /Arun/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+    // The followers list leaves out everyone doing it (me and Arun).
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose followers' }));
+    const watchers = screen.getByRole('listbox', { name: 'Followers' });
+    expect(within(watchers).queryByRole('option', { name: /Arun/ })).toBeNull();
+    expect(within(watchers).queryByRole('option', { name: /Me/ })).toBeNull();
+    fireEvent.click(within(watchers).getByRole('option', { name: /Bala/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search followers' }), { key: 'Escape' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u1', 'u2'], followerIds: ['u3'] })));
+  });
+
+  it('followers: someone then picked to do it is only an assignee; with no followers none are sent', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    const dialog = await openForm({ canSeeTeam: true });
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Supplier call' } });
+    fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: todayIST() } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Choose followers' }));
+    const watchers = screen.getByRole('listbox', { name: 'Followers' });
+    fireEvent.click(within(watchers).getByRole('option', { name: /Bala/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search followers' }), { key: 'Escape' });
+    const doers = await picker(dialog);
+    fireEvent.click(within(doers).getByRole('option', { name: /Bala/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const sent = post.mock.calls[0][1];
+    expect(sent.assigneeIds).toEqual(['u1', 'u3']);
+    expect(sent).not.toHaveProperty('followerIds');
   });
 
   it('"Own copy each" makes one task per person', async () => {

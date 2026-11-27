@@ -259,6 +259,45 @@ describe('API access and pages', () => {
     return { pHead, p1, p2, sHead, s1, boss, orders };
   }
 
+  it('admins are not ranked: their tasks, projects and order steps stay out of the rows and totals; "Admins (no team head)" stays', async () => {
+    const w = await world();
+    const yesterday = addDays(istDay(), -1);
+    // An admin doing a late task, owning a late project, and moving an order step that is now late.
+    await StaffTask.create({ number: 10, title: 'Admin task', createdBy: w.boss._id, bucket: 'open', status: 'todo', dueOn: yesterday, rank: yesterday, assignee: w.boss._id, assignees: [{ user: w.boss._id, name: 'Owner', team: null }], teams: [] });
+    const prj = await StaffProject.create({ name: 'Admin project', owner: { user: w.boss._id, name: 'Owner', team: null }, people: [{ user: w.boss._id, name: 'Owner', team: null }], teams: [], dueOn: yesterday, rank: yesterday, createdBy: w.boss._id });
+    await StaffTask.create({ number: 11, title: 'Open in admin project', createdBy: w.boss._id, bucket: 'open', status: 'todo', project: prj._id, rank: '9999-12-31', assignee: w.p1._id, assignees: [{ user: w.p1._id, name: 'P one', team: 'procurement' }], teams: ['procurement'] });
+    const o = await paidOrder('Admin moved');
+    for (const i of o.items) await wf.setStock(w.boss, String(o._id), String(i._id), { stock: 'in_stock' }, req);
+    await age(String(o._id), 5);
+    // A step whose mover left, in a team with no head: it falls back to "Admins (no team head)".
+    const gone = await person('procurement', { name: 'Left' });
+    const o2 = await paidOrder('Orphan');
+    await wf.setStock(gone, String(o2._id), String(o2.items[0]._id), { stock: 'in_stock' }, req);
+    await age(String(o2._id), 5);
+    await User.updateOne({ _id: gone._id }, { $set: { role: 'customer', 'staff.active': false } });
+    await User.updateOne({ _id: w.pHead._id }, { $set: { 'staff.isHead': false } });
+
+    // The admin's items are still found and owned by them…
+    const raw = await itemsFor({}, new Date());
+    const theirs = raw.filter((i) => i.owner.id === String(w.boss._id));
+    expect(theirs.length).toBeGreaterThanOrEqual(4); // task, project, 2 order lines
+    expect(theirs.every((i) => i.owner.admin === true)).toBe(true);
+    expect(raw.some((i) => i.owner.via === 'admins' && i.owner.id === null)).toBe(true);
+
+    // …but not ranked, and not in the totals.
+    const all = await request(app).get('/api/v1/staff/delays').set(await auth(w.boss));
+    expect(all.status).toBe(200);
+    expect(all.body.people.some((p) => p.id === String(w.boss._id))).toBe(false);
+    expect(all.body.people.some((p) => p.id === null && p.name === 'Admins (no team head)')).toBe(true);
+    const counted = raw.filter((i) => !i.owner.admin && i.bucket === 'late').length;
+    expect(all.body.totals.late).toBe(counted);
+    expect(all.body.people.reduce((n, p) => n + p.late, 0)).toBe(counted);
+    // Asking for the admin by name finds nobody.
+    const asked = await request(app).get(`/api/v1/staff/delays?person=${w.boss._id}`).set(await auth(w.boss));
+    expect(asked.body.people).toEqual([]);
+    expect(asked.body.totals.late).toBe(0);
+  });
+
   it('no session → 401; plain staff → 403 on the ranking and on anyone else', async () => {
     const w = await world();
     expect((await request(app).get('/api/v1/staff/delays/me')).status).toBe(401);

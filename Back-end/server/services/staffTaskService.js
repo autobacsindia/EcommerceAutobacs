@@ -1106,7 +1106,7 @@ export async function recountSubtasks(parentId) {
  *
  * `parentId` makes it a sub-task of that task (see "Sub-tasks" above).
  *
- * @param {{ title, description?, priority?, dueOn?, startOn?, tags?, assigneeId?, assigneeIds?, shared?, orderId?, parentId?, clientId? }} input
+ * @param {{ title, description?, priority?, dueOn?, startOn?, tags?, assigneeId?, assigneeIds?, followerIds?, shared?, orderId?, parentId?, clientId? }} input
  * @param {{ note?: boolean }} [opts] `note: false` leaves the line on the parent's history to the caller
  * @returns {Promise<{ task: object, tasks: object[], duplicate: boolean }>}
  */
@@ -1137,6 +1137,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   // Everything under a personal task stays personal, or its title would reach others.
   const personal = askedPersonal || !!parent?.personal;
   const people = await loadAssignees(actor, personal ? [] : rawIds);
+  const followers = await followersForNewTask(actor, input.followerIds, { personal, people });
   const order = await loadOrderRef(input.orderId);
 
   // One shared task for everyone, unless the giver asked for a copy each.
@@ -1188,6 +1189,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
     const dueApproval = needsApproval && !personal ? approvalFor(actor, { ...peopleFields(who), personal }, dueOn, now) : undefined;
     const history = [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }];
     if (dueApproval) history.push({ at: now, by: actor._id, byName: actor.name || '', action: 'due_approval', from: '', to: dueApproval.auto ? 'approved (set by a manager)' : `asked: due ${dueOn}` });
+    for (const f of followers) history.push({ ...checkEntry(actor, 'follower_added', f.name), at: now });
     try {
       const doc = await staffTaskRepository.create({
         number,
@@ -1205,6 +1207,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         ...(personal ? { personal: true, team: null, teams: [] } : {}),
         ...(estimateMinutes ? { estimateMinutes } : {}),
         ...(repeat ? { repeat } : {}),
+        ...(followers.length ? { followers } : {}),
         createdBy: actor._id,
         createdByName: actor.name || '',
         order,
@@ -2205,6 +2208,25 @@ async function writeFollowers(actor, t, people, removeIds) {
   if (next) return next;
   if (!(await staffTaskRepository.findById(t._id))) throw fail('Task not found.', 404);
   throw fail(FOLLOWERS_FULL, 400);
+}
+
+/**
+ * Followers picked on the New task form (person ids), as `{ user, name }`.
+ * The giver may always choose them (giving a task is editing it). Like
+ * changeFollowers: anyone also doing the task is dropped (doing it already
+ * keeps them informed — and only the people doing it count as late), repeats
+ * count once, and a personal task has none.
+ */
+async function followersForNewTask(actor, list, { personal, people }) {
+  if (list == null) return [];
+  if (!Array.isArray(list) || list.some((x) => !mongoose.isValidObjectId(x))) throw fail('Invalid person.', 400);
+  const ids = [...new Set(list.map(String))];
+  if (!ids.length) return [];
+  if (personal) throw fail('A personal task is only yours, so nobody can follow it.', 400);
+  const doing = new Set(people.map((u) => idOf(u._id)));
+  const toAdd = ids.filter((x) => !doing.has(x));
+  if (toAdd.length > FOLLOWERS_MAX) throw fail(FOLLOWERS_FULL, 400);
+  return loadFollowers(actor, toAdd);
 }
 
 /**

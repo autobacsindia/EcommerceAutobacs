@@ -31,9 +31,25 @@ export default function SalesTypeBadge({ info, detail = false }: { info: SalesTy
       )}
       {detail && c?.status === 'approved' && (
         <p className="text-xs text-green-800">
-          {info.label} approved by {c.byName || (c.role === 'admin' ? 'the admin' : 'accounts')}
+          {c.changes?.length ? 'First approved' : `${info.label} approved`} by {c.byName || (c.role === 'admin' ? 'the admin' : 'accounts')}
           {c.at ? ` on ${formatDateTimeIST(c.at)}` : ''}{c.note ? `: “${c.note}”` : ''}
         </p>
+      )}
+      {info.alert && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs font-medium text-red-800">{info.alert}</p>}
+      {detail && !!c?.changes?.length && (
+        <div className="pt-1">
+          <p className="text-xs font-semibold text-gray-700">Type changes</p>
+          <ol className="mt-1 space-y-1 border-l-2 border-gray-200 pl-3" aria-label="Type changes">
+            {c.changes.map((ch, i) => (
+              <li key={`${ch.at}-${i}`} className="text-xs text-gray-700">
+                <span className="font-semibold">{ch.fromLabel} → {ch.toLabel}</span>
+                {' '}by {ch.byName || (ch.role === 'admin' ? 'the admin' : 'accounts')}
+                {ch.at ? ` on ${formatDateTimeIST(ch.at)}` : ''}: “{ch.reason}”
+                {ch.payLaterNote && <span className="block text-amber-800">{ch.payLaterNote}</span>}
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
     </div>
   );

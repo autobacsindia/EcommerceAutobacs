@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { reportClientError } from './reportClientError';
 
 /**
  * Lazy-load an OPTIONAL component's chunk without ever letting a failed download
@@ -49,6 +50,9 @@ export function loadOptionalChunk<P>(
     } catch {
       /* a logging failure must not resurrect the error we just contained */
     }
+    // The page still works (it renders nothing here), so a warning, not an error —
+    // but a run of these is how the 2026-11 careers outage started.
+    reportClientError({ feature: 'script', step: 'optional-chunk', level: 'warning', error: lastError });
     return { default: RenderNothing as ComponentType<P> };
   };
 }

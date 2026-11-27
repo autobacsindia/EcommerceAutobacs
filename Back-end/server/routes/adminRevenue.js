@@ -3,10 +3,13 @@
  *
  *   GET   /admin/revenue?period=fy|all               the full picture, month by month
  *   GET   /admin/revenue/sales?period&source&cursor   every sale behind the figures (cursor paged)
- *   POST  /admin/revenue/zoho-import (file=CSV)       import a Zoho Books invoice OR credit-note export
+ *   POST  /admin/revenue/zoho-import (file=CSV)       import a Zoho Books invoice, credit-note or payments export
  *   POST  /admin/revenue/zoho-rematch                 re-run the count-once matcher
  *   GET   /admin/revenue/zoho-invoices?state&cursor   invoices by match state (cursor paged)
  *   PATCH /admin/revenue/zoho-invoices/:id            admin decides: same panel order / separate sale
+ *   GET   /admin/revenue/unbilled?state&cursor        paid, no sale bill yet (cursor paged)
+ *   POST  /admin/revenue/unbilled                     add money Zoho never recorded (with proof)
+ *   PATCH /admin/revenue/unbilled/:id                 count / same as panel order / billed / remove
  *
  * The figures here are company-level money, so every route is admin-only on the
  * server (`protect` → 401, `admin` → 403 for staff and customers).
@@ -25,8 +28,10 @@ import {
   rematchZohoInvoices,
   listZohoInvoices,
   decideZohoInvoice,
+  resolvePeriod,
 } from '../services/companyRevenueService.js';
-import { ZOHO_IMPORT_MAX_BYTES, ZOHO_MATCH_STATES } from '../config/companyRevenue.js';
+import { addManualReceipt, decideUnbilled, listUnbilled, rematchUnbilled } from '../services/unbilledReceiptService.js';
+import { ZOHO_IMPORT_MAX_BYTES, ZOHO_MATCH_STATES, UNBILLED_STATES, UNBILLED_MAX_AMOUNT } from '../config/companyRevenue.js';
 
 const router = express.Router();
 router.use(protect, admin);
@@ -83,6 +88,8 @@ router.post(
   '/revenue/zoho-rematch',
   asyncHandler(async (req, res) => {
     const result = await rematchZohoInvoices();
+    // Unbilled Zoho payments go through the same count-once check.
+    result.unbilledRematched = (await rematchUnbilled()).changed;
     await dropHeaderCache();
     res.json({ success: true, result });
   })
@@ -110,6 +117,50 @@ router.patch(
     const invoice = await decideZohoInvoice(req.params.id, req.body, req.user);
     await dropHeaderCache();
     res.json({ success: true, invoice });
+  })
+);
+
+router.get(
+  '/revenue/unbilled',
+  query('state').optional().isIn(UNBILLED_STATES),
+  query('period').optional().isIn(['fy', 'all']),
+  query('cursor').optional().isString().isLength({ max: 60 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  validateRequest,
+  asyncHandler(async (req, res) => {
+    noStore(res);
+    const { from } = resolvePeriod(req.query.period || 'fy');
+    res.json({ success: true, ...(await listUnbilled({ ...req.query, from })) });
+  })
+);
+
+router.post(
+  '/revenue/unbilled',
+  body('customerName').isString().trim().isLength({ min: 1, max: 200 }),
+  body('amount').isFloat({ gt: 0, max: UNBILLED_MAX_AMOUNT }),
+  body('receivedAt').isString().isLength({ min: 8, max: 10 }),
+  body('proof').isString().trim().isLength({ min: 1, max: 500 }),
+  body('mode').optional({ values: 'null' }).isString().isLength({ max: 60 }),
+  body('note').optional({ values: 'null' }).isString().isLength({ max: 500 }),
+  validateRequest,
+  asyncHandler(async (req, res) => {
+    const receipt = await addManualReceipt(req.body, req.user);
+    await dropHeaderCache();
+    res.status(201).json({ success: true, receipt });
+  })
+);
+
+router.patch(
+  '/revenue/unbilled/:id',
+  param('id').isMongoId(),
+  body('decision').isIn(['count', 'same_as_panel', 'billed', 'remove']),
+  body('invoiceNumber').optional({ values: 'null' }).isString().isLength({ max: 60 }),
+  body('note').optional({ values: 'null' }).isString().isLength({ max: 300 }),
+  validateRequest,
+  asyncHandler(async (req, res) => {
+    const receipt = await decideUnbilled(req.params.id, req.body, req.user);
+    await dropHeaderCache();
+    res.json({ success: true, receipt });
   })
 );
 

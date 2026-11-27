@@ -22,6 +22,7 @@ import {
   razorpayStartMethodForChoice,
   type PaymentChoice,
 } from '@/lib/paymentChoices';
+import { streetLines, isAddressComplete, savedAddressStreet, ADDRESS_FIELD_TEXT, ADDRESS_LIMITS } from '@/lib/deliveryAddress';
 import { validateCheckoutAddress, firstAddressError, type AddressErrors, type AddressField } from '@/lib/checkout/addressValidation';
 import { BUYER_TYPES, checkGstin, normalizeGstin, type BuyerType } from '@/lib/legal/buyerTypes';
 import { enterpriseBlockError } from '@/lib/legal/checkoutBuyer';
@@ -30,6 +31,7 @@ import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
+import { httpStatusOf, reportClientError } from '@/lib/reportClientError';
 import { useStepScroll } from '@/hooks/useStepScroll';
 import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
@@ -41,7 +43,11 @@ import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
 import { formatRupees } from '@/lib/formatRupees';
+import EnhancedImage from '@/components/layout/EnhancedImage';
+import { firstImageUrl } from '@/lib/firstImageUrl';
 import CheckoutDeliveryNote from '@/components/checkout/CheckoutDeliveryNote';
+import PromoCodeBox from '@/components/checkout/PromoCodeBox';
+import { usePendingCouponAutoApply } from '@/hooks/usePendingCouponAutoApply';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -56,7 +62,11 @@ interface ServerValidation {
 
 interface Address {
   fullName: string;
+  /** House / Flat / Building no. (lib/deliveryAddress.ts) */
+  houseNumber: string;
+  /** Street / Area — sent as addressLine1 */
   street: string;
+  landmark: string;
   city: string;
   state: string;
   postalCode: string;
@@ -67,7 +77,11 @@ interface Address {
 
 interface SavedAddress {
   fullName: string;
+  /** Absent on addresses saved before the house-number rule. */
+  houseNumber?: string;
   addressLine1: string;
+  addressLine2?: string;
+  landmark?: string;
   city: string;
   state: string;
   postalCode: string;
@@ -75,6 +89,22 @@ interface SavedAddress {
   phone: string;
   isDefault?: boolean;
 }
+
+/** A saved address as the form's fields. Old two-line addresses keep both lines (lib/deliveryAddress.ts). */
+const fromSaved = (addr: SavedAddress): Address => {
+  const { houseNumber, addressLine1, landmark } = savedAddressStreet(addr);
+  return {
+    fullName: addr.fullName,
+    houseNumber,
+    street: addressLine1,
+    landmark,
+    city: addr.city, state: addr.state, postalCode: addr.postalCode, country: addr.country, phone: addr.phone,
+  };
+};
+
+const EMPTY_ADDRESS: Omit<Address, 'fullName'> = {
+  houseNumber: '', street: '', landmark: '', city: '', state: '', postalCode: '', country: 'India', phone: '',
+};
 
 /** A labelled delivery-address box that turns red with its own message. */
 function AddressInput({ field, label, value, error, className, onChange, type = 'text', placeholder, inputMode, maxLength, autoComplete }: {
@@ -127,7 +157,9 @@ function CheckoutPageContent() {
   const offerLabel = useFestivalOfferLabel();
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const { cart, clearCart, isLoading: cartLoading, refreshCart } = useCart();
+  const { cart, clearCart, isLoading: cartLoading, refreshCart, applyCoupon } = useCart();
+  // "Buy now" skips the cart page, so the card-QR code (HILUX5000) must be applied here too.
+  usePendingCouponAutoApply(cart, isAuthenticated, applyCoupon);
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('cart');
   // Each step change scrolls back to the stepper and focuses the new step's heading.
   const { containerRef: stepTopRef, headingRef: stepHeadingRef } = useStepScroll(currentStep);
@@ -294,7 +326,7 @@ function CheckoutPageContent() {
   });
 
   const [address, setAddress] = useState<Address>({
-    fullName: '', street: '', city: '', state: '', postalCode: '', country: 'India', phone: '',
+    fullName: '', ...EMPTY_ADDRESS,
   });
 
   // ── Buyer category + legal acceptance ───────────────────────────────────────
@@ -332,6 +364,8 @@ function CheckoutPageContent() {
   const [shouldSaveAddress, setShouldSaveAddress] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState<number | null>(null);
+  // Which saved address the form is completing (an old one with no house no.).
+  const [completingIndex, setCompletingIndex] = useState<number | null>(null);
   // Per-field messages from the last "Continue to Payment"; a box clears as it is edited.
   const [addressErrors, setAddressErrors] = useState<AddressErrors>({});
 
@@ -406,7 +440,7 @@ function CheckoutPageContent() {
               if (defaultIndex !== -1) {
                 setSelectedAddressIndex(defaultIndex);
                 const addr = response.user.addresses[defaultIndex];
-                setAddress({ fullName: addr.fullName, street: addr.addressLine1, city: addr.city, state: addr.state, postalCode: addr.postalCode, country: addr.country, phone: addr.phone });
+                setAddress(fromSaved(addr));
               }
             }
           } else {
@@ -465,15 +499,31 @@ function CheckoutPageContent() {
     if (firstError) {
       // A saved address from before these checks (e.g. PIN "12") opens in the
       // form, filled in, so the customer can correct it.
-      if (!showAddressForm) setShowAddressForm(true);
+      // An old saved address without a house number / with a one-word street:
+      // remember which one, so saving the completed form REPLACES it.
+      if (!showAddressForm) {
+        setShowAddressForm(true);
+        setCompletingIndex(selectedAddressIndex);
+        toast.error('Please complete this saved address — add the house / flat number and street details so the courier can find you.');
+        return;
+      }
       toast.error(firstError);
       return;
     }
     if (!showAddressForm && selectedAddressIndex !== null) { setCurrentStep('payment'); return; }
-    if (shouldSaveAddress && isAuthenticated) {
+    if ((shouldSaveAddress || completingIndex !== null) && isAuthenticated) {
       try {
-        const newAddress: SavedAddress = { fullName: address.fullName, addressLine1: address.street, city: address.city, state: address.state, postalCode: address.postalCode, country: address.country, phone: address.phone, isDefault: savedAddresses.length === 0 };
-        const updatedAddresses = [...savedAddresses, newAddress];
+        const completing = completingIndex !== null && savedAddresses[completingIndex] ? completingIndex : null;
+        const newAddress: SavedAddress = {
+          fullName: address.fullName, houseNumber: address.houseNumber.trim(), addressLine1: address.street,
+          ...(address.landmark.trim() && { landmark: address.landmark.trim() }),
+          city: address.city, state: address.state, postalCode: address.postalCode, country: address.country, phone: address.phone,
+          isDefault: completing !== null ? Boolean(savedAddresses[completing].isDefault) : savedAddresses.length === 0,
+        };
+        // Completing an old saved address replaces it instead of adding a copy.
+        const updatedAddresses = completing !== null
+          ? savedAddresses.map((a, i) => (i === completing ? newAddress : a))
+          : [...savedAddresses, newAddress];
         await apiClient.put('/profile', { name: user?.name, email: user?.email, addresses: updatedAddresses });
         setSavedAddresses(updatedAddresses);
         toast.success('Address saved to profile');
@@ -570,7 +620,8 @@ function CheckoutPageContent() {
               gstin: normalizeGstin(business.gstin),
               billingAddress: billingSameAsShipping
                 ? {
-                    addressLine1: address.street,
+                    // A bill-to has no house-number field: fold it into line 1.
+                    addressLine1: [address.houseNumber.trim(), address.street.trim()].filter(Boolean).join(', '),
                     city: address.city,
                     postalCode: address.postalCode,
                     phone: address.phone,
@@ -589,7 +640,9 @@ function CheckoutPageContent() {
         acceptTerms: acceptedTerms,
         whatsappOptIn,
         shippingAddress: {
-          fullName: address.fullName, addressLine1: address.street,
+          fullName: address.fullName,
+          houseNumber: address.houseNumber, addressLine1: address.street,
+          ...(address.landmark.trim() && { landmark: address.landmark }),
           city: address.city, state: address.state, postalCode: address.postalCode,
           country: address.country, phone: address.phone
         },
@@ -659,6 +712,8 @@ function CheckoutPageContent() {
         toast.error(err.message || 'The Black Friday offer has ended. Please review your new total.', { duration: 8000 });
       } else {
         toast.error(err.message || 'Failed to place order');
+        // Report only (the "Website errors" page): the HTTP status and message, no cart or address.
+        reportClientError({ feature: 'checkout', step: 'place-order', error: err, message: err?.message || 'Failed to place order', context: { httpStatus: httpStatusOf(err), paymentMethod } });
       }
     } finally {
       setLoading(false);
@@ -851,8 +906,17 @@ function CheckoutPageContent() {
             <div className="space-y-3 mb-8">
               {cart?.items.map((item: any) => (
                 <div key={`${item.product._id}-${item.variantId ?? ''}`} className="flex items-center gap-4 bg-obsidian border border-hairline rounded-lg p-4">
-                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-lg shrink-0" />
-                  <div className="flex-1">
+                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-lg shrink-0 overflow-hidden">
+                    <EnhancedImage
+                      src={firstImageUrl(item.product.images)}
+                      alt={item.product.name}
+                      width={64}
+                      height={64}
+                      context="product"
+                      className="object-cover w-full h-full"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-display text-ink tracking-[-0.01em] text-sm">{item.product.name}</h3>
                     {item.variantLabel && (
                       <p className="text-[12px] uppercase tracking-[0.12em] text-gold mt-0.5 font-semibold">{item.variantLabel}</p>
@@ -931,6 +995,7 @@ function CheckoutPageContent() {
                     : reviewQuoteLoading ? 'Working it out…' : '—'}
                 </span>
               </div>
+              <PromoCodeBox />
             </div>
 
             <button
@@ -1102,13 +1167,20 @@ function CheckoutPageContent() {
                     className={`border rounded-sm p-4 cursor-pointer transition-colors ${selectedAddressIndex === index ? 'border-gold bg-gold/5' : 'border-hairline bg-obsidian hover:border-gold/40'}`}
                     onClick={() => {
                       setSelectedAddressIndex(index);
-                      setAddress({ fullName: addr.fullName, street: addr.addressLine1, city: addr.city, state: addr.state, postalCode: addr.postalCode, country: addr.country, phone: addr.phone });
+                      setAddress(fromSaved(addr));
                     }}
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <p className="font-display text-ink tracking-[-0.01em] text-sm">{addr.fullName}</p>
-                        <p className="text-ink/70 font-display text-sm mt-1">{addr.addressLine1}</p>
+                        {streetLines(addr).map((line, i) => (
+                          <p key={i} className={`text-ink/70 font-display text-sm ${i === 0 ? 'mt-1' : ''}`}>{line}</p>
+                        ))}
+                        {!isAddressComplete(savedAddressStreet(addr)) && (
+                          <p className="mt-1 inline-block rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-display text-amber-800">
+                            Needs house / flat no. — you&apos;ll be asked to add it
+                          </p>
+                        )}
                         <p className="text-ink/70 font-display text-sm">{addr.city}, {addr.state} {addr.postalCode}</p>
                         <p className="text-ink-muted font-display text-sm">{addr.phone}</p>
                       </div>
@@ -1142,7 +1214,7 @@ function CheckoutPageContent() {
                 ))}
 
                 <button
-                  onClick={() => { setShowAddressForm(true); setSelectedAddressIndex(null); setAddressErrors({}); setAddress({ fullName: user?.name || '', street: '', city: '', state: '', postalCode: '', country: 'India', phone: '' }); }}
+                  onClick={() => { setShowAddressForm(true); setSelectedAddressIndex(null); setAddressErrors({}); setCompletingIndex(null); setAddress({ fullName: user?.name || '', ...EMPTY_ADDRESS }); }}
                   className="w-full py-3 border-2 border-dashed border-hairline rounded-full text-ink-muted hover:border-gold hover:text-gold flex items-center justify-center gap-2 transition-colors font-display font-bold text-[15px]"
                 >
                   <Plus className="h-4 w-4" />
@@ -1162,14 +1234,21 @@ function CheckoutPageContent() {
             {showAddressForm && (
               <form onSubmit={handleAddressSubmit} noValidate className="space-y-4">
                 {savedAddresses.length > 0 && (
-                  <button type="button" onClick={() => setShowAddressForm(false)} className="text-sm text-gold hover:text-ink font-display font-bold uppercase tracking-[0.12em] transition-colors mb-2">
+                  <button type="button" onClick={() => { setShowAddressForm(false); setCompletingIndex(null); }} className="text-sm text-gold hover:text-ink font-display font-bold uppercase tracking-[0.12em] transition-colors mb-2">
                     ← Back to Saved Addresses
                   </button>
                 )}
                 {/* noValidate: our own per-box messages replace the browser's
                     bubble, which named no field once the placeholders were gone. */}
                 <AddressInput field="fullName" label="Full name" autoComplete="name" value={address.fullName} error={addressErrors.fullName} className={inputClass} onChange={onAddressChange} />
-                <AddressInput field="street" label="House / street address" autoComplete="street-address" value={address.street} error={addressErrors.street} className={inputClass} onChange={onAddressChange} />
+                {completingIndex !== null && (
+                  <p role="status" className="rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-display text-amber-900">
+                    This saved address is missing some details. Please add your house / flat number (and street & area) so the courier doesn&apos;t have to call you.
+                  </p>
+                )}
+                <AddressInput field="houseNumber" label={ADDRESS_FIELD_TEXT.houseNumber.label} placeholder={ADDRESS_FIELD_TEXT.houseNumber.placeholder} autoComplete="address-line1" maxLength={ADDRESS_LIMITS.houseNumber} value={address.houseNumber} error={addressErrors.houseNumber} className={inputClass} onChange={onAddressChange} />
+                <AddressInput field="street" label={ADDRESS_FIELD_TEXT.addressLine1.label} placeholder={ADDRESS_FIELD_TEXT.addressLine1.placeholder} autoComplete="address-line2" maxLength={ADDRESS_LIMITS.street} value={address.street} error={addressErrors.street} className={inputClass} onChange={onAddressChange} />
+                <AddressInput field="landmark" label={ADDRESS_FIELD_TEXT.landmark.label} placeholder={ADDRESS_FIELD_TEXT.landmark.placeholder} autoComplete="off" maxLength={ADDRESS_LIMITS.landmark} value={address.landmark} error={addressErrors.landmark} className={inputClass} onChange={onAddressChange} />
                 <div className="grid grid-cols-2 gap-4">
                   <AddressInput field="city" label="City" autoComplete="address-level2" value={address.city} error={addressErrors.city} className={inputClass} onChange={onAddressChange} />
                   <AddressInput field="state" label="State" autoComplete="address-level1" value={address.state} error={addressErrors.state} className={inputClass} onChange={onAddressChange} />
@@ -1273,7 +1352,9 @@ function CheckoutPageContent() {
               <div>
                 <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-2">Shipping Address</h3>
                 <p className="text-ink font-display text-sm font-semibold">{address.fullName}</p>
-                <p className="text-ink/70 font-display text-sm">{address.street}</p>
+                {streetLines({ houseNumber: address.houseNumber, addressLine1: address.street, landmark: address.landmark }).map((line, i) => (
+                  <p key={i} className="text-ink/70 font-display text-sm">{line}</p>
+                ))}
                 <p className="text-ink/70 font-display text-sm">{address.city}, {address.state} {address.postalCode}</p>
                 <p className="text-ink-muted font-display text-sm">{address.phone}</p>
               </div>

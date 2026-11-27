@@ -10,6 +10,30 @@ export type SalesTypeCheck = {
   role: 'accounts' | 'admin' | null;
   at: string | null;
   note: string;
+  /** Every later change of the type, newest first (Back-end utils/salesType.js shapeChange). */
+  changes?: SalesTypeChange[];
+};
+/** One B2B ↔ B2C change by accounts / the admin, kept for good. */
+export type SalesTypeChange = {
+  at: string | null;
+  byName: string | null;
+  role: 'accounts' | 'admin' | null;
+  from: 'b2b' | 'b2c';
+  to: 'b2b' | 'b2c';
+  fromLabel: 'B2B' | 'B2C';
+  toLabel: 'B2B' | 'B2C';
+  reason: string;
+  payLaterEffect: 'none' | 'withdrawn' | 'kept_shipped_unpaid';
+  /** Server-written, e.g. "Ship before payment was taken back…". */
+  payLaterNote: string | null;
+};
+/** Can accounts switch this order to the other type now (Back-end salesTypeService typeChangeOption). */
+export type SalesTypeChangeOption = {
+  to: 'b2b' | 'b2c';
+  toLabel: 'B2B' | 'B2C';
+  allowed: boolean;
+  why: string | null;
+  payLaterEffect: SalesTypeChange['payLaterEffect'];
 };
 export type SalesTypeInfo = {
   type: 'b2b' | 'b2c';
@@ -20,6 +44,8 @@ export type SalesTypeInfo = {
   company: { legalName: string; gstin: string } | null;
   /** Accounts' check; null on orders made before it existed. */
   check: SalesTypeCheck | null;
+  /** Red note, e.g. changed to B2C after it shipped unpaid. */
+  alert?: string | null;
 };
 /** The quotation's buyer, for the form (enterprise = B2B). */
 export type QuotationBuyer = {
@@ -121,8 +147,10 @@ export type SalesOrder = {
   shippingAddress: {
     fullName?: string;
     phone?: string;
+    houseNumber?: string;
     addressLine1?: string;
     addressLine2?: string;
+    landmark?: string;
     city?: string;
     state?: string;
     postalCode?: string;

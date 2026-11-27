@@ -254,6 +254,9 @@ class PricingService {
         },
         categories: product.categories || [],
         brandSlug: product.brandSlug || null,
+        // For vehicle-scoped coupons only; orderService picks persisted fields, so
+        // this never lands on the order.
+        compatibleVehicles: product.compatibleVehicles || [],
         onSale,
         // Filled in by the product-tier ladder when one applies; 0 otherwise. This is
         // the figure refundMathService reads to refund a returned line at ITS OWN rate.
@@ -287,10 +290,12 @@ class PricingService {
     const products   = (appliesTo?.products   || []).map(String);
     const categories = (appliesTo?.categories || []).map(String);
     const brandSlugs = (appliesTo?.brandSlugs || []);
-    if (!products.length && !categories.length && !brandSlugs.length) return true; // whole-cart
+    const vehicles   = (appliesTo?.vehicles   || []).map(String);
+    if (!products.length && !categories.length && !brandSlugs.length && !vehicles.length) return true; // whole-cart
     if (products.includes(String(item.product))) return true;
     if (item.brandSlug && brandSlugs.includes(item.brandSlug)) return true;
     if ((item.categories || []).some(c => categories.includes(String(c)))) return true;
+    if ((item.compatibleVehicles || []).some(v => vehicles.includes(String(v?._id ?? v)))) return true;
     return false;
   }
 

@@ -10,7 +10,9 @@ import { formatRupees } from '@/lib/formatRupees';
 
 export type MomentKey =
   | 'payment_failed' | 'refunded' | 'cancelled' | 'returning' | 'delivered' | 'on_hold'
-  | 'late' | 'partly' | 'shipped' | 'packed' | 'preparing' | 'placed';
+  | 'late' | 'partly' | 'shipped' | 'packed' | 'preparing' | 'placed'
+  // Delivery updates operations records on a parcel in transit.
+  | 'delivery_failed' | 'out_for_delivery' | 'date_moved' | 'in_transit';
 
 export interface OrderMomentData {
   key: MomentKey;
@@ -18,6 +20,12 @@ export interface OrderMomentData {
   refund?: { amount: number } | null;
   returnStep?: number;
   late?: { dueDay: string };
+  /** Delivery updates: the team's note, exactly as the customer sees it under the parcel. */
+  note?: string;
+  /** date_moved: the new expected day, 'YYYY-MM-DD'. */
+  newDay?: string;
+  /** Delivery updates: when it was recorded (ISO). A newer one plays again. */
+  at?: string;
 }
 
 export type MomentTone = 'go' | 'care' | 'calm';
@@ -27,6 +35,10 @@ export interface MomentCopy {
   tone: MomentTone;
   title: string;
   body: string;
+  /** The team's own words on a delivery update, shown as a quote under the body. */
+  note?: string;
+  /** "Updated Thu 3 Dec" for delivery updates, so an old update never reads as today. */
+  updated?: string;
   /** Return steps, with the index of the current one. */
   steps?: { labels: string[]; at: number };
 }
@@ -47,6 +59,13 @@ export function momentDay(day: string | undefined | null): string | null {
 export function momentDayShort(day: string | undefined | null): string | null {
   const full = momentDay(day);
   return full ? full.split(' ').slice(0, 2).join(' ') : null;
+}
+
+const IST_MS = 330 * 60 * 1000;
+/** ISO time → its India calendar day as "Thu 3 Dec"; null when malformed. */
+export function momentDayOf(iso: string | undefined | null): string | null {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(t) ? momentDay(new Date(t + IST_MS).toISOString().slice(0, 10)) : null;
 }
 
 /**
@@ -103,6 +122,37 @@ export function momentCopy(moment: OrderMomentData, { shipped = false }: { shipp
           : `${promise}Your order is still with us and our team is on it. We’ll message you the moment it moves.`,
       };
     }
+    case 'delivery_failed':
+    case 'out_for_delivery':
+    case 'in_transit':
+    case 'date_moved': {
+      const note = moment.note?.trim() || undefined;
+      const on = momentDayOf(moment.at);
+      const updated = on ? `Updated ${on}` : undefined;
+      if (moment.key === 'delivery_failed') {
+        return {
+          chip: 'Delivery attempt', tone: 'care', title: 'The courier couldn’t deliver this time',
+          body: 'The courier will try again. Keep your phone close, or message us if you’d like a different time.',
+          note, updated,
+        };
+      }
+      if (moment.key === 'out_for_delivery') {
+        return {
+          chip: 'Out for delivery', tone: 'go', title: 'Out for delivery',
+          body: 'Your parcel is with the delivery partner in your area. Keep your phone close.',
+          note, updated,
+        };
+      }
+      if (moment.key === 'date_moved') {
+        const day = momentDay(moment.newDay);
+        return {
+          chip: 'Date updated', tone: 'care', title: 'Your delivery date has changed',
+          body: day ? `New expected date: ${day}. We’re sorry for the wait.` : 'We’ve updated your expected delivery date. We’re sorry for the wait.',
+          updated,
+        };
+      }
+      return { chip: 'In transit', tone: 'go', title: 'Your parcel is moving', body: 'Your parcel is on its way with the courier.', note, updated };
+    }
     case 'partly':
       return {
         chip: 'Part shipped', tone: 'care', title: 'Part of your order is on its way',
@@ -129,9 +179,16 @@ export function momentCopy(moment: OrderMomentData, { shipped = false }: { shipp
   }
 }
 
-/** What "the same update" means for play-once: the scene, plus the return step. */
+const UPDATE_KEYS: ReadonlySet<MomentKey> = new Set(['delivery_failed', 'out_for_delivery', 'date_moved', 'in_transit']);
+
+/**
+ * What "the same update" means for play-once: the scene, plus the return step, plus
+ * the time of a delivery update (a second failed attempt is a new update).
+ */
 export function momentSignature(moment: OrderMomentData): string {
-  return moment.key === 'returning' ? `returning:${moment.returnStep ?? 0}` : moment.key;
+  if (moment.key === 'returning') return `returning:${moment.returnStep ?? 0}`;
+  if (UPDATE_KEYS.has(moment.key) && moment.at) return `${moment.key}:${moment.at}`;
+  return moment.key;
 }
 
 const storageKey = (orderId: string) => `ab:order-moment:${orderId}`;

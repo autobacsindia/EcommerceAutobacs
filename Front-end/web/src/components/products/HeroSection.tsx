@@ -20,7 +20,7 @@ interface HeroSectionProps {
 }
 
 export default function HeroSection({ product }: HeroSectionProps) {
-  const lifestyleImage = product.images?.[0]?.url || '/placeholder-product.jpg';
+  const lifestyleImage = product.images?.[0]?.url || '/images/fallback-product.webp';
   // A time-boxed sale's slash hides the moment the countdown hits zero; an
   // untimed markdown (originalPrice with no saleEndsAt) always shows.
   const { live: saleLive } = useSaleCountdown(product.saleEndsAt);

@@ -39,6 +39,7 @@ import { AdminOrderPayments } from '@/components/payments/OrderSupplierBills';
 import OrderPayLater from '@/components/payments/payLater/OrderPayLater';
 import EditOrderAddress from '@/components/admin/EditOrderAddress';
 import OrderDeliveryFees, { type OrderDeliveryFeesSnapshot } from '@/components/orders/OrderDeliveryFees';
+import { streetLines } from '@/lib/deliveryAddress';
 
 /** What the gateway holds — and so the most a refund can send back. */
 const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
@@ -99,8 +100,10 @@ interface Order {
     fullName: string;
     phone: string;
     alternatePhone?: string;
+    houseNumber?: string;
     addressLine1: string;
     addressLine2?: string;
+    landmark?: string;
     city: string;
     state: string;
     postalCode: string;
@@ -886,10 +889,9 @@ function AdminOrderDetailPageInner() {
               {order.shippingAddress.alternatePhone && (
                 <p className="text-gray-600">Alt: {order.shippingAddress.alternatePhone}</p>
               )}
-              <p className="text-gray-600 mt-2">
-                {order.shippingAddress.addressLine1}
-                {order.shippingAddress.addressLine2 && `, ${order.shippingAddress.addressLine2}`}
-              </p>
+              <div className="text-gray-600 mt-2">
+                {streetLines(order.shippingAddress).map((line, i) => <p key={i}>{line}</p>)}
+              </div>
               <p className="text-gray-600">
                 {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}
               </p>

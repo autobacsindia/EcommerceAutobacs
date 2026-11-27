@@ -67,6 +67,7 @@ import {
   emailStaffPayLaterApprovedAlert,
   emailStaffPayLaterPaidAlert,
   emailPayLaterOverdueAlert,
+  emailStaffSalesTypeChangedAlert,
   emailTeamShippedAlert,
   emailTeamOutOfStockAlert,
   emailTeamRefundRequestedAlert,
@@ -220,6 +221,8 @@ const handlers = {
   'send-staff-pay-later-approved-alert': async (job) => { await emailStaffPayLaterApprovedAlert(job.data.orderId); },
   'send-staff-pay-later-paid-alert': async (job) => { await emailStaffPayLaterPaidAlert(job.data.orderId); },
   'send-pay-later-overdue-alert': async (job) => { await emailPayLaterOverdueAlert(job.data); },
+  // B2B → B2C that touched "Ship before payment" (services/salesTypeService.js).
+  'send-staff-sales-type-changed-alert': async (job) => { await emailStaffSalesTypeChangedAlert(job.data.orderId); },
 
   // Team workflow alerts. Each sender never throws (per-recipient errors are logged),
   // so a flaky inbox cannot make BullMQ re-send to everyone else.

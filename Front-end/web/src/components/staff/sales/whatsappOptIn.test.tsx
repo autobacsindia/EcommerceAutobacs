@@ -24,7 +24,7 @@ function renderAndFill() {
   fireEvent.click(screen.getByRole('radio', { name: /B2C — retail/ }));
   fill(/^Name$/, 'Ravi Kumar');
   fill(/Mobile \(WhatsApp\)/, '98765 43210');
-  fill(/House \/ street/, '12 MG Road');
+  fill(/House \/ Flat/, 'Flat 4B'); fill(/Street \/ Area/, '12 MG Road');
   fill(/^City$/, 'Pune');
   fill(/^State$/, 'Maharashtra');
   fill(/PIN code/, '411001');

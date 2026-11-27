@@ -45,6 +45,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import apiClient from '@/lib/api';
+import { httpStatusOf, reportClientError } from '@/lib/reportClientError';
 import './careers.css';
 
 /** A public job posting as returned by GET /careers/postings. */
@@ -728,6 +729,13 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
           ReferenceError that masks the real error the applicant should see.
         */
         const uploaded: Record<string, UploadedRef> = {};
+        /*
+          Which step we are on and, for a failed upload, which file slot — sent with
+          the error report so the "Website errors" page says exactly what broke.
+          Codes only: never the applicant's name, email or file name.
+        */
+        let step = 'prepare';
+        const failure: Record<string, string | number | undefined> = {};
         try {
           /*
             Step 1: the files we are about to send. This has to be decided BEFORE
@@ -749,6 +757,7 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
 
           // Step 2: upload credentials from our backend (files never touch us).
           setOverall(3, 'Preparing secure upload…');
+          step = 'upload-signature';
           const sig = await apiClient.post<SignatureResponse>(
             '/careers/applications/upload-signature',
             {
@@ -777,6 +786,8 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
 
           // Step 3: upload every file straight to storage (parallel).
           setOverall(5, 'Uploading files…');
+          step = 'file-upload';
+          failure.provider = sig.provider || 'cloudinary';
 
           let completed = 0;
           const total = toUpload.length;
@@ -802,8 +813,14 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
               setOverall(5 + Math.round((completed / total) * 85), `Uploading files… (${completed}/${total} done)`);
             });
           }));
-          const failedUpload = results.find((r) => r.status === 'rejected');
+          const failedIndex = results.findIndex((r) => r.status === 'rejected');
+          const failedUpload = failedIndex >= 0 ? results[failedIndex] as PromiseRejectedResult : undefined;
           if (failedUpload) {
+            const item = toUpload[failedIndex];
+            failure.slot = item.key;
+            failure.sizeMb = Math.round((item.file.size / (1024 * 1024)) * 10) / 10;
+            failure.mime = (item.file.type || 'unknown').slice(0, 40);
+            failure.failedUploads = results.filter((r) => r.status === 'rejected').length;
             throw failedUpload.reason instanceof Error
               ? failedUpload.reason
               : new Error('One of your files failed to upload. Please try again.');
@@ -811,6 +828,7 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
 
           // Step 3: submit the application (refs + fields) to our API.
           setOverall(92, 'Saving your application…');
+          step = 'submit';
           if (btn) btn.textContent = 'Saving…';
           await apiClient.post('/careers/applications', {
             role,
@@ -854,6 +872,13 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
           if (strays.length) {
             apiClient.post('/careers/applications/cleanup', { publicIds: strays }).catch(() => {});
           }
+          const httpStatus = httpStatusOf(err) ?? Number(/HTTP (\d{3})/.exec(err instanceof Error ? err.message : '')?.[1] || 0);
+          reportClientError({
+            feature: 'careers',
+            step,
+            error: err,
+            context: { ...failure, httpStatus: httpStatus || undefined, online: navigator.onLine },
+          });
           if (unmounted) return;
           showErr(err instanceof Error ? err.message : 'Something went wrong. Please check your connection and try again.');
           resetBtn();

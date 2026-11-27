@@ -15,6 +15,7 @@
  *   - the bell counts are the list queries
  */
 
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
 
@@ -1057,3 +1058,6 @@ describe('correcting the pickup cost after inspection (owner, 2026-11-11)', () =
 });
 
 function toPaiseT(rupees) { return Math.round(rupees * 100); }
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

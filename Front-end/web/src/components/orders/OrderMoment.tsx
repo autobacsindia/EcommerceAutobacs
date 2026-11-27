@@ -44,8 +44,8 @@ export default function OrderMoment({
 
   const copy = momentCopy(moment, { shipped });
   const svg = useMemo(
-    () => sceneMarkup(moment.key, { lateDay: momentDayShort(moment.late?.dueDay) }),
-    [moment.key, moment.late?.dueDay],
+    () => sceneMarkup(moment.key, { lateDay: momentDayShort(moment.late?.dueDay), newDay: momentDayShort(moment.newDay) }),
+    [moment.key, moment.late?.dueDay, moment.newDay],
   );
 
   const chipClass = copy.tone === 'care'
@@ -77,6 +77,12 @@ export default function OrderMoment({
         </span>
         <h2 className="font-display text-xl font-bold leading-tight text-ink sm:text-2xl" data-testid="order-moment-title">{copy.title}</h2>
         <p className="font-display text-sm text-ink-muted" data-testid="order-moment-body">{copy.body}</p>
+        {copy.note && (
+          <p className="rounded-lg border-l-2 border-[#EF9F27] bg-obsidian-deep px-3 py-2 font-display text-sm text-ink" data-testid="order-moment-note">
+            <span className="text-ink-muted">Update from our team: </span>{copy.note}
+          </p>
+        )}
+        {copy.updated && <p className="font-display text-xs text-ink-muted" data-testid="order-moment-updated">{copy.updated}</p>}
         {copy.steps && (
           <ol className="mt-1 flex flex-wrap gap-1.5" aria-label="Return steps">
             {copy.steps.labels.map((label, i) => {

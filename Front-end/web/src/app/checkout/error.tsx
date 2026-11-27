@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { reportClientError } from '@/lib/reportClientError';
 
 export default function CheckoutError({
   error,
@@ -16,6 +17,7 @@ export default function CheckoutError({
         extra: { digest: error.digest, url: window.location.href },
       });
     }
+    reportClientError({ feature: 'checkout', step: 'page-crash', error, context: { digest: error.digest } });
     console.error('[Checkout Error]', error);
   }, [error]);
 

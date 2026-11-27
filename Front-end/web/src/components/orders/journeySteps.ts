@@ -100,14 +100,42 @@ function step(history: History, itemId: string, key: StepKey, state: StepState, 
   };
 }
 
+/** Stages only the supplier route has: a line in one of these is on that route now, whatever it was before. */
+const SUPPLIER_ONLY = new Set<StepKey>(['to_ship', 'payment_pending', 'with_supplier']);
+/** History codes that set (or clear) which route a line takes, newest first in the history. */
+const ROUTE_CODES = new Map<string, boolean | null>([
+  ['stock_own_stock', true],
+  ['stock_in_stock', false],
+  ['stock_ordered', false],
+  ['supplier_changed', false],
+  ['payment_pending', false],
+  ['stock_undone', null],
+  ['decision_undone', null],
+]);
+
+/**
+ * Which path to draw. The CURRENT stage decides first: a line marked "our
+ * warehouse" and later moved to a supplier is on the supplier path now, and
+ * drawing the warehouse path would leave its stage off the track (every step
+ * blank). Only stages both paths share (New Order, Dispatched, Delivered) fall
+ * back to the stock decision, then to the latest routing decision in the history.
+ */
+function isWarehouseLine(stage: LineStage, stock: string | null | undefined, history: History, itemId: string): boolean {
+  if (stage === 'own_stock') return true;
+  if (SUPPLIER_ONLY.has(stage)) return false;
+  if (stock === 'own_stock') return true;
+  if (stock === 'in_stock' || stock === 'ordered') return false;
+  const last = history.find((h) => h.code && ROUTE_CODES.has(h.code) && h.itemId === itemId);
+  return last ? ROUTE_CODES.get(last.code!) === true : false;
+}
+
 export function buildJourney(order: Pick<WorkOrder, 'inWorkflow' | 'lines' | 'history'>): JourneyLine[] {
   if (!order.inWorkflow) return [];
   const history = order.history || [];
 
   return order.lines.map((line) => {
     const stage: LineStage = line.stage ?? 'stock_check';
-    const viaWarehouse = stage === 'own_stock' || line.stock === 'own_stock'
-      || history.some((h) => h.code === 'stock_own_stock' && h.itemId === line.itemId);
+    const viaWarehouse = isWarehouseLine(stage, line.stock, history, line.itemId);
     const path = viaWarehouse ? WAREHOUSE_PATH : SUPPLIER_PATH;
     const inBranch = BRANCH.includes(stage);
     const wentOutOfStock = history.some((h) => h.code === 'stock_out_of_stock' && h.itemId === line.itemId);
@@ -117,6 +145,9 @@ export function buildJourney(order: Pick<WorkOrder, 'inWorkflow' | 'lines' | 'hi
     const finished = stage === 'delivered';
     const steps = path.map((key, i) => {
       if (inBranch) return step(history, line.itemId, key, i <= at ? 'done' : 'upcoming', viaWarehouse);
+      // A stage this path does not know (a newer server stage): the line is in the
+      // workflow, so it was paid — never draw a blank track.
+      if (at < 0) return step(history, line.itemId, key, key === 'paid' ? 'done' : 'upcoming', viaWarehouse);
       if (i < at || (i === at && finished)) return step(history, line.itemId, key, 'done', viaWarehouse);
       return step(history, line.itemId, key, i === at ? 'current' : 'upcoming', viaWarehouse);
     });

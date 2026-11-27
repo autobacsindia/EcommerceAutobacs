@@ -272,38 +272,40 @@ export default function DeliveryFeesEditor({ endpoint, queryKey, canEditSwitches
           all-India rate per slab above.
           {' '}PIN locations loaded: {config.data?.pinLocationCount ?? 0}.
         </p>
-        <table className="w-full text-sm">
-          <thead><tr className="text-left text-gray-600"><th className="py-1">Up to (km)</th><th className="py-1">Big parcel ₹ per kg</th><th className="py-1">Small parcel ₹ per slab</th><th /></tr></thead>
-          <tbody>
-            {bands.map((b, i) => {
-              const last = i === bands.length - 1;
-              return (
-                <tr key={i}>
-                  <td className="py-1 pr-2">
-                    {last ? <span className="text-gray-600">and above</span> : (
-                      <input aria-label={`Band ${i + 1} up to km`} inputMode="numeric" className={input} value={b.upToKm}
-                        onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, upToKm: e.target.value } : x)))} />
-                    )}
-                  </td>
-                  <td className="py-1 pr-2">
-                    <input aria-label={`Band ${i + 1} rate per kg`} inputMode="decimal" className={input} value={b.ratePerKg}
-                      onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, ratePerKg: e.target.value } : x)))} />
-                  </td>
-                  <td className="py-1 pr-2">
-                    <input aria-label={`Band ${i + 1} small parcel rate per slab`} inputMode="decimal" className={input} value={b.slabRate}
-                      placeholder="All-India rate"
-                      onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, slabRate: e.target.value } : x)))} />
-                  </td>
-                  <td className="py-1">
-                    {!last && bands.length > 1 && (
-                      <button type="button" className="text-xs text-red-600 underline" onClick={() => setBands((bs) => bs.filter((_, j) => j !== i))}>Remove</button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-gray-600"><th className="py-1">Up to (km)</th><th className="py-1">Big parcel ₹ per kg</th><th className="py-1">Small parcel ₹ per slab</th><th /></tr></thead>
+            <tbody>
+              {bands.map((b, i) => {
+                const last = i === bands.length - 1;
+                return (
+                  <tr key={i}>
+                    <td className="py-1 pr-2">
+                      {last ? <span className="text-gray-600">and above</span> : (
+                        <input aria-label={`Band ${i + 1} up to km`} inputMode="numeric" className={input} value={b.upToKm}
+                          onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, upToKm: e.target.value } : x)))} />
+                      )}
+                    </td>
+                    <td className="py-1 pr-2">
+                      <input aria-label={`Band ${i + 1} rate per kg`} inputMode="decimal" className={input} value={b.ratePerKg}
+                        onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, ratePerKg: e.target.value } : x)))} />
+                    </td>
+                    <td className="py-1 pr-2">
+                      <input aria-label={`Band ${i + 1} small parcel rate per slab`} inputMode="decimal" className={input} value={b.slabRate}
+                        placeholder="All-India rate"
+                        onChange={(e) => setBands((bs) => bs.map((x, j) => (j === i ? { ...x, slabRate: e.target.value } : x)))} />
+                    </td>
+                    <td className="py-1">
+                      {!last && bands.length > 1 && (
+                        <button type="button" className="text-xs text-red-600 underline" onClick={() => setBands((bs) => bs.filter((_, j) => j !== i))}>Remove</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {bands.length < 10 && (
           <button type="button" className="mt-2 text-sm text-blue-700 underline"
             onClick={() => setBands((bs) => [...bs.slice(0, -1), { upToKm: '', ratePerKg: bs[bs.length - 1]?.ratePerKg || '16', slabRate: bs[bs.length - 1]?.slabRate || '' }, bs[bs.length - 1]])}>

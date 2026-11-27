@@ -57,17 +57,17 @@ export default function EnhancedImage({
       return false;
     }
 
-    // Basic URL validation
+    // next/image accepts only absolute http(s) URLs and root-relative paths. It
+    // THROWS on anything else ("photo.jpg", "//cdn/x"), and that throw takes the
+    // whole page down (checkout included), so those get the fallback instead.
+    const s = source.trim();
+    if (s.startsWith('/')) return !s.startsWith('//');
     try {
-      const urlObj = new URL(source.startsWith('http') ? source : `http://example.com${source}`);
+      const urlObj = new URL(s);
       // Reject non-HTTP(S) protocols (data:, blob:, file:, etc.)
-      if (!['http:', 'https:'].includes(urlObj.protocol)) {
-        return false;
-      }
-      return true;
+      return ['http:', 'https:'].includes(urlObj.protocol);
     } catch {
-      // If it's not a valid URL, it might be a relative path which is okay
-      return source.trim().length > 0;
+      return false;
     }
   };
 

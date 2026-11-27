@@ -71,7 +71,7 @@ const makeProduct = (over = {}) => {
   return Product.create({ name: `Bumper ${n}`, slug: `bumper-qd${n}`, sku: `SKUQD-${n}`, description: 'x'.repeat(30), price: 11800, stock: 'in', isActive: true, ...over });
 };
 const CUSTOMER = { name: 'Rohit Shah', email: 'rohit.qd@example.com', phone: '9820917286' };
-const ADDRESS = { addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
+const ADDRESS = { houseNumber: 'Flat 4B', addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
 const input = (items, extra = {}) => ({ customer: CUSTOMER, shippingAddress: ADDRESS, items, ...extra });
 const labour = (price, quantity = 1) => ({ custom: true, name: 'Installation', quantity, price });
 const FIVE = { percent: 5, reason: 'Repeat customer' };

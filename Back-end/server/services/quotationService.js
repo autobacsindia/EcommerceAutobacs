@@ -25,6 +25,7 @@ import { formatLongDateIST } from '../utils/datetime.js';
 import { rupeesInWords } from '../utils/amountInWords.js';
 import { publicEmail } from '../utils/customerContact.js';
 import { discountLabel } from '../utils/quoteDiscount.js';
+import { streetLines } from '../utils/deliveryAddress.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -90,8 +91,7 @@ export function buildQuotation(order, { now = Date.now() } = {}) {
       alternatePhone: addr.alternatePhone || '',
       email: publicEmail(order.user?.email || order.guestEmail || ''),
       address: [
-        addr.addressLine1,
-        addr.addressLine2,
+        ...streetLines(addr),
         [addr.city, addr.state].filter(Boolean).join(', '),
         addr.postalCode,
       ].filter(Boolean),

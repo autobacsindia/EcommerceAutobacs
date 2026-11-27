@@ -168,6 +168,9 @@ const nextConfig: NextConfig = {
       { source: '/media/videos', destination: '/blog/videos', permanent: true },
       // News was replaced by the Press Coverage page at /media.
       { source: '/media/news', destination: '/media', permanent: true },
+      // The footer calls this page "Press", so people (and journalists) type
+      // /press — which was a 404.
+      { source: '/press', destination: '/media', permanent: true },
       // `/conditions` was a second, shorter terms page that contradicted `/terms`
       // on whether prices include tax. It is deleted, not 404'd: it was linked
       // from the login and register page footers (so it has real inbound traffic
@@ -178,11 +181,18 @@ const nextConfig: NextConfig = {
       // of /my-account) used to land on a 404. Temporary: /account may get a page.
       { source: '/account', destination: '/profile', permanent: false },
       { source: '/my-account', destination: '/profile', permanent: false },
-      // The Onam 2026 in-store offer has ended and its landing page is removed. The
-      // counter-card QR codes still point here and can't be reprinted, so send them
-      // home instead of to a 404. Temporary (not permanent) so a future campaign can
-      // reuse the path without browsers having cached this redirect forever.
-      { source: '/onam', destination: '/', permanent: false },
+      // The printed Roavion thank-you card QR (first sent at Onam 2026) encodes /onam
+      // and can't be reprinted. Since 2026-11 it carries the Hilux owners' offer, so it
+      // lands on that page. Temporary (not permanent) so the card can be re-pointed at
+      // the next campaign without browsers having cached this redirect forever.
+      { source: '/onam', destination: '/hilux-owners', permanent: false },
+      // The printed thank-you card in customers' hands encodes /festive (owner checked
+      // by scanning one, 2026-11-27). Owner decision the same day: switch it NOW to the
+      // Revo/Travo offer, even though the festive-2026 campaign is still running — new
+      // scanners stop seeing the festive page. Customers who already activated festive
+      // keep it (activation is stored server-side). The festive page code stays, so
+      // deleting this line restores it. Temporary so browsers don't cache it forever.
+      { source: '/festive', destination: '/hilux-owners', permanent: false },
       // Old WooCommerce theme pages Google still requests (Search Console, Sep 2026).
       // All four answered 404 here; each now points at its live equivalent. Query
       // strings are forwarded, so `/search?q=winch` lands on the product search.
@@ -226,6 +236,9 @@ const nextConfig: NextConfig = {
     // Baked in at build time. In production NEXT_PUBLIC_API_URL is already validated
     // above, so this is always defined when NODE_ENV === 'production'.
     API_BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080',
+    // The build's git commit, so the "Website errors" page can say which deploy an
+    // error came from. Both hosts set one at build time; '' when neither does.
+    NEXT_PUBLIC_RELEASE: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 12),
   },
   webpack(config) {
     // ─── Windows duplicate-module fix ────────────────────────────────────────

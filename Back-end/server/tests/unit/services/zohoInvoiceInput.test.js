@@ -9,6 +9,8 @@ import {
   namesAgree,
   parseZohoInvoiceCsv,
   parseZohoCreditNoteCsv,
+  parseZohoPaymentCsv,
+  razorpayIdsIn,
   readZohoCsv,
   zohoExportKind,
   matchInvoicesToOrders,
@@ -164,5 +166,40 @@ describe('matchInvoicesToOrders — every sale counted once, never on a guess', 
     );
     expect(r.has('a')).toBe(false);
     expect(r.get('b').state).toBe('needs_check');
+  });
+});
+
+describe('parseZohoPaymentCsv / razorpayIdsIn', () => {
+  const PH = 'Payment Number,CustomerPayment ID,Mode,Amount,Unused Amount,Reference Number,Currency Code,Customer Name,Date,Payment Status,Invoice Number';
+  const pcsv = (...l) => Buffer.from([PH, ...l].join('\n'));
+
+  it('one payment per id (one row per applied invoice), unused part only, drafts/voids skipped', () => {
+    const { payments, skipped, errors } = parseZohoPaymentCsv(pcsv(
+      '1,P1,Cash,"30,000.00",10000.000,,INR,"Rao",2026-09-01,Paid,AUTO/1',
+      '1,P1,Cash,"30,000.00",10000.000,,INR,"Rao",2026-09-01,Paid,AUTO/2', // same payment, second invoice
+      '2,P2,UPI,5000,0.000,pay_AbCdEf12345678,INR,"Done",2026-09-02,Paid,AUTO/3',
+      '3,P3,UPI,700,700,,INR,"D",2026-09-03,Draft,',
+      '4,P4,UPI,700,700,,INR,"V",2026-09-03,Void,',
+      '5,P5,UPI,700,700,,USD,"U",2026-09-03,Paid,',
+      '6,P6,UPI,700,900.004,,INR,"Over",2026-09-03,Paid,',
+      '7,P7,UPI,abc,1,,INR,"Bad",2026-09-03,Paid,',
+    ));
+    expect(payments.map((p) => [p.zohoPaymentId, p.amount, p.paymentTotal])).toEqual([['P1', 10000, 30000], ['P2', 0, 5000], ['P6', 700, 700]]);
+    expect(payments[0].receivedAt.toISOString()).toBe('2026-08-31T18:30:00.000Z');
+    expect(skipped).toEqual({ draft: 1, void: 1 });
+    expect(errors).toHaveLength(2);
+  });
+
+  it('rejects a file that is not the payments export', () => {
+    expect(() => parseZohoPaymentCsv(Buffer.from('CustomerPayment ID,Amount\nP1,1'))).toThrow(/not a Zoho payments export/);
+  });
+
+  it('is told apart from the other exports by its columns', () => {
+    expect(zohoExportKind(readZohoCsv(pcsv('1,P1,Cash,1,1,,INR,"A",2026-09-01,Paid,')))).toBe('payments');
+  });
+
+  it('finds Razorpay payment ids in a reference', () => {
+    expect(razorpayIdsIn('UTR 123 / pay_AbCdEf12345678, pay_Zz9')).toEqual(['pay_AbCdEf12345678']);
+    expect(razorpayIdsIn(null)).toEqual([]);
   });
 });

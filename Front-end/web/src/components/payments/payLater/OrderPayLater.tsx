@@ -10,6 +10,7 @@ import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { payLaterKeys, type PayLaterOption } from './api';
 import PayLaterBadge from './PayLaterBadge';
 import SalesTypeApprove from './SalesTypeApprove';
+import SalesTypeChange from './SalesTypeChange';
 import SalesTypeBadge from '@/components/staff/sales/SalesTypeBadge';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
@@ -32,6 +33,7 @@ export default function OrderPayLater({ orderId, onChanged, hideType = false }: 
         <section aria-label="B2B or B2C" className="space-y-2">
           <SalesTypeBadge info={t} detail />
           {t.check?.status === 'pending' && <SalesTypeApprove orderId={orderId} label={t.label} onDone={onChanged} />}
+          {data?.typeChange && <SalesTypeChange orderId={orderId} option={data.typeChange} onDone={onChanged} />}
         </section>
       )}
       <PayLaterPart orderId={orderId} onChanged={onChanged} />

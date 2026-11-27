@@ -3,6 +3,7 @@
  *   - one open supplier payment per item, even when several are raised at the same moment
  *   - Pay is recorded only with the amount and payee the admin saw (payVersion + a pinned compare-and-set)
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -180,3 +181,6 @@ describe('Payment race guards', () => {
     });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

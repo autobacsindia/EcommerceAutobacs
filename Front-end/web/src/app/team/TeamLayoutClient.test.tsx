@@ -193,8 +193,9 @@ it('the other teams\' menus are exactly as before the Refunds change, with the l
   expect(parts('sales', false, false)).toEqual(['Team chat', 'Tasks', 'My delays', 'Website leads', 'Meta leads', 'Payments', 'My Roav Points', 'Google reviews']);
   expect(parts('procurement')).toEqual(['Team chat', 'Tasks', 'My delays', 'Orders', 'Deliveries', 'Delivered', 'Returns', 'Payments', 'Suppliers', 'Supplier partners', 'Supplier enquiries', 'Price calculator', 'Shipping calculator', 'Delivery fees']);
   expect(parts('operations')).toEqual(['Team chat', 'Tasks', 'My delays', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments']);
-  expect(parts('developer')).toEqual(['Team chat', 'Tasks', 'My delays', 'Payments']);
-  expect(parts('marketing')).toEqual(['Team chat', 'Tasks', 'My delays', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments']);
+  // Developer (DevOps) and marketing gained "Website errors" (customer-facing errors).
+  expect(parts('developer')).toEqual(['Team chat', 'Tasks', 'My delays', 'Website errors', 'Payments']);
+  expect(parts('marketing')).toEqual(['Team chat', 'Tasks', 'My delays', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Website errors', 'Payments']);
 });
 
 it('"Payment due" (ship before payment) shows for accounts and the GTM head only', () => {

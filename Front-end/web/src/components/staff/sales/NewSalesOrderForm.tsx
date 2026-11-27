@@ -10,6 +10,8 @@ import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerG
 import { discountRuleProblem, errorMessage, percentText, previewDiscount, rupees, type Quotation, type SalesOrder, type SalesProduct } from './types';
 import { altMobileProblem, mobileProblem, normalizeMobile } from './phone';
 import ProductLink from '@/components/staff/ProductLink';
+import StreetFields from '@/components/address/StreetFields';
+import { firstAddressProblem } from '@/lib/deliveryAddress';
 
 type Line = {
   key: string;
@@ -33,7 +35,7 @@ const REOPEN_CONFIRM = 'The client already accepted this quotation. Saving cance
   + 'and the quotation goes back to "waiting for the client". Continue?';
 
 const EMPTY_CUSTOMER = { name: '', email: '', phone: '', alternatePhone: '' };
-const EMPTY_ADDRESS = { addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '' };
+const EMPTY_ADDRESS = { houseNumber: '', addressLine1: '', landmark: '', addressLine2: '', city: '', state: '', postalCode: '' };
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-medium text-gray-700';
@@ -92,7 +94,7 @@ export default function NewSalesOrderForm({
   const [address, setAddress] = useState(() => {
     const a = quotation?.shippingAddress;
     return a
-      ? { addressLine1: a.addressLine1 || '', addressLine2: a.addressLine2 || '', city: a.city || '', state: a.state || '', postalCode: a.postalCode || '' }
+      ? { houseNumber: a.houseNumber || '', addressLine1: a.addressLine1 || '', landmark: a.landmark || '', addressLine2: a.addressLine2 || '', city: a.city || '', state: a.state || '', postalCode: a.postalCode || '' }
       : EMPTY_ADDRESS;
   });
   // "New order for this customer": start from an earlier order's customer and
@@ -112,7 +114,7 @@ export default function NewSalesOrderForm({
     setCustomer({ name: o.customer.name || '', email: o.customer.email || '', phone: o.customer.phone || '', alternatePhone: o.customer.alternatePhone || '' });
     const a = o.shippingAddress || {};
     setAddress({
-      addressLine1: a.addressLine1 || '', addressLine2: a.addressLine2 || '',
+      houseNumber: a.houseNumber || '', addressLine1: a.addressLine1 || '', landmark: a.landmark || '', addressLine2: a.addressLine2 || '',
       city: a.city || '', state: a.state || '', postalCode: a.postalCode || '',
     });
     setRepeatOf(o.orderNumber);
@@ -253,6 +255,7 @@ export default function NewSalesOrderForm({
   const total = lines.reduce((s, l) => s + priceOf(l) * l.quantity, 0);
   const phoneProblem = mobileProblem(customer.phone);
   const [phoneTouched, setPhoneTouched] = useState(false);
+  const [showAddrErrors, setShowAddrErrors] = useState(false);
   const altPhoneProblem = altMobileProblem(customer.alternatePhone, customer.phone);
   const [altPhoneTouched, setAltPhoneTouched] = useState(false);
   const saving = Math.max(0, fullTotal - total);
@@ -286,7 +289,8 @@ export default function NewSalesOrderForm({
           legalName: company.legalName.trim(),
           gstin: company.gstin.trim().toUpperCase(),
           billingAddress: billingSame
-            ? { addressLine1: address.addressLine1, addressLine2: address.addressLine2, city: address.city, postalCode: address.postalCode }
+            // A bill-to has no house-number field: fold it into line 1.
+            ? { addressLine1: [address.houseNumber.trim(), address.addressLine1.trim()].filter(Boolean).join(', '), addressLine2: address.addressLine2, city: address.city, postalCode: address.postalCode }
             : billing,
         }
         : { type: 'individual' },
@@ -326,6 +330,10 @@ export default function NewSalesOrderForm({
     if (isB2B && !/^[0-9A-Za-z]{15}$/.test(company.gstin.trim())) { setError('B2B: enter the 15-character GSTIN.'); return; }
     if (phoneProblem) { setPhoneTouched(true); setError(`Mobile number: ${phoneProblem}.`); return; }
     if (altPhoneProblem) { setAltPhoneTouched(true); setError(`Alternative phone number: ${altPhoneProblem}.`); return; }
+    // Same rule as the server (lib/deliveryAddress.ts ↔ utils/deliveryAddress.js).
+    // An old quotation without a house number must have it added here.
+    const addrProblem = firstAddressProblem(address);
+    if (addrProblem) { setShowAddrErrors(true); setError(`Delivery address: ${addrProblem}`); return; }
     if (lines.length === 0) { setError('Add at least one product.'); return; }
     if (hasProblem) { setError('Fix the items marked in red.'); return; }
     if (!isB2B && discountProblem) { setError(`Discount: ${discountProblem}`); return; }
@@ -476,16 +484,16 @@ export default function NewSalesOrderForm({
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold text-gray-900">Delivery address</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className={label} htmlFor="a-1">House / street</label>
-            <input id="a-1" className={input} required minLength={3} maxLength={200} value={address.addressLine1}
-              onChange={(e) => setAddress({ ...address, addressLine1: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2">
-            <label className={label} htmlFor="a-2">Area / landmark (optional)</label>
-            <input id="a-2" className={input} maxLength={200} value={address.addressLine2}
-              onChange={(e) => setAddress({ ...address, addressLine2: e.target.value })} />
-          </div>
+          <StreetFields idPrefix="a" value={address} showErrors={showAddrErrors} inputClassName={input} labelClassName={label}
+            onChange={(field, v) => setAddress({ ...address, [field]: v })} />
+          {/* Older quotations kept area / landmark here; shown only when filled. */}
+          {address.addressLine2 && (
+            <div className="sm:col-span-2">
+              <label className={label} htmlFor="a-2">Address line 2</label>
+              <input id="a-2" className={input} maxLength={200} value={address.addressLine2}
+                onChange={(e) => setAddress({ ...address, addressLine2: e.target.value })} />
+            </div>
+          )}
           <div>
             <label className={label} htmlFor="a-city">City</label>
             <input id="a-city" className={input} required minLength={2} value={address.city}

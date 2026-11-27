@@ -19,6 +19,7 @@
 
 import { useEffect, useState } from 'react';
 import { isChunkLoadError, reloadPage, shouldAutoReload } from '@/lib/chunkErrorRecovery';
+import { reportClientError } from '@/lib/reportClientError';
 
 export default function GlobalError({
   error,
@@ -31,7 +32,10 @@ export default function GlobalError({
 
   useEffect(() => {
     console.error('[global-error]', error);
-    if (isChunkLoadError(error) && shouldAutoReload()) {
+    const chunk = isChunkLoadError(error);
+    // Sent before any reload: keepalive lets the report outlive the page.
+    reportClientError({ feature: 'page-crash', step: chunk ? 'root-chunk-load' : 'root-crash', error, context: { digest: error.digest, chunkLoad: chunk } });
+    if (chunk && shouldAutoReload()) {
       setReloading(true);
       reloadPage();
     }

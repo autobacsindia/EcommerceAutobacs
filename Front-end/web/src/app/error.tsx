@@ -14,6 +14,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { reportClientError } from '@/lib/reportClientError';
 
 export default function GlobalError({
   error,
@@ -37,6 +38,8 @@ export default function GlobalError({
         }
       });
     }
+
+    reportClientError({ feature: 'page-crash', step: 'route-error', error, context: { digest: error.digest } });
 
     console.error('[Global Error] Uncaught server error:', error);
   }, [error]);

@@ -39,7 +39,7 @@ function fillCustomer() {
   fireEvent.click(screen.getByRole('radio', { name: /B2C — retail/ }));
   fill(/^Name$/, 'Rohit Shah');
   fill(/Mobile/, '9876543210');
-  fill(/House \/ street/, '12 MG Road');
+  fill(/House \/ Flat/, 'Flat 4B'); fill(/Street \/ Area/, '12 MG Road');
   fill(/^City$/, 'Pune');
   fill(/^State$/, 'Maharashtra');
   fill(/PIN code/, '411001');
@@ -53,7 +53,7 @@ async function addLabour(price: string) {
 const quotation = (over: Partial<Quotation> = {}): Quotation => ({
   id: 'q1', number: 'QT-AB12CD34', version: 1, status: 'open',
   customer: { name: 'Rohit Shah', email: '', phone: '9876543210' },
-  shippingAddress: { addressLine1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' } as Quotation['shippingAddress'],
+  shippingAddress: { houseNumber: 'Flat 4B', addressLine1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' } as Quotation['shippingAddress'],
   items: [{ product: null, variantId: null, variantLabel: null, custom: true, name: 'Installation', image: '', quantity: 1, price: 10000, listPrice: null }],
   subtotal: 10000, discount: null, totalAmount: 10000, notes: '', validUntil: '2026-11-05T10:00:00.000Z',
   salesPerson: 'Asha', orderId: null, createdAt: '2026-10-29T10:00:00.000Z', updatedAt: '2026-10-29T10:00:00.000Z',

@@ -27,7 +27,7 @@ function fillAndSubmit(alt: string) {
   fill(/^Name$/, 'Ravi Kumar');
   fill(/Mobile \(WhatsApp\)/, '98765 43210');
   fill(/Alternative phone number/, alt);
-  fill(/House \/ street/, '12 MG Road');
+  fill(/House \/ Flat/, 'Flat 4B'); fill(/Street \/ Area/, '12 MG Road');
   fill(/^City$/, 'Pune');
   fill(/^State$/, 'Maharashtra');
   fill(/PIN code/, '411001');

@@ -4,7 +4,12 @@ import { STAFF_TEAM_VALUES } from "../config/staff.js";
 const AddressSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   phone: { type: String, required: true },
-  addressLine1: { type: String, required: true },
+  // House / flat / building no. and landmark (utils/deliveryAddress.js).
+  // Optional in the schema: addresses saved before the rule have neither, and
+  // checkout asks the customer to complete them before they are used.
+  houseNumber: String,
+  landmark: String,
+  addressLine1: { type: String, required: true }, // Street / Area
   addressLine2: String,
   city: { type: String, required: true },
   state: { type: String, required: true },

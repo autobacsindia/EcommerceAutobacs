@@ -141,7 +141,7 @@ describe('Company revenue routes', () => {
       expect(summary.zohoMatched.linked).toEqual({ count: 1, total: 10000 });
       expect(summary.ordersFulfilled).toEqual({ total: 2, website: 0, zoho: 2 });
       // Sales = every counted order (delivered or on the way) + Zoho-only bills
-      expect(summary.sales).toEqual({ total: 3, website: { total: 1, delivered: 0, shipped: 1, processing: 0 }, zoho: 2, zohoCancelled: 0 });
+      expect(summary.sales).toEqual({ total: 3, website: { total: 1, delivered: 0, shipped: 1, processing: 0 }, zoho: 2, zohoCancelled: 0, unbilled: 0 });
 
       // The list behind the figures: the same three sales, newest first, across both sources.
       const list = (await adm.get('/admin/revenue/sales?limit=2')).body;

@@ -74,7 +74,7 @@ async function makeProduct(overrides = {}) {
 }
 
 const CUSTOMER = { name: 'Call In Customer', email: 'caller@example.com', phone: '9812345678' };
-const ADDRESS = { addressLine1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' };
+const ADDRESS = { houseNumber: 'Flat 4B', addressLine1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' };
 
 const orderInput = (product, extra = {}) => ({
   customer: CUSTOMER,
@@ -219,7 +219,7 @@ describe('who may download it', () => {
 
     const web = await Order.create({
       user: new mongoose.Types.ObjectId(), items: [{ product: new mongoose.Types.ObjectId(), name: 'W', price: 10, quantity: 1 }],
-      shippingAddress: { fullName: 'W', phone: '9876543210', addressLine1: '1', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
+      shippingAddress: { fullName: 'W', phone: '9876543210', houseNumber: 'Flat 4B', addressLine1: 'MG Road, Kochi', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
       subtotal: 10, totalAmount: 10, status: 'processing', paymentStatus: 'paid',
     });
     const head = await makeStaff('sales', { isHead: true });

@@ -38,7 +38,7 @@ const PRODUCT = { id: 'p1', name: 'Dash cam', image: '', price: 5000, available:
 function fillCustomer() {
   fill(/^Name$/, 'Rohit Shah');
   fill(/Mobile/, '9876543210');
-  fill(/House \/ street/, '12 MG Road');
+  fill(/House \/ Flat/, 'Flat 4B'); fill(/Street \/ Area/, '12 MG Road');
   fill(/^City$/, 'Pune');
   fill(/^State$/, 'Maharashtra');
   fill(/^PIN code/, '411001');
@@ -92,7 +92,7 @@ describe('the quotation form', () => {
     const body = post.mock.calls[0][1];
     expect(body.buyer).toEqual({
       type: 'enterprise', legalName: 'ABC Motors Pvt Ltd', gstin: '32AAACA1234A1Z5',
-      billingAddress: { addressLine1: '12 MG Road', addressLine2: '', city: 'Pune', postalCode: '411001' },
+      billingAddress: { addressLine1: 'Flat 4B, 12 MG Road', addressLine2: '', city: 'Pune', postalCode: '411001' },
     });
     expect(body.discount).toBeNull();
     expect(body.items[0].offerPrice).toBeNull();

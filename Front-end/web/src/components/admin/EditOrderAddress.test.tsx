@@ -9,7 +9,7 @@ jest.mock('@/lib/api-client', () => ({
 }));
 
 const ADDRESS: OrderShippingAddress = {
-  fullName: 'Ravi', phone: '9876543210', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001', country: 'India',
+  fullName: 'Ravi', phone: '9876543210', houseNumber: 'Flat 4B', addressLine1: 'Marine Drive, Ernakulam', city: 'Kochi', state: 'Kerala', postalCode: '682001', country: 'India',
 };
 
 beforeEach(() => patch.mockReset());
@@ -21,13 +21,13 @@ describe('EditOrderAddress', () => {
     const onSaved = jest.fn();
     render(<EditOrderAddress orderId="o1" address={ADDRESS} onSaved={onSaved} onCancel={jest.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Address line 1 *'), { target: { value: '12B Marine Drive' } });
+    fireEvent.change(screen.getByLabelText('Street / Area *'), { target: { value: '12B Marine Drive' } });
     fireEvent.change(screen.getByLabelText('Why are you changing it? *'), { target: { value: 'Right flat number' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save address' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
     expect(patch).toHaveBeenCalledWith('/orders/o1/shipping-address', {
-      address: { fullName: 'Ravi', phone: '9876543210', alternatePhone: '', addressLine1: '12B Marine Drive', addressLine2: '', city: 'Kochi' },
+      address: { fullName: 'Ravi', phone: '9876543210', alternatePhone: '', houseNumber: 'Flat 4B', addressLine1: '12B Marine Drive', landmark: '', addressLine2: '', city: 'Kochi' },
       reason: 'Right flat number',
     });
   });
@@ -50,6 +50,16 @@ describe('EditOrderAddress', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/already been shipped/);
     expect(onSaved).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Save address' })).toBeEnabled();
+  });
+
+  it('an old order (no house no.) must have it added before saving — nothing is sent', async () => {
+    const old = { ...ADDRESS, houseNumber: undefined, addressLine1: 'Kochi' };
+    render(<EditOrderAddress orderId="o1" address={old} onSaved={jest.fn()} onCancel={jest.fn()} />);
+    fireEvent.change(screen.getByLabelText('House / Flat / Building no. *'), { target: { value: '-' } });
+    fireEvent.change(screen.getByLabelText('Why are you changing it? *'), { target: { value: 'Add flat no.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save address' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/house \/ flat number doesn't look right/);
+    expect(patch).not.toHaveBeenCalled();
   });
 
   it('Cancel closes without saving', () => {

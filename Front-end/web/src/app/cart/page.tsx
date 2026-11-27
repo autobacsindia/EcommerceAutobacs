@@ -11,7 +11,8 @@ import SavingsCelebration from '@/components/checkout/SavingsCelebration';
 import DeliveryFeeBreakdown from '@/components/checkout/DeliveryFeeBreakdown';
 import { useDeliveryFeeOffer, useDeliveryPin } from '@/hooks/useDeliveryFeeOffer';
 import EnhancedImage from '@/components/layout/EnhancedImage';
-import { ProductImage, productUrl } from '@/lib/types';
+import { firstImageUrl } from '@/lib/firstImageUrl';
+import { productUrl } from '@/lib/types';
 import { toast } from 'react-hot-toast';
 import SkeletonLoader from '@/components/layout/SkeletonLoader';
 import apiClient from '@/lib/api';
@@ -21,6 +22,7 @@ import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { usePendingCouponAutoApply } from '@/hooks/usePendingCouponAutoApply';
 import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { useFestivalOfferLabel } from '@/components/festival/FestivalThemeContext';
@@ -219,6 +221,8 @@ function CartPageContent() {
     }
   };
   const { isAuthenticated } = useAuth();
+  // A code handed over by a QR landing page (e.g. the Hilux owners' card).
+  usePendingCouponAutoApply(cart, isAuthenticated, applyCoupon);
   const { formatPrice } = useCurrency();
   const offerLabel = useFestivalOfferLabel();
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
@@ -296,17 +300,6 @@ function CartPageContent() {
         toast.error('Failed to clear cart');
       }
     }
-  };
-
-  const getFirstImageUrl = (images: ProductImage[] | string | undefined): string | null => {
-    if (!images) return null;
-    if (typeof images === 'string') return images;
-    if (Array.isArray(images) && images.length > 0) {
-      const first = images[0];
-      if (typeof first === 'string') return first;
-      if (first && typeof first === 'object' && 'url' in first) return (first as ProductImage).url;
-    }
-    return null;
   };
 
   if (isLoading && !cart) return <SkeletonLoader type="cart-page" />;
@@ -401,7 +394,7 @@ function CartPageContent() {
                         className="shrink-0 w-20 h-20 sm:w-24 sm:h-24 bg-obsidian-raised border border-hairline rounded-lg overflow-hidden"
                       >
                         <EnhancedImage
-                          src={getFirstImageUrl(item.product.images)}
+                          src={firstImageUrl(item.product.images)}
                           alt={item.product.name}
                           width={96}
                           height={96}

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { AlarmClock, BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Hourglass, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck, UserCog } from 'lucide-react';
+import { AlarmClock, BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Hourglass, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck, UserCog, Bug } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -83,6 +83,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'accounts') nav.push({ href: '/team/approvals', label: 'Waiting for approval', icon: ClipboardCheck }, { href: '/team/refunds', label: 'Refunds', icon: Wallet }, paid, delivered);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid, delivered);
   if (team === 'marketing') nav.push(...MARKETING_AREAS.map(({ href, label, icon }) => ({ href, label, icon })));
+  // Developer (DevOps): every problem customers hit on the website, to fix and mark resolved.
+  if (team === 'developer') nav.push({ href: '/team/site-errors', label: 'Website errors', icon: Bug });
   /*
     Returns: operations checks, picks up and inspects; procurement handles suppliers;
     accounts sends the customer refund (the Refunds page, "Returned items" tab) and

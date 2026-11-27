@@ -7,6 +7,7 @@ import { sceneMarkup } from './orderMomentScenes';
 const KEYS: MomentKey[] = [
   'payment_failed', 'refunded', 'cancelled', 'returning', 'delivered', 'on_hold',
   'late', 'partly', 'shipped', 'packed', 'preparing', 'placed',
+  'delivery_failed', 'out_for_delivery', 'date_moved', 'in_transit',
 ];
 
 beforeEach(() => window.localStorage.clear());
@@ -62,6 +63,46 @@ describe('OrderMoment — picture + words for the server-chosen update', () => {
   });
 });
 
+describe('delivery updates from the team', () => {
+  const at = '2026-12-03T09:30:00.000Z'; // 15:00 IST, Thu 3 Dec
+
+  it('shows the team note as text, with when it was updated', () => {
+    render(<OrderMoment orderId="d1" moment={{ key: 'delivery_failed', note: 'Customer not reachable on phone', at }} />);
+    expect(screen.getByTestId('order-moment-title')).toHaveTextContent('The courier couldn’t deliver this time');
+    expect(screen.getByTestId('order-moment-note')).toHaveTextContent('Update from our team: Customer not reachable on phone');
+    expect(screen.getByTestId('order-moment-updated')).toHaveTextContent('Updated Thu 3 Dec');
+  });
+
+  it('a note is React text, never markup', () => {
+    render(<OrderMoment orderId="d2" moment={{ key: 'in_transit', note: '<img src=x onerror=alert(1)>', at }} />);
+    const note = screen.getByTestId('order-moment-note');
+    expect(note.querySelector('img')).toBeNull();
+    expect(note).toHaveTextContent('<img src=x onerror=alert(1)>');
+  });
+
+  it('no note → no note line; no time → no updated line', () => {
+    render(<OrderMoment orderId="d3" moment={{ key: 'out_for_delivery' }} />);
+    expect(screen.queryByTestId('order-moment-note')).toBeNull();
+    expect(screen.queryByTestId('order-moment-updated')).toBeNull();
+  });
+
+  it('date moved names the new day, and draws it on the calendar', () => {
+    const m = { key: 'date_moved' as const, newDay: '2026-12-04', at };
+    expect(momentCopy(m).body).toContain('New expected date: Fri 4 Dec');
+    expect(sceneMarkup('date_moved', { newDay: 'Fri 4' })).toContain('Fri 4');
+    expect(sceneMarkup('date_moved', { newDay: '<b>' })).toContain('&#60;b&#62;');
+    expect(momentCopy({ key: 'date_moved', newDay: 'junk' }).body).not.toContain('junk');
+  });
+
+  it('a second update of the same kind plays again (signature carries the time)', () => {
+    expect(momentSignature({ key: 'delivery_failed', at })).toBe(`delivery_failed:${at}`);
+    const first = render(<OrderMoment orderId="d4" moment={{ key: 'delivery_failed', at }} />);
+    first.unmount();
+    render(<OrderMoment orderId="d4" moment={{ key: 'delivery_failed', at: '2026-12-04T09:30:00.000Z' }} />);
+    expect(screen.getByTestId('order-moment').querySelector('.om-scene')).toHaveAttribute('data-still', 'false');
+  });
+});
+
 describe('momentCopy — the words', () => {
   it('late says sorry and names the date we promised', () => {
     const c = momentCopy({ key: 'late', late: { dueDay: '2026-11-30' } });
@@ -110,6 +151,7 @@ describe('sceneMarkup', () => {
       const html = sceneMarkup(key, { lateDay: 'Mon 30' });
       // Every inline animation uses a known om-* keyframe; no infinite loops.
       expect(html).not.toMatch(/infinite/);
+      expect(html).not.toMatch(/<animate/); // CSS only, so "still" really is still
       for (const m of html.matchAll(/animation:([a-z-]+)/g)) expect(m[1]).toMatch(/^om-/);
     }
   });

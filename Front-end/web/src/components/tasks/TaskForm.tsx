@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, CalendarRange, Flag, FolderKanban, ListChecks, ListTree, Loader2, Lock, Repeat, Tag, Timer, UserPlus, Users, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Eye, Flag, FolderKanban, ListChecks, ListTree, Loader2, Lock, Repeat, Tag, Timer, UserPlus, Users, X } from 'lucide-react';
 import TagInput from './TagInput';
 import AssigneePicker from './AssigneePicker';
 import { AvatarStack, DueTimeSelect } from './ui';
@@ -15,7 +15,7 @@ import apiClient from '@/lib/api-client';
 import RichTextBox from '@/components/ui/RichTextBox';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { LONG_TEXT_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, estimateProblem, isPastDue, newClientId, parseDuration, type Assignee, type RepeatInput, type Task, type TaskPriority } from './types';
+import { FOLLOWERS_MAX, LONG_TEXT_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, estimateProblem, isPastDue, newClientId, parseDuration, type Assignee, type RepeatInput, type Task, type TaskPriority } from './types';
 
 /** Shown under a due date that has already passed. */
 export function PastDueWarning({ dueOn, dueTime }: { dueOn: string; dueTime?: string | null }) {
@@ -139,6 +139,7 @@ export function PeopleField({ people, selected, onChange, copies, onCopies }: {
         />
       </div>
       {n === 0 && <p className="text-xs text-red-600">Pick at least one person.</p>}
+      <p className="text-xs font-normal text-gray-500">Only the people doing the work. To keep someone informed, add them as a follower.</p>
       {n > 1 && (
         <fieldset className="flex flex-col gap-2 sm:flex-row">
           <legend className="sr-only">One task or a copy each</legend>
@@ -146,6 +147,41 @@ export function PeopleField({ people, selected, onChange, copies, onCopies }: {
           {choice(true, 'Own copy each', `${n} tasks — each person marks their own done.`)}
         </fieldset>
       )}
+    </div>
+  );
+}
+
+/**
+ * Who follows it: they see it and hear about it, but do not do it — so a late
+ * task never counts against them. The same picker and rules as the task page's
+ * Followers field: anyone you may give a task to, never someone doing it.
+ */
+export function FollowersPicker({ people, assigned, selected, onChange }: {
+  people: Assignee[]; assigned: string[]; selected: string[]; onChange: (ids: string[]) => void;
+}) {
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const chosen = selected.map((id) => byId.get(id)).filter((p): p is Assignee => !!p);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="flex items-center gap-1 text-xs font-medium text-gray-500"><Eye aria-hidden className="h-3.5 w-3.5" /> Followers</span>
+      <AssigneePicker
+        people={people.filter((p) => !assigned.includes(p.id))}
+        selected={selected}
+        onChange={onChange}
+        max={FOLLOWERS_MAX}
+        label="Followers"
+        triggerLabel="Choose followers"
+        trigger={chosen.length ? (
+          <span className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-800 hover:border-gray-300">
+            <AvatarStack people={chosen} max={4} size="sm" />
+            <span className="max-w-[14rem] truncate">{chosen.map((p) => (p.me ? 'Me' : p.name.split(' ')[0])).join(', ')}</span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-gray-300 px-2 py-1 text-sm text-gray-500 hover:border-gray-400">
+            <UserPlus aria-hidden className="h-4 w-4" /> Add follower
+          </span>
+        )}
+      />
     </div>
   );
 }
@@ -177,6 +213,10 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
   // Several people share one task unless the giver asks for a copy each.
   const [copies, setCopies] = useState(false);
   const many = copies && chosen.length > 1;
+  // Followers only watch. Someone also picked to do it only does it (the server drops them too).
+  const [followerPick, setFollowerPick] = useState<string[]>([]);
+  const followers = followerPick.filter((id) => !chosen.includes(id));
+  const pickPeople = (ids: string[]) => { setPicked(ids); setFollowerPick((f) => f.filter((id) => !ids.includes(id))); };
   const [order, setOrder] = useState<PickedOrder | null>(null);
   const [listId, setListId] = useState<string | null>(defaultListId ?? null);
   const [projectId, setProjectId] = useState<string | null>(defaultProjectId ?? null);
@@ -197,7 +237,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
     mutationFn: () => apiClient.post<{ task: Task; tasks: Task[] }>('/staff/tasks', {
       title: form.title.trim(),
       description: form.description.trim(),
-      ...(personal ? { personal: true } : { assigneeIds: chosen, shared: !copies }),
+      ...(personal ? { personal: true } : { assigneeIds: chosen, shared: !copies, ...(followers.length ? { followerIds: followers } : {}) }),
       ...(estimateMinutes ? { estimateMinutes } : {}),
       ...(repeat ? { repeat } : {}),
       checklist: form.steps.split('\n').map((l) => l.trim()).filter(Boolean),
@@ -288,7 +328,8 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, de
         {personal && (
           <p className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600"><Lock aria-hidden className="h-3.5 w-3.5" /> Only you will see this task.</p>
         )}
-        {!personal && choices.length > 1 && <PeopleField people={choices} selected={chosen} onChange={setPicked} copies={copies} onCopies={setCopies} />}
+        {!personal && choices.length > 1 && <PeopleField people={choices} selected={chosen} onChange={pickPeople} copies={copies} onCopies={setCopies} />}
+        {!personal && choices.length > 1 && <FollowersPicker people={choices} assigned={chosen} selected={followers} onChange={setFollowerPick} />}
         {!personal && choices.length === 1 && (
           <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">This task is for you.</p>
         )}

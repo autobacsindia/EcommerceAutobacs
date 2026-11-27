@@ -111,6 +111,56 @@ describe('buildJourney', () => {
     expect(b.steps[2]).toMatchObject({ state: 'upcoming', by: null });
   });
 
+  describe('a line first marked "our warehouse", then moved to a supplier', () => {
+    const switched = [
+      ENTERED,
+      h('stock_own_stock', '2026-10-01T06:00:00Z'),
+      h('stock_in_stock', '2026-10-02T06:00:00Z', 'Aromal'),
+    ];
+    it.each([
+      ['to_ship', 'in_stock', 'In Stock:current'],
+      ['payment_pending', 'in_stock', 'Payment Pending:current'],
+      ['with_supplier', 'ordered', 'Ordered From Supplier:current'],
+    ] as const)('at %s it shows the supplier path with Paid done and its stage current', (stage, stock, current) => {
+      const s = states(order([line({ stage, stock })], [...switched, h('payment_pending', '2026-10-03T06:00:00Z')]));
+      expect(s).toHaveLength(7);
+      expect(s[0]).toBe('Paid:done');
+      expect(s[1]).toBe('New Order:done');
+      expect(s).toContain(current);
+    });
+
+    it('even while the stock field still says our warehouse', () => {
+      // The screenshot case: the stage moved on, the stale hint must not win.
+      const s = states(order([line({ stage: 'payment_pending', stock: 'own_stock' })], switched));
+      expect(s.slice(0, 2)).toEqual(['Paid:done', 'New Order:done']);
+      expect(s).toContain('Payment Pending:current');
+    });
+
+    it("once dispatched it keeps the supplier path and the supplier parcel's time", () => {
+      const o = order([line({ stage: 'shipped', stock: 'ordered' })], [
+        ...switched,
+        h('stock_ordered', '2026-10-03T06:00:00Z'),
+        h('shipped_own', '2026-10-04T09:00:00Z', 'Other', null),
+        h('shipped', '2026-10-05T09:00:00Z', 'Ravi', null),
+      ]);
+      const [j] = buildJourney(o);
+      expect(j.steps).toHaveLength(7);
+      expect(j.steps.find((s) => s.key === 'shipped')).toMatchObject({ state: 'current', by: 'Ravi', at: '2026-10-05T09:00:00Z' });
+    });
+
+    it('with no stock field, the latest routing decision in the history decides', () => {
+      expect(states(order([line({ stage: 'shipped', stock: null })], switched))).toHaveLength(7);
+      const back = [...switched, h('stock_own_stock', '2026-10-03T06:00:00Z')];
+      expect(states(order([line({ stage: 'shipped', stock: null })], back))).toHaveLength(5);
+    });
+  });
+
+  it('a stage the tracker does not know still shows Paid done, never a blank track', () => {
+    const o = order([line({ stage: 'some_new_stage' as Line['stage'] })], [ENTERED]);
+    expect(states(o)[0]).toBe('Paid:done');
+    expect(states(o).slice(1).every((x) => x.endsWith(':upcoming'))).toBe(true);
+  });
+
   it('an unpaid order has no journey yet', () => {
     expect(buildJourney(order([line()], [], { inWorkflow: false }))).toEqual([]);
   });

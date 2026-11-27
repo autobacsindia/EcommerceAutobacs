@@ -5,6 +5,7 @@
  *   - "advance committed?":      payment_request_order (the cancel guard)
  *   - an order's open deals:     a supplier_deal_* index, never a collection scan
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import mongoose from 'mongoose';
 import * as dbHandler from './db-handler.js';
 import PaymentRequest from '../models/PaymentRequest.js';
@@ -72,3 +73,6 @@ it("an order's open deals read on an index", async () => {
   expect(explain.executionStats.totalDocsExamined).toBe(1);
   expect(await SupplierDeal.countDocuments({ order })).toBe(1);
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

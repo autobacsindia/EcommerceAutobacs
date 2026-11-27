@@ -15,6 +15,7 @@
  *     once, or a double click never pays anything twice or half a batch
  */
 
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -585,3 +586,6 @@ describe('Supplier directory and one-transfer payments', () => {
     });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

@@ -11,12 +11,16 @@
 
 import { useState } from 'react';
 import apiClient from '@/lib/api-client';
+import { ADDRESS_FIELD_TEXT, deliveryAddressProblems } from '@/lib/deliveryAddress';
 
 export type OrderShippingAddress = {
   fullName: string;
   phone: string;
   alternatePhone?: string;
+  /** Absent on orders placed before the house-number rule. */
+  houseNumber?: string;
   addressLine1: string;
+  landmark?: string;
   addressLine2?: string;
   city: string;
   state: string;
@@ -26,11 +30,13 @@ export type OrderShippingAddress = {
 
 type Saved = { shippingAddress: OrderShippingAddress; addressEditable: boolean };
 
-const FIELDS: Array<{ key: keyof OrderShippingAddress; label: string; required?: boolean; inputMode?: 'tel' }> = [
+const FIELDS: Array<{ key: keyof OrderShippingAddress; label: string; required?: boolean; inputMode?: 'tel'; placeholder?: string }> = [
   { key: 'fullName', label: 'Full name', required: true },
   { key: 'phone', label: 'Mobile number', required: true, inputMode: 'tel' },
   { key: 'alternatePhone', label: 'Alternate number', inputMode: 'tel' },
-  { key: 'addressLine1', label: 'Address line 1', required: true },
+  { key: 'houseNumber', label: 'House / Flat / Building no.', required: true, placeholder: ADDRESS_FIELD_TEXT.houseNumber.placeholder },
+  { key: 'addressLine1', label: 'Street / Area', required: true, placeholder: ADDRESS_FIELD_TEXT.addressLine1.placeholder },
+  { key: 'landmark', label: 'Landmark', placeholder: ADDRESS_FIELD_TEXT.landmark.placeholder },
   { key: 'addressLine2', label: 'Address line 2' },
   { key: 'city', label: 'City', required: true },
 ];
@@ -46,7 +52,10 @@ export default function EditOrderAddress({ orderId, address, onSaved, onCancel }
   onSaved: (saved: Saved) => void;
   onCancel: () => void;
 }) {
-  const [draft, setDraft] = useState<OrderShippingAddress>({ ...address, alternatePhone: address.alternatePhone ?? '', addressLine2: address.addressLine2 ?? '' });
+  const [draft, setDraft] = useState<OrderShippingAddress>({
+    ...address, alternatePhone: address.alternatePhone ?? '', addressLine2: address.addressLine2 ?? '',
+    houseNumber: address.houseNumber ?? '', landmark: address.landmark ?? '',
+  });
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -54,6 +63,11 @@ export default function EditOrderAddress({ orderId, address, onSaved, onCancel }
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving) return;
+    // Same rule as the server (which re-checks): an old order without a house
+    // number must have it added here.
+    const problems = deliveryAddressProblems(draft);
+    const problem = problems.houseNumber || problems.addressLine1 || problems.landmark;
+    if (problem) { setError(problem); return; }
     setSaving(true);
     setError('');
     try {
@@ -72,7 +86,7 @@ export default function EditOrderAddress({ orderId, address, onSaved, onCancel }
 
   return (
     <form onSubmit={submit} className="space-y-3" aria-label="Edit delivery address">
-      {FIELDS.map(({ key, label, required, inputMode }) => (
+      {FIELDS.map(({ key, label, required, inputMode, placeholder }) => (
         <label key={key} className="block text-sm">
           <span className="text-gray-700">{label}{required ? ' *' : ''}</span>
           <input
@@ -81,6 +95,7 @@ export default function EditOrderAddress({ orderId, address, onSaved, onCancel }
             required={required}
             maxLength={200}
             inputMode={inputMode}
+            placeholder={placeholder}
             onChange={(ev) => setDraft((d) => ({ ...d, [key]: ev.target.value }))}
           />
         </label>

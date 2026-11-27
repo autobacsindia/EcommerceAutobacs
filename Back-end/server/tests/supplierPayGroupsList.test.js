@@ -10,6 +10,7 @@
  *     pay (paying from a search must not leave half a supplier behind unseen)
  *   - only admin and accounts; unapproved payments are never in it
  */
+import { withoutMinimumMargin } from './helpers/marginRule.js';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
 
@@ -168,3 +169,6 @@ describe('a held payment, as the pay queue shows it', () => {
     expect(detail).toMatchObject({ total: 2400, onHoldTotal: 0 });
   });
 });
+
+// Older payment cases are not about the 30% minimum (tests/supplierMargin.test.js is).
+withoutMinimumMargin();

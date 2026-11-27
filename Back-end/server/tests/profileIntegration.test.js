@@ -108,7 +108,7 @@ describe('Profile Integration API', () => {
         {
           fullName: 'Test User',
           phone: '9876543210',
-          addressLine1: '123 Main St',
+          houseNumber: 'Flat 4B', addressLine1: '123 Main St',
           city: 'Kochi',
           state: 'Kerala',
           postalCode: '682001',
