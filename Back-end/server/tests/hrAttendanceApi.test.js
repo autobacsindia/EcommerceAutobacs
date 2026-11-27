@@ -354,7 +354,11 @@ describe('punch', () => {
     }
     const hr = ops.filter((o) => !o.startsWith('users.') && o !== 'employeeprofiles.findOne');
     // Measured 15 before the optimisation pass, 12 after; the day's punches are read once.
-    expect(hr.length).toBeLessThanOrEqual(12);
+    // +2 once the leave module landed: the day reads approved leave and holidays (in parallel),
+    // so someone on leave or on a holiday is never marked absent. 14 is the bound now.
+    expect(hr.length).toBeLessThanOrEqual(14);
+    expect(hr.filter((o) => o === 'leaverequests.find')).toHaveLength(1);
+    expect(hr.filter((o) => o === 'hrholidays.find')).toHaveLength(1);
     expect(hr.filter((o) => o === 'attendancepunches.find')).toHaveLength(2); // pre-check + in-transaction re-check
   });
 
