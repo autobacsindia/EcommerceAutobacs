@@ -174,6 +174,14 @@ describe('CheckoutPage', () => {
     });
   });
 
+  // "Buy now" skips the cart page, so the first checkout step must take a promo code.
+  it('offers a promo code box on the first step', async () => {
+    render(<CheckoutPage />);
+    await screen.findByText('Review Your Cart');
+    expect(screen.getByTestId('checkout-promo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Promo code')).toBeInTheDocument();
+  });
+
   it('shows address form when no saved addresses exist', async () => {
     render(<CheckoutPage />);
 

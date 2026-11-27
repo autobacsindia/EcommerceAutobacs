@@ -46,6 +46,8 @@ import { formatRupees } from '@/lib/formatRupees';
 import EnhancedImage from '@/components/layout/EnhancedImage';
 import { firstImageUrl } from '@/lib/firstImageUrl';
 import CheckoutDeliveryNote from '@/components/checkout/CheckoutDeliveryNote';
+import PromoCodeBox from '@/components/checkout/PromoCodeBox';
+import { usePendingCouponAutoApply } from '@/hooks/usePendingCouponAutoApply';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -155,7 +157,9 @@ function CheckoutPageContent() {
   const offerLabel = useFestivalOfferLabel();
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const { cart, clearCart, isLoading: cartLoading, refreshCart } = useCart();
+  const { cart, clearCart, isLoading: cartLoading, refreshCart, applyCoupon } = useCart();
+  // "Buy now" skips the cart page, so the card-QR code (HILUX5000) must be applied here too.
+  usePendingCouponAutoApply(cart, isAuthenticated, applyCoupon);
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('cart');
   // Each step change scrolls back to the stepper and focuses the new step's heading.
   const { containerRef: stepTopRef, headingRef: stepHeadingRef } = useStepScroll(currentStep);
@@ -991,6 +995,7 @@ function CheckoutPageContent() {
                     : reviewQuoteLoading ? 'Working it out…' : '—'}
                 </span>
               </div>
+              <PromoCodeBox />
             </div>
 
             <button
