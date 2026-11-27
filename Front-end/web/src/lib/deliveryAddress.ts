@@ -122,3 +122,27 @@ export function streetLines(a: StreetFields | null | undefined): string[] {
     clean(x.landmark) ? `Landmark: ${clean(x.landmark)}` : '',
   ].filter(Boolean);
 }
+
+/**
+ * A saved address as the three street fields checkout sends with an order.
+ *
+ * Addresses saved before the house-number rule (#647) have no `houseNumber`;
+ * most of them were written as two lines — house/flat/building on line 1,
+ * street & area on line 2, e.g. "C64, 9th Floor" / "Jomer Symphony, Ponnurunni".
+ * Mapping only line 1 to the street flagged every such customer as "missing a
+ * house number" and silently dropped line 2 from the order.
+ *
+ *   no house no. + two lines → line 1 is the house, line 2 the street
+ *   otherwise                → line 2 (if any) is kept, appended to the street
+ *
+ * Nothing the customer typed is ever dropped; the server still re-checks the
+ * result like any other order address.
+ */
+export function savedAddressStreet(a: StreetFields | null | undefined): { houseNumber: string; addressLine1: string; landmark: string } {
+  const house = clean(a?.houseNumber);
+  const line1 = clean(a?.addressLine1);
+  const line2 = clean(a?.addressLine2);
+  const landmark = clean(a?.landmark);
+  if (!house && line1 && line2) return { houseNumber: line1, addressLine1: line2, landmark };
+  return { houseNumber: house, addressLine1: [line1, line2].filter(Boolean).join(', '), landmark };
+}
