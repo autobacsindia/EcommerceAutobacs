@@ -249,7 +249,10 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         </nav>
 
         {/* Gallery + Buy box */}
-        <div className="grid gap-6 rounded-xl bg-white p-4 shadow-sm sm:p-6 lg:grid-cols-2 lg:gap-12 lg:p-8">
+        {/* grid-cols-1 + min-w-0: a grid item's default min-width is its content,
+            so the photo dots row of an 8-photo product pushed the page to 404px on
+            a 375px phone (sideways scroll, title and price cut off). */}
+        <div className="grid grid-cols-1 gap-6 rounded-xl bg-white p-4 shadow-sm sm:p-6 lg:grid-cols-2 lg:gap-12 lg:p-8" data-testid="pdp-main-grid">
           {/*
             ⚠ No <Reveal> here. It server-renders its children at opacity 0 and only
             fades them in once the client bundle has hydrated AND an observer fires —
@@ -259,10 +262,10 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             above-the-fold content paints with the HTML; Reveal is for content
             further down the page.
           */}
-          <div>
+          <div className="min-w-0">
             <Gallery images={displayImages} name={product.name} onSale={onSale} jumpTo={variantSlide} zeroDelivery={zeroDelivery} />
           </div>
-          <div>
+          <div className="min-w-0">
             <BuyBox
               product={product}
               selectedVariantId={selectedVariantId}
