@@ -223,7 +223,7 @@ function RecordRefundForm({ requestId, currency, left, onDone }: { requestId: st
         </label>
       </div>
       <label className="block"><span className={label}>Proof (optional)</span>
-        <input aria-label="Proof" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setProof(Array.from(e.target.files || []))} className="text-sm" />
+        <input aria-label="Proof" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setProof(Array.from(e.target.files || []))} className="max-w-full text-sm" />
       </label>
       <SlipReadStatus slip={slip} />
       <input aria-label="Note" className={input} maxLength={1000} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -590,7 +590,7 @@ function AddEntryForm({ supplierId, balances, onDone, onCancel }: {
       </div>
       <div>
         <label className={label} htmlFor="cr-add-proof">Proof (optional)</label>
-        <input id="cr-add-proof" type="file" multiple accept="image/*,application/pdf" className="text-sm" onChange={(e) => setProof(Array.from(e.target.files || []))} />
+        <input id="cr-add-proof" type="file" multiple accept="image/*,application/pdf" className="max-w-full text-sm" onChange={(e) => setProof(Array.from(e.target.files || []))} />
       </div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">

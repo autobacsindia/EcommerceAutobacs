@@ -363,7 +363,7 @@ function PayAmount({ bill, onCancel, onDone }: { bill: SupplierBill & { leftToAs
       )}
       <div>
         <label htmlFor={`${id}-file`} className={label}>Bill photo / PDF for accounts (optional)</label>
-        <input id={`${id}-file`} type="file" accept="image/*,application/pdf" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} className="text-sm" />
+        <input id={`${id}-file`} type="file" accept="image/*,application/pdf" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} className="max-w-full text-sm" />
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
@@ -452,7 +452,7 @@ function BillForm({ bill, onCancel, onDone }: { bill?: SupplierBill; onCancel: (
       </div>
       <div>
         <label htmlFor={`${id}-file`} className={label}>{editing ? 'Add bill photo / PDF' : 'Bill photo / PDF'}</label>
-        <input id={`${id}-file`} type="file" accept="image/*,application/pdf" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} className="text-sm" />
+        <input id={`${id}-file`} type="file" accept="image/*,application/pdf" multiple onChange={(e) => setFiles([...(e.target.files ?? [])])} className="max-w-full text-sm" />
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">

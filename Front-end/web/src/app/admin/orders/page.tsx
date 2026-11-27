@@ -694,7 +694,7 @@ function AdminOrdersPageInner() {
       )}
 
       {/* Stats Summary */}
-      <div className="mb-6 flex items-center justify-between text-sm text-gray-600">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600">
         <div className="flex flex-wrap items-center gap-4">
           <span>Showing {orders.length} of {pagination.total} orders</span>
           <label className="flex items-center gap-2">
