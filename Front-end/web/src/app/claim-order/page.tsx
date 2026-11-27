@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
@@ -29,7 +30,7 @@ function ClaimOrderPageInner() {
     if (urlToken) { setToken(urlToken); setStep('verify'); }
     if (urlOrderId) setOrderId(urlOrderId);
 
-    const pendingClaim = localStorage.getItem('pendingClaim');
+    const pendingClaim = safeLocal.get('pendingClaim');
     if (pendingClaim) {
       try {
         const claimData = JSON.parse(pendingClaim);
@@ -76,7 +77,7 @@ function ClaimOrderPageInner() {
       });
       if (apiResponse.success) {
         // auth token is set via httpOnly cookie by the backend — no localStorage write needed
-        localStorage.removeItem('pendingClaim');
+        safeLocal.remove('pendingClaim');
         setClaimed(true);
         toast.success('Account claimed successfully!');
         setTimeout(() => { router.push(`/orders/${orderId || 'history'}`); }, 2000);

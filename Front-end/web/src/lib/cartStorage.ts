@@ -14,6 +14,7 @@
  */
 
 import type { StockStatus } from '@/lib/stock';
+import { safeLocal } from '@/lib/safeStorage';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ export const saveLocalCart = (cart: LocalCart): void => {
     // Handle quota exceeded
     if (error instanceof DOMException && error.name === 'QuotaExceededError') {
       console.warn('[Cart] Storage quota exceeded, clearing old cart');
-      localStorage.removeItem(CART_STORAGE_KEY);
+      safeLocal.remove(CART_STORAGE_KEY);
     }
   }
 };
@@ -96,8 +97,8 @@ export const saveLocalCart = (cart: LocalCart): void => {
  * Clear local cart
  */
 export const clearLocalCart = (): void => {
-  localStorage.removeItem(CART_STORAGE_KEY);
-  localStorage.removeItem(SYNC_QUEUE_KEY);
+  safeLocal.remove(CART_STORAGE_KEY);
+  safeLocal.remove(SYNC_QUEUE_KEY);
 };
 
 // ── Cart Operations ──────────────────────────────────────────────────────────
@@ -212,7 +213,7 @@ export const getSyncQueue = (): SyncQueueItem[] => {
  * Clear sync queue
  */
 export const clearSyncQueue = (): void => {
-  localStorage.removeItem(SYNC_QUEUE_KEY);
+  safeLocal.remove(SYNC_QUEUE_KEY);
 };
 
 /**
@@ -265,7 +266,7 @@ export const processSyncQueue = async (apiClient: any): Promise<void> => {
   
   // Keep failed actions in queue for retry
   if (failedActions.length > 0) {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(failedActions));
+    safeLocal.setJSON(SYNC_QUEUE_KEY, failedActions);
     console.warn(`[Cart Sync] ${failedActions.length} actions failed, will retry later`);
   } else {
     clearSyncQueue();

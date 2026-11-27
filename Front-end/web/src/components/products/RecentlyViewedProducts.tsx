@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingCart, SlidersHorizontal } from 'lucide-react';
@@ -33,8 +34,8 @@ export default function RecentlyViewedProducts() {
   useEffect(() => {
     try {
       const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
-      const stored = localStorage.getItem(storageKey);
-      setProducts(stored ? JSON.parse(stored) : []);
+      const stored = safeLocal.getJSON<unknown>(storageKey, []);
+      setProducts(Array.isArray(stored) ? (stored as RecentProduct[]) : []);
     } catch (e) {
       console.error('Failed to load recently viewed', e);
     }
@@ -46,7 +47,7 @@ export default function RecentlyViewedProducts() {
 
   const clearHistory = () => {
     const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
-    localStorage.removeItem(storageKey);
+    safeLocal.remove(storageKey);
     setProducts([]);
     toast.success('Recently viewed history cleared');
   };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/context/CurrencyContext';
@@ -48,27 +49,12 @@ const formatPriceValue = (value: number): string => {
 
 // Helper function to save filter preferences to localStorage
 const saveFilterPreferences = (preferences: any) => {
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem('productFilterPreferences', JSON.stringify(preferences));
-    } catch (e) {
-      console.error('Failed to save filter preferences', e);
-    }
-  }
+  safeLocal.setJSON('productFilterPreferences', preferences);
 };
 
 // Helper function to load filter preferences from localStorage
 const loadFilterPreferences = () => {
-  if (typeof window !== 'undefined') {
-    try {
-      const savedPreferences = localStorage.getItem('productFilterPreferences');
-      return savedPreferences ? JSON.parse(savedPreferences) : null;
-    } catch (e) {
-      console.error('Failed to load filter preferences', e);
-      return null;
-    }
-  }
-  return null;
+  return safeLocal.getJSON<any>('productFilterPreferences', null);
 };
 
 export default function EnhancedProductFilters() {

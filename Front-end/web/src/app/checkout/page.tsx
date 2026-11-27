@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LogIn } from 'lucide-react';
@@ -675,10 +676,10 @@ function CheckoutPageContent() {
       const chargedTotal = response.order.totalAmount ?? pricing.quote?.totalAmount ?? validated.total;
 
       if (isGuest) {
-        localStorage.setItem('pendingClaim', JSON.stringify({
+        safeLocal.setJSON('pendingClaim', {
           orderId: newOrderId, email: guestEmail, phone: guestPhone,
           magicToken: response.magicLinkToken
-        }));
+        });
       }
 
       if (paymentMethod === PAYMENT_METHODS.RAZORPAY) {
@@ -772,7 +773,7 @@ function CheckoutPageContent() {
   }
 
   if (currentStep === 'confirmation' && orderId) {
-    const isGuestOrder = typeof window !== 'undefined' ? localStorage.getItem('pendingClaim') : null;
+    const isGuestOrder = safeLocal.get('pendingClaim');
     return (
       <div className="min-h-screen bg-obsidian-deep py-16">
         <div className="max-w-2xl mx-auto px-4 text-center">
@@ -825,7 +826,7 @@ function CheckoutPageContent() {
             <button onClick={() => router.push(`/orders/${orderId}`)} className="bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-3 rounded-full transition-colors">
               View Order Details
             </button>
-            <button onClick={() => { localStorage.removeItem('pendingClaim'); router.push('/products'); }} className="bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold px-6 py-3 rounded-full transition-colors">
+            <button onClick={() => { safeLocal.remove('pendingClaim'); router.push('/products'); }} className="bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold px-6 py-3 rounded-full transition-colors">
               Continue Shopping
             </button>
           </div>

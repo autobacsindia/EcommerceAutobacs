@@ -1,6 +1,7 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
+import { safeLocal } from '@/lib/safeStorage';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ShoppingCart, Heart, ArrowRight } from 'lucide-react';
@@ -67,7 +68,7 @@ export default function ModernFastMovingSection({
     const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
     const cacheKey = `fastMoving_${CACHE_VERSION}_${limit}`;
 
-    const cachedRaw = localStorage.getItem(cacheKey);
+    const cachedRaw = safeLocal.get(cacheKey);
     if (cachedRaw) {
       try {
         const cached = JSON.parse(cachedRaw);
@@ -77,10 +78,10 @@ export default function ModernFastMovingSection({
           setLoading(false);
           return;
         }
-        localStorage.removeItem(cacheKey);
+        safeLocal.remove(cacheKey);
       } catch (e) {
         console.warn('Failed to parse cached fast-moving products:', e);
-        localStorage.removeItem(cacheKey);
+        safeLocal.remove(cacheKey);
       }
     }
 
@@ -93,14 +94,7 @@ export default function ModernFastMovingSection({
         const productsData = response.products || [];
         setProducts(productsData);
 
-        try {
-          localStorage.setItem(
-            cacheKey,
-            JSON.stringify({ products: productsData, cachedAt: Date.now() })
-          );
-        } catch (e) {
-          console.warn('Failed to cache fast-moving products in localStorage:', e);
-        }
+        safeLocal.setJSON(cacheKey, { products: productsData, cachedAt: Date.now() });
       } catch (err: any) {
         console.error('Failed to fetch fast-moving products:', err);
         setError('Failed to load fast-moving products.');
