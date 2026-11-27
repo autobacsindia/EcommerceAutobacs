@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /*
   Plain CSS transitions, not an animation library: framer-motion added 57 KB to
@@ -13,6 +14,24 @@ import { useEffect, useState, type ReactNode } from 'react';
 */
 
 const DURATION_MS = 200;
+
+/*
+  Both overlays render on <body>, not where they are used. An overlay inside the
+  Tasks page sat under the panel's side menu and top bar: on a wide screen the
+  board is `position: sticky`, and a sticky box makes its own layer, so the
+  window's z-50 only counted inside the board — the side menu (z-40) and the bar
+  (z-20) still painted over it, cutting off its title and left column.
+  On <body> nothing above can trap it. The theme classes come along, because the
+  colours are CSS variables set on the panel's root.
+*/
+const LAYER = 'panel-theme admin-panel tk-theme';
+
+/** `document` exists only in the browser: wait one effect before portalling. */
+function useBody() {
+  const [body, setBody] = useState<HTMLElement | null>(null);
+  useEffect(() => setBody(document.body), []);
+  return body;
+}
 
 /**
  * Keeps an overlay in the page for the length of its closing transition, and
@@ -59,9 +78,10 @@ const fade = 'transition-opacity duration-200 ease-out motion-reduce:transition-
 export function Dialog({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) {
   useOverlay(open, onClose);
   const { mounted, shown } = useTransition(open);
-  if (!mounted) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-3 pt-[8vh] sm:p-6 sm:pt-[10vh]">
+  const body = useBody();
+  if (!mounted || !body) return null;
+  return createPortal(
+    <div className={`${LAYER} fixed inset-0 z-50 flex items-start justify-center p-3 pt-[8vh] sm:p-6 sm:pt-[10vh]`}>
       <div className={`absolute inset-0 bg-[rgb(0_0_0/0.45)] ${fade} ${shown ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} aria-hidden />
       <div
         role="dialog"
@@ -73,7 +93,8 @@ export function Dialog({ open, onClose, label, children }: { open: boolean; onCl
       >
         {children}
       </div>
-    </div>
+    </div>,
+    body,
   );
 }
 
@@ -85,9 +106,10 @@ export function Dialog({ open, onClose, label, children }: { open: boolean; onCl
 export function TaskWindow({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) {
   useOverlay(open, onClose);
   const { mounted, shown } = useTransition(open);
-  if (!mounted) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-4 lg:p-6">
+  const body = useBody();
+  if (!mounted || !body) return null;
+  return createPortal(
+    <div className={`${LAYER} fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-4 lg:p-6`}>
       <div className={`absolute inset-0 bg-[rgb(0_0_0/0.45)] ${fade} ${shown ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} aria-hidden />
       <div
         role="dialog"
@@ -99,6 +121,7 @@ export function TaskWindow({ open, onClose, label, children }: { open: boolean; 
       >
         {children}
       </div>
-    </div>
+    </div>,
+    body,
   );
 }
