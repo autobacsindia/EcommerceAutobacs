@@ -346,6 +346,12 @@ Every other rule in this file still applies unchanged — secrets, prod data, cu
 
 There is no separate "deploy" step. **A push to `main` deploys to the live store within minutes** — real customers, real Razorpay. Treat the merge itself as the deploy.
 
+**Release slots (owner guide: [docs/HOW-TO-RELEASE.md](docs/HOW-TO-RELEASE.md)).** The live site changes twice a day, not on every merge:
+
+- **Open feature/fix PRs against `develop`** (`gh pr create --base develop`). The owner's "merge it" merges into `develop`, which deploys only the test tier — not customers.
+- `.github/workflows/release-slots.yml` opens one **Release PR `develop` → `main`** at ~1:30 PM and ~9:30 PM IST and starts full CI on it. The owner merges it at 2 PM / 10 PM. Merge it with **`gh pr merge <n> --merge`** (a merge commit), never `--squash` — squash leaves `develop` and `main` permanently diverged.
+- **Hotfix** only when the owner says so: PR straight to `main`. After any push to `main` the workflow merges `main` back into `develop`; a conflict fails that job loudly — resolve with a `main` → `develop` PR.
+
 - **Always go through a pull request.** Branch protection requires it (`Changes must be made through a pull request`) — but **repo admins can bypass it, and a plain `git push origin main` from an admin account silently succeeds**, printing only `remote: Bypassed rule violations for refs/heads/main`. That push skips the PR review *and* both CI checks. The gate is not a technical guarantee for admins; it is a convention you have to keep. Use `gh pr create` + merge, not a direct push.
 
 - **Order of operations when a change needs a data migration:** deploy the code first, confirm the new behaviour is live in prod, *then* run the migration. Running it first just lets the old code undo it.
