@@ -105,6 +105,8 @@ export interface UnbilledRow {
   _id: string;
   source: 'zoho_payment' | 'manual';
   paymentNumber?: string;
+  /** Paid-sales sheet reference (its re-upload key). */
+  saleRef?: string;
   receivedAt: string;
   customerName: string;
   mode?: string;
@@ -130,7 +132,7 @@ export interface UnbilledRow {
 }
 
 export interface ZohoImportResult {
-  kind: 'invoices' | 'credit_notes' | 'payments';
+  kind: 'invoices' | 'credit_notes' | 'payments' | 'paid_sales';
   /** Payments export only: payments Zoho has since applied to an invoice. */
   billed?: number;
   batchId?: string;

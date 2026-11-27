@@ -168,3 +168,12 @@ describe('Paid, no sale bill yet', () => {
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Add paid sale without bill' })).toBeNull());
   });
 });
+
+it('reports a paid-sales sheet upload', async () => {
+  postForm.mockResolvedValue({ result: { kind: 'paid_sales', inserted: 3, updated: 0, skipped: { draft: 0, void: 0 }, errors: ['Line 5 (CU-X): Add proof — skipped.'], rematched: 0, creditsUnmatched: 0 } });
+  wrap();
+  fireEvent.change(screen.getByLabelText('Zoho CSV file'), { target: { files: [new File(['x'], 'paid-sales.csv', { type: 'text/csv' })] } });
+  fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Paid sales without bill: 3 new, 0 updated.');
+  expect(screen.getByText('Line 5 (CU-X): Add proof — skipped.')).toBeInTheDocument();
+});

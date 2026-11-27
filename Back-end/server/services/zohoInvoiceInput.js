@@ -83,8 +83,12 @@ export function readZohoCsv(buffer) {
   return rows;
 }
 
-/** Which Zoho export this is: 'credit_notes', 'payments' or 'invoices' (the default, validated by its parser). */
+/**
+ * Which file this is: a Zoho export ('credit_notes', 'payments', 'invoices' — the
+ * default, validated by its parser) or our own paid-sales sheet ('paid_sales').
+ */
 export const zohoExportKind = (rows) => {
+  if ('Sale Reference' in rows[0]) return 'paid_sales';
   if ('Credit Note Number' in rows[0]) return 'credit_notes';
   if ('CustomerPayment ID' in rows[0]) return 'payments';
   return 'invoices';

@@ -28,7 +28,7 @@ import orderExtraChargeRepository from '../repositories/orderExtraChargeReposito
 import {
   readZohoCsv, zohoExportKind, parseZohoInvoiceCsv, parseZohoCreditNoteCsv, matchInvoicesToOrders, nameKey,
 } from './zohoInvoiceInput.js';
-import { unbilledRevenue, importZohoPayments } from './unbilledReceiptService.js';
+import { unbilledRevenue, importZohoPayments, importPaidSales } from './unbilledReceiptService.js';
 
 const DAY_MS = 864e5;
 const TZ = '+05:30';
@@ -431,14 +431,16 @@ async function importCreditNotes(rows, user) {
 }
 
 /**
- * Import a Zoho export — the invoice, credit-note or payments-received list (told
- * apart by their columns). Same file twice = same rows (upsert by Zoho id).
+ * Import a Zoho export — the invoice, credit-note or payments-received list — or
+ * our own paid-sales sheet (told apart by their columns). Same file twice = same
+ * rows (upsert by Zoho id / Sale Reference).
  */
 export async function importZohoExport(buffer, user) {
   const rows = readZohoCsv(buffer);
   const kind = zohoExportKind(rows);
   if (kind === 'credit_notes') return importCreditNotes(rows, user);
   if (kind === 'payments') return importZohoPayments(rows, user);
+  if (kind === 'paid_sales') return importPaidSales(rows, user);
   return importInvoices(rows, user);
 }
 

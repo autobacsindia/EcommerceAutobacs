@@ -177,7 +177,7 @@ function useRefreshFigures() {
   ]);
 }
 
-const IMPORT_LABELS = { invoices: 'Bills', credit_notes: 'Credit notes', payments: 'Payments with no bill' } as const;
+const IMPORT_LABELS = { invoices: 'Bills', credit_notes: 'Credit notes', payments: 'Payments with no bill', paid_sales: 'Paid sales without bill' } as const;
 
 function ZohoUpload() {
   const [file, setFile] = useState<File | null>(null);
@@ -203,6 +203,9 @@ function ZohoUpload() {
         <strong>Payments Received → Export → Invoice Payments</strong> (CSV) and upload each file here.
         Zoho exports at most 6 months at a time. Uploading the same file again updates it — nothing is counted twice.
         From the payments file only money <em>not yet on any bill</em> is added, as &ldquo;Paid, no sale bill yet&rdquo;.
+        You can also upload our own <strong>paid-sales sheet</strong> (money seen only in ClickUp or the bank) with the columns{' '}
+        <code className="rounded bg-gray-100 px-1 text-xs">Sale Reference, Customer, Amount Received, Date Received, Mode, Proof, Note</code>{' '}
+        — each Sale Reference is counted once, and uploading the sheet again updates it.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <input

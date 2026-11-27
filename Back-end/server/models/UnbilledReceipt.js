@@ -27,6 +27,8 @@ const UnbilledReceiptSchema = new mongoose.Schema(
     // Zoho "CustomerPayment ID" — the re-import key. Absent on manual entries.
     zohoPaymentId: { type: String, maxlength: 40 },
     paymentNumber: { type: String, maxlength: 60 },
+    // "Sale Reference" from the paid-sales CSV — its re-upload key. Absent on Zoho rows and form entries.
+    saleRef: { type: String, maxlength: 60 },
     zohoStatus: { type: String, maxlength: 30 }, // lower-case Zoho payment status
     receivedAt: { type: Date, required: true },
     customerName: { type: String, required: true, maxlength: 200 },
@@ -58,6 +60,10 @@ const UnbilledReceiptSchema = new mongoose.Schema(
 UnbilledReceiptSchema.index(
   { zohoPaymentId: 1 },
   { unique: true, partialFilterExpression: { zohoPaymentId: { $type: 'string' } }, name: 'unbilled_zoho_payment_id' }
+);
+UnbilledReceiptSchema.index(
+  { saleRef: 1 },
+  { unique: true, partialFilterExpression: { saleRef: { $type: 'string' } }, name: 'unbilled_sale_ref' }
 );
 UnbilledReceiptSchema.index({ state: 1, receivedAt: -1, _id: -1 }, { name: 'unbilled_state_recent' });
 UnbilledReceiptSchema.index({ receivedAt: 1 }, { name: 'unbilled_received' });

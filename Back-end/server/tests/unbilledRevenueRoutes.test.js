@@ -190,6 +190,66 @@ describe('Paid, no sale bill yet', () => {
     });
   });
 
+  describe('paid-sales sheet (our own CSV)', () => {
+    let adm;
+    beforeEach(async () => { adm = await makeUser('admin'); });
+    const SHEET = 'Sale Reference,Customer,Amount Received,Date Received,Mode,Proof,Note';
+    const sale = (ref, name, amount, day, proof = 'https://app.clickup.com/t/x') => [ref, `"${name}"`, `"${amount}"`, isoDay(fyDay(day)), 'Bank', proof, ''].join(',');
+    const sheet = (...l) => [SHEET, ...l].join('\n');
+
+    it('counts each row once; the same file twice changes nothing; a corrected amount updates', async () => {
+      const file = sheet(sale('CU-SHB-1', 'Kiran', '11,25,000', 5), sale('CU-SCM-1', 'Meena', '300000', 6));
+      const up = await adm.upload('/admin/revenue/zoho-import', file);
+      expect(up.status).toBe(200);
+      expect(up.body.result).toMatchObject({ kind: 'paid_sales', inserted: 2, errors: [] });
+      expect((await summary(adm)).revenue.unbilled).toMatchObject({ total: 1425000, manual: 1425000, count: 2 });
+
+      const again = await adm.upload('/admin/revenue/zoho-import', file);
+      expect(again.body.result).toMatchObject({ inserted: 0, updated: 2 });
+      expect(await UnbilledReceipt.countDocuments()).toBe(2);
+
+      await adm.upload('/admin/revenue/zoho-import', sheet(sale('CU-SHB-1', 'Kiran', '11,00,000', 5))).expect(200);
+      expect((await summary(adm)).revenue.unbilled.total).toBe(1400000);
+    });
+
+    it('reports bad rows instead of guessing', async () => {
+      const future = isoDay(new Date(Date.now() + 10 * 864e5));
+      const up = await adm.upload('/admin/revenue/zoho-import', sheet(
+        sale('CU-OK', 'Kiran', '1000', 1),
+        sale('CU-OK', 'Kiran', '2000', 2), // same reference again
+        sale('bad ref!', 'X', '1000', 1),
+        sale('CU-NOPROOF', 'X', '1000', 1, ''),
+        ['CU-FUT', 'X', '1000', future, '', 'p', ''].join(','),
+        sale('CU-ZERO', 'X', '0', 1),
+      ));
+      expect(up.body.result.inserted).toBe(1);
+      expect(up.body.result.errors).toHaveLength(5);
+      expect((await summary(adm)).revenue.unbilled.total).toBe(1000);
+      expect((await adm.upload('/admin/revenue/zoho-import', 'Sale Reference,Customer\nX,Y')).status).toBe(400);
+    });
+
+    it('an admin decision survives a re-upload', async () => {
+      const file = sheet(sale('CU-BILL', 'Kiran', '50000', 3));
+      await adm.upload('/admin/revenue/zoho-import', file).expect(200);
+      const row = await UnbilledReceipt.findOne({ saleRef: 'CU-BILL' }).lean();
+      await adm.patch(`/admin/revenue/unbilled/${row._id}`, { decision: 'billed', invoiceNumber: 'AUTO/26-27/0400' }).expect(200);
+      await adm.upload('/admin/revenue/zoho-import', file).expect(200);
+      expect(await UnbilledReceipt.findById(row._id).lean()).toMatchObject({ state: 'billed', billedAs: 'AUTO/26-27/0400' });
+      expect((await summary(adm)).revenue.unbilled.total).toBe(0);
+    });
+
+    it('a Zoho payment for money already entered by hand is held back, not counted twice', async () => {
+      await adm.upload('/admin/revenue/zoho-import', sheet(sale('CU-BR01', 'Kiran Customs', '754400', 20))).expect(200);
+      // Later accounts records the bank transfer in Zoho: 12.7 L, of which 5.16 L is on bills.
+      await adm.upload('/admin/revenue/zoho-import',
+        payCsv(payLine({ id: '91', day: 20, amount: 1270000, unused: 754400, name: 'Kiran Customs', inv: 'AUTO/9' }))).expect(200);
+      const z = await UnbilledReceipt.findOne({ zohoPaymentId: '91' }).lean();
+      expect(z.state).toBe('needs_check');
+      expect(z.reason).toMatch(/CU-BR01/);
+      expect((await summary(adm)).revenue.unbilled).toMatchObject({ total: 754400, needsCheck: { count: 1, total: 754400 } });
+    });
+  });
+
   describe('added by hand', () => {
     let adm;
     beforeEach(async () => { adm = await makeUser('admin'); });

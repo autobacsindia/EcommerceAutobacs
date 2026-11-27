@@ -738,6 +738,10 @@ export async function ensureCriticalIndexes() {
       { zohoPaymentId: 1 },
       { unique: true, partialFilterExpression: { zohoPaymentId: { $type: 'string' } }, name: 'unbilled_zoho_payment_id', background: true }
     );
+    await db.collection('unbilledreceipts').createIndex(
+      { saleRef: 1 },
+      { unique: true, partialFilterExpression: { saleRef: { $type: 'string' } }, name: 'unbilled_sale_ref', background: true }
+    );
     await db.collection('unbilledreceipts').createIndex({ state: 1, receivedAt: -1, _id: -1 }, { name: 'unbilled_state_recent', background: true });
     await db.collection('unbilledreceipts').createIndex({ receivedAt: 1 }, { name: 'unbilled_received', background: true });
     console.log('✓ UnbilledReceipt indexes confirmed');

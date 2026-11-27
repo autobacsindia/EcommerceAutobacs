@@ -7,9 +7,12 @@
  *                       has since applied to an invoice drops to 0 (the invoice
  *                       counts instead) — so a sale never counts twice.
  *   addManualReceipt    money Zoho never recorded, added by an admin with proof.
+ *   importPaidSales     the same, many at once, from our own CSV sheet ("Sale
+ *                       Reference" column = re-upload key: same file twice = same rows).
  *   decideUnbilled      admin: count it / same as a panel order / billed / remove.
- *   rematchUnbilled     count-once check against panel orders (Razorpay id, then
- *                       name + amount + date). Admin decisions are never overwritten.
+ *   rematchUnbilled     count-once check for Zoho payments: a panel order (Razorpay
+ *                       id, then name + amount + date) or a hand-entered sale for the
+ *                       same money. Admin decisions are never overwritten.
  */
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
@@ -17,14 +20,19 @@ import Payment from '../models/Payment.js';
 import UnbilledReceipt from '../models/UnbilledReceipt.js';
 import AppError from '../utils/AppError.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
-import { MATCH_TOLERANCE, MATCH_ORDER_SCAN_CAP, UNBILLED_MAX_AMOUNT, UNBILLED_STATES } from '../config/companyRevenue.js';
+import {
+  MATCH_TOLERANCE, MATCH_ORDER_SCAN_CAP, UNBILLED_MAX_AMOUNT, UNBILLED_STATES, ZOHO_IMPORT_MAX_INVOICES,
+} from '../config/companyRevenue.js';
 import { countedOrderFilter } from './revenueOrderFilter.js';
-import { parseZohoPaymentCsv, razorpayIdsIn, matchInvoicesToOrders, nameKey, parseInvoiceDate } from './zohoInvoiceInput.js';
+import {
+  parseZohoPaymentCsv, razorpayIdsIn, matchInvoicesToOrders, nameKey, namesAgree, parseInvoiceDate, parseMoney,
+} from './zohoInvoiceInput.js';
 
 const DAY_MS = 864e5;
 const TZ = '+05:30';
 const round2 = (n) => Math.round((n || 0) * 100) / 100;
 const INVOICE_NUMBER = /^[A-Za-z0-9][A-Za-z0-9/_.-]{1,59}$/;
+const SALE_REF = /^[A-Za-z0-9][A-Za-z0-9/_.:-]{1,59}$/;
 const LIST_FIELDS = '-history -customerKey';
 
 /** Rows that count as revenue in a window. */
@@ -82,7 +90,7 @@ export async function rematchUnbilled() {
   const rows = await UnbilledReceipt.find({
     source: 'zoho_payment', stateBy: 'auto', amount: { $gt: 0 }, state: { $in: ['open', 'in_panel', 'needs_check'] },
   })
-    .select('receivedAt amount customerKey reference state order')
+    .select('receivedAt amount customerKey reference state order reason')
     .limit(MATCH_ORDER_SCAN_CAP)
     .lean()
     .maxTimeMS(QUERY_TIMEOUTS.import);
@@ -101,11 +109,31 @@ export async function rematchUnbilled() {
     for (const p of pays) if (counted.has(String(p.order))) payOrder.set(p.gatewayPaymentId, p.order);
   }
 
-  // 2. Otherwise the same matcher as Zoho invoices: name + amount + date.
   const dates = rows.map((r) => r.receivedAt.getTime());
   const pad = MATCH_TOLERANCE.possibleDays * DAY_MS;
   const from = new Date(Math.min(...dates) - pad);
   const to = new Date(Math.max(...dates) + pad);
+
+  // 2. A sale an admin entered by hand (form or paid-sales sheet) for the same
+  //    money: once accounts records that payment in Zoho, it would count twice.
+  const manual = await UnbilledReceipt.find({
+    source: 'manual', state: { $in: ['open', 'billed'] }, receivedAt: { $gte: from, $lte: to },
+  })
+    .select('receivedAt amount customerKey customerName saleRef')
+    .limit(MATCH_ORDER_SCAN_CAP)
+    .lean()
+    .maxTimeMS(QUERY_TIMEOUTS.import);
+  const claimed = new Set();
+  const handEntry = (r) => {
+    const m = manual.find((x) => !claimed.has(String(x._id))
+      && namesAgree(x.customerKey, r.customerKey)
+      && Math.abs(x.amount - r.amount) <= Math.max(MATCH_TOLERANCE.sureAmountRupees, x.amount * MATCH_TOLERANCE.possibleAmountRatio)
+      && Math.abs(x.receivedAt - r.receivedAt) <= pad);
+    if (m) claimed.add(String(m._id));
+    return m;
+  };
+
+  // 3. Otherwise the same matcher as Zoho invoices: name + amount + date.
   const orders = await Order.find({ ...countedOrderFilter(from), createdAt: { $gte: from, $lte: to } })
     .select('totalAmount createdAt shippingAddress.fullName')
     .limit(MATCH_ORDER_SCAN_CAP)
@@ -120,15 +148,18 @@ export async function rematchUnbilled() {
   const ops = [];
   for (const r of rows) {
     const viaPay = razorpayIdsIn(r.reference).map((id) => payOrder.get(id)).find(Boolean);
+    const hand = viaPay ? null : handEntry(r);
     let d;
     if (viaPay) d = { state: 'in_panel', order: viaPay, reason: 'Razorpay payment of a website order' };
-    else {
+    else if (hand) {
+      d = { state: 'needs_check', order: null, reason: `Looks like the hand-entered sale ${hand.saleRef || hand.customerName} — not counted twice` };
+    } else {
       const m = fuzzy.get(String(r._id));
       d = m.state === 'linked' ? { state: 'in_panel', order: m.orderId, reason: m.reason }
         : m.state === 'needs_check' ? { state: 'needs_check', order: m.orderId, reason: m.reason }
           : { state: 'open', order: null, reason: 'No panel order like it' };
     }
-    if (r.state === d.state && String(r.order || '') === String(d.order || '')) continue;
+    if (r.state === d.state && String(r.order || '') === String(d.order || '') && (r.reason || '') === d.reason.slice(0, 200)) continue;
     ops.push({
       updateOne: {
         // Never overwrite an admin decision made while this ran.
@@ -193,30 +224,42 @@ export async function importZohoPayments(rows, user) {
 
 const clean = (v, max) => (v == null ? '' : String(v).trim().slice(0, max));
 
+/**
+ * The rules for money an admin states (form or sheet). Returns the clean entry,
+ * or `{ error }` — never guesses.
+ */
+export function checkManualEntry(input) {
+  const customerName = clean(input.customerName, 200);
+  const amount = round2(typeof input.amount === 'number' ? input.amount : parseMoney(input.amount));
+  const receivedAt = parseInvoiceDate(input.receivedAt);
+  if (!customerName) return { error: 'Enter the customer name.' };
+  if (!Number.isFinite(amount) || amount <= 0 || amount > UNBILLED_MAX_AMOUNT) return { error: 'Enter the amount received, in rupees.' };
+  if (!receivedAt) return { error: 'Enter the date the money came in.' };
+  if (receivedAt.getTime() > Date.now() + DAY_MS) return { error: 'The date cannot be in the future.' };
+  const proof = clean(input.proof, 500);
+  if (!proof) return { error: 'Add proof — a ClickUp link, quote number or bank reference.' };
+  return {
+    entry: {
+      customerName,
+      customerKey: nameKey(customerName).slice(0, 200),
+      amount,
+      receivedAt,
+      proof,
+      mode: clean(input.mode, 60),
+      note: clean(input.note, 500),
+    },
+  };
+}
+
 /** An admin records money Zoho never got (e.g. a project paid in full, seen only in ClickUp). */
 export async function addManualReceipt(input, user) {
-  const customerName = clean(input.customerName, 200);
-  const amount = round2(Number(input.amount));
-  const receivedAt = parseInvoiceDate(input.receivedAt);
-  if (!customerName) throw new AppError('Enter the customer name.', 400, { expose: true });
-  if (!Number.isFinite(amount) || amount <= 0 || amount > UNBILLED_MAX_AMOUNT) {
-    throw new AppError('Enter the amount received, in rupees.', 400, { expose: true });
-  }
-  if (!receivedAt) throw new AppError('Enter the date the money came in.', 400, { expose: true });
-  if (receivedAt.getTime() > Date.now() + DAY_MS) throw new AppError('The date cannot be in the future.', 400, { expose: true });
-  const proof = clean(input.proof, 500);
-  if (!proof) throw new AppError('Add proof — a ClickUp link, quote number or bank reference.', 400, { expose: true });
+  const { entry, error } = checkManualEntry(input);
+  if (error) throw new AppError(error, 400, { expose: true });
 
   const now = new Date();
   const doc = await UnbilledReceipt.create({
     source: 'manual',
-    receivedAt,
-    customerName,
-    customerKey: nameKey(customerName).slice(0, 200),
-    mode: clean(input.mode, 60),
-    amount,
-    proof,
-    note: clean(input.note, 500),
+    ...entry,
     state: 'open',
     stateBy: 'admin',
     reason: 'Added by an admin',
@@ -227,6 +270,76 @@ export async function addManualReceipt(input, user) {
   const out = doc.toObject();
   delete out.history;
   return out;
+}
+
+export const PAID_SALES_COLUMNS = ['Sale Reference', 'Customer', 'Amount Received', 'Date Received', 'Mode', 'Proof', 'Note'];
+const PAID_SALES_REQUIRED = ['Sale Reference', 'Customer', 'Amount Received', 'Date Received', 'Proof'];
+
+/**
+ * Our own "paid sales without a bill" sheet (columns PAID_SALES_COLUMNS). Pure:
+ * bad rows are reported, never guessed; a reference used twice keeps the first.
+ */
+export function parsePaidSalesCsv(rows) {
+  const missing = PAID_SALES_REQUIRED.filter((c) => !(c in rows[0]));
+  if (missing.length) {
+    throw new AppError(`This paid-sales sheet is missing column(s): ${missing.join(', ')}. Columns: ${PAID_SALES_COLUMNS.join(', ')}.`, 400, { expose: true });
+  }
+  if (rows.length > ZOHO_IMPORT_MAX_INVOICES) {
+    throw new AppError(`Too many rows in one file (${rows.length}). Upload at most ${ZOHO_IMPORT_MAX_INVOICES} at a time.`, 400, { expose: true });
+  }
+  const sales = [];
+  const errors = [];
+  const seen = new Set();
+  rows.forEach((row, i) => {
+    const line = i + 2; // header is line 1
+    const ref = clean(row['Sale Reference'], 60);
+    if (!ref && !clean(row.Customer, 200) && !clean(row['Amount Received'], 30)) return; // blank line
+    if (!SALE_REF.test(ref)) { errors.push(`Line ${line}: "Sale Reference" must be letters, numbers and - / _ . : (2–60) — skipped.`); return; }
+    if (seen.has(ref)) { errors.push(`Line ${line}: reference ${ref} is used twice — the first one is kept.`); return; }
+    const { entry, error } = checkManualEntry({
+      customerName: row.Customer, amount: row['Amount Received'], receivedAt: row['Date Received'],
+      proof: row.Proof, mode: row.Mode, note: row.Note,
+    });
+    if (error) { errors.push(`Line ${line} (${ref}): ${error} — skipped.`); return; }
+    seen.add(ref);
+    sales.push({ saleRef: ref, ...entry });
+  });
+  return { sales, errors };
+}
+
+/**
+ * Upload the paid-sales sheet. Upsert by Sale Reference: the same file twice
+ * changes nothing; a corrected amount or date updates the row; an admin
+ * decision (billed / removed) is kept.
+ */
+export async function importPaidSales(rows, user) {
+  const { sales, errors } = parsePaidSalesCsv(rows);
+  const now = new Date();
+  let inserted = 0;
+  let updated = 0;
+  if (sales.length) {
+    const res = await UnbilledReceipt.bulkWrite(
+      sales.map((s) => ({
+        updateOne: {
+          filter: { saleRef: s.saleRef },
+          update: {
+            $set: { ...s, importedAt: now },
+            $setOnInsert: {
+              source: 'manual', state: 'open', stateBy: 'admin', reason: 'Uploaded by an admin (paid-sales sheet)',
+              addedBy: user?._id || null, addedByName: user?.name || null,
+            },
+            $push: { history: { $each: [{ at: now, by: user?._id, byName: user?.name, action: 'imported' }], $slice: -50 } },
+          },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+    inserted = res.upsertedCount;
+    updated = res.matchedCount;
+  }
+  const match = await rematchUnbilled();
+  return { kind: 'paid_sales', inserted, updated, skipped: { draft: 0, void: 0 }, errors, rematched: match.changed, creditsUnmatched: 0 };
 }
 
 const DECISIONS = {

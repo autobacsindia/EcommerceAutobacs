@@ -123,7 +123,9 @@ function UnbilledItem({ row }: { row: UnbilledRow }) {
           )}
         </p>
         <p className="text-gray-600">
-          {row.source === 'zoho_payment' ? `Zoho payment ${row.paymentNumber ?? ''}` : `Added by ${row.addedByName || 'an admin'}`}
+          {row.source === 'zoho_payment'
+            ? `Zoho payment ${row.paymentNumber ?? ''}`
+            : `${row.saleRef ? `Sheet ${row.saleRef} · uploaded` : 'Added'} by ${row.addedByName || 'an admin'}`}
           {row.mode && ` · ${row.mode}`}
           {row.reference && ` · Ref ${row.reference}`}
           {row.billedAs && ` · Billed as ${row.billedAs}`}
