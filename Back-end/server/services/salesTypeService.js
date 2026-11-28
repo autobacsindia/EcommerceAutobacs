@@ -4,7 +4,7 @@
  * GTM marks a quotation B2B or B2C (utils/salesType.js). When the customer accepts,
  * the order is created with `buyerTypeCheck.status = 'pending'`. Accounts (or the
  * admin) looks at the type and its reason ("B2C — offer applied: 10% off (Black
- * Friday)", "B2B — no offers") and approves it with a note. A B2B order can ship
+ * Friday)", "B2B — no discount on the total") and approves it with a note. A B2B order can ship
  * before payment only after this (services/payLaterService.js).
  *
  * Approving changes nothing about money or order state; it is a once-only
