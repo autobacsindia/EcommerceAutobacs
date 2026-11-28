@@ -101,15 +101,15 @@ export function mvhdDurationSec(buf, box) {
   return Number.isFinite(sec) && sec > 0 ? sec : null;
 }
 
-/** Sample-entry codecs of every VIDEO track in a `moov` payload. */
-export function videoCodecs(buf, moov) {
+/** Sample-entry codecs of every track with this handler (`vide` / `soun`) in a `moov` payload. */
+function trackCodecs(buf, moov, handler) {
   const codecs = [];
   for (const trak of childBoxes(buf, moov.start, moov.end).filter((b) => b.type === 'trak')) {
     const mdia = child(buf, trak, 'mdia');
     if (!mdia) continue;
     const hdlr = child(buf, mdia, 'hdlr');
     // hdlr payload: version/flags(4) pre_defined(4) handler_type(4)
-    if (!hdlr || hdlr.end - hdlr.start < 12 || fourcc(buf, hdlr.start + 8) !== 'vide') continue;
+    if (!hdlr || hdlr.end - hdlr.start < 12 || fourcc(buf, hdlr.start + 8) !== handler) continue;
     const minf = child(buf, mdia, 'minf');
     const stbl = minf && child(buf, minf, 'stbl');
     const stsd = stbl && child(buf, stbl, 'stsd');
@@ -123,6 +123,15 @@ export function videoCodecs(buf, moov) {
   return codecs;
 }
 
+/** Sample-entry codecs of every VIDEO track in a `moov` payload. */
+export const videoCodecs = (buf, moov) => trackCodecs(buf, moov, 'vide');
+
+/**
+ * Sample-entry codecs of every SOUND track (`mp4a` = AAC). Old Android 3GP clips
+ * carry AMR (`samr`/`sawb`), which browsers and iPhones cannot play.
+ */
+export const audioCodecs = (buf, moov) => trackCodecs(buf, moov, 'soun');
+
 /** Everything we need from a `moov` buffer (the box INCLUDING its header). */
 export function parseMoov(buf) {
   const h = readBoxHeader(buf, 0);
@@ -133,7 +142,7 @@ export function parseMoov(buf) {
   if (durationSec === null) return { ok: false, reason: 'no-duration' };
   const codecs = videoCodecs(buf, moov);
   if (!codecs.length) return { ok: false, reason: 'no-video-track' };
-  return { ok: true, durationSec, videoCodecs: codecs };
+  return { ok: true, durationSec, videoCodecs: codecs, audioCodecs: audioCodecs(buf, moov) };
 }
 
 /**

@@ -13,8 +13,9 @@
  * `verifyUploadedVideo` reads the real object back and checks, server-side:
  *   - the key is one we minted, inside the caller's own folder;
  *   - it exists and its stored size is ≤ the byte cap (HEAD);
- *   - its first bytes are an MP4/MOV container (magic-byte sniff);
- *   - its real length is ≤ 60s and its video is H.264 (`moov` read via ranged GETs,
+ *   - its first bytes are an MP4/MOV/3GP container (magic-byte sniff);
+ *   - its real length is ≤ 60s, its video is H.264 and its sound (if any) is AAC
+ *     (`moov` read via ranged GETs,
  *     services/storage/mp4Probe.js).
  * Anything unreadable is REJECTED, never accepted unchecked. A rejected object is
  * deleted (best-effort) so refused uploads do not pile up.
@@ -33,6 +34,8 @@ import {
   REEL_UPLOAD_TYPES,
   REEL_UPLOAD_SLOT,
   REEL_ALLOWED_CODECS,
+  REEL_ALLOWED_AUDIO_CODECS,
+  REEL_UNSUPPORTED_FORMAT_MESSAGE,
   REEL_PLAYBACK_CONTENT_TYPE,
   REEL_PLAYBACK_TTL_SEC,
 } from '../config/reels.js';
@@ -87,7 +90,7 @@ export async function buildUploadTarget({ userId, team = false, contentType, siz
   const type = String(contentType || '').trim().toLowerCase();
   const ext = REEL_UPLOAD_TYPES[type];
   if (!ext) {
-    throw new ReelMediaError('Please choose an MP4 or MOV video.', 400, 'REEL_MEDIA_TYPE');
+    throw new ReelMediaError(REEL_UNSUPPORTED_FORMAT_MESSAGE, 400, 'REEL_MEDIA_TYPE');
   }
   const bytes = Number(size);
   if (!Number.isSafeInteger(bytes) || bytes <= 0) {
@@ -168,11 +171,11 @@ export async function verifyUploadedVideo(publicId, { folder }) {
   } catch {
     throw unavailable();
   }
-  // ISO base media only (`ftyp` at offset 4): that is what MP4/MOV are, and what the
-  // duration read below understands. WebM, AVI, HTML, images… are all refused here.
+  // ISO base media only (`ftyp` at offset 4): that is what MP4/MOV/3GP are, and what
+  // the duration read below understands. WebM, MKV, AVI, HTML, images… are refused here.
   const isIso = first.length >= 8 && first.toString('latin1', 4, 8) === 'ftyp';
   if (!isIso || detectKind(first) !== KIND.VIDEO) {
-    await rejectAndDelete(key, 'Only MP4 or MOV videos can be posted as reels.', 'REEL_MEDIA_NOT_VIDEO');
+    await rejectAndDelete(key, REEL_UNSUPPORTED_FORMAT_MESSAGE, 'REEL_MEDIA_NOT_VIDEO');
   }
 
   let probe;
@@ -191,10 +194,15 @@ export async function verifyUploadedVideo(publicId, { folder }) {
   if (!probe.videoCodecs.every((c) => REEL_ALLOWED_CODECS.includes(c))) {
     await rejectAndDelete(
       key,
-      'This video uses a format not every phone can play (often iPhone "High Efficiency"). '
-        + 'On iPhone set Camera → Formats → Most Compatible, or export the video as H.264, then try again.',
+      'This video uses a format not every phone can play (usually "High Efficiency" / HEVC). '
+        + 'iPhone: Settings → Camera → Formats → Most Compatible. '
+        + 'Android: turn off "High efficiency video" in the camera settings. Then record it again, or choose a different video.',
       'REEL_MEDIA_CODEC',
     );
+  }
+  const audio = probe.audioCodecs ?? [];
+  if (audio.length && !audio.some((c) => REEL_ALLOWED_AUDIO_CODECS.includes(c))) {
+    await rejectAndDelete(key, REEL_UNSUPPORTED_FORMAT_MESSAGE, 'REEL_MEDIA_AUDIO_CODEC');
   }
 
   return {

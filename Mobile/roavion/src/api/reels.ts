@@ -14,6 +14,7 @@
  */
 import { api } from './client';
 import * as mock from './reelsMock';
+import { reelVideoType, UNSUPPORTED_VIDEO_MESSAGE, type ReelVideoType } from '../reels/videoType';
 
 export type ReelStatus = 'pending' | 'approved' | 'rejected' | 'removed';
 /** `backorder` is buyable (ships when restocked); only `out` blocks the cart. */
@@ -82,8 +83,8 @@ export interface UploadTarget {
   maxDurationSec: number;
 }
 
-/** The only two video types the server takes. */
-export type ReelVideoType = 'video/mp4' | 'video/quicktime';
+/** Accepted video types live in ../reels/videoType (pure, unit-tested). */
+export { reelVideoType, UNSUPPORTED_VIDEO_MESSAGE, type ReelVideoType };
 
 export const REELS_MOCK = process.env.EXPO_PUBLIC_REELS_MOCK === '1';
 
@@ -160,17 +161,6 @@ export interface PickedVideo {
   fileName?: string | null;
 }
 
-/** MP4 or MOV from what the picker reported; null for anything else. */
-export function reelVideoType(video: PickedVideo): ReelVideoType | null {
-  const mime = (video.mimeType || '').toLowerCase();
-  const name = (video.fileName || video.uri).toLowerCase().split('?')[0];
-  if (mime === 'video/quicktime' || mime === 'video/mov' || name.endsWith('.mov')) return 'video/quicktime';
-  if (mime === 'video/mp4' || name.endsWith('.mp4') || name.endsWith('.m4v')) return 'video/mp4';
-  // Some Android pickers report a generic or missing type for an .mp4.
-  if (!mime || mime === 'video/*' || mime === 'application/octet-stream') return 'video/mp4';
-  return null;
-}
-
 export function getUploadTarget(input: { contentType: ReelVideoType; size: number }): Promise<UploadTarget> {
   const res: Promise<Wrapped<Partial<UploadTarget>>> = REELS_MOCK
     ? mock.getUploadTarget(input)
@@ -218,7 +208,7 @@ export function uploadReelVideo(
 
   const promise = (async () => {
     const contentType = reelVideoType(video);
-    if (!contentType) throw new Error('Please choose an MP4 or MOV video.');
+    if (!contentType) throw new Error(UNSUPPORTED_VIDEO_MESSAGE);
 
     if (REELS_MOCK) {
       const target = await getUploadTarget({ contentType, size: 1 });
