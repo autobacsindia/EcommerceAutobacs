@@ -25,6 +25,24 @@ import { GOOGLE_ADS_ID } from './googleAds';
 import { META_PIXEL_ID } from './metaPixel';
 
 /**
+ * Staff panels (/admin, /team) load no ad or tracking script.
+ *
+ * Measured on /admin/orders (2026-11-28): GTM (which also pulls in Clarity
+ * session recording), Google Ads and the Meta Pixel cost ~0.2 s of blocked main
+ * thread per page load on a fast Mac (several times that on an office PC) and
+ * ~380 beacon requests in a 10-minute panel session — while sending staff into
+ * the ad audiences and page-view counts as if they were shoppers.
+ *
+ * Only the NETWORK part is skipped. The queues and stubs (gtmDataLayer, gtag,
+ * fbq) are still created, so any code that pushes an event on a panel page just
+ * queues it into an array nobody drains — nothing throws.
+ *
+ * A JS expression, inlined into each snippet (the snippets must stay
+ * self-contained strings: the CSP hashes them byte for byte).
+ */
+export const STAFF_PANEL_PATH_TEST = `/^\\/(admin|team)(\\/|$)/.test(location.pathname)`;
+
+/**
  * GTM's queue must exist before anything pushes to it: page-mount effects fire
  * the moment a route hydrates, and a push against an undefined array throws.
  * Note the name — `gtmDataLayer`, NOT the default `dataLayer` (see lib/gtm.ts:
@@ -48,7 +66,7 @@ export const gtmLoaderSnippet = `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;
-f.parentNode.insertBefore(j,f);
+if(!${STAFF_PANEL_PATH_TEST})f.parentNode.insertBefore(j,f);
 })(window,document,'script','${GTM_DATA_LAYER}','${GTM_ID}');`;
 
 /**
@@ -79,7 +97,7 @@ function gtag(){dataLayer.push(arguments);}
 window.gtag = gtag;
 gtag('js', new Date());
 gtag('config', '${GOOGLE_ADS_ID}');
-(function(){var s=document.createElement('script');s.async=true;
+(function(){if(${STAFF_PANEL_PATH_TEST})return;var s=document.createElement('script');s.async=true;
 s.src='https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}';
 var f=document.getElementsByTagName('script')[0];f.parentNode.insertBefore(s,f);})();`;
 
@@ -88,7 +106,7 @@ export const metaPixelSnippet = `!function(f,b,e,v,n,t,s)
 {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 n.callMethod.apply(n,arguments):n.queue.push(arguments)};
 if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
+n.queue=[];if(${STAFF_PANEL_PATH_TEST})return;t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window,document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
