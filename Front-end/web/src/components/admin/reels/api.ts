@@ -7,7 +7,8 @@
  */
 import apiClient from '@/lib/api-client';
 
-export type ReelStatus = 'pending' | 'approved' | 'rejected' | 'removed';
+/** `processing` = the server is converting the video to a format every phone plays. */
+export type ReelStatus = 'processing' | 'pending' | 'approved' | 'rejected' | 'removed';
 
 export interface ReelProduct {
   id: string;
@@ -64,6 +65,7 @@ export const REEL_TABS: { status: ReelStatus; label: string; empty: string }[] =
   { status: 'approved', label: 'Live', empty: 'No reels are live yet.' },
   { status: 'rejected', label: 'Rejected', empty: 'No rejected reels.' },
   { status: 'removed', label: 'Removed', empty: 'No removed reels.' },
+  { status: 'processing', label: 'Converting', empty: 'No videos are being converted right now.' },
 ];
 
 /** Short reasons staff tap most often; free text can replace or add to them. */

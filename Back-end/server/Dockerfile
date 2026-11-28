@@ -13,7 +13,8 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache curl
+# ffmpeg: reel videos in HEVC etc. are converted to H.264 (services/reelConvertService.js)
+RUN apk add --no-cache curl ffmpeg
 
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001

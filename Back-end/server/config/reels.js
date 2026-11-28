@@ -26,8 +26,15 @@ const intFromEnv = (name, fallback) => {
  *   rejected — staff declined it (reason recorded). Can still be approved later if
  *              staff change their mind; never public meanwhile.
  *   removed  — taken down after being live (or pulled before review). Terminal.
+ *   processing — accepted, but the file is in a format not every phone can play
+ *              (HEVC, old 3GP sound…). A background job converts it to H.264/AAC
+ *              (services/reelConvertService.js) and then moves it to `pending`
+ *              (customer) or `approved` (team upload). Never public, never in the
+ *              review queue, and it has no playback link. If the conversion cannot
+ *              be done it becomes `rejected` with a plain reason.
  */
 export const REEL_STATUS = Object.freeze({
+  PROCESSING: 'processing',
   PENDING: 'pending',
   APPROVED: 'approved',
   REJECTED: 'rejected',
@@ -39,7 +46,7 @@ export const REEL_STATUSES = Object.freeze(Object.values(REEL_STATUS));
 export const REEL_TRANSITIONS = Object.freeze({
   approve: Object.freeze([REEL_STATUS.PENDING, REEL_STATUS.REJECTED]),
   reject: Object.freeze([REEL_STATUS.PENDING]),
-  remove: Object.freeze([REEL_STATUS.PENDING, REEL_STATUS.APPROVED, REEL_STATUS.REJECTED]),
+  remove: Object.freeze([REEL_STATUS.PROCESSING, REEL_STATUS.PENDING, REEL_STATUS.APPROVED, REEL_STATUS.REJECTED]),
 });
 
 /** Hard cap on clip length, seconds. A small tolerance absorbs container rounding. */
@@ -96,6 +103,44 @@ export const REEL_ALLOWED_CODECS = Object.freeze(['avc1', 'avc3']);
  * a spatial-audio track) one AAC track is enough — players pick that one.
  */
 export const REEL_ALLOWED_AUDIO_CODECS = Object.freeze(['mp4a']);
+
+/**
+ * ── SERVER CONVERSION (2026-11-28) ───────────────────────────────────────────────
+ * A clip whose container we can read but whose codecs are not H.264/AAC is no
+ * longer refused: it is converted by ffmpeg in a BullMQ job. Runs inside the
+ * backend container (ffmpeg is in the Dockerfile), one clip at a time per replica
+ * and on two threads, so an encode cannot starve the HTTP server beside it.
+ *
+ * `REEL_CONVERT=off` is the kill switch: back to refusing those clips with the
+ * "switch off High Efficiency" message. Without a queue Redis (dev, tests) it is
+ * off too, because nothing would ever pick the job up.
+ */
+export const reelConversionEnabled = () =>
+  String(process.env.REEL_CONVERT || '').toLowerCase() !== 'off'
+  && Boolean(process.env.REDIS_URL || process.env.QUEUE_REDIS_URL);
+
+/** Job id for one reel's conversion. '|' not ':' — BullMQ rejects custom ids containing ':'. */
+export const reelConvertJobId = (reelId, ...scope) => ['reel-convert', String(reelId), ...scope].join('|');
+
+/** `media.convert` while a reel is not yet (or could not be) made playable. */
+export const REEL_CONVERT_STATE = Object.freeze({ PENDING: 'pending', FAILED: 'failed' });
+
+/**
+ * Hard stop for one ffmpeg run. A 60s 1080p clip takes well under two minutes; a
+ * 60s 4K/60fps one on two shared threads can take several, so the limit is generous.
+ */
+export const REEL_CONVERT_TIMEOUT_MS = intFromEnv('REEL_CONVERT_TIMEOUT_MS', 8 * 60 * 1000);
+/** Longest side of the converted video, pixels. Phones record 4K; nobody needs it in a feed. */
+export const REEL_CONVERT_MAX_SIDE = 1920;
+export const REEL_CONVERT_THREADS = intFromEnv('REEL_CONVERT_THREADS', 2);
+
+/** The sweep re-queues a reel stuck in `processing` this long, and gives up after the second. */
+export const REEL_CONVERT_STUCK_AFTER_MS = 15 * 60 * 1000;
+export const REEL_CONVERT_GIVE_UP_AFTER_MS = 3 * 60 * 60 * 1000;
+
+/** What the uploader reads when their clip could not be converted. */
+export const REEL_CONVERT_FAILED_MESSAGE =
+  "We couldn't prepare this video for all phones. Please record it again in MP4, or choose a different video.";
 
 /**
  * Where reels live in the PRIVATE R2 bucket. Each uploader gets their own prefix

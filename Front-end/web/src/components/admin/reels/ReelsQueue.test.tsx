@@ -266,6 +266,27 @@ describe('contract change 2026-11-18 fields', () => {
     expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
   });
 
+  it('a reel being converted has its own tab, a plain note, and no approve/reject buttons', async () => {
+    getMock.mockImplementation((url: string) => Promise.resolve(url.includes('status=processing')
+      ? { success: true, reels: [makeReel({ status: 'processing', mp4Url: null })], nextCursor: null }
+      : { success: true, reels: [], nextCursor: null }));
+    renderQueue();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Converting' }));
+    expect(await screen.findByText(/Converting this video so it plays on every phone/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
+  });
+
+  it('a reel whose conversion failed cannot be approved after all', async () => {
+    getMock.mockImplementation((url: string) => Promise.resolve(url.includes('status=rejected')
+      ? { success: true, reels: [makeReel({ status: 'rejected', mp4Url: null, rejectReason: "We couldn't prepare this video for all phones." })], nextCursor: null }
+      : { success: true, reels: [], nextCursor: null }));
+    renderQueue();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Rejected' }));
+    expect(await screen.findByText(/could not be converted/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve after all' })).not.toBeInTheDocument();
+  });
+
   it('shows the server 409 message when a reel changed state underneath us', async () => {
     getMock.mockResolvedValue({ success: true, reels: [makeReel({ status: 'approved' })], nextCursor: null });
     postMock.mockRejectedValue(new Error('This reel is already removed. Refresh to see its latest state.'));

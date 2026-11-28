@@ -17,6 +17,7 @@ import { alpha, colors, elevation, font, palette, radius, spacing, type } from '
 import { EmptyState, ErrorState, Overline, PremiumButton, Shimmer, StripeLoader } from '../../src/ui';
 
 const STATUS: Record<ReelStatus, { label: string; bg: string; fg: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  processing: { label: 'Preparing video', bg: colors.gold, fg: colors.ink, icon: 'sync' },
   pending: { label: 'Under review', bg: colors.gold, fg: colors.ink, icon: 'time' },
   approved: { label: 'Live', bg: colors.green, fg: colors.white, icon: 'checkmark-circle' },
   rejected: { label: 'Not approved', bg: colors.red, fg: colors.white, icon: 'close-circle' },
@@ -118,7 +119,7 @@ export default function MyReelsScreen() {
   }
 
   const live = reels.filter((r) => r.status === 'approved').length;
-  const review = reels.filter((r) => r.status === 'pending').length;
+  const review = reels.filter((r) => r.status === 'pending' || r.status === 'processing').length;
 
   return (
     <FlatList

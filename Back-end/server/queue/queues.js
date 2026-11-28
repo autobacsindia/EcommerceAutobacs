@@ -10,6 +10,7 @@
 
 import { Queue } from 'bullmq';
 import { createConnection } from './connection.js';
+import { reelConvertJobId } from '../config/reels.js';
 
 const DEFAULT_JOB_OPTIONS = {
   attempts: 3,
@@ -21,6 +22,7 @@ const DEFAULT_JOB_OPTIONS = {
 let notificationsQueue = null;
 let orderQueue         = null;
 let mediaQueue         = null;
+let reelConvertQueue   = null;
 
 export function getNotificationsQueue() {
   if (!notificationsQueue) {
@@ -147,8 +149,49 @@ export function enqueueMetaLeadSheetWrite({ jobId, delay }) {
   return getNotificationsQueue().add('write-meta-lead-sheet', {}, { jobId, delay, attempts: 5, backoff: { type: 'exponential', delay: 30_000 } });
 }
 
+/**
+ * Reel video conversion (ffmpeg → H.264/AAC), services/reelConvertService.js.
+ *
+ * Its own queue, not a job on `media`: one encode is up to two minutes of CPU, and
+ * sharing a worker would let a reel hold up image variants (and the reverse). The
+ * worker runs ONE at a time per replica.
+ */
+export function getReelConvertQueue() {
+  if (!reelConvertQueue) {
+    reelConvertQueue = new Queue('reel-convert', {
+      connection: createConnection(),
+      defaultJobOptions: {
+        ...DEFAULT_JOB_OPTIONS,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+      },
+    });
+  }
+  return reelConvertQueue;
+}
+
+
+/**
+ * Queue one reel for conversion. Never throws: the reel is already saved as
+ * `processing`, and the sweep re-queues anything that did not make it onto the
+ * queue. The reel id as job id collapses a double submit onto one job; the sweep
+ * passes its own id because a FAILED job keeps its id for 7 days.
+ * @returns {Promise<boolean>} true when the job was added
+ */
+export async function enqueueReelConversion(reelId, { jobId } = {}) {
+  if (!process.env.REDIS_URL && !process.env.QUEUE_REDIS_URL) return false;
+  try {
+    await getReelConvertQueue().add('convert-reel', { reelId: String(reelId) }, { jobId: jobId || reelConvertJobId(reelId) });
+    return true;
+  } catch (err) {
+    console.error(`[Queue] reel conversion enqueue failed for ${reelId}: ${err.message}`);
+    return false;
+  }
+}
+
 export async function closeQueues() {
   await Promise.all([
+    reelConvertQueue?.close(),
     notificationsQueue?.close(),
     orderQueue?.close(),
     mediaQueue?.close(),

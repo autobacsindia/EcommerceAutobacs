@@ -20,6 +20,8 @@
  * server-side minting only. It is why the private bucket has no custom domain:
  * an expiring capability is the ONLY way to read it.
  */
+import fs from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import {
   S3Client,
   PutObjectCommand,
@@ -153,6 +155,44 @@ export const getObjectBuffer = async ({ key, scope }) => {
   } catch (err) {
     console.error(`[Storage] get failed — ${bucket}/${key}: ${err.message}`);
     throw new AppError(`Storage read failed: ${err.message}`, 500);
+  }
+};
+
+/**
+ * Stream an object to a local file without holding it in memory (a reel is up
+ * to 100 MB). Throws when the object is missing or the read fails — the caller
+ * (the conversion job) retries.
+ * @returns {Promise<number>} bytes written
+ */
+export const downloadToFile = async ({ key, scope, filePath }) => {
+  const bucket = bucketFor(scope);
+  try {
+    const r = await client().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    await pipeline(r.Body, fs.createWriteStream(filePath));
+    return (await fs.promises.stat(filePath)).size;
+  } catch (err) {
+    console.error(`[Storage] download failed — ${bucket}/${key}: ${err.message}`);
+    throw new AppError(`Storage read failed: ${err.message}`, 500);
+  }
+};
+
+/** Upload a local file by streaming it (the size is sent, so nothing is buffered). */
+export const putFile = async ({ filePath, key, scope, contentType }) => {
+  if (!key) throw new AppError('[Storage] putFile requires a key', 500);
+  const bucket = bucketFor(scope);
+  try {
+    const { size } = await fs.promises.stat(filePath);
+    await client().send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: fs.createReadStream(filePath),
+      ContentLength: size,
+      ContentType: contentType || 'application/octet-stream',
+    }));
+    return { key, bucket, bytes: size };
+  } catch (err) {
+    console.error(`[Storage] put failed — ${bucket}/${key}: ${err.message}`);
+    throw new AppError(`Storage upload failed: ${err.message}`, 500);
   }
 };
 
@@ -337,4 +377,5 @@ export const listKeys = async ({ prefix = '', scope, limit = Infinity }) => {
 export default {
   putObject, headObject, objectExists, getObjectBuffer, getObjectHead,
   deleteObject, deleteObjects, presignPut, presignGet, listKeys, resetClient, getObjectRange,
+  downloadToFile, putFile,
 };

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import {
   REEL_STATUS,
+  REEL_CONVERT_STATE,
   REEL_STATUSES,
   REEL_CAPTION_MAX,
   REEL_REJECT_REASON_MAX,
@@ -32,6 +33,9 @@ const ReelMediaSchema = new mongoose.Schema({
   bytes: { type: Number, min: 0 },
   width: { type: Number, min: 0 },
   height: { type: Number, min: 0 },
+  // Set only while the file still needs converting ('pending') or could not be
+  // ('failed'). Absent on every playable reel. A 'failed' reel can never be approved.
+  convert: { type: String, enum: Object.values(REEL_CONVERT_STATE) },
 }, { _id: false });
 
 const ReelSchema = new mongoose.Schema({
