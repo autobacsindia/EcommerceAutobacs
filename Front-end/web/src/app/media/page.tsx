@@ -116,7 +116,7 @@ export default function MediaPressPage() {
 
       <header className="abi-masthead">
         <div className="abi-eyebrow">{MASTHEAD.eyebrow}</div>
-        <div className="abi-h1">{MASTHEAD.title}<br /><em>{MASTHEAD.titleEm}</em></div>
+        <h1 className="abi-h1">{MASTHEAD.title}<br /><em>{MASTHEAD.titleEm}</em></h1>
         <p className="abi-lede">{MASTHEAD.lede}</p>
         {featuredPubs.length > 0 && (
           <div className="abi-featured">
