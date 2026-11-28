@@ -37,8 +37,10 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "esbuild": "0.25.12",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~58.0.4",
+    "three": "0.170.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -47,7 +49,8 @@
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "test": "node --import ./scripts/ts-resolve.mjs --test \"src/**/*.test.mjs\""
+    "test": "node --import ./scripts/ts-resolve.mjs --test \"src/**/*.test.mjs\"",
+    "build:showroom": "node scripts/build-showroom.mjs"
   },
   "private": true
 }

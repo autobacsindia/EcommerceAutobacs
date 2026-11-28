@@ -90,6 +90,7 @@ export default function RootLayout() {
             <Stack.Screen name="orders" options={{ title: 'My orders' }} />
             <Stack.Screen name="order/[id]" options={{ title: 'Order' }} />
             <Stack.Screen name="garage" options={{ headerShown: false }} />
+            <Stack.Screen name="showroom" options={{ headerShown: false }} />
             <Stack.Screen name="reels/new" options={{ title: 'Post a reel', presentation: 'modal' }} />
             <Stack.Screen name="reels/mine" options={{ title: 'My reels' }} />
           </Stack>

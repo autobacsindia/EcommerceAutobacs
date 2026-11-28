@@ -1,0 +1,53 @@
+/**
+ * The 3D stage on Expo web (development previews): react-native-webview has no
+ * web build, so the same page goes in a sandboxed iframe (scripts only — no
+ * same-origin access, no navigation). Native uses Showroom3D.tsx.
+ */
+import { memo, useEffect, useRef, useState } from 'react';
+import { colors } from '../../theme';
+import type { Showroom3DProps } from './Showroom3D';
+import { showroomHtml, STAGE_BG } from './showroomHtml';
+
+function Showroom3D({ parts, paint, still, onReady, onError }: Showroom3DProps) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [ready, setReady] = useState(false);
+  // Built once from the first props; later changes are posted to the page.
+  const [html] = useState(() => showroomHtml({ parts, paint, accent: colors.green, still }));
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.source !== frame.current?.contentWindow || typeof e.data !== 'string') return;
+      try {
+        const msg = JSON.parse(e.data) as { type?: string };
+        if (msg.type === 'ready') {
+          setReady(true);
+          onReady();
+        } else if (msg.type === 'error') onError();
+      } catch {
+        /* not ours */
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [onReady, onError]);
+
+  useEffect(() => {
+    if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'parts', parts }), '*');
+  }, [ready, parts]);
+
+  useEffect(() => {
+    if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'paint', paint }), '*');
+  }, [ready, paint]);
+
+  return (
+    <iframe
+      ref={frame}
+      title="3D view of the car"
+      sandbox="allow-scripts"
+      srcDoc={html}
+      style={{ border: 0, width: '100%', height: '100%', display: 'block', background: STAGE_BG }}
+    />
+  );
+}
+
+export default memo(Showroom3D);

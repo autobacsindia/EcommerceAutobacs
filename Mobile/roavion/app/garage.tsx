@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { fetchVehicles } from '../src/api/catalogue';
 import { colors, elevation, font, radius, spacing, type } from '../src/theme';
 import { EmptyState, ErrorState, IconButton, Overline, PremiumButton, PressScale, SectionHeader, Shimmer, Stripes } from '../src/ui';
+import { DEFAULT_SHOWROOM_CAR, showroomCarFor } from '../src/garage/slots';
 import { useApp } from '../src/store';
 
 export default function GarageScreen() {
@@ -51,6 +52,10 @@ export default function GarageScreen() {
 
   const tileW = (width - spacing.lg * 2 - spacing.sm * 2) / 3;
 
+  // The 3D showroom exists for a few cars only. A customer whose saved car has
+  // one opens their own; everyone else is offered the first car to try it.
+  const showroomCar = showroomCarFor(garage?.make, garage?.model) ?? DEFAULT_SHOWROOM_CAR;
+
   return (
     <View style={s.screen}>
       <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -73,6 +78,25 @@ export default function GarageScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
+        <PressScale
+          onPress={() => router.push(`/showroom?car=${showroomCar.slug}`)}
+          haptic="light"
+          style={s.showroom}
+          accessibilityLabel={`Open the 3D showroom for the ${showroomCar.make} ${showroomCar.model}`}
+        >
+          <View style={s.showroomIcon}>
+            <Ionicons name="cube-outline" size={22} color={colors.green} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={s.overRow}>
+              <Overline>New · 3D showroom</Overline>
+            </View>
+            <Text style={s.showroomTitle}>Build your {showroomCar.make} {showroomCar.model}</Text>
+            <Text style={s.showroomBody}>Turn the car around and fit parts on it.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.green} />
+        </PressScale>
+
         {garage && (
           <View style={s.carCard}>
             <View style={s.carStripes} pointerEvents="none">
@@ -234,6 +258,14 @@ const s = StyleSheet.create({
   carModel: { ...type.body, color: colors.onDarkMuted },
   clear: { marginTop: spacing.md, alignSelf: 'center', padding: spacing.xs },
   clearText: { fontFamily: font.medium, fontSize: 13, color: colors.onDarkMuted, textDecorationLine: 'underline' },
+
+  showroom: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginBottom: spacing.xl,
+    backgroundColor: colors.greenFaint, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.greenSoft,
+  },
+  showroomIcon: { width: 44, height: 44, borderRadius: radius.lg, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
+  showroomTitle: { ...type.h3, marginTop: 2 },
+  showroomBody: { ...type.small },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   makeTile: {
