@@ -42,6 +42,7 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [converting, setConverting] = useState(false);
 
   const [productTerm, setProductTerm] = useState('');
   const [productQuery, setProductQuery] = useState('');
@@ -105,12 +106,14 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
         setUploaded({ file, publicId });
       }
       setStage('saving');
-      await createTeamReel({
+      const saved = (await createTeamReel({
         publicId,
         productId: product._id,
         caption: caption.trim(),
         ...(creator ? { creatorUserId: creator._id } : {}),
-      });
+      })) as unknown as { reel?: { status?: string }; status?: string } | null;
+      // HEVC and similar clips are converted on the server first, then go live by themselves.
+      setConverting((saved?.reel?.status ?? saved?.status) === 'processing');
       await qc.invalidateQueries({ queryKey: reelKeys.admin() });
       // Reset for the next reel.
       setFile(null);
@@ -265,7 +268,11 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
             </div>
           )}
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-          {done && !error && <p role="status" className="text-sm text-green-700">Reel published. It is now in the Live tab.</p>}
+          {done && !error && <p role="status" className="text-sm text-green-700">
+              {converting
+                ? 'Reel uploaded. We are converting the video so it plays on every phone. It goes live by itself in a minute or two (see the Converting tab).'
+                : 'Reel published. It is now in the Live tab.'}
+            </p>}
 
           <button type="button" onClick={submit} disabled={busy}
             className="w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60 sm:w-auto">

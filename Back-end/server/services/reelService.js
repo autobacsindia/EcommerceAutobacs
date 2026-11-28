@@ -22,11 +22,14 @@ import affiliateRepository from '../repositories/affiliateRepository.js';
 import { resolveBuyerIdentity, isSelfReferral } from './affiliateAttributionService.js';
 import { resolvePublicFestivalOffer } from './festivalOfferService.js';
 import { verifyUploadedVideo, reelFolderFor, reelPlaybackUrls } from './reelMediaService.js';
+import { enqueueReelConversion } from '../queue/queues.js';
 import { getRedisClient as getCounterRedis } from '../middleware/rate-limit/redisClient.js';
 import { AFFILIATE_STATUS } from '../config/affiliate.js';
 import {
   REEL_STATUS,
   REEL_STATUSES,
+  REEL_CONVERT_STATE,
+  reelConversionEnabled,
   REEL_TRANSITIONS,
   REEL_PAGE_DEFAULT,
   REEL_PAGE_MAX,
@@ -288,8 +291,14 @@ export async function createReel({ uploaderId, creatorId = uploaderId, team = fa
     return { reel: await shapeOwn(existing, uploaderId), created: false };
   }
 
-  const media = await verifyUploadedVideo(publicId, { folder });
+  const { needsConversion = false, codecs, ...checked } = await verifyUploadedVideo(publicId, {
+    folder, convert: reelConversionEnabled(),
+  });
+  const media = needsConversion ? { ...checked, convert: REEL_CONVERT_STATE.PENDING } : checked;
   const now = new Date();
+  // A clip that must be converted first is parked in `processing`: not public, not
+  // in the review queue. The job moves it on (pending, or approved for a team upload).
+  const live = team && !needsConversion;
   const doc = {
     creator: creatorId ? toObjectId(creatorId) : null,
     uploadedBy: uploaderId,
@@ -297,12 +306,18 @@ export async function createReel({ uploaderId, creatorId = uploaderId, team = fa
     product,
     media,
     caption: cleanText(caption, REEL_CAPTION_MAX),
-    status: team ? REEL_STATUS.APPROVED : REEL_STATUS.PENDING,
-    ...(team ? { approvedAt: now, moderatedAt: now, moderatedBy: uploaderId } : {}),
+    status: needsConversion ? REEL_STATUS.PROCESSING : (team ? REEL_STATUS.APPROVED : REEL_STATUS.PENDING),
+    ...(live ? { approvedAt: now, moderatedAt: now, moderatedBy: uploaderId } : {}),
   };
 
   try {
     const reel = await reelRepository.create(doc);
+    if (needsConversion) {
+      console.log(`[reels] ${reel._id} queued for conversion (video ${codecs?.video?.join('+') || '?'}, audio ${codecs?.audio?.join('+') || 'none'})`);
+      // If the queue is down the reel stays `processing`; the sweep re-queues it
+      // (cronService scheduleReelConversionSweep), so the upload is never lost.
+      await enqueueReelConversion(reel._id);
+    }
     return { reel: await shapeOwn(reel, uploaderId), created: true };
   } catch (err) {
     // A concurrent submit of the same upload won the unique index — return its reel.
@@ -450,8 +465,8 @@ export async function adminList({ status, cursor = null, limit }) {
   return { reels: withAdminFields, nextCursor };
 }
 
-async function moderate(id, action, set) {
-  const updated = await reelRepository.transition(id, REEL_TRANSITIONS[action], set);
+async function moderate(id, action, set, opts) {
+  const updated = await reelRepository.transition(id, REEL_TRANSITIONS[action], set, opts);
   if (updated) return shapeOwn(updated, null);
   const current = await reelRepository.findById(id);
   if (!current) throw fail('Reel not found', 404);
@@ -461,9 +476,12 @@ async function moderate(id, action, set) {
 
 export async function approveReel(id, staffId) {
   const now = new Date();
+  // A reel whose conversion failed has no playable file; it can never go live.
+  const current = await reelRepository.findById(id);
+  if (current?.media?.convert) throw fail('This video could not be prepared for all phones, so it cannot be approved', 409);
   return moderate(id, 'approve', {
     status: REEL_STATUS.APPROVED, approvedAt: now, moderatedAt: now, moderatedBy: staffId, rejectReason: null,
-  });
+  }, { where: { 'media.convert': { $exists: false } } });
 }
 
 export async function rejectReel(id, staffId, reason) {

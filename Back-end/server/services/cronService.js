@@ -14,6 +14,8 @@ import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './s
 import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '../queue/queues.js';
 import { findOriginalsMissingVariants } from './storage/variantSweep.js';
 import { storageProvider } from '../config/storage.js';
+import { sweepStuckConversions } from './reelConvertService.js';
+import { reelConversionEnabled } from '../config/reels.js';
 import { postStuckDigests } from './chatStuckDigest.js';
 import { sweepCalls } from './chatCallService.js';
 import { sendOverdueReport } from './overdueReportService.js';
@@ -81,6 +83,7 @@ class CronService {
     this.scheduleCareersMediaRetention();
     this.scheduleAffiliateMaturation();
     this.scheduleVariantSweep();
+    this.scheduleReelConversionSweep();
     this.scheduleChatStuckDigest();
     this.scheduleOverdueReport();
     this.scheduleProjectReminders();
@@ -772,6 +775,28 @@ class CronService {
       if (this.redis) await this.redis.del(marker).catch(() => {});
       return null;
     }
+  }
+
+  /** Reels: re-queue (or give up on) videos stuck in "processing". */
+  scheduleReelConversionSweep() {
+    if (storageProvider() !== 'r2' || !reelConversionEnabled()) return;
+    const schedule = '*/10 * * * *';
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:reelConversionSweep', 5 * 60, async () => {
+        try {
+          const res = await sweepStuckConversions();
+          if (res.stuck) console.log(`[CronService] Reel conversion sweep: ${res.stuck} stuck, ${res.requeued} re-queued, ${res.failed} given up`);
+        } catch (err) {
+          console.error('[CronService] Reel conversion sweep failed:', err.message);
+        }
+      })
+    );
+    this.scheduledTasks.push({
+      name: 'reelConversionSweep',
+      task,
+      schedule,
+      description: 'Reels: re-queue videos stuck in processing, give up after 3 hours',
+    });
   }
 
   scheduleVariantSweep() {

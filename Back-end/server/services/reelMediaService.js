@@ -14,15 +14,17 @@
  *   - the key is one we minted, inside the caller's own folder;
  *   - it exists and its stored size is ≤ the byte cap (HEAD);
  *   - its first bytes are an MP4/MOV/3GP container (magic-byte sniff);
- *   - its real length is ≤ 60s, its video is H.264 and its sound (if any) is AAC
- *     (`moov` read via ranged GETs,
- *     services/storage/mp4Probe.js).
+ *   - its real length is ≤ 60s (`moov` read via ranged GETs,
+ *     services/storage/mp4Probe.js);
+ *   - its video is H.264 and its sound (if any) is AAC — or, when conversion is on,
+ *     it is flagged for conversion instead of refused.
  * Anything unreadable is REJECTED, never accepted unchecked. A rejected object is
  * deleted (best-effort) so refused uploads do not pile up.
  *
  * ── PLAYBACK ─────────────────────────────────────────────────────────────────────
- * The file is served as uploaded (no transcoding — the H.264 rule is what makes that
- * safe) through a presigned GET minted on every read. Not via img.autobacsindia.com:
+ * The stored file is always H.264/AAC (uploaded that way, or converted by
+ * services/reelConvertService.js) and is served through a presigned GET minted on
+ * every read. Not via img.autobacsindia.com:
  * that Worker serves image types only, on purpose.
  */
 import {
@@ -135,11 +137,16 @@ async function rejectAndDelete(key, message, code) {
 }
 
 /**
- * Confirm the uploaded object is a real, short, H.264 video in the caller's folder.
- * @returns {Promise<{ publicId, format, durationSec, bytes }>}
+ * Confirm the uploaded object is a real, short video in the caller's folder.
+ *
+ * H.264 + AAC is accepted as is. Any other codec is refused, unless `convert` is
+ * true: then the result carries `needsConversion: true` and the caller must not
+ * publish it until services/reelConvertService.js has produced an H.264 copy.
+ *
+ * @returns {Promise<{ publicId, format, durationSec, bytes, needsConversion?: true, codecs?: object }>}
  * @throws {ReelMediaError}
  */
-export async function verifyUploadedVideo(publicId, { folder }) {
+export async function verifyUploadedVideo(publicId, { folder, convert = false }) {
   const key = typeof publicId === 'string' ? publicId.trim() : '';
   // Must be a key we minted, under THIS caller's prefix. slotFromKey matches the
   // whole key shape, so `u_1` cannot match `u_12` and `..` segments never pass.
@@ -191,7 +198,14 @@ export async function verifyUploadedVideo(publicId, { folder }) {
   if (probe.durationSec > REEL_MAX_DURATION_SEC + REEL_DURATION_TOLERANCE_SEC) {
     await rejectAndDelete(key, `Reels can be at most ${REEL_MAX_DURATION_SEC} seconds long.`, 'REEL_MEDIA_TOO_LONG');
   }
-  if (!probe.videoCodecs.every((c) => REEL_ALLOWED_CODECS.includes(c))) {
+  const audio = probe.audioCodecs ?? [];
+  const videoOk = probe.videoCodecs.every((c) => REEL_ALLOWED_CODECS.includes(c));
+  const audioOk = !audio.length || audio.some((c) => REEL_ALLOWED_AUDIO_CODECS.includes(c));
+  // A real, short clip in codecs not every phone plays (HEVC, H.263, AMR sound…).
+  // With conversion on it is kept and converted; the caller parks the reel in
+  // `processing`. It needs a picture track: sound-only files are still refused.
+  const needsConversion = (!videoOk || !audioOk) && convert && probe.videoCodecs.length > 0;
+  if (!videoOk && !needsConversion) {
     await rejectAndDelete(
       key,
       'This video uses a format not every phone can play (usually "High Efficiency" / HEVC). '
@@ -200,8 +214,7 @@ export async function verifyUploadedVideo(publicId, { folder }) {
       'REEL_MEDIA_CODEC',
     );
   }
-  const audio = probe.audioCodecs ?? [];
-  if (audio.length && !audio.some((c) => REEL_ALLOWED_AUDIO_CODECS.includes(c))) {
+  if (!audioOk && !needsConversion) {
     await rejectAndDelete(key, REEL_UNSUPPORTED_FORMAT_MESSAGE, 'REEL_MEDIA_AUDIO_CODEC');
   }
 
@@ -210,6 +223,7 @@ export async function verifyUploadedVideo(publicId, { folder }) {
     format: extOf(key),
     durationSec: Math.round(probe.durationSec * 10) / 10,
     bytes,
+    ...(needsConversion ? { needsConversion: true, codecs: { video: probe.videoCodecs, audio } } : {}),
   };
 }
 
@@ -230,6 +244,8 @@ const NO_URLS = Object.freeze({ hlsUrl: null, mp4Url: null, posterUrl: null });
  */
 export async function reelPlaybackUrls(media) {
   const key = media?.publicId;
+  // Not converted (yet): the stored file is one some phones cannot play, or is gone.
+  if (media?.convert) return { ...NO_URLS };
   if (typeof key !== 'string' || !PLAYABLE_KEY.test(key)) return { ...NO_URLS };
   try {
     const mp4Url = await r2.presignGet({

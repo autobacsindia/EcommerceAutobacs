@@ -16,7 +16,8 @@ import { api } from './client';
 import * as mock from './reelsMock';
 import { reelVideoType, UNSUPPORTED_VIDEO_MESSAGE, type ReelVideoType } from '../reels/videoType';
 
-export type ReelStatus = 'pending' | 'approved' | 'rejected' | 'removed';
+/** `processing`: the server is converting the video so every phone can play it; review comes next. */
+export type ReelStatus = 'processing' | 'pending' | 'approved' | 'rejected' | 'removed';
 /** `backorder` is buyable (ships when restocked); only `out` blocks the cart. */
 export type Availability = 'in' | 'low' | 'out' | 'backorder';
 

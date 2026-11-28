@@ -46,7 +46,11 @@ export default function ReelCard({ reel }: { reel: Reel }) {
             aria-label={`Reel by ${reel.creator?.name ?? 'unknown creator'}`}
           />
         ) : (
-          <div className="flex h-full items-center justify-center p-4 text-center text-sm text-gray-300">Video is still processing.</div>
+          <div className="flex h-full items-center justify-center p-4 text-center text-sm text-gray-300">
+            {reel.status === 'processing'
+              ? 'Converting this video so it plays on every phone. This takes a minute or two.'
+              : reel.status === 'rejected' ? 'This video could not be converted, so there is nothing to play.' : 'Video is not available.'}
+          </div>
         )}
         {reel.durationSec ? (
           <span className="pointer-events-none absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium text-white">
@@ -109,7 +113,8 @@ export default function ReelCard({ reel }: { reel: Reel }) {
                 className="flex-1 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Reject</button>
             </>
           )}
-          {reel.status === 'rejected' && (
+          {/* No video = the conversion failed; the server would refuse the approval. */}
+          {reel.status === 'rejected' && src && (
             <button type="button" onClick={() => approve.mutate()} disabled={approve.isPending}
               className="flex-1 rounded-lg border border-green-600 bg-white px-3 py-2 text-sm font-semibold text-green-700 hover:bg-green-50 disabled:opacity-60">
               {approve.isPending ? 'Approving…' : 'Approve after all'}

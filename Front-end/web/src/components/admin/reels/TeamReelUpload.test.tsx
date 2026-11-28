@@ -274,3 +274,19 @@ describe('uploadVideoToStorage', () => {
     await expect(uploadVideoToStorage(video(), { ...SIG, uploadUrl: 'http://evil.example/x' })).rejects.toThrow(/misconfigured/);
   });
 });
+
+it('says the video is being converted when the server parks it as processing (HEVC etc.)', async () => {
+  postMock.mockImplementation((url: string) => Promise.resolve(
+    url === '/reels/upload-signature' ? SIG : { success: true, reel: { id: 'r9', status: 'processing' } },
+  ));
+  uploadMock.mockResolvedValue({ publicId: 'reels/abc123' });
+  renderUpload();
+  fireEvent.change(screen.getByLabelText('Video'), { target: { files: [video()] } });
+  await pickProduct();
+  fireEvent.click(screen.getByRole('button', { name: 'Publish reel' }));
+
+  const status = await screen.findByRole('status');
+  expect(status).toHaveTextContent('converting the video');
+  // It is NOT live yet, so it must not say so.
+  expect(status).not.toHaveTextContent('Reel published');
+});

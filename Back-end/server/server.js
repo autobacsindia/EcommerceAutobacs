@@ -9,6 +9,7 @@ import { validateEnvironment, logEnvironmentInfo } from "./config/validateEnv.js
 import { startNotificationWorker } from "./queue/workers/notificationWorker.js";
 import { startOrderWorker } from "./queue/workers/orderWorker.js";
 import { startMediaWorker } from "./queue/workers/mediaWorker.js";
+import { startReelConvertWorker } from "./queue/workers/reelConvertWorker.js";
 import { closeQueues } from "./queue/queues.js";
 import { createShutdownHandler } from "./utils/gracefulShutdown.js";
 import mongoose from "mongoose";
@@ -200,7 +201,7 @@ async function bootstrap() {
     // Kept so SIGTERM can let in-flight jobs finish (see utils/gracefulShutdown.js).
     const workers = [];
     try {
-      workers.push(startNotificationWorker(), startOrderWorker(), startMediaWorker());
+      workers.push(startNotificationWorker(), startOrderWorker(), startMediaWorker(), startReelConvertWorker());
       console.log('✓ Queue workers started');
     } catch (e) {
       console.warn('⚠ Queue workers skipped:', e.message);

@@ -59,13 +59,31 @@ class ReelRepository {
    * still in one of `from`, so two moderators acting at once cannot both win, and an
    * illegal transition writes nothing. Returns the updated reel, or null.
    */
-  async transition(id, from, set) {
+  async transition(id, from, set, { where = {}, unset = null } = {}) {
     if (!mongoose.isValidObjectId(id)) return null;
     return Reel.findOneAndUpdate(
-      { _id: id, status: { $in: from } },
-      { $set: set },
+      { _id: id, status: { $in: from }, ...where },
+      { $set: set, ...(unset ? { $unset: unset } : {}) },
       { new: true, projection: CARD_FIELDS },
     ).lean();
+  }
+
+  /**
+   * Reels still in `status` that were created before `before`, oldest first, bounded.
+   * Served by reel_status_queue. Used by the stuck-conversion sweep.
+   */
+  async findOlderInStatus({ status, before, limit }) {
+    return Reel.find({ status, createdAt: { $lt: before } })
+      .select('_id createdAt')
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .lean();
+  }
+
+  /** The fields the conversion job needs, nothing else. */
+  async findForConversion(id) {
+    if (!mongoose.isValidObjectId(id)) return null;
+    return Reel.findById(id).select('status source uploadedBy media').lean();
   }
 
   /**
