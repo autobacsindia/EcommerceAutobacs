@@ -68,7 +68,7 @@ export function useCalls(): CallApi | null {
 }
 
 const post = <T,>(path: string, body: unknown = {}, keepalive = false) =>
-  apiClient.post<T>(`/chat${path}`, body, { retries: 0, ...(keepalive ? { keepalive: true } : {}) });
+  apiClient.post<T>(`/chat${path}`, body, { retries: 0, background: true, ...(keepalive ? { keepalive: true } : {}) });
 
 const IN_CALL = new Set(['outgoing', 'connecting', 'connected', 'reconnecting']);
 

@@ -177,10 +177,11 @@ class APIClient {
     if (this.enableLogging) console.log(`[API] ${ic.method} ${ic.endpoint}`);
 
     const { retries, retryDelay } = getRetryConfig(endpoint, options);
+    const showsLoadingBar = isLoadingBarRequest(method, options);
 
     const result = await executeWithRetry<T>({
       attempt: async (signal) => {
-        const { params: _p, headers: _h, retries: _r, retryDelay: _d, timeout: _t, signal: _s, ...rest } = options ?? {};
+        const { params: _p, headers: _h, retries: _r, retryDelay: _d, timeout: _t, signal: _s, background: _b, ...rest } = options ?? {};
         const response = await fetch(finalUrl, {
           ...rest,
           method: ic.method,
@@ -202,8 +203,8 @@ class APIClient {
       retryDelay,
       timeout: options?.timeout ?? DEFAULT_TIMEOUT,
       externalSignal: options?.signal ?? undefined,
-      onBeforeFetch: () => { this.loadingCount++; this.notifyLoadingChange(); },
-      onAfterFetch: () => { this.loadingCount = Math.max(0, this.loadingCount - 1); this.notifyLoadingChange(); },
+      onBeforeFetch: () => { if (showsLoadingBar) { this.loadingCount++; this.notifyLoadingChange(); } },
+      onAfterFetch: () => { if (showsLoadingBar) { this.loadingCount = Math.max(0, this.loadingCount - 1); this.notifyLoadingChange(); } },
       on401: async (error): Promise<On401Result<T>> => {
         const isAuthEndpoint =
           endpoint.includes('/auth/login') ||
@@ -259,6 +260,22 @@ class APIClient {
   async delete<T>(endpoint: string, options?: FetchOptions): Promise<T> {
     return this.executeRequest<T>('DELETE', endpoint, undefined, options);
   }
+}
+
+/**
+ * Whether a request lights the top-of-page loading bar (GlobalLoadingBar).
+ *
+ * Only writes the person started: saving, sending, approving. Reads never do —
+ * pages show their own skeletons and spinners for data they are waiting on, and
+ * most reads are background checks (the bell every 20 s, the chat list, live
+ * calls). Counting those made the bar flash every ~10 s on an idle panel page
+ * (measured on /admin/orders, 2026-11-28: 3 flashes in 40 s), which staff read
+ * as "the panel keeps loading".
+ */
+export function isLoadingBarRequest(method: string, options?: Pick<FetchOptions, 'background'>): boolean {
+  const m = method.toUpperCase();
+  if (m === 'GET' || m === 'HEAD') return false;
+  return !options?.background;
 }
 
 // Singleton — one instance shared across the entire browser session
