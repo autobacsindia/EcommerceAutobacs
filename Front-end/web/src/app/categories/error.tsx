@@ -1,5 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useChunkErrorReload } from '@/hooks/useChunkErrorReload';
+import ReloadingNotice from '@/components/layout/ReloadingNotice';
+import { reportClientError } from '@/lib/reportClientError';
+import { isChunkLoadError } from '@/lib/chunkErrorRecovery';
+
 /**
  * Error boundary for /categories. Rendered when the server component's
  * getCategories() throws (backend unreachable / non-2xx). Unlike a cached
@@ -14,6 +20,12 @@ export default function CategoriesError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const reloading = useChunkErrorReload(error);
+  useEffect(() => {
+    reportClientError({ feature: 'page-crash', step: 'route-error', error, context: { scope: 'categories', digest: error.digest, chunkLoad: isChunkLoadError(error) } });
+  }, [error]);
+  if (reloading) return <ReloadingNotice />;
+
   return (
     <div className="min-h-screen bg-obsidian-deep py-12 flex items-center justify-center">
       <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-8 max-w-md mx-4 text-center">

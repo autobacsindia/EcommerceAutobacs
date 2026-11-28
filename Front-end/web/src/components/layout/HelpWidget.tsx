@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { usePathname, useRouter } from 'next/navigation';
 import { LifeBuoy } from 'lucide-react';
 import { trackContact } from '@/lib/contactTracking';
@@ -125,7 +126,7 @@ export default function HelpWidget() {
   // Resolve the initial position from the saved ratio once we're on the client.
   useEffect(() => {
     measure();
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    const raw = safeLocal.get(STORAGE_KEY);
     const ratio = raw != null ? parseFloat(raw) : DEFAULT_RATIO;
     const safeRatio = Number.isFinite(ratio) ? Math.min(Math.max(ratio, 0), 1) : DEFAULT_RATIO;
     setTop(clampTop(travel() * safeRatio, metrics.current.height, metrics.current.bottom, metrics.current.top));
@@ -148,11 +149,7 @@ export default function HelpWidget() {
       // Store as a fraction of the same travel range restore multiplies back by,
       // so the tab returns to exactly where it was dropped.
       const ratio = nextTop / travel();
-      try {
-        localStorage.setItem(STORAGE_KEY, String(ratio));
-      } catch {
-        /* private mode / quota — non-critical */
-      }
+      safeLocal.set(STORAGE_KEY, String(ratio)); // best-effort: blocked/full storage just forgets
     },
     [travel],
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
+import { safeLocal } from '@/lib/safeStorage';
 import { Fragment, Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -116,7 +117,8 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
     if (!product) return;
     try {
       const storageKey = user ? `recentlyViewed_${user._id}` : 'recentlyViewed_guest';
-      const recent = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const stored = safeLocal.getJSON<unknown>(storageKey, []);
+      const recent = Array.isArray(stored) ? stored : [];
       const filtered = recent.filter((p: { _id: string }) => p._id !== product._id);
       const newRecent = [
         {
@@ -134,7 +136,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         },
         ...filtered,
       ].slice(0, 10);
-      localStorage.setItem(storageKey, JSON.stringify(newRecent));
+      safeLocal.setJSON(storageKey, newRecent);
     } catch (e) {
       console.error('Failed to save recently viewed', e);
     }

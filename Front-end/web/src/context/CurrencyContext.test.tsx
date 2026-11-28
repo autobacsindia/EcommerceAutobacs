@@ -11,6 +11,7 @@ import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { CurrencyProvider, useCurrency } from './CurrencyContext';
+import { blockStorage } from '@/test-utils/blockStorage';
 
 function Show({ value, exact }: { value: number; exact?: boolean }) {
   const { formatPrice } = useCurrency();
@@ -59,5 +60,20 @@ describe('formatPrice', () => {
     /* The card suppresses these as not worth a badge, but the cart itemises them —
        so the formatter must be able to render one. */
     expect(shown(0.4, true)).toBe('₹0.40');
+  });
+});
+
+/* Regression (Website errors, 2026-11-27): "Whole page crashed: Failed to read the
+   'localStorage' property from 'Window': Access is denied", 14× on product pages.
+   This provider wraps every page and read localStorage on mount, unguarded — in an
+   Instagram/Facebook in-app browser that read alone throws, taking the page down. */
+describe('CurrencyProvider with storage blocked (in-app browsers)', () => {
+  let restore: () => void;
+  beforeEach(() => { restore = blockStorage(); });
+  afterEach(() => { cleanup(); restore(); });
+
+  it('mounts and formats prices instead of crashing the page', () => {
+    expect(() => window.localStorage.getItem('x')).toThrow();
+    expect(shown(1000)).toBe('₹1,000');
   });
 });

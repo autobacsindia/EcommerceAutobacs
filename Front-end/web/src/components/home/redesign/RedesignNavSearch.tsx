@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { safeLocal } from '@/lib/safeStorage';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
@@ -97,9 +98,8 @@ export default function RedesignNavSearch({
     (items: HistoryItem[]) => {
       const capped = items.slice(0, MAX_RECENT);
       setHistory(capped);
-      if (typeof window === 'undefined') return;
-      if (capped.length) localStorage.setItem(storageKey, JSON.stringify(capped));
-      else localStorage.removeItem(storageKey);
+      if (capped.length) safeLocal.setJSON(storageKey, capped);
+      else safeLocal.remove(storageKey);
     },
     [storageKey],
   );

@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useChunkErrorReload } from '@/hooks/useChunkErrorReload';
+import ReloadingNotice from '@/components/layout/ReloadingNotice';
+import { reportClientError } from '@/lib/reportClientError';
+import { isChunkLoadError } from '@/lib/chunkErrorRecovery';
 
 export default function OrdersError({
   error,
@@ -9,6 +13,10 @@ export default function OrdersError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const reloading = useChunkErrorReload(error);
+  useEffect(() => {
+    reportClientError({ feature: 'page-crash', step: 'route-error', error, context: { scope: 'orders', digest: error.digest, chunkLoad: isChunkLoadError(error) } });
+  }, [error]);
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).Sentry) {
       (window as any).Sentry.captureException(error, {
@@ -18,6 +26,8 @@ export default function OrdersError({
     }
     console.error('[Orders Error]', error);
   }, [error]);
+
+  if (reloading) return <ReloadingNotice />;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-obsidian-deep px-4">

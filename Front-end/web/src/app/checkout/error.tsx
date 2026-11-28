@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { reportClientError } from '@/lib/reportClientError';
+import { useChunkErrorReload } from '@/hooks/useChunkErrorReload';
+import ReloadingNotice from '@/components/layout/ReloadingNotice';
 
 export default function CheckoutError({
   error,
@@ -10,6 +12,7 @@ export default function CheckoutError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const reloading = useChunkErrorReload(error);
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).Sentry) {
       (window as any).Sentry.captureException(error, {
@@ -20,6 +23,8 @@ export default function CheckoutError({
     reportClientError({ feature: 'checkout', step: 'page-crash', error, context: { digest: error.digest } });
     console.error('[Checkout Error]', error);
   }, [error]);
+
+  if (reloading) return <ReloadingNotice />;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-obsidian-deep px-4">
