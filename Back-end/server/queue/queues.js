@@ -10,6 +10,7 @@
 
 import { Queue } from 'bullmq';
 import { createConnection } from './connection.js';
+import { reelConvertJobId } from '../config/reels.js';
 
 const DEFAULT_JOB_OPTIONS = {
   attempts: 3,
@@ -169,8 +170,6 @@ export function getReelConvertQueue() {
   return reelConvertQueue;
 }
 
-/** '|' not ':' — BullMQ rejects custom ids containing ':' (see variantJobId). */
-export const reelConvertJobId = (reelId, ...scope) => ['reel-convert', String(reelId), ...scope].join('|');
 
 /**
  * Queue one reel for conversion. Never throws: the reel is already saved as

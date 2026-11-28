@@ -22,7 +22,10 @@ import affiliateRepository from '../repositories/affiliateRepository.js';
 import { resolveBuyerIdentity, isSelfReferral } from './affiliateAttributionService.js';
 import { resolvePublicFestivalOffer } from './festivalOfferService.js';
 import { verifyUploadedVideo, reelFolderFor, reelPlaybackUrls } from './reelMediaService.js';
-import { enqueueReelConversion } from '../queue/queues.js';
+// Namespace import, not named: many suites stub queue/queues.js with only the
+// functions THEY use, and a named import of one they omit fails module linking for
+// every test that loads the app (same reason as r2Provider in reelMediaService).
+import * as queues from '../queue/queues.js';
 import { getRedisClient as getCounterRedis } from '../middleware/rate-limit/redisClient.js';
 import { AFFILIATE_STATUS } from '../config/affiliate.js';
 import {
@@ -316,7 +319,7 @@ export async function createReel({ uploaderId, creatorId = uploaderId, team = fa
       console.log(`[reels] ${reel._id} queued for conversion (video ${codecs?.video?.join('+') || '?'}, audio ${codecs?.audio?.join('+') || 'none'})`);
       // If the queue is down the reel stays `processing`; the sweep re-queues it
       // (cronService scheduleReelConversionSweep), so the upload is never lost.
-      await enqueueReelConversion(reel._id);
+      await queues.enqueueReelConversion?.(reel._id);
     }
     return { reel: await shapeOwn(reel, uploaderId), created: true };
   } catch (err) {

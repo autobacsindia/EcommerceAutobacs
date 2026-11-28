@@ -119,6 +119,9 @@ export const reelConversionEnabled = () =>
   String(process.env.REEL_CONVERT || '').toLowerCase() !== 'off'
   && Boolean(process.env.REDIS_URL || process.env.QUEUE_REDIS_URL);
 
+/** Job id for one reel's conversion. '|' not ':' — BullMQ rejects custom ids containing ':'. */
+export const reelConvertJobId = (reelId, ...scope) => ['reel-convert', String(reelId), ...scope].join('|');
+
 /** `media.convert` while a reel is not yet (or could not be) made playable. */
 export const REEL_CONVERT_STATE = Object.freeze({ PENDING: 'pending', FAILED: 'failed' });
 

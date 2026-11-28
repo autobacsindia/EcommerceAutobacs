@@ -31,7 +31,8 @@ import { spawn } from 'node:child_process';
 import * as r2 from './storage/r2Provider.js';
 import { probeIsoMedia } from './storage/mp4Probe.js';
 import reelRepository from '../repositories/reelRepository.js';
-import { enqueueReelConversion, reelConvertJobId } from '../queue/queues.js';
+// Namespace import: suites that stub queue/queues.js partially must still link (see reelService).
+import * as queues from '../queue/queues.js';
 import {
   REEL_STATUS,
   REEL_CONVERT_STATE,
@@ -39,6 +40,7 @@ import {
   REEL_CONVERT_MAX_SIDE,
   REEL_CONVERT_THREADS,
   REEL_CONVERT_FAILED_MESSAGE,
+  reelConvertJobId,
   REEL_CONVERT_STUCK_AFTER_MS,
   REEL_CONVERT_GIVE_UP_AFTER_MS,
   REEL_ALLOWED_CODECS,
@@ -248,7 +250,7 @@ export async function failConversion(reelId, { storage = r2, now = () => new Dat
  * slot so a re-queue is a NEW job (a failed job keeps its id for 7 days) while two
  * sweeps in the same slot still collapse onto one.
  */
-export async function sweepStuckConversions({ now = new Date(), limit = 50, enqueue = enqueueReelConversion, fail = failConversion } = {}) {
+export async function sweepStuckConversions({ now = new Date(), limit = 50, enqueue = (...a) => queues.enqueueReelConversion(...a), fail = failConversion } = {}) {
   const rows = await reelRepository.findOlderInStatus({
     status: REEL_STATUS.PROCESSING,
     before: new Date(now.getTime() - REEL_CONVERT_STUCK_AFTER_MS),
