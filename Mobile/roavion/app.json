@@ -44,7 +44,8 @@
           "cameraPermission": "Autobacs uses the camera so you can record a reel.",
           "microphonePermission": "Autobacs records sound with your reel."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

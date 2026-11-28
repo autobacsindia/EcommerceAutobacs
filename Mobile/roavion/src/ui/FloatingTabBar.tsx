@@ -46,11 +46,14 @@ export function FloatingTabBar({
   emitter,
   navigateToTab,
   insets,
+  hiddenRoutes,
 }: BottomTabBarProps & {
   /** @deprecated ignored — the bar is always white now. */
   darkRoutes?: string[];
   /** @deprecated ignored — Reels is an ordinary tab now. */
   centerRoute?: string;
+  /** Route names that are tab screens but get no button (the cart, reached from the header). */
+  hiddenRoutes?: string[];
 }) {
   const [kb, setKb] = useState(false);
   useEffect(() => {
@@ -72,6 +75,7 @@ export function FloatingTabBar({
   return (
     <View style={[s.bar, { paddingBottom: Math.max(insets.bottom, MIN_BOTTOM) }]} accessibilityRole="tablist">
       {state.routes.map((route, index) => {
+        if (hiddenRoutes?.includes(route.name)) return null;
         const { options } = descriptors[route.key];
         const isFocused = index === state.index;
         const label = typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title ?? route.name;
@@ -92,7 +96,7 @@ export function FloatingTabBar({
             style={s.item}
             accessibilityRole="tab"
             accessibilityState={{ selected: isFocused }}
-            accessibilityLabel={options.tabBarAccessibilityLabel ?? `${label}, tab, ${index + 1} of ${state.routes.length}`}
+            accessibilityLabel={options.tabBarAccessibilityLabel ?? `${label}, tab`}
           >
             <View style={[s.pill, isFocused && s.pillOn]}>
               {options.tabBarIcon?.({ focused: isFocused, color, size: 22 })}
