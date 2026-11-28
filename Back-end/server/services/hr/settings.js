@@ -16,6 +16,7 @@ const EDITABLE = [
   'deviceChangeCooldownDays', 'autoCloseTime', 'leaveHeadStep', 'monthDayBasis', 'payday',
   'pfEmployeeRate', 'pfEmployerRate', 'pfWageCeilingPaise', 'esiEmployeeRate', 'esiEmployerRate',
   'esiGrossThresholdPaise', 'ptSlabs', 'includeIncentives', 'onboardingItems',
+  'marksPerHalfDayLop', 'overtimeMultiplier', 'punctualityBonusPaise', 'punctualityFullMaxMarks', 'punctualityHalfMaxMarks',
 ];
 
 const plain = (doc) => {

@@ -261,3 +261,12 @@ it('on a page that lives under "More", it opens by itself and marks that page', 
   expect(screen.getByRole('heading', { name: 'Training' })).toBeInTheDocument();
   pathname = '/team';
 });
+
+it('the HR team gets a link to the HR panel; other teams do not', () => {
+  pathname = '/team';
+  const { unmount } = render(<TeamLayoutClient userName="H" team="hr" teamLabel="HR" isHead={false}><p>x</p></TeamLayoutClient>);
+  expect(screen.getByRole('link', { name: /HR panel/ })).toHaveAttribute('href', '/hr');
+  unmount();
+  shell(false);
+  expect(screen.queryByRole('link', { name: /HR panel/ })).toBeNull();
+});

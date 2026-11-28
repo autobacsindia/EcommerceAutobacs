@@ -25,7 +25,7 @@ export type ThemeChoice = Theme | 'system';
 
 export const DARK_QUERY = '(prefers-color-scheme: dark)';
 
-export const isPanelPath = (pathname: string): boolean => /^\/(team|admin)(\/|$)/.test(pathname);
+export const isPanelPath = (pathname: string): boolean => /^\/(team|admin|hr)(\/|$)/.test(pathname);
 
 function read(key: string): string | null {
   try {

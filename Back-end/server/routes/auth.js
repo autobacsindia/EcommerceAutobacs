@@ -37,6 +37,7 @@ import {
 import emailHandler from "../services/emailHandler.js";
 import { describeStaff } from "../services/staffService.js";
 import sessionStore from "../services/sessionStore.js";
+import { isTeamAppClient, tokenBody } from "../utils/teamAppClient.js";
 import { 
   generateTokenPair as generateSessionTokenPair,
   storeRefreshToken,
@@ -252,9 +253,13 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
     userAgent
   );
   
-  // Set BOTH tokens as httpOnly cookies (SECURE - XSS protected)
-  setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
-  setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+  // The Autobacs Team app gets the pair in the body instead (utils/teamAppClient.js);
+  // everyone else: BOTH tokens as httpOnly cookies (SECURE - XSS protected).
+  const appClient = isTeamAppClient(req);
+  if (!appClient) {
+    setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
+    setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+  }
   
   // Bind session context for admin accounts at login time (not on first API call)
   if (user.role === 'admin') {
@@ -284,7 +289,8 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
       // Team profile for staff (null otherwise) — lets the client land staff on /team.
       staff: describeStaff(user),
       username: user.username || null
-    }
+    },
+    ...(appClient ? tokenBody(tokens) : {})
   });
 }));
 
@@ -317,7 +323,10 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
 // @desc    Refresh access token using refresh token
 // @access  Public (but rate limited to prevent abuse)
 router.post("/refresh", refreshTokenRateLimit, validateRefreshTokenInput, asyncHandler(async (req, res) => {
-  const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+  // The app sends its token in the body; a stale cookie from an older build must not shadow it.
+  const refreshToken = isTeamAppClient(req)
+    ? (req.body?.refreshToken || req.cookies.refreshToken)
+    : (req.cookies.refreshToken || req.body.refreshToken);
   // Hash of the presented token — the key under which a just-rotated successor
   // may have been cached (see rotateRefreshToken / sessionStore grace window).
   const presentedHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
@@ -325,6 +334,10 @@ router.post("/refresh", refreshTokenRateLimit, validateRefreshTokenInput, asyncH
   // Apply a token pair to httpOnly cookies + respond. Shared by the normal
   // rotation path and the grace-replay path so both emit identical responses.
   const respondWithTokens = (tokens) => {
+    // Autobacs Team app: the pair goes in the body, no cookies (utils/teamAppClient.js).
+    if (isTeamAppClient(req)) {
+      return res.json({ success: true, message: 'Token refreshed successfully', ...tokenBody(tokens) });
+    }
     setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
     // Grace-cached tokens come back through JSON, so refreshTokenExpiry is a
     // string — normalize to a Date for the cookie's `expires`.
@@ -396,7 +409,10 @@ router.post("/refresh", refreshTokenRateLimit, validateRefreshTokenInput, asyncH
 // @desc    Logout user (revoke refresh token)
 // @access  Public
 router.post("/logout", asyncHandler(async (req, res) => {
-  const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+  // The app sends its token in the body; a stale cookie from an older build must not shadow it.
+  const refreshToken = isTeamAppClient(req)
+    ? (req.body?.refreshToken || req.cookies.refreshToken)
+    : (req.cookies.refreshToken || req.body.refreshToken);
 
   if (refreshToken) {
     try {

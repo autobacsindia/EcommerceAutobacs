@@ -42,12 +42,24 @@ const PayrollRunSchema = new mongoose.Schema({
   // Settings + rules snapshot used for this month (rates can change later).
   settingsSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   inputsFingerprint: { type: String, default: '' },
+  // People left out of the run and why ("no salary set") — bounded by headcount.
+  skipped: {
+    type: [new mongoose.Schema({
+      employee: { type: ObjectId, ref: 'EmployeeProfile' },
+      name: String,
+      reason: String,
+    }, { _id: false })],
+    default: [],
+  },
+  // Payslips with a blocking warning: lock refuses while this is above 0.
+  blockedCount: { type: Number, default: 0 },
   computedAt: { type: Date, default: null },
   lockedAt: { type: Date, default: null },
   lockedBy: { type: ObjectId, ref: 'User', default: null },
   approvedAt: { type: Date, default: null },
   approvedBy: { type: ObjectId, ref: 'User', default: null },
   payoutsCreatedAt: { type: Date, default: null },
+  payoutsCount: { type: Number, default: 0 },
   history: { type: [HistorySchema], default: [] }, // a handful per month
   rev: { type: Number, default: 0 },
 }, { timestamps: true });

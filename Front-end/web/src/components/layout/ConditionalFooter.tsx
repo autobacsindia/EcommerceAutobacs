@@ -19,7 +19,7 @@ export default function ConditionalFooter() {
     path === '/login' ||
     path === '/register' ||
     path.startsWith('/admin') ||
-    path === '/team' || path.startsWith('/team/');
+    path === '/team' || path.startsWith('/team/') || path === '/hr' || path.startsWith('/hr/');
 
   if (hide) return null;
 
