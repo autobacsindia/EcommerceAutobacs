@@ -11,7 +11,8 @@ import LeaveInbox from './LeaveInbox';
 
 const leaveInbox = jest.fn();
 jest.mock('@/lib/hr/api', () => ({ hrApi: { leaveInbox: (...a: unknown[]) => leaveInbox(...a), decideLeave: jest.fn() } }));
-jest.mock('next/navigation', () => ({ usePathname: () => '/hr/leave', useRouter: () => ({ push: jest.fn() }) }));
+let mockPath = '/hr/leave';
+jest.mock('next/navigation', () => ({ usePathname: () => mockPath, useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ logout: jest.fn(), user: { name: 'HR Person' } }) }));
 jest.mock('@/components/panel/ViewWebsiteLink', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/panel/PanelShell', () => ({
@@ -42,6 +43,17 @@ it('renders the leave page inside the panel with the waiting badge, without cras
 
 it('lists the HR screens', () => {
   expect(HR_NAV.map((n) => n.href)).toEqual([
-    '/hr', '/hr/employees', '/hr/leave', '/hr/overtime', '/hr/late-early', '/hr/payroll', '/hr/rules', '/hr/settings',
+    '/hr', '/hr/employees', '/hr/leave', '/hr/overtime', '/hr/late-early', '/hr/payroll', '/hr/rules', '/hr/settings', '/hr/careers',
   ]);
+});
+
+it('marks Careers active on the applications sub-page', async () => {
+  leaveInbox.mockResolvedValue({ items: [], nextCursor: null });
+  mockPath = '/hr/careers/applications';
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}>
+      <HrLayoutClient userName="HR" isAdmin={false}><p>child</p></HrLayoutClient>
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole('link', { name: 'Careers' })).toHaveAttribute('aria-current', 'page');
 });
