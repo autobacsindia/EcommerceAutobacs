@@ -7,7 +7,7 @@ import { DEFAULT_SHOWROOM_CAR as car, findSlot, showroomCarBySlug, showroomCarFo
 import {
   displacedBy, emptyBuild, fitPart, fittedSlotKeys, paintHex, parseBuild, partCount, planCart, removePart, serializeBuild, setPaint,
 } from '../build.ts';
-import { setPaintScript, setPartsScript, showroomConfig, showroomHtml } from '../showroom/showroomHtml.ts';
+import { setInsetsScript, setPaintScript, setPartsScript, showroomConfig, showroomHtml } from '../showroom/showroomHtml.ts';
 import { SCENE_JS, SCENE_SOURCE_HASH } from '../showroom/sceneBundle.generated.ts';
 import { sceneSourceHash } from '../../../scripts/build-showroom.mjs';
 import { readFileSync } from 'node:fs';
@@ -85,7 +85,7 @@ test('unknown slots and empty products change nothing; builds are never mutated'
 
 test('paint only accepts the car\'s own colours', () => {
   const b = emptyBuild(car);
-  assert.equal(setPaint(car, b, 'red').paint, 'red');
+  assert.equal(setPaint(car, b, 'black').paint, 'black');
   assert.equal(setPaint(car, b, 'chartreuse'), b);
   assert.equal(paintHex(car, { ...b, paint: 'gone' }), car.paints[0].hex);
 });
@@ -145,7 +145,8 @@ test('add to cart: skips what is already in the cart and holds back parts that n
 
 test('nothing from a build can become markup or script in the 3D page', () => {
   const evil = '</script><script>alert(1)</script>';
-  const cfg = showroomConfig({ parts: ['bumper', evil, 'UPPER', '../x'], paint: evil, accent: 'red', still: 'yes' });
+  const cfg = showroomConfig({ parts: ['bumper', evil, 'UPPER', '../x'], paint: evil, accent: 'red', still: 'yes', insetTop: evil, insetBottom: 7 });
+  assert.deepEqual([cfg.insetTop, cfg.insetBottom], [0, 0.8]);
   assert.deepEqual(cfg.parts, ['bumper']);
   assert.match(cfg.paint, /^#[0-9a-f]{6}$/i);
   assert.match(cfg.accent, /^#[0-9a-f]{6}$/i);
@@ -158,5 +159,6 @@ test('nothing from a build can become markup or script in the 3D page', () => {
 
   assert.equal(setPartsScript(['bumper', evil]), 'window.showroom&&window.showroom.setParts(["bumper"]);true;');
   assert.equal(setPaintScript(evil), 'true;');
+  assert.equal(setInsetsScript(evil, 0.4126), 'window.showroom&&window.showroom.setInsets(0,0.413);true;');
   assert.equal(setPaintScript('#a3151c'), 'window.showroom&&window.showroom.setPaint("#a3151c");true;');
 });

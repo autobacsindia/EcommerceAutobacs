@@ -13,7 +13,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { colors } from '../../theme';
-import { setPaintScript, setPartsScript, showroomHtml, STAGE_BG } from './showroomHtml';
+import { setInsetsScript, setPaintScript, setPartsScript, showroomHtml, STAGE_BG } from './showroomHtml';
 
 const ORIGINS = ['about:*'];
 
@@ -21,18 +21,21 @@ export interface Showroom3DProps {
   parts: string[];
   paint: string;
   still: boolean;
+  /** Share of the screen (0–0.8) the app's own controls cover, so the car is framed in what is left. */
+  insetTop: number;
+  insetBottom: number;
   onReady: () => void;
   /** WebGL is unavailable on this phone, or the 3D page crashed twice. */
   onError: () => void;
 }
 
-function Showroom3D({ parts, paint, still, onReady, onError }: Showroom3DProps) {
+function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
   // `WebView<object>`: the class's default type parameter makes its props `never` once a ref pins it.
   const web = useRef<WebView<object>>(null);
   const [ready, setReady] = useState(false);
   // Built once from the first props; later changes are injected, not re-rendered.
   // `page.n` goes up when the page is rebuilt after the OS kills the WebView (low memory).
-  const [page, setPage] = useState(() => ({ n: 0, html: showroomHtml({ parts, paint, accent: colors.green, still }) }));
+  const [page, setPage] = useState(() => ({ n: 0, html: showroomHtml({ parts, paint, accent: colors.green, still, insetTop, insetBottom }) }));
 
   useEffect(() => {
     if (ready) web.current?.injectJavaScript(setPartsScript(parts));
@@ -41,6 +44,10 @@ function Showroom3D({ parts, paint, still, onReady, onError }: Showroom3DProps) 
   useEffect(() => {
     if (ready) web.current?.injectJavaScript(setPaintScript(paint));
   }, [ready, paint]);
+
+  useEffect(() => {
+    if (ready) web.current?.injectJavaScript(setInsetsScript(insetTop, insetBottom));
+  }, [ready, insetTop, insetBottom]);
 
   const onMessage = useCallback(
     (e: WebViewMessageEvent) => {
@@ -67,8 +74,8 @@ function Showroom3D({ parts, paint, still, onReady, onError }: Showroom3DProps) 
       onError();
       return;
     }
-    setPage({ n: page.n + 1, html: showroomHtml({ parts, paint, accent: colors.green, still }) });
-  }, [page.n, parts, paint, still, onError]);
+    setPage({ n: page.n + 1, html: showroomHtml({ parts, paint, accent: colors.green, still, insetTop, insetBottom }) });
+  }, [page.n, parts, paint, still, insetTop, insetBottom, onError]);
 
   return (
     <View style={s.fill}>

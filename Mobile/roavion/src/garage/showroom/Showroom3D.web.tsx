@@ -8,11 +8,11 @@ import { colors } from '../../theme';
 import type { Showroom3DProps } from './Showroom3D';
 import { showroomHtml, STAGE_BG } from './showroomHtml';
 
-function Showroom3D({ parts, paint, still, onReady, onError }: Showroom3DProps) {
+function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   // Built once from the first props; later changes are posted to the page.
-  const [html] = useState(() => showroomHtml({ parts, paint, accent: colors.green, still }));
+  const [html] = useState(() => showroomHtml({ parts, paint, accent: colors.green, still, insetTop, insetBottom }));
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -38,6 +38,10 @@ function Showroom3D({ parts, paint, still, onReady, onError }: Showroom3DProps) 
   useEffect(() => {
     if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'paint', paint }), '*');
   }, [ready, paint]);
+
+  useEffect(() => {
+    if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'insets', top: insetTop, bottom: insetBottom }), '*');
+  }, [ready, insetTop, insetBottom]);
 
   return (
     <iframe

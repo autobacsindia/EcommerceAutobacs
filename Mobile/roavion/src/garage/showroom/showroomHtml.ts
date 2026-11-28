@@ -7,8 +7,8 @@
  */
 import { SCENE_JS } from './sceneBundle.generated';
 
-/** The stage behind the car — the app's own light page grey. */
-export const STAGE_BG = '#f5f7f6';
+/** The garage's own dark, shown for the instant before the first picture is drawn. */
+export const STAGE_BG = '#1a1b1b';
 
 export interface ShowroomInit {
   /** Slot keys already fitted. */
@@ -19,10 +19,14 @@ export interface ShowroomInit {
   accent: string;
   /** No spin and no grow-in animation (the phone asks for reduced motion). */
   still: boolean;
+  /** Share of the screen (0–0.8) the app's own controls cover at the top and bottom. */
+  insetTop?: number;
+  insetBottom?: number;
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const SLOT = /^[a-z0-9-]{1,40}$/;
+const share = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(0.8, Math.round(v * 1000) / 1000)) : 0);
 
 /**
  * Everything that goes into the page is checked first and written as JSON, so
@@ -30,11 +34,12 @@ const SLOT = /^[a-z0-9-]{1,40}$/;
  */
 export function showroomConfig(init: ShowroomInit) {
   return {
-    bg: STAGE_BG,
     parts: init.parts.filter((k) => SLOT.test(k)),
-    paint: HEX.test(init.paint) ? init.paint : '#f4f4f2',
+    paint: HEX.test(init.paint) ? init.paint : '#a3151c',
     accent: HEX.test(init.accent) ? init.accent : '#0a5c33',
     still: init.still === true,
+    insetTop: share(init.insetTop),
+    insetBottom: share(init.insetBottom),
   };
 }
 
@@ -62,4 +67,9 @@ export function setPartsScript(parts: string[]): string {
 /** Script the app injects to repaint the car. Ignored unless it is a plain hex colour. */
 export function setPaintScript(hex: string): string {
   return HEX.test(hex) ? `window.showroom&&window.showroom.setPaint(${inlineJson(hex)});true;` : 'true;';
+}
+
+/** Script the app injects when its own top/bottom controls change size. Numbers only. */
+export function setInsetsScript(top: number, bottom: number): string {
+  return `window.showroom&&window.showroom.setInsets(${share(top)},${share(bottom)});true;`;
 }

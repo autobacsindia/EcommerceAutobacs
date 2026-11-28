@@ -63,11 +63,11 @@ const HILUX: ShowroomCar = {
     { key: 'winch', label: 'Winch', group: 'utility', icon: 'sync-outline', excludes: [] },
   ],
   paints: [
+    { key: 'red', label: 'Red', hex: '#a3151c' },
     { key: 'white', label: 'White', hex: '#f4f4f2' },
     { key: 'silver', label: 'Silver', hex: '#b9bdbf' },
     { key: 'grey', label: 'Grey', hex: '#5b6064' },
     { key: 'black', label: 'Black', hex: '#17191a' },
-    { key: 'red', label: 'Red', hex: '#a3151c' },
   ],
 };
 
