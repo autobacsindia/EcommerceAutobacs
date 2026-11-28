@@ -10,6 +10,7 @@
 
 import posthog from 'posthog-js';
 import { trackPurchase, trackCampaignOfferViewed } from './analytics';
+import { loadPostHog } from './posthogLoader';
 
 jest.mock('posthog-js', () => ({
   __esModule: true,
@@ -17,6 +18,8 @@ jest.mock('posthog-js', () => ({
 }));
 
 const captured = () => (posthog.capture as jest.Mock).mock.calls;
+
+beforeAll(() => loadPostHog());
 
 beforeEach(() => {
   jest.clearAllMocks();
