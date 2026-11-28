@@ -122,9 +122,11 @@ async function priceQuotation(actor, input, previousDiscount = null) {
   const lines = await priceSalesLines(input.items);
   // Validated before anything else happens, so a bad percent changes nothing.
   const wanted = cleanDiscountInput(input.discount);
-  // B2B gets no offers — refused here, whatever the browser sent.
+  // B2B: per-line B2B prices are allowed (priceSalesLines already refused
+  // anything blank, under ₹1 or above the catalogue price), but no % discount on
+  // the total — refused here, whatever the browser sent.
   if (isB2B({ buyer })) {
-    const problem = b2bOfferProblem({ discount: wanted, lines });
+    const problem = b2bOfferProblem({ discount: wanted });
     if (problem) throw fail(problem, 400);
   }
   const priced = priceWithDiscount(totalOf(lines), wanted);
@@ -541,10 +543,10 @@ export async function acceptQuotation(actor, id, req) {
   // Above 10% off the website price: only with an approval for these exact prices.
   // The lines were just re-priced and matched, so the stored quotation IS the price.
   if (isBlocked(q)) throw fail(NEEDS_APPROVAL('accepted'), 409);
-  // B2B: still no offers on the re-priced lines (a quotation saved before a rule
-  // change, or written around the edit path, cannot become a discounted B2B order).
+  // B2B: still no discount on the total (a quotation written around the edit
+  // path cannot become a % discounted B2B order).
   if (isB2B(q)) {
-    const problem = b2bOfferProblem({ discount: q.discount, lines: lineItems });
+    const problem = b2bOfferProblem({ discount: q.discount });
     if (problem) throw fail(`${problem} Edit the quotation, then accept it.`, 409);
   }
   const discountApproval = approvalForOrder(q);

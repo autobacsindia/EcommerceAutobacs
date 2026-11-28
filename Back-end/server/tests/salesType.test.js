@@ -3,14 +3,17 @@
  *
  * What must hold (on the SERVER, whatever the browser sends):
  *   - B2B = the enterprise buyer: company name + checksum-valid GSTIN, else refused
- *   - B2B gets no offers: a % discount, or a catalogue line below its price, is refused
- *     when the quotation is saved AND again when it is accepted
+ *   - B2B gets no % discount on the total: refused when the quotation is saved AND
+ *     again when it is accepted
+ *   - B2B item prices (owner 2026-11-28): staff may set a price at or below the
+ *     catalogue price on each line; it is validated, survives edit/reopen, needs
+ *     approval above 10% off, and is what the order (and so the invoice) bills
  *   - B2C keeps its offers as today
  *   - accept snapshots the type onto the order and opens accounts' check (`pending`)
  *   - accounts / the admin approve the type with a note, once; nobody else can
  *   - ship before payment: refused on B2C ("not available — retail (B2C) order"),
  *     refused on B2B until accounts approved, then allowed — for admin AND accounts
- *   - the badge reason says why: "offer applied: 10% off (Black Friday)" / "no offers"
+ *   - the badge reason says why: "offer applied: 10% off (Black Friday)" / "B2B price on 1 item"
  */
 import { jest } from '@jest/globals';
 
@@ -38,6 +41,7 @@ const quotes = await import('../services/salesQuotationService.js');
 const salesType = await import('../services/salesTypeService.js');
 const payLater = await import('../services/payLaterService.js');
 const util = await import('../utils/salesType.js');
+const approvals = await import('../services/quotationApprovalService.js');
 const { listSalesOrders } = await import('../services/salesOrderService.js');
 
 jest.setTimeout(60000);
@@ -83,13 +87,17 @@ async function acceptedOrder(extra) {
 const expectFail = (p, status, msg) => expect(p).rejects.toMatchObject({ statusCode: status, ...(msg && { message: expect.stringMatching(msg) }) });
 
 describe('the rules (pure)', () => {
-  it('B2C reason names the offer; B2B reason says no offers', () => {
+  it('B2C reason names the offer; B2B reason names its item prices', () => {
     expect(util.shapeSalesType({ salesDiscount: { percent: 10, reason: 'Black Friday' }, items: [] }))
       .toMatchObject({ type: 'b2c', label: 'B2C', reason: 'Retail order — offer applied: 10% off (Black Friday).', shipBeforePayment: 'not_b2c' });
     expect(util.shapeSalesType({ items: [{ price: 4500, listPrice: 5000 }] }).reason).toBe('Retail order — offer applied: offer price on 1 item.');
     expect(util.shapeSalesType({ items: [{ price: 5000, listPrice: null }] }).reason).toBe('Retail order — no offer applied.');
     expect(util.shapeSalesType({ buyer: { type: 'enterprise', legalName: 'ABC', gstin: GSTIN }, buyerTypeCheck: { status: 'pending' } }))
       .toMatchObject({ type: 'b2b', shipBeforePayment: 'needs_check', company: { legalName: 'ABC', gstin: GSTIN } });
+    expect(util.shapeSalesType({ buyer: { type: 'enterprise' }, items: [{ price: 4500, listPrice: 5000 }] }).reason)
+      .toBe('Business order — B2B price on 1 item, no discount on the total. Ship before payment allowed.');
+    expect(util.b2bOfferProblem({ discount: null, lines: [{ price: 4500, listPrice: 5000 }] })).toBeNull();
+    expect(util.b2bOfferProblem({ discount: { percent: 5 } })).toMatch(/no discount on the total/);
   });
   it('ship before payment by type', () => {
     expect(util.payLaterTypeProblem({})).toBe('Ship before payment: not available — retail (B2C) order.');
@@ -99,13 +107,10 @@ describe('the rules (pure)', () => {
   });
 });
 
-describe('B2B quotations: no offers, refused on the server', () => {
+describe('B2B quotations: no discount on the total, refused on the server', () => {
   it('a discount on the total is refused', async () => {
-    await expectFail(quotes.createQuotation(rep, input([line()], { buyer: B2B_BUYER, discount: BLACK_FRIDAY }), req), 400, /B2B orders get no offers: remove the discount/);
+    await expectFail(quotes.createQuotation(rep, input([line()], { buyer: B2B_BUYER, discount: BLACK_FRIDAY }), req), 400, /B2B orders get no discount on the total/);
     expect(await SalesQuotation.countDocuments()).toBe(0);
-  });
-  it('a catalogue line below its price is refused', async () => {
-    await expectFail(quotes.createQuotation(rep, input([line({ offerPrice: 4500 })], { buyer: B2B_BUYER }), req), 400, /below the catalogue price/);
   });
   it('needs a valid GSTIN and a company name', async () => {
     await expectFail(quotes.createQuotation(rep, input([line()], { buyer: { ...B2B_BUYER, gstin: '27AAPFU0939F1ZX' } }), req), 400);
@@ -115,15 +120,100 @@ describe('B2B quotations: no offers, refused on the server', () => {
     const q = await quotes.createQuotation(rep, input([line(), { custom: true, name: 'Fitting', quantity: 1, price: 700 }], { buyer: B2B_BUYER }), req);
     expect(q.salesType).toMatchObject({ type: 'b2b', company: { legalName: 'ABC Motors Pvt Ltd', gstin: GSTIN } });
     expect(q.totalAmount).toBe(5700);
-    await expectFail(quotes.updateQuotation(rep, q.id, input([line()], { buyer: B2B_BUYER, discount: BLACK_FRIDAY }), req), 400, /no offers/);
+    await expectFail(quotes.updateQuotation(rep, q.id, input([line()], { buyer: B2B_BUYER, discount: BLACK_FRIDAY }), req), 400, /no discount on the total/);
     expect((await SalesQuotation.findById(q.id).lean()).version).toBe(1);
   });
   it('a B2B quotation that somehow holds a discount cannot be accepted', async () => {
     const q = await quotes.createQuotation(rep, input([line()], { buyer: B2B_BUYER }), req);
     await SalesQuotation.updateOne({ _id: q.id }, { $set: { discount: { percent: 5, amount: 250, reason: 'x', by: rep._id, at: new Date() }, totalAmount: 4750 } });
-    await expectFail(quotes.acceptQuotation(rep, q.id, req), 409, /no offers/);
+    await expectFail(quotes.acceptQuotation(rep, q.id, req), 409, /no discount on the total/);
     expect(await Order.countDocuments()).toBe(0);
     expect((await SalesQuotation.findById(q.id).lean()).status).toBe('open');
+  });
+});
+
+describe('B2B item prices set by staff (owner 2026-11-28)', () => {
+  const b2b = (items, extra = {}) => input(items, { buyer: B2B_BUYER, ...extra });
+
+  it('list ₹5,000 → staff sets ₹4,600: saved, totals by the server, client totals ignored', async () => {
+    const q = await quotes.createQuotation(rep, b2b([line({ offerPrice: 4600, quantity: 2 })], {
+      // Tampered client money: none of it may be used.
+      totalAmount: 1, subtotal: 1, items_total: 1,
+    }), req);
+    expect(q.items[0]).toMatchObject({ price: 4600, listPrice: 5000, quantity: 2 });
+    expect(q.subtotal).toBe(9200);
+    expect(q.totalAmount).toBe(9200);
+    expect(q.salesType.reason).toMatch(/B2B price on 1 item/);
+    const stored = await SalesQuotation.findById(q.id).lean();
+    expect(stored.items[0].price).toBe(4600);
+    expect(stored.totalAmount).toBe(9200);
+  });
+
+  it('a client-sent line price on a catalogue line is ignored; only offerPrice counts', async () => {
+    const q = await quotes.createQuotation(rep, b2b([line({ price: 1, listPrice: 1 })]), req);
+    expect(q.items[0]).toMatchObject({ price: 5000, listPrice: null });
+    expect(q.totalAmount).toBe(5000);
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negative', -100],
+    ['not a number', 'abc'],
+    ['under ₹1', 0.5],
+  ])('a %s B2B price is refused and nothing is saved', async (_label, bad) => {
+    await expectFail(quotes.createQuotation(rep, b2b([line({ offerPrice: bad })]), req), 400, /valid offer price/);
+    expect(await SalesQuotation.countDocuments()).toBe(0);
+  });
+
+  it('a B2B price above the catalogue price is refused', async () => {
+    await expectFail(quotes.createQuotation(rep, b2b([line({ offerPrice: 5001 })]), req), 400, /can't be higher than its price/);
+  });
+
+  it('survives reopen and edit: the edit re-prices on the server and keeps the old version with the staff name', async () => {
+    const q = await quotes.createQuotation(rep, b2b([line({ offerPrice: 4600 })]), req);
+    const reopened = await quotes.getQuotation(rep, q.id);
+    const got = reopened.quotation || reopened;
+    expect(got.items[0]).toMatchObject({ price: 4600, listPrice: 5000 });
+
+    const edited = await quotes.updateQuotation(rep, q.id, b2b([line({ offerPrice: 4700, quantity: 3 })]), req);
+    expect(edited.version).toBe(2);
+    expect(edited.items[0]).toMatchObject({ price: 4700, quantity: 3 });
+    expect(edited.totalAmount).toBe(14100);
+    const stored = await SalesQuotation.findById(q.id).lean();
+    expect(stored.revisions).toHaveLength(1);
+    expect(stored.revisions[0]).toMatchObject({ version: 1, totalAmount: 4600, savedByName: 'Asha' });
+    expect(stored.revisions[0].items[0].price).toBe(4600);
+  });
+
+  it('accept: the order bills exactly the B2B price, snapshotted with the list price', async () => {
+    const q = await quotes.createQuotation(rep, b2b([line({ offerPrice: 4600, quantity: 2 }), { custom: true, name: 'Fitting', quantity: 1, price: 700 }]), req);
+    const { orderId } = await quotes.acceptQuotation(rep, q.id, req);
+    const order = await Order.findById(orderId).lean();
+    expect(order.buyer).toMatchObject({ type: 'enterprise', gstin: GSTIN });
+    expect(order.items[0]).toMatchObject({ price: 4600, listPrice: 5000, quantity: 2 });
+    expect(order.totalAmount).toBe(9900);
+    // A later catalogue price change does not touch the order.
+    await Product.updateOne({ _id: product._id }, { $set: { price: 9999 } });
+    expect((await Order.findById(orderId).lean()).items[0].price).toBe(4600);
+  });
+
+  it('more than 10% below the website price needs approval before sharing or accepting (B2B too)', async () => {
+    const q = await quotes.createQuotation(rep, b2b([line({ offerPrice: 4250 })]), req); // 15% off
+    expect(q.approval).toMatchObject({ state: 'needed' });
+    await expectFail(quotes.getQuotationDocument(rep, q.id), 409, /needs approval/);
+    await expectFail(quotes.acceptQuotation(rep, q.id, req), 409, /needs approval/);
+    expect(await Order.countDocuments()).toBe(0);
+
+    const asked = await approvals.requestApproval(rep, q.id, { reason: 'Dealer, 20 cars a year' }, req);
+    await approvals.decideApproval(head, q.id, { decision: 'approve', note: 'OK for dealer', priceKey: asked.approval.priceKey }, req);
+    const { orderId } = await quotes.acceptQuotation(rep, q.id, req);
+    expect((await Order.findById(orderId).lean()).items[0].price).toBe(4250);
+  });
+
+  it('10% or less off needs no approval', async () => {
+    const q = await quotes.createQuotation(rep, b2b([line({ offerPrice: 4500 })]), req); // exactly 10%
+    expect(q.approval).toMatchObject({ state: 'not_needed' });
+    await expect(quotes.acceptQuotation(rep, q.id, req)).resolves.toHaveProperty('orderId');
   });
 });
 

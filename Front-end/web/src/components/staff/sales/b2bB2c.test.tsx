@@ -3,8 +3,8 @@
  *
  * What must hold on screen (the server enforces the same rules on its own):
  *   - a new quotation must be marked B2B or B2C before it is saved
- *   - B2B: company name + GSTIN sent as an enterprise buyer; offer prices locked to
- *     the catalogue price and no discount on the total — nothing offer-like is sent
+ *   - B2B: company name + GSTIN sent as an enterprise buyer; staff may set a B2B
+ *     price on each item (owner 2026-11-28), but there is no discount on the total
  *   - B2C: offers and the discount work as before, sent as an individual buyer
  *   - accounts / admin see the badge with the server's reason, approve with a note,
  *     and B2C says "Ship before payment: not available — retail (B2C) order"
@@ -53,7 +53,7 @@ const B2C: SalesTypeInfo = {
   shipBeforePayment: 'not_b2c', company: null, check: { status: 'pending', type: 'b2c', byName: null, role: null, at: null, note: '' },
 };
 const B2B: SalesTypeInfo = {
-  type: 'b2b', label: 'B2B', reason: 'Business order — no offers. Ship before payment once accounts approves.',
+  type: 'b2b', label: 'B2B', reason: 'Business order — no discount on the total. Ship before payment once accounts approves.',
   shipBeforePayment: 'needs_check', company: { legalName: 'ABC Motors Pvt Ltd', gstin: '32AAACA1234A1Z5' },
   check: { status: 'pending', type: 'b2b', byName: null, role: null, at: null, note: '' },
 };
@@ -77,16 +77,19 @@ describe('the quotation form', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('B2B: company + GSTIN sent, offer price locked, no discount section, nothing offer-like sent', async () => {
+  it('B2B: company + GSTIN sent, B2B price editable and sent, no discount section', async () => {
     wrap(<NewSalesOrderForm />);
     fireEvent.click(screen.getByRole('radio', { name: /B2B — business/ }));
     fill(/Company name/, 'ABC Motors Pvt Ltd');
     fill(/^GSTIN$/, '32aaaca1234a1z5');
     fillCustomer();
     await addDashCam();
-    expect(screen.getByLabelText(/Offer price for Dash cam/)).toBeDisabled();
+    const price = screen.getByLabelText(/B2B price for Dash cam/);
+    expect(price).toBeEnabled();
+    fill(/B2B price for Dash cam/, '4250');
+    expect(screen.getByText(/B2B price · saves/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Discount %')).toBeNull();
-    expect(screen.getByText(/no offers and no discount on the total/)).toBeInTheDocument();
+    expect(screen.getByText(/B2B order: no discount on the total/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create quotation' }));
     await waitFor(() => expect(post).toHaveBeenCalled());
     const body = post.mock.calls[0][1];
@@ -95,10 +98,22 @@ describe('the quotation form', () => {
       billingAddress: { addressLine1: 'Flat 4B, 12 MG Road', addressLine2: '', city: 'Pune', postalCode: '411001' },
     });
     expect(body.discount).toBeNull();
-    expect(body.items[0].offerPrice).toBeNull();
+    expect(body.items[0].offerPrice).toBe(4250);
   });
 
-  it('switching to B2B clears an offer price and a discount already typed', async () => {
+  it('B2B with no price typed sends no offer price (the catalogue price applies)', async () => {
+    wrap(<NewSalesOrderForm />);
+    fireEvent.click(screen.getByRole('radio', { name: /B2B — business/ }));
+    fill(/Company name/, 'ABC Motors Pvt Ltd');
+    fill(/^GSTIN$/, '32aaaca1234a1z5');
+    fillCustomer();
+    await addDashCam();
+    fireEvent.click(screen.getByRole('button', { name: 'Create quotation' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0][1].items[0].offerPrice).toBeNull();
+  });
+
+  it('switching to B2B keeps the item price typed but clears the discount on the total', async () => {
     wrap(<NewSalesOrderForm />);
     fireEvent.click(screen.getByRole('radio', { name: /B2C — retail/ }));
     fillCustomer();
@@ -106,7 +121,7 @@ describe('the quotation form', () => {
     fill(/Offer price for Dash cam/, '4500');
     fill('Discount %', '5');
     fireEvent.click(screen.getByRole('radio', { name: /B2B — business/ }));
-    expect(screen.getByLabelText(/Offer price for Dash cam/)).toHaveValue('');
+    expect(screen.getByLabelText(/B2B price for Dash cam/)).toHaveValue('4500');
     fireEvent.click(screen.getByRole('radio', { name: /B2C — retail/ }));
     expect(screen.getByLabelText('Discount %')).toHaveValue('');
   });
@@ -174,7 +189,7 @@ describe('what accounts and the admin see', () => {
     get.mockResolvedValue({ canApprove: false, why: 'Accounts must first approve this order as B2B (with a note).', dueDays: 3, salesType: B2B });
     post.mockResolvedValue({ order: {} });
     wrap(<OrderPayLater orderId="o1" />);
-    expect(await screen.findByText(/Business order — no offers/)).toBeInTheDocument();
+    expect(await screen.findByText(/Business order — no discount on the total/)).toBeInTheDocument();
     expect(screen.getByText(/Accounts must first approve this order as B2B/)).toBeInTheDocument();
     const approve = screen.getByRole('button', { name: 'Approve as B2B' });
     expect(approve).toBeDisabled();
