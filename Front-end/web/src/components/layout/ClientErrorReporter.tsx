@@ -13,18 +13,25 @@ import { reportClientError, setReporterViewer } from '@/lib/reportClientError';
  * EventTarget.prototype.addEventListener for every listener on the page. Plain
  * window listeners see the same errors without touching anything else.
  */
-/** Path of the failing script (no origin or query string), line and column — or 'inline'. */
+/**
+ * Path of the failing script (no origin or query string), line and column — or 'inline'.
+ *
+ * The key is `script`, NOT `file`: the backend drops every context key containing
+ * "file" (utils/clientErrorScrub.js — upload file names can carry a person's name),
+ * so a `file` key never reached the Website errors page and "Invalid or unexpected
+ * token" stayed undiagnosable.
+ */
 export function scriptLocation(event: Pick<ErrorEvent, 'filename' | 'lineno' | 'colno'>): Record<string, string | number> {
-  let file = 'inline';
+  let script = 'inline';
   try {
     if (event.filename) {
       const u = new URL(event.filename, window.location.href);
-      file = u.origin === window.location.origin ? u.pathname : `${u.origin}${u.pathname}`;
+      script = u.origin === window.location.origin ? u.pathname : `${u.origin}${u.pathname}`;
     }
   } catch {
-    file = 'unknown';
+    script = 'unknown';
   }
-  return { file, line: event.lineno || 0, col: event.colno || 0 };
+  return { script, line: event.lineno || 0, col: event.colno || 0 };
 }
 
 export default function ClientErrorReporter() {
