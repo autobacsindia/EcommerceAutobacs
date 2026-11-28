@@ -13,7 +13,7 @@ import { resolveFestivalSetting, type FestivalOfferSetting, type FestivalVariant
 import { toast } from 'react-hot-toast';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
-import { useReportBuyBarHeight } from '@/lib/floatingClearance';
+import { useFloatingClearance, useReportBuyBarHeight } from '@/lib/floatingClearance';
 
 interface StickyVariant {
   _id: string;
@@ -143,9 +143,13 @@ export default function StickyCartBar({
     }
   };
 
+  // The page's own Add to cart / Buy now block (BuyBox) reports when it is on
+  // screen. While it is, this bar would be a second copy of the same buttons.
+  const { buyButtonsInView } = useFloatingClearance();
+
   // Hide when the resolved unit is sold out (a selected out-of-stock variant, or a
   // simple product out of stock). Variable products with no selection stay visible.
-  const shown = isVisible && activeStock !== 'out';
+  const shown = isVisible && activeStock !== 'out' && !buyButtonsInView;
   // The floating Contact button lifts by this bar's height so it never sits on it.
   const barRef = useReportBuyBarHeight<HTMLDivElement>(shown);
   if (!shown) {
@@ -168,10 +172,18 @@ export default function StickyCartBar({
               {product.name}
               {variant ? ` · ${variant.label}` : ''}
             </p>
-            <p className="text-2xl font-black text-orange-500">
+            <p className="text-2xl font-black text-orange-500" data-testid="sticky-price">
+              {/* A full "₹92,000 – ₹1,17,500" range does not fit beside the two
+                  buttons on a phone and wrapped onto a second line. The bar only
+                  needs the starting price; the exact range is in the buy box. */}
               {needsSelection
                 ? (rangeMin != null && rangeMax != null && rangeMin !== rangeMax
-                    ? `${fmt(rangeMin)} – ${fmt(rangeMax)}`
+                    ? (
+                      <>
+                        <span className="mr-1 align-middle text-xs font-semibold text-ink-muted">From</span>
+                        {fmt(rangeMin)}
+                      </>
+                    )
                     : fmt(rangeMin ?? activePrice))
                 : fmt(festivalOffer ? festivalOffer.finalPrice : activePrice)}
               {festivalOffer && (

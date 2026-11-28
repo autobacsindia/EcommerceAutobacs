@@ -298,15 +298,22 @@ export default function BuyBox({
       </div>
       <p className="mt-2 text-[13px] text-ink-muted">
         {needsSelection ? 'Select a model to see its price · ' : ''}Inclusive of all taxes · {shippingStatement(chargeAtCheckout).toLowerCase()}
-        {deliveryOfferLive && (
+        {/* Not on a sold-out item: an offer you cannot use reads as a broken promise. */}
+        {deliveryOfferLive && !outOfStock && (
           <span className="ml-1 font-semibold text-[#E3132C]">· Black Friday: apply the offer at checkout for ₹0 delivery fees</span>
         )}
       </p>
-      <DeliveryEstimate
-        variant="page"
-        window={outOfStock ? null : delivery.estimates?.[product._id] ?? null}
-        className="mt-3"
-      />
+      {/* Sold out: no estimate to show, so no reserved blank line either. The
+          stock is known when the page is rendered, so dropping the line here
+          never shifts the page; for a model picked later the shift follows the
+          shopper's own tap. */}
+      {!outOfStock && (
+        <DeliveryEstimate
+          variant="page"
+          window={delivery.estimates?.[product._id] ?? null}
+          className="mt-3"
+        />
+      )}
 
       {/* The campaign, made visible where the buying decision is actually made. Hidden
           until a variable product has a model picked, because the rate is charged on the
