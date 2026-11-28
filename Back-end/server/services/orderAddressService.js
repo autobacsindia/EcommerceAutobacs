@@ -38,7 +38,7 @@ const fail = (message, status = 400) => new AppError(message, status, { expose: 
 
 const LABELS = {
   fullName: 'Full name', phone: 'Mobile number', alternatePhone: 'Alternate number',
-  houseNumber: 'House / flat / building', addressLine1: 'Street / area', addressLine2: 'Address line 2',
+  houseNumber: 'House name / flat / building', addressLine1: 'Street / area', addressLine2: 'Address line 2',
   landmark: 'Landmark', city: 'City',
   postalCode: 'PIN code', state: 'State', country: 'Country',
 };

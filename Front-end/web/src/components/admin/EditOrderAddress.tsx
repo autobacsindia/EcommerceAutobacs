@@ -34,7 +34,7 @@ const FIELDS: Array<{ key: keyof OrderShippingAddress; label: string; required?:
   { key: 'fullName', label: 'Full name', required: true },
   { key: 'phone', label: 'Mobile number', required: true, inputMode: 'tel' },
   { key: 'alternatePhone', label: 'Alternate number', inputMode: 'tel' },
-  { key: 'houseNumber', label: 'House / Flat / Building no.', required: true, placeholder: ADDRESS_FIELD_TEXT.houseNumber.placeholder },
+  { key: 'houseNumber', label: ADDRESS_FIELD_TEXT.houseNumber.label, required: true, placeholder: ADDRESS_FIELD_TEXT.houseNumber.placeholder },
   { key: 'addressLine1', label: 'Street / Area', required: true, placeholder: ADDRESS_FIELD_TEXT.addressLine1.placeholder },
   { key: 'landmark', label: 'Landmark', placeholder: ADDRESS_FIELD_TEXT.landmark.placeholder },
   { key: 'addressLine2', label: 'Address line 2' },

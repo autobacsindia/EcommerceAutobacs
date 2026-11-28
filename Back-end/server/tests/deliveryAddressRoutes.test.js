@@ -50,7 +50,7 @@ const text = (res) => JSON.stringify(res.body).toLowerCase();
 
 describe('website checkout refuses a bad address before anything is priced or saved', () => {
   it.each([
-    ['missing house no.', { houseNumber: '' }, 'house / flat / building number'],
+    ['missing house no.', { houseNumber: '' }, 'house name or flat / building number'],
     ['one-word street', { addressLine1: 'Kochi' }, 'one word'],
     ['junk street', { addressLine1: '----' }, "doesn't look right"],
     ['junk landmark', { landmark: 'aaaa' }, 'landmark'],
@@ -71,7 +71,7 @@ describe('website checkout refuses a bad address before anything is priced or sa
     const res = await jar.post(`${BASE}/orders/guest`).set('X-XSRF-TOKEN', xsrf)
       .send({ items, email: 'guest@example.test', shippingAddress: { ...GOOD, houseNumber: undefined }, paymentMethod: 'razorpay' });
     expect(res.status).toBe(400);
-    expect(text(res)).toContain('house / flat / building number');
+    expect(text(res)).toContain('house name or flat / building number');
   });
 
   it('a good address gets past the address check (landmark optional)', async () => {
@@ -79,7 +79,7 @@ describe('website checkout refuses a bad address before anything is priced or sa
     const res = await request(app).post(`${BASE}/orders`).set('Authorization', `Bearer ${token}`)
       .send({ items, shippingAddress: { ...GOOD, landmark: undefined }, paymentMethod: 'razorpay' });
     // The made-up product then fails later — but not on the address.
-    expect(text(res)).not.toContain('house / flat');
+    expect(text(res)).not.toContain('house name or flat');
     expect(text(res)).not.toContain('street and area');
   });
 });
@@ -90,7 +90,7 @@ describe('staff and admin doors', () => {
     const res = await request(app).post(`${BASE}/staff/sales/quotations`).set('Authorization', `Bearer ${token}`)
       .send({ customer: { name: 'Big Build', phone: '9820917286' }, shippingAddress: { ...GOOD, houseNumber: '' }, items: [{ custom: true, name: 'Lift kit', quantity: 1, price: 100 }] });
     expect(res.status).toBe(400);
-    expect(text(res)).toContain('house / flat / building number');
+    expect(text(res)).toContain('house name or flat / building number');
   });
 
   it('POST /orders/admin/offline — one-word street → 400, no order, no customer', async () => {
@@ -117,7 +117,7 @@ describe('saved addresses (PUT /profile/addresses)', () => {
     const res = await request(app).put(`${BASE}/profile/addresses`).set('Authorization', `Bearer ${token}`)
       .send({ addresses: [{ ...GOOD, houseNumber: '' }] });
     expect(res.status).toBe(400);
-    expect(res.body.message.toLowerCase()).toContain('house / flat / building number');
+    expect(res.body.message.toLowerCase()).toContain('house name or flat / building number');
   });
 
   it('keeps an old address untouched while a new one is added, and still lists it', async () => {

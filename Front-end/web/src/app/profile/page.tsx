@@ -403,7 +403,7 @@ export default function ProfilePage() {
                           <p className="font-display text-ink tracking-[-0.01em] mb-1">{address.fullName}</p>
                           {streetLines(address).map((line, i) => <p key={i} className="text-ink/70">{line}</p>)}
                           {!isAddressComplete(address) && (
-                            <p className="text-amber-700 text-xs mt-1">Please add your house / flat number — tap Edit.</p>
+                            <p className="text-amber-700 text-xs mt-1">Please add your house name or flat number — tap Edit.</p>
                           )}
                           <p className="text-ink/70">{address.city}, {address.state} {address.postalCode}</p>
                           <p className="text-ink/70">{address.country}</p>

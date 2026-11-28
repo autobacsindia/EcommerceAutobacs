@@ -28,7 +28,7 @@ import { ADDRESS_FIELD_TEXT, ADDRESS_LIMITS, firstAddressProblem } from '../src/
 interface Address {
   fullName: string;
   phone: string;
-  /** House / Flat / Building no. (src/deliveryAddress.ts) */
+  /** House name / flat / building no. (src/deliveryAddress.ts) */
   houseNumber: string;
   /** Street / Area */
   addressLine1: string;

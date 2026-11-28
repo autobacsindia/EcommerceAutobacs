@@ -38,7 +38,7 @@ const PRODUCT = { id: 'p1', name: 'Dash cam', image: '', price: 5000, available:
 function fillCustomer() {
   fill(/^Name$/, 'Rohit Shah');
   fill(/Mobile/, '9876543210');
-  fill(/House \/ Flat/, 'Flat 4B'); fill(/Street \/ Area/, '12 MG Road');
+  fill(/House name \/ flat/, 'Flat 4B'); fill(/Street \/ Area/, '12 MG Road');
   fill(/^City$/, 'Pune');
   fill(/^State$/, 'Maharashtra');
   fill(/^PIN code/, '411001');
