@@ -403,7 +403,7 @@ describe('Reels API', () => {
     });
 
     it.each([
-      ['not a video', () => Buffer.from('<html><script>alert(1)</script></html>'), /MP4 or MOV/],
+      ['not a video', () => Buffer.from('<html><script>alert(1)</script></html>'), /isn't supported/],
       ['HEVC', () => makeMp4({ codec: 'hvc1' }), /Most Compatible/],
       ['unreadable', () => makeMp4({ rawDuration: 0 }), /could not read/],
     ])('refuses an upload that is %s', async (_label, bytes, msg) => {

@@ -53,15 +53,26 @@ export const REEL_MAX_BYTES = intFromEnv('REEL_MAX_BYTES', 100 * 1024 * 1024);
  * Upload types we hand out a target for, and the extension each maps to. The
  * extension comes from this allowlist, never from the uploaded filename.
  *
- * MP4 and MOV only: both are ISO base media, which is what lets the server read the
- * clip's real length and codec back out of storage (services/storage/mp4Probe.js).
- * The declared type is a hint — the bytes are checked at submit.
+ * Only ISO base media containers (MP4, MOV, M4V, 3GP, 3G2): that is what lets the
+ * server read the clip's real length and codecs back out of storage
+ * (services/storage/mp4Probe.js), and what every phone and browser can play once the
+ * codec is H.264. The declared type is a hint — the bytes are checked at submit.
+ *
+ * Deliberately NOT here: WebM, MKV and AVI. iPhones cannot play WebM/MKV at all, and
+ * we do not transcode, so accepting them would publish reels that are blank for half
+ * the audience. The clients refuse them up front with REEL_UNSUPPORTED_FORMAT_MESSAGE.
  */
 export const REEL_UPLOAD_TYPES = Object.freeze({
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
   'video/x-m4v': 'm4v',
+  'video/3gpp': '3gp',
+  'video/3gpp2': '3g2',
 });
+
+/** One plain-English line for any video we cannot take. Clients show the same words. */
+export const REEL_UNSUPPORTED_FORMAT_MESSAGE =
+  "This video format isn't supported — please record in MP4 or choose a different video.";
 
 /**
  * The type every reel is served as, whatever the uploader stored. MOV and MP4 are the
@@ -77,6 +88,14 @@ export const REEL_PLAYBACK_CONTENT_TYPE = 'video/mp4';
  * clear message; the mobile app asks the photo picker for an H.264 copy instead.
  */
 export const REEL_ALLOWED_CODECS = Object.freeze(['avc1', 'avc3']);
+
+/**
+ * Sound codecs accepted: AAC. A clip with no sound is fine; a clip whose only sound
+ * is something else (AMR in old Android 3GP files) is refused, because browsers and
+ * iPhones refuse to play it. When a phone writes several sound tracks (e.g. AAC plus
+ * a spatial-audio track) one AAC track is enough — players pick that one.
+ */
+export const REEL_ALLOWED_AUDIO_CODECS = Object.freeze(['mp4a']);
 
 /**
  * Where reels live in the PRIVATE R2 bucket. Each uploader gets their own prefix

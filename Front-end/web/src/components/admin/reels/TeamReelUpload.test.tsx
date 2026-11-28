@@ -77,7 +77,7 @@ it('needs a video and a product before anything is uploaded', async () => {
 it('rejects a non-video file without asking for a signature', async () => {
   renderUpload();
   fireEvent.change(screen.getByLabelText('Video'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
-  expect(await screen.findByRole('alert')).toHaveTextContent('MP4 or MOV');
+  expect(await screen.findByRole('alert')).toHaveTextContent("This video format isn't supported");
   expect(postMock).not.toHaveBeenCalled();
 });
 
@@ -129,19 +129,113 @@ it('retrying after a failed save does not upload the video twice', async () => {
 });
 
 it('checkVideoFile enforces type and size', () => {
-  expect(checkVideoFile(new File(['x'], 'a.gif', { type: 'image/gif' }), { maxBytes: 10 })).toMatch(/MP4/);
+  expect(checkVideoFile(new File(['x'], 'a.gif', { type: 'image/gif' }), { maxBytes: 10 })).toMatch(/record in MP4/);
   expect(checkVideoFile(new File(['x'.repeat(20)], 'a.mp4', { type: 'video/mp4' }), { maxBytes: 10 })).toMatch(/too big/);
   expect(checkVideoFile(new File(['x'], 'a.mp4', { type: 'video/mp4' }), { maxBytes: 10 })).toBeNull();
 });
 
-it('videoTypeOf takes MP4/MOV by label, or by extension when the browser gives no label', () => {
+describe('videoTypeOf — the phone videos people actually have', () => {
   const f = (name: string, type: string) => new File(['x'], name, { type });
-  expect(videoTypeOf(f('a.mov', 'video/quicktime'))).toBe('video/quicktime');
-  expect(videoTypeOf(f('a.MOV', ''))).toBe('video/quicktime');
-  expect(videoTypeOf(f('a.mp4', 'application/octet-stream'))).toBe('video/mp4');
-  expect(videoTypeOf(f('a.webm', 'video/webm'))).toBeNull();
-  expect(videoTypeOf(f('a.mp4', 'text/html'))).toBeNull();
-  expect(videoTypeOf(f('a.exe', ''))).toBeNull();
+
+  it.each([
+    ['iPhone camera MOV', 'IMG_0412.MOV', 'video/quicktime', 'video/quicktime'],
+    ['iPhone MOV with no label', 'IMG_0412.MOV', '', 'video/quicktime'],
+    ['MOV labelled video/mov', 'a.mov', 'video/mov', 'video/quicktime'],
+    ['Android camera MP4', 'VID_20261128_101500.mp4', 'video/mp4', 'video/mp4'],
+    ['MP4 labelled octet-stream', 'a.mp4', 'application/octet-stream', 'video/mp4'],
+    ['MP4 with codecs in the label', 'a.mp4', 'video/mp4; codecs="avc1.42E01E"', 'video/mp4'],
+    ['M4V', 'a.m4v', 'video/x-m4v', 'video/x-m4v'],
+    ['Android 3GP', 'VID_0001.3gp', 'video/3gpp', 'video/3gpp'],
+    ['3GP labelled audio/3gpp', 'VID_0001.3gp', 'audio/3gpp', 'video/3gpp'],
+    ['3G2 with no label', 'clip.3g2', '', 'video/3gpp2'],
+  ])('takes %s', (_l, name, type, want) => {
+    expect(videoTypeOf(f(name, type))).toBe(want);
+  });
+
+  it.each([
+    ['WebM (Android screen recorder)', 'a.webm', 'video/webm'],
+    ['MKV', 'a.mkv', 'video/x-matroska'],
+    ['MKV with no label', 'a.mkv', ''],
+    ['AVI', 'a.avi', 'video/x-msvideo'],
+    ['an HTML page renamed .mp4', 'a.mp4', 'text/html'],
+    ['an .exe', 'a.exe', ''],
+    ['a file with no name or label', 'clip', ''],
+  ])('refuses %s (cannot play on every phone)', (_l, name, type) => {
+    expect(videoTypeOf(f(name, type))).toBeNull();
+  });
+});
+
+it.each(['a.webm', 'a.mkv', 'a.avi'])('picking %s shows the plain-English message, not a crash', async (name) => {
+  renderUpload();
+  fireEvent.change(screen.getByLabelText('Video'), { target: { files: [new File(['x'], name, { type: '' })] } });
+  expect(await screen.findByRole('alert')).toHaveTextContent("This video format isn't supported — please record in MP4 or choose a different video.");
+  expect(postMock).not.toHaveBeenCalled();
+});
+
+it('the file picker offers 3GP as well as MP4/MOV', () => {
+  renderUpload();
+  const accept = screen.getByLabelText('Video').getAttribute('accept') ?? '';
+  for (const t of ['video/mp4', 'video/quicktime', 'video/3gpp', '.mov', '.3gp']) expect(accept).toContain(t);
+});
+
+it('a server refusal of the signature (e.g. 400 unsupported) is a friendly message, never an uncaught error', async () => {
+  postMock.mockRejectedValue(Object.assign(new Error("This video format isn't supported — please record in MP4 or choose a different video."), { status: 400 }));
+  renderUpload();
+  fireEvent.change(screen.getByLabelText('Video'), { target: { files: [video()] } });
+  await pickProduct();
+  fireEvent.click(screen.getByRole('button', { name: 'Publish reel' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent("isn't supported");
+  expect(uploadMock).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Publish reel' })).toBeEnabled();
+});
+
+it('an error with no message still shows a sentence', async () => {
+  postMock.mockRejectedValue({});
+  renderUpload();
+  fireEvent.change(screen.getByLabelText('Video'), { target: { files: [video()] } });
+  await pickProduct();
+  fireEvent.click(screen.getByRole('button', { name: 'Publish reel' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not upload the reel. Please try again.');
+});
+
+it('when the server refuses the stored video (HEVC), the next try uploads again instead of re-sending a deleted key', async () => {
+  let saveCalls = 0;
+  postMock.mockImplementation((url: string) => {
+    if (url === '/reels/upload-signature') return Promise.resolve(SIG);
+    saveCalls += 1;
+    return saveCalls === 1
+      ? Promise.reject(Object.assign(new Error('This video uses a format not every phone can play'), { status: 400 }))
+      : Promise.resolve({ id: 'r9' });
+  });
+  uploadMock.mockResolvedValue({ publicId: 'reels/abc123' });
+  renderUpload();
+  fireEvent.change(screen.getByLabelText('Video'), { target: { files: [video()] } });
+  await pickProduct();
+  fireEvent.click(screen.getByRole('button', { name: 'Publish reel' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('not every phone can play');
+  fireEvent.click(screen.getByRole('button', { name: 'Publish reel' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Reel published');
+  expect(uploadMock).toHaveBeenCalledTimes(2);
+});
+
+describe('readVideoDuration', () => {
+  const { readVideoDuration } = jest.requireActual<typeof VideoUpload>('./videoUpload');
+  afterEach(() => jest.useRealTimers());
+
+  it('never hangs: gives up (null) when the browser fires no event for a file it cannot decode', async () => {
+    jest.useFakeTimers();
+    const p = readVideoDuration(video(), 1000);
+    jest.advanceTimersByTime(1000);
+    await expect(p).resolves.toBeNull();
+    expect(URL.revokeObjectURL).toHaveBeenCalled();
+  });
+
+  it('resolves null (no throw) when the object URL cannot be made', async () => {
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = jest.fn(() => { throw new Error('blocked'); });
+    await expect(readVideoDuration(video())).resolves.toBeNull();
+    URL.createObjectURL = orig;
+  });
 });
 
 describe('uploadVideoToStorage', () => {

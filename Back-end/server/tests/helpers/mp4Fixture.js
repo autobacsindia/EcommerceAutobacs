@@ -38,7 +38,8 @@ const trak = (handler, codec) => box('trak',
  * @param {number} [o.durationSec=20]
  * @param {string} [o.codec='avc1']        video sample entry (`hvc1` = HEVC)
  * @param {boolean} [o.moovAtEnd=true]     phone recordings put `moov` last
- * @param {'mp4'|'mov'} [o.container='mp4']
+ * @param {'mp4'|'mov'|'3gp'} [o.container='mp4']
+ * @param {string|string[]} [o.audioCodec='mp4a'] sound sample entry/entries (`samr` = AMR)
  * @param {number} [o.mvhdVersion=0]
  * @param {number} [o.mdatBytes=4096]
  * @param {boolean} [o.audio=true]
@@ -48,15 +49,16 @@ const trak = (handler, codec) => box('trak',
  */
 export function makeMp4({
   durationSec = 20, codec = 'avc1', moovAtEnd = true, container = 'mp4', mvhdVersion = 0,
-  mdatBytes = 4096, audio = true, video = true, rawDuration, largeMdat = false,
+  mdatBytes = 4096, audio = true, video = true, rawDuration, largeMdat = false, audioCodec = 'mp4a',
 } = {}) {
   const timescale = 600;
   const moov = box('moov',
     mvhd({ timescale, duration: rawDuration ?? Math.round(durationSec * timescale), version: mvhdVersion }),
     ...(video ? [trak('vide', codec)] : []),
-    ...(audio ? [trak('soun', 'mp4a')] : []));
+    ...(audio ? [audioCodec].flat().map((c) => trak('soun', c)) : []));
   const mdat = largeMdat ? largeBox('mdat', Buffer.alloc(mdatBytes)) : box('mdat', Buffer.alloc(mdatBytes));
-  const head = [ftyp(container === 'mov' ? 'qt  ' : 'isom'), box('wide')];
+  const brand = { mov: 'qt  ', '3gp': '3gp4' }[container] ?? 'isom';
+  const head = [ftyp(brand), box('wide')];
   return Buffer.concat(moovAtEnd ? [...head, mdat, moov] : [...head, moov, mdat]);
 }
 

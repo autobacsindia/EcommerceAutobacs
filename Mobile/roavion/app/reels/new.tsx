@@ -24,7 +24,8 @@ import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchProducts, type Product } from '../../src/api/catalogue';
-import { createReel, reelVideoType, uploadReelVideo, REELS_MOCK, type PickedVideo } from '../../src/api/reels';
+import { createReel, reelVideoType, uploadReelVideo, REELS_MOCK, UNSUPPORTED_VIDEO_MESSAGE, type PickedVideo } from '../../src/api/reels';
+import { pickerErrorText } from '../../src/reels/videoType';
 import { reelKeys } from '../../src/reels/useReels';
 import { ProgressRing } from '../../src/reels/ProgressRing';
 import { useApp } from '../../src/store';
@@ -113,7 +114,7 @@ export default function NewReelScreen() {
       return;
     }
     if (!reelVideoType(a)) {
-      Alert.alert('Video type not supported', 'Please choose an MP4 or MOV video.');
+      Alert.alert('Video not supported', UNSUPPORTED_VIDEO_MESSAGE);
       return;
     }
     if (a.fileSize && a.fileSize > DEFAULT_MAX_BYTES) {
@@ -124,7 +125,19 @@ export default function NewReelScreen() {
     setVideo({ uri: a.uri, mimeType: a.mimeType, fileName: a.fileName, durationSec, fileSize: a.fileSize ?? null });
   };
 
-  const pick = async () => {
+  // Every picker/permission call can reject (export of an iCloud or HEVC clip fails,
+  // the camera is busy, the OS kills the picker…). Catch it here and say so in plain
+  // words: an un-awaited rejection from a button press is an uncaught error.
+  const guarded = (run: () => Promise<void>) => async () => {
+    try {
+      await run();
+    } catch (err) {
+      haptic.error();
+      Alert.alert("Couldn't use that video", pickerErrorText(err));
+    }
+  };
+
+  const pick = guarded(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Allow access', 'Allow Autobacs to access your videos in Settings to post a reel.');
@@ -142,9 +155,9 @@ export default function NewReelScreen() {
         videoExportPreset: ImagePicker.VideoExportPreset.H264_1920x1080,
       }),
     );
-  };
+  });
 
-  const record = async () => {
+  const record = guarded(async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Allow camera', 'Allow Autobacs to use the camera in Settings to record a reel.');
@@ -158,7 +171,7 @@ export default function NewReelScreen() {
         videoExportPreset: ImagePicker.VideoExportPreset.H264_1920x1080, // iOS: H.264, not HEVC
       }),
     );
-  };
+  });
 
   const canPost = !!video && !!product && phase === 'edit';
 
@@ -181,7 +194,8 @@ export default function NewReelScreen() {
     } catch (err) {
       cancelRef.current = null;
       setPhase('edit');
-      const msg = (err as Error)?.message || 'Please try again.';
+      const raw = (err as { message?: unknown } | null)?.message;
+      const msg = typeof raw === 'string' && raw.trim() ? raw : 'Please try again.';
       // Cancelling on purpose needs no error dialog.
       if (msg === 'Upload cancelled.') return;
       haptic.error();
@@ -301,7 +315,7 @@ export default function NewReelScreen() {
           <View style={s.pickHero}>
             <Stripes width={16} height={5} gap={4} onDark />
             <Text style={s.pickTitle}>Show off the gear on your car</Text>
-            <Text style={s.pickBody}>Up to {MAX_SECONDS} seconds · under 100 MB · MP4 or MOV</Text>
+            <Text style={s.pickBody}>Up to {MAX_SECONDS} seconds · under 100 MB · MP4, MOV or 3GP</Text>
             <View style={s.pickRow}>
               <PremiumButton label="Record" icon="videocam" variant="green" onPress={record} style={{ flex: 1 }} />
               <PremiumButton label="Gallery" icon="images-outline" variant="light" onPress={pick} style={{ flex: 1 }} />
