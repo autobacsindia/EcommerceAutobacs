@@ -8,26 +8,32 @@
  *   product_view → add_to_cart → begin_checkout → checkout_step → purchase
  * Plus the side funnels: search, wishlist, sign_up, and checkout_abandoned (drop-off).
  */
-import posthog from 'posthog-js';
+import type { PostHog } from 'posthog-js';
+import { readyPostHog } from './posthogLoader';
 
 const enabled = () => typeof window !== 'undefined' && !!process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
 /** PostHog starts once the page has settled; anything earlier waits here, in order. */
 const MAX_WAITING = 50;
-const waiting: Array<() => void> = [];
+const waiting: Array<(ph: PostHog) => void> = [];
 
-export const whenAnalyticsReady = (run: () => void) => {
+/** Runs now if PostHog is up, else queues (bounded) until PostHogProvider starts it. */
+export const whenAnalyticsReady = (run: (ph: PostHog) => void) => {
   if (!enabled()) return;
-  if (posthog.__loaded) run();
+  const ph = readyPostHog();
+  if (ph) run(ph);
   else if (waiting.length < MAX_WAITING) waiting.push(run);
 };
 
-export const flushWaitingAnalytics = () => {
-  while (waiting.length) waiting.shift()!();
+/** PostHog's `loaded` hook passes its client; callers without one get the ready client. */
+export const flushWaitingAnalytics = (client?: PostHog) => {
+  const ph = client ?? readyPostHog();
+  if (!ph) return;
+  while (waiting.length) waiting.shift()!(ph);
 };
 
 export const capture = (event: string, props?: Record<string, unknown>) => {
-  whenAnalyticsReady(() => posthog.capture(event, props));
+  whenAnalyticsReady((ph) => ph.capture(event, props));
 };
 
 export interface ProductEventInput {
@@ -196,10 +202,10 @@ export const trackCampaignOfferViewed = (input: {
 
 /** Tie events to a user after login. */
 export const identifyUser = (user: { id: string; email?: string; name?: string }) => {
-  whenAnalyticsReady(() => posthog.identify(user.id, { email: user.email, name: user.name }));
+  whenAnalyticsReady((ph) => ph.identify(user.id, { email: user.email, name: user.name }));
 };
 
 /** Clear identity on logout. */
 export const resetAnalytics = () => {
-  whenAnalyticsReady(() => posthog.reset());
+  whenAnalyticsReady((ph) => ph.reset());
 };

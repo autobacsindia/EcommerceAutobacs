@@ -2,8 +2,8 @@
 
 import { useEffect, Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import posthog from 'posthog-js';
 import { flushWaitingAnalytics, whenAnalyticsReady } from '@/lib/analytics';
+import { loadPostHog, readyPostHog } from '@/lib/posthogLoader';
 
 /**
  * PostHog Provider — forward-looking product/behavioral analytics (ADR-005).
@@ -25,7 +25,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
     const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
     if (!key) return; // disabled until configured
 
-    if (posthog.__loaded) return;
+    if (readyPostHog()) return;
 
     let cancelled = false;
     let started = false;
@@ -44,22 +44,32 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       if (cancelled || started) return;
       started = true;
       clearPending();
-      posthog.init(key, {
-        // Reverse-proxy through our own domain (see next.config.ts rewrites).
-        api_host: '/ingest',
-        ui_host: process.env.NEXT_PUBLIC_POSTHOG_UI_HOST || 'https://us.posthog.com',
-        capture_pageview: false,      // handled manually below (App Router SPA navigation)
-        capture_pageleave: true,
-        // Real-user Core Web Vitals (LCP/INP/CLS/FCP) — the free replacement for
-        // Vercel Speed Insights. Shows up under Web Analytics / Web Vitals in the
-        // PostHog dashboard, no extra dependency or cost.
-        capture_performance: { web_vitals: true },
-        persistence: 'localStorage+cookie',
-        loaded: flushWaitingAnalytics,
-      });
+      // The library itself is fetched only now (see lib/posthogLoader.ts), not with
+      // the page's first-load JavaScript. A failed fetch leaves events queued (bounded)
+      // and the page untouched; analytics must never be able to break a page.
+      loadPostHog()
+        .then((posthog) => {
+          if (cancelled || posthog.__loaded) return;
+          posthog.init(key, {
+            // Reverse-proxy through our own domain (see next.config.ts rewrites).
+            api_host: '/ingest',
+            ui_host: process.env.NEXT_PUBLIC_POSTHOG_UI_HOST || 'https://us.posthog.com',
+            capture_pageview: false,      // handled manually below (App Router SPA navigation)
+            capture_pageleave: true,
+            // Real-user Core Web Vitals (LCP/INP/CLS/FCP) — the free replacement for
+            // Vercel Speed Insights. Shows up under Web Analytics / Web Vitals in the
+            // PostHog dashboard, no extra dependency or cost.
+            capture_performance: { web_vitals: true },
+            persistence: 'localStorage+cookie',
+            loaded: () => flushWaitingAnalytics(posthog),
+          });
+        })
+        .catch(() => {
+          /* analytics is optional: an unreachable chunk must not surface as a page error */
+        });
     };
 
-    // PostHog pulls in about 60 KB more while it starts up. On a phone on 4G that
+    // PostHog (225 KB library + ~60 KB more while it starts up) is fetched here. On a phone on 4G that
     // competed with the page's own pictures, so it waits until the page has loaded.
     // Ad and tracking scripts can hold the load event back for 8-10 seconds, so the
     // wait is capped: otherwise anyone leaving before then would never be counted.
@@ -96,7 +106,7 @@ function PostHogPageview() {
   useEffect(() => {
     const qs = searchParams?.toString();
     const url = window.location.origin + pathname + (qs ? `?${qs}` : '');
-    whenAnalyticsReady(() => posthog.capture('$pageview', { $current_url: url }));
+    whenAnalyticsReady((ph) => ph.capture('$pageview', { $current_url: url }));
   }, [pathname, searchParams]);
 
   return null;
