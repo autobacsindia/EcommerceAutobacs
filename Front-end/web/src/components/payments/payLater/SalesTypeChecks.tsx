@@ -36,7 +36,7 @@ export default function SalesTypeChecks({ view, orderHref }: { view: SalesTypeVi
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-500">
-        {view === 'check' && 'GTM marked these orders B2B (business, no offers) or B2C (retail, offers allowed). Check the reason and approve with a note.'}
+        {view === 'check' && 'GTM marked these orders B2B (business, B2B item prices, no % discount on the total) or B2C (retail, offers allowed). Check the reason and approve with a note.'}
         {view === 'b2b_unpaid' && 'B2B orders accounts approved that are not paid yet. Accounts or the admin can let one ship before payment, with a reason.'}
         {view === 'approved' && 'Every approved B2B / B2C order, newest first. Approved the wrong type? Change it here with a reason — every change is kept.'}
       </p>

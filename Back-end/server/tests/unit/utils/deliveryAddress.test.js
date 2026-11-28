@@ -104,7 +104,7 @@ describe('website checkout (validateOrder — POST /orders and /orders/guest)', 
   });
 
   it.each([
-    ['missing house no.', { houseNumber: '' }, 'house / flat'],
+    ['missing house no.', { houseNumber: '' }, 'house name or flat'],
     ['one-word street', { addressLine1: 'Kochi' }, 'one word'],
     ['junk street', { addressLine1: 'aaaa' }, "doesn't look right"],
     ['junk landmark', { landmark: '-' }, 'landmark'],
@@ -147,7 +147,7 @@ describe('offline / sales / quotation-accept (createOfflineOrderRecord — the s
   });
 
   it('refuses an address with no house number (e.g. an old quotation)', async () => {
-    await expect(call(full({ houseNumber: undefined }))).rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/house \/ flat/i) });
+    await expect(call(full({ houseNumber: undefined }))).rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/house name or flat \/ building number/i) });
   });
   it('refuses a junk street', async () => {
     await expect(call(full({ addressLine1: '-' }))).rejects.toMatchObject({ statusCode: 400 });
@@ -166,7 +166,7 @@ describe('saved addresses (normaliseAddressBook)', () => {
   });
 
   it('rejects a NEW address without a house number', () => {
-    expect(() => normaliseAddressBook([full({ houseNumber: '' })])).toThrow(/house \/ flat/i);
+    expect(() => normaliseAddressBook([full({ houseNumber: '' })])).toThrow(/house name or flat \/ building number/i);
   });
 
   it('lets an UNCHANGED old address through, so the customer can still manage the rest', () => {
@@ -178,7 +178,7 @@ describe('saved addresses (normaliseAddressBook)', () => {
 
   it('but an EDITED old address must meet the rule', () => {
     const old = { fullName: 'Rahul Menon', phone: '9876543210', addressLine1: 'Kochi', city: 'Kochi', state: 'Kerala', postalCode: '682024' };
-    expect(() => normaliseAddressBook([{ ...old, city: 'Aluva' }], [old])).toThrow(/house \/ flat/i);
+    expect(() => normaliseAddressBook([{ ...old, city: 'Aluva' }], [old])).toThrow(/house name or flat \/ building number/i);
   });
 });
 
@@ -186,7 +186,7 @@ describe('admin address edit (buildNewAddress)', () => {
   const current = { fullName: 'Rahul', phone: '9876543210', addressLine1: 'Kochi', city: 'Kochi', state: 'Kerala', postalCode: '682024', country: 'India' };
 
   it('an old order must have the house number added before the edit saves', () => {
-    expect(() => buildNewAddress(current, { phone: '9876543211' })).toThrow(/house \/ flat/i);
+    expect(() => buildNewAddress(current, { phone: '9876543211' })).toThrow(/house name or flat \/ building number/i);
   });
 
   it('saves house number and landmark', () => {

@@ -28,7 +28,7 @@ const wrap = (ui: React.ReactNode) => render(
 const fill = (labelText: RegExp | string, value: string) => fireEvent.change(screen.getByLabelText(labelText), { target: { value } });
 
 const B2B: SalesTypeInfo = {
-  type: 'b2b', label: 'B2B', reason: 'Business order — no offers. Ship before payment allowed.',
+  type: 'b2b', label: 'B2B', reason: 'Business order — no discount on the total. Ship before payment allowed.',
   shipBeforePayment: 'allowed', company: { legalName: 'ABC Motors Pvt Ltd', gstin: '27AAPFU0939F1ZV' },
   check: { status: 'approved', type: 'b2b', byName: 'Meera', role: 'accounts', at: '2026-11-25T06:00:00.000Z', note: 'GSTIN checked', changes: [] },
 };

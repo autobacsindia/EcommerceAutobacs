@@ -63,7 +63,7 @@ interface ServerValidation {
 
 interface Address {
   fullName: string;
-  /** House / Flat / Building no. (lib/deliveryAddress.ts) */
+  /** House name / flat / building no. (lib/deliveryAddress.ts) */
   houseNumber: string;
   /** Street / Area — sent as addressLine1 */
   street: string;
@@ -505,7 +505,7 @@ function CheckoutPageContent() {
       if (!showAddressForm) {
         setShowAddressForm(true);
         setCompletingIndex(selectedAddressIndex);
-        toast.error('Please complete this saved address — add the house / flat number and street details so the courier can find you.');
+        toast.error('Please complete this saved address — add the house name or flat number and street details so the courier can find you.');
         return;
       }
       toast.error(firstError);
@@ -1179,7 +1179,7 @@ function CheckoutPageContent() {
                         ))}
                         {!isAddressComplete(savedAddressStreet(addr)) && (
                           <p className="mt-1 inline-block rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-display text-amber-800">
-                            Needs house / flat no. — you&apos;ll be asked to add it
+                            Needs house name / flat no. — you&apos;ll be asked to add it
                           </p>
                         )}
                         <p className="text-ink/70 font-display text-sm">{addr.city}, {addr.state} {addr.postalCode}</p>
@@ -1244,7 +1244,7 @@ function CheckoutPageContent() {
                 <AddressInput field="fullName" label="Full name" autoComplete="name" value={address.fullName} error={addressErrors.fullName} className={inputClass} onChange={onAddressChange} />
                 {completingIndex !== null && (
                   <p role="status" className="rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-display text-amber-900">
-                    This saved address is missing some details. Please add your house / flat number (and street & area) so the courier doesn&apos;t have to call you.
+                    This saved address is missing some details. Please add your house name or flat number (and street & area) so the courier doesn&apos;t have to call you.
                   </p>
                 )}
                 <AddressInput field="houseNumber" label={ADDRESS_FIELD_TEXT.houseNumber.label} placeholder={ADDRESS_FIELD_TEXT.houseNumber.placeholder} autoComplete="address-line1" maxLength={ADDRESS_LIMITS.houseNumber} value={address.houseNumber} error={addressErrors.houseNumber} className={inputClass} onChange={onAddressChange} />

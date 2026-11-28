@@ -138,8 +138,9 @@ export default function NewSalesOrderForm({
   const [discountPercent, setDiscountPercent] = useState(quotation?.discount ? String(quotation.discount.percent) : '');
   const [discountReason, setDiscountReason] = useState(quotation?.discount?.reason || '');
   // B2B or B2C (owner 2026-11-25). A new quotation starts with neither, so GTM
-  // must choose. B2B = a business with a GSTIN: no offers (the server refuses them
-  // too), and ship before payment becomes possible once accounts approves.
+  // must choose. B2B = a business with a GSTIN: a B2B price may be set on each
+  // item (owner 2026-11-28) but no % discount on the total (the server refuses
+  // it too), and ship before payment becomes possible once accounts approves.
   const [saleType, setSaleType] = useState<'' | 'b2b' | 'b2c'>(() => (quotation
     ? (quotation.buyer?.type === 'enterprise' ? 'b2b' : 'b2c')
     : ''));
@@ -156,11 +157,10 @@ export default function NewSalesOrderForm({
     addressLine1: savedBilling?.addressLine1 || '', addressLine2: savedBilling?.addressLine2 || '',
     city: savedBilling?.city || '', postalCode: savedBilling?.postalCode || '',
   }));
-  /** B2B gets no offers: every catalogue line back to its price, no discount on the total. */
+  /** B2B keeps the item prices typed so far but gets no discount on the total. */
   function chooseType(t: 'b2b' | 'b2c') {
     setSaleType(t);
     if (t === 'b2b') {
-      setLines((ls) => ls.map((l) => (l.custom ? l : { ...l, offer: '' })));
       setDiscountPercent('');
       setDiscountReason('');
     }
@@ -279,7 +279,7 @@ export default function NewSalesOrderForm({
           product: l.productId,
           variantId: l.variantId,
           quantity: l.quantity,
-          offerPrice: isB2B || l.offer.trim() === '' ? null : Number(l.offer),
+          offerPrice: l.offer.trim() === '' ? null : Number(l.offer),
         })),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       discount: !isB2B && percent > 0 ? { percent, reason: discountReason.trim() } : null,
@@ -385,7 +385,7 @@ export default function NewSalesOrderForm({
           </label>
           <label className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${saleType === 'b2b' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300'}`}>
             <input type="radio" name="sale-type" className="mt-0.5" checked={saleType === 'b2b'} onChange={() => chooseType('b2b')} />
-            <span><span className="font-semibold">B2B — business</span><br /><span className="text-xs text-gray-600">No offers: catalogue prices only. Needs company name + GSTIN. Ship before payment possible after accounts approves.</span></span>
+            <span><span className="font-semibold">B2B — business</span><br /><span className="text-xs text-gray-600">Set a B2B price on each item (no % discount on the total). Needs company name + GSTIN. Ship before payment possible after accounts approves.</span></span>
           </label>
         </div>
         {isB2B && (
@@ -644,7 +644,7 @@ export default function NewSalesOrderForm({
                       </button>
                     </div>
                     <div className="w-36">
-                      <label className="sr-only" htmlFor={`offer-${l.key}`}>{l.custom ? 'Price' : 'Offer price'} for {l.name || 'custom item'}</label>
+                      <label className="sr-only" htmlFor={`offer-${l.key}`}>{l.custom ? 'Price' : isB2B ? 'B2B price' : 'Offer price'} for {l.name || 'custom item'}</label>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">₹</span>
                         <input
@@ -652,8 +652,6 @@ export default function NewSalesOrderForm({
                           inputMode="decimal"
                           placeholder={l.custom ? 'Price' : String(l.listPrice)}
                           value={l.offer}
-                          disabled={isB2B && !l.custom}
-                          title={isB2B && !l.custom ? 'B2B: catalogue price only, no offers' : undefined}
                           onChange={(e) => update(l.key, { offer: e.target.value.replace(/[^\d.]/g, '') })}
                           className={`${input} pl-7 ${problem ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : deep ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : ''}`}
                         />
@@ -662,8 +660,9 @@ export default function NewSalesOrderForm({
                         {problem
                           || (l.custom ? `Price each · ${rupees(offer * l.quantity)} total` : null)
                           || (deep ? 'Less than half price — check it' : null)
-                          || (isB2B && !l.custom ? 'B2B: catalogue price' : null)
-                          || (offer < l.listPrice ? `Offer · saves ${rupees((l.listPrice - offer) * l.quantity)}` : 'Offer price (optional)')}
+                          || (offer < l.listPrice
+                            ? `${isB2B ? 'B2B price' : 'Offer'} · saves ${rupees((l.listPrice - offer) * l.quantity)}`
+                            : isB2B ? 'B2B price (optional)' : 'Offer price (optional)')}
                       </p>
                     </div>
                     {/*
@@ -707,7 +706,7 @@ export default function NewSalesOrderForm({
 
       {isB2B ? (
         <p className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3 text-xs text-indigo-900" role="note">
-          B2B order: no offers and no discount on the total — the customer pays the catalogue price.
+          B2B order: no discount on the total. To give this business a better price, type a B2B price on each item above — the customer is billed exactly that. More than 10% below the website price needs the GTM head’s approval.
         </p>
       ) : (
       <section className="rounded-xl border border-gray-200 bg-white p-5" aria-labelledby="discount-h">

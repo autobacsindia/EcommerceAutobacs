@@ -56,7 +56,7 @@ describe('probeIsoMedia', () => {
   ])('reads duration and codec from %s', async (_label, opts) => {
     const buf = makeMp4({ durationSec: 42.5, ...opts });
     const res = await probeIsoMedia(bufferReader(buf), { size: buf.length });
-    expect(res).toEqual({ ok: true, durationSec: 42.5, videoCodecs: ['avc1'] });
+    expect(res).toEqual({ ok: true, durationSec: 42.5, videoCodecs: ['avc1'], audioCodecs: ['mp4a'] });
   });
 
   it('finds an end-of-file moov in a handful of small reads, never the whole file', async () => {
@@ -64,6 +64,13 @@ describe('probeIsoMedia', () => {
     const reader = bufferReader(buf);
     await probeIsoMedia(reader, { size: buf.length });
     expect(reader.calls).toBeLessThanOrEqual(5);
+  });
+
+  it('reads sound codecs too: AMR in an old 3GP, none in a silent clip, every track when there are several', async () => {
+    const probe = async (o) => { const b = makeMp4(o); return (await probeIsoMedia(bufferReader(b), { size: b.length })).audioCodecs; };
+    expect(await probe({ container: '3gp', audioCodec: 'samr' })).toEqual(['samr']);
+    expect(await probe({ audio: false })).toEqual([]);
+    expect(await probe({ audioCodec: ['mp4a', 'apac'] })).toEqual(['mp4a', 'apac']);
   });
 
   it('reports HEVC as hvc1', async () => {
@@ -121,7 +128,20 @@ describe('buildUploadTarget', () => {
   });
 
   it.each([
+    ['M4V', 'video/x-m4v', 'm4v'],
+    ['Android 3GP', 'video/3gpp', '3gp'],
+    ['Android 3G2', 'video/3gpp2', '3g2'],
+  ])('takes %s and names the key by the ALLOWLISTED extension', async (_l, contentType, ext) => {
+    const t = await buildUploadTarget({ userId: USER, contentType, size: 10 });
+    expect(t.key.endsWith(`.${ext}`)).toBe(true);
+    expect(t.headers).toEqual({ 'Content-Type': contentType });
+  });
+
+  it.each([
     ['WebM', 'video/webm', 10, 'REEL_MEDIA_TYPE'],
+    ['MKV', 'video/x-matroska', 10, 'REEL_MEDIA_TYPE'],
+    ['AVI', 'video/x-msvideo', 10, 'REEL_MEDIA_TYPE'],
+    ['a generic octet-stream', 'application/octet-stream', 10, 'REEL_MEDIA_TYPE'],
     ['HTML', 'text/html', 10, 'REEL_MEDIA_TYPE'],
     ['no type', undefined, 10, 'REEL_MEDIA_TYPE'],
     ['no size', 'video/mp4', undefined, 'REEL_MEDIA_SIZE'],
@@ -129,7 +149,9 @@ describe('buildUploadTarget', () => {
     ['fractional size', 'video/mp4', 1.5, 'REEL_MEDIA_SIZE'],
     ['oversize', 'video/mp4', REEL_MAX_BYTES + 1, 'REEL_MEDIA_TOO_LARGE'],
   ])('refuses %s before signing anything', async (_l, contentType, size, code) => {
-    await expect(buildUploadTarget({ userId: USER, contentType, size })).rejects.toMatchObject({ statusCode: 400, code });
+    const err = await buildUploadTarget({ userId: USER, contentType, size }).catch((e) => e);
+    expect(err).toMatchObject({ statusCode: 400, code });
+    if (code === 'REEL_MEDIA_TYPE') expect(err.message).toBe("This video format isn't supported — please record in MP4 or choose a different video.");
     expect(r2.presignPut).not.toHaveBeenCalled();
   });
 });
@@ -149,6 +171,17 @@ describe('verifyUploadedVideo', () => {
   it('accepts an H.264 MOV and a clip at exactly 60s', async () => {
     const key = put(keyIn(folder, 'mov'), makeMp4({ container: 'mov', durationSec: 60.4 }));
     expect((await verifyUploadedVideo(key, { folder })).durationSec).toBe(60.4);
+  });
+
+  it.each([
+    ['an Android 3GP with H.264 + AAC', '3gp', { container: '3gp' }],
+    ['an M4V', 'm4v', {}],
+    ['a silent clip (no sound track)', 'mp4', { audio: false }],
+    ['AAC alongside a spatial-audio track (newer iPhones)', 'mov', { container: 'mov', audioCodec: ['mp4a', 'apac'] }],
+  ])('accepts %s', async (_l, ext, opts) => {
+    const key = put(keyIn(folder, ext), makeMp4(opts));
+    await expect(verifyUploadedVideo(key, { folder })).resolves.toMatchObject({ publicId: key, format: ext });
+    expect(store.has(key)).toBe(true);
   });
 
   it.each([
@@ -173,10 +206,13 @@ describe('verifyUploadedVideo', () => {
   it.each([
     ['over 60 seconds', makeMp4({ durationSec: 75 }), 'REEL_MEDIA_TOO_LONG', /60 seconds/],
     ['HEVC (iPhone High Efficiency)', makeMp4({ codec: 'hvc1' }), 'REEL_MEDIA_CODEC', /Most Compatible/],
-    ['a renamed web page', Buffer.from('<!doctype html><script>alert(1)</script>'), 'REEL_MEDIA_NOT_VIDEO', /MP4 or MOV/],
-    ['a JPEG', Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(600)]), 'REEL_MEDIA_NOT_VIDEO', /MP4 or MOV/],
-    ['a WebM', Buffer.concat([Buffer.from([0x1A, 0x45, 0xDF, 0xA3]), Buffer.alloc(600)]), 'REEL_MEDIA_NOT_VIDEO', /MP4 or MOV/],
-    ['an AVIF image in an ftyp box', box('ftyp', Buffer.from('avif0000avifmif1')), 'REEL_MEDIA_NOT_VIDEO', /MP4 or MOV/],
+    ['HEVC (Android "High efficiency video")', makeMp4({ codec: 'hev1' }), 'REEL_MEDIA_CODEC', /High efficiency video/],
+    ['an old 3GP in H.263', makeMp4({ container: '3gp', codec: 's263', audioCodec: 'samr' }), 'REEL_MEDIA_CODEC', /choose a different video/],
+    ['H.264 with AMR-only sound (old Android 3GP)', makeMp4({ container: '3gp', audioCodec: 'samr' }), 'REEL_MEDIA_AUDIO_CODEC', /isn't supported/],
+    ['a renamed web page', Buffer.from('<!doctype html><script>alert(1)</script>'), 'REEL_MEDIA_NOT_VIDEO', /isn't supported/],
+    ['a JPEG', Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(600)]), 'REEL_MEDIA_NOT_VIDEO', /isn't supported/],
+    ['a WebM', Buffer.concat([Buffer.from([0x1A, 0x45, 0xDF, 0xA3]), Buffer.alloc(600)]), 'REEL_MEDIA_NOT_VIDEO', /isn't supported/],
+    ['an AVIF image in an ftyp box', box('ftyp', Buffer.from('avif0000avifmif1')), 'REEL_MEDIA_NOT_VIDEO', /isn't supported/],
     ['unreadable (no duration)', makeMp4({ rawDuration: 0 }), 'REEL_MEDIA_UNREADABLE', /could not read/],
   ])('refuses %s and deletes the object', async (_l, buf, code, msg) => {
     const key = put(keyIn(folder), buf);

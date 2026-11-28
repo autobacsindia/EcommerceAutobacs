@@ -14,6 +14,9 @@
  */
 import { api } from './client';
 import * as mock from './reelsMock';
+import * as FileSystem from 'expo-file-system/legacy';
+import { reelVideoType, UNSUPPORTED_VIDEO_MESSAGE, type ReelVideoType } from '../reels/videoType';
+import { runReelUpload, cancelledError } from '../reels/uploadCore';
 
 export type ReelStatus = 'pending' | 'approved' | 'rejected' | 'removed';
 /** `backorder` is buyable (ships when restocked); only `out` blocks the cart. */
@@ -82,8 +85,8 @@ export interface UploadTarget {
   maxDurationSec: number;
 }
 
-/** The only two video types the server takes. */
-export type ReelVideoType = 'video/mp4' | 'video/quicktime';
+/** Accepted video types live in ../reels/videoType (pure, unit-tested). */
+export { reelVideoType, UNSUPPORTED_VIDEO_MESSAGE, type ReelVideoType };
 
 export const REELS_MOCK = process.env.EXPO_PUBLIC_REELS_MOCK === '1';
 
@@ -160,17 +163,6 @@ export interface PickedVideo {
   fileName?: string | null;
 }
 
-/** MP4 or MOV from what the picker reported; null for anything else. */
-export function reelVideoType(video: PickedVideo): ReelVideoType | null {
-  const mime = (video.mimeType || '').toLowerCase();
-  const name = (video.fileName || video.uri).toLowerCase().split('?')[0];
-  if (mime === 'video/quicktime' || mime === 'video/mov' || name.endsWith('.mov')) return 'video/quicktime';
-  if (mime === 'video/mp4' || name.endsWith('.mp4') || name.endsWith('.m4v')) return 'video/mp4';
-  // Some Android pickers report a generic or missing type for an .mp4.
-  if (!mime || mime === 'video/*' || mime === 'application/octet-stream') return 'video/mp4';
-  return null;
-}
-
 export function getUploadTarget(input: { contentType: ReelVideoType; size: number }): Promise<UploadTarget> {
   const res: Promise<Wrapped<Partial<UploadTarget>>> = REELS_MOCK
     ? mock.getUploadTarget(input)
@@ -199,26 +191,25 @@ export function createReel(input: { publicId: string; productId: string; caption
 }
 
 /**
- * Upload one video and return its key for POST /reels. Steps:
- *   1. read the file to learn its exact byte size (the picker's fileSize is
- *      missing on some Android phones, and the size is signed into the URL);
+ * Upload one video and return its key for POST /reels. Steps (see
+ * ../reels/uploadCore for why the bytes never go through fetch().blob()):
+ *   1. read the file's exact byte size from the file system (the picker's
+ *      fileSize is missing on some Android phones, and the size is signed);
  *   2. ask our API for a presigned R2 PUT for that type + size;
- *   3. PUT the raw bytes straight to R2 (never through our API), with progress.
- * XHR rather than fetch because fetch in React Native exposes no upload progress.
+ *   3. PUT the raw bytes straight to R2 with the native uploader, with progress.
  */
 export function uploadReelVideo(
   video: PickedVideo,
   onProgress: (fraction: number) => void,
 ): { promise: Promise<{ publicId: string }>; cancel: () => void } {
-  let xhr: XMLHttpRequest | null = null;
+  let task: FileSystem.UploadTask | null = null;
   let cancelled = false;
   // Mock upload's own cancel hook (set once it starts).
   let cancelOne: (() => void) | null = null;
-  const cancelledError = () => new Error('Upload cancelled.');
 
   const promise = (async () => {
     const contentType = reelVideoType(video);
-    if (!contentType) throw new Error('Please choose an MP4 or MOV video.');
+    if (!contentType) throw new Error(UNSUPPORTED_VIDEO_MESSAGE);
 
     if (REELS_MOCK) {
       const target = await getUploadTarget({ contentType, size: 1 });
@@ -226,39 +217,33 @@ export function uploadReelVideo(
       return mock.fakeUpload(target.publicId, onProgress, (c) => (cancelOne = c));
     }
 
-    let blob: Blob;
-    try {
-      blob = await (await fetch(video.uri)).blob();
-    } catch {
-      throw new Error('We could not read this video. Please pick it again.');
-    }
-    if (!blob.size) throw new Error('We could not read this video. Please pick it again.');
-    if (cancelled) throw cancelledError();
-
-    const target = await getUploadTarget({ contentType, size: blob.size });
-    if (blob.size > target.maxBytes) {
-      throw new Error(`Please choose a video under ${Math.floor(target.maxBytes / (1024 * 1024))} MB.`);
-    }
-    if (cancelled) throw cancelledError();
-
-    await new Promise<void>((resolve, reject) => {
-      const req = new XMLHttpRequest();
-      xhr = req;
-      req.open('PUT', target.uploadUrl);
-      for (const [k, v] of Object.entries(target.headers)) req.setRequestHeader(k, v);
-      req.upload.onprogress = (e) => {
-        if (e.lengthComputable && e.total > 0) onProgress(Math.min(0.99, e.loaded / e.total));
-      };
-      req.onload = () => {
-        if (req.status >= 200 && req.status < 300) resolve();
-        else reject(new Error(`Upload failed (${req.status}). Please try again.`));
-      };
-      req.onerror = () => reject(new Error('Upload failed — check your internet and try again.'));
-      req.onabort = () => reject(cancelledError());
-      req.send(blob);
-    });
-    onProgress(1);
-    return { publicId: target.publicId };
+    return runReelUpload(
+      {
+        isCancelled: () => cancelled,
+        getTarget: getUploadTarget,
+        fileSize: async (uri) => {
+          const info = await FileSystem.getInfoAsync(uri);
+          return info.exists && !info.isDirectory ? info.size : null;
+        },
+        put: async (url, uri, headers, report) => {
+          task = FileSystem.createUploadTask(
+            url,
+            uri,
+            { httpMethod: 'PUT', uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT, headers },
+            (p) => {
+              if (p.totalBytesExpectedToSend > 0) report(p.totalBytesSent / p.totalBytesExpectedToSend);
+            },
+          );
+          const res = await task.uploadAsync();
+          // A cancelled task resolves with nothing.
+          if (!res) throw cancelledError();
+          return { status: res.status };
+        },
+      },
+      video.uri,
+      contentType,
+      onProgress,
+    );
   })();
 
   return {
@@ -266,7 +251,7 @@ export function uploadReelVideo(
     cancel: () => {
       cancelled = true;
       cancelOne?.();
-      (xhr as XMLHttpRequest | null)?.abort();
+      void (task as FileSystem.UploadTask | null)?.cancelAsync().catch(() => {});
     },
   };
 }

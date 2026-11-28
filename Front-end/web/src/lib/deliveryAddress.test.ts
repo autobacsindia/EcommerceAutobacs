@@ -20,7 +20,7 @@ describe('delivery-address rule (website copy) — shared case table', () => {
   });
 
   it('messages match the server word for word', () => {
-    expect(ADDRESS_MESSAGES.houseRequired).toBe('Enter your house / flat / building number, e.g. "Flat 4B, Jomer Symphony".');
+    expect(ADDRESS_MESSAGES.houseRequired).toBe('Enter your house name or flat / building number, e.g. "Rose Villa" or "Flat 4B, Jomer Symphony".');
   });
 });
 

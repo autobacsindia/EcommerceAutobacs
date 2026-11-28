@@ -35,7 +35,7 @@ const IDENTITY = ['fullName', 'phone', 'houseNumber', 'addressLine1', 'addressLi
 const LABELS = {
   fullName: 'Full name',
   phone: 'Mobile number',
-  houseNumber: 'House / flat / building',
+  houseNumber: 'House name / flat / building',
   addressLine1: 'Street / area',
   addressLine2: 'Address line 2',
   landmark: 'Landmark',

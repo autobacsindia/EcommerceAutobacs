@@ -7,7 +7,7 @@
  *   - every change is kept (who, when, from → to, why, the replaced buyer block);
  *     nothing is overwritten silently; the order view shows it newest first
  *   - a double click records ONE change
- *   - B2C → B2B needs a valid GSTIN, and is refused when the order was sold with offers
+ *   - B2C → B2B needs a valid GSTIN, and is refused when the order was sold with a % discount on the total
  *   - no change once the receipt was emailed (invoiceNo), or on a cancelled order
  *   - B2B → B2C with "ship before payment" on:
  *       unpaid, not shipped → taken back (awaiting_payment again, payLater removed)
@@ -61,7 +61,7 @@ const makeProduct = () => {
   return Product.create({ name: `Dash cam ${n}`, slug: `dash-stc${n}`, sku: `SKUSTC-${n}`, description: 'x'.repeat(30), price: 5000, stock: 'in', isActive: true });
 };
 const CUSTOMER = { name: 'Rohit Shah', email: 'rohit.stc@example.com', phone: '9820917286' };
-const ADDRESS = { addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
+const ADDRESS = { houseNumber: 'Flat 4B', addressLine1: 'Suman Heights', city: 'Navi Mumbai', state: 'Maharashtra', postalCode: '400706' };
 const COMPANY = { legalName: 'ABC Motors Pvt Ltd', gstin: GSTIN, billingAddress: { addressLine1: 'Suman Heights', city: 'Navi Mumbai', postalCode: '400706' } };
 const B2B_BUYER = { type: 'enterprise', ...COMPANY };
 const input = (items, extra = {}) => ({ customer: CUSTOMER, shippingAddress: ADDRESS, items, ...extra });
@@ -111,8 +111,9 @@ describe('the rules (pure)', () => {
     expect(util.typeChangeProblem(base, 'b2b')).toBeNull();
     expect(util.typeChangeProblem({ ...base, invoiceNo: 12 }, 'b2b')).toMatch(/receipt has already been emailed/);
     expect(util.typeChangeProblem({ ...base, status: 'cancelled' }, 'b2b')).toMatch(/cancelled/);
-    expect(util.typeChangeProblem({ ...base, salesDiscount: { percent: 10 } }, 'b2b')).toMatch(/sold with offers/);
-    expect(util.typeChangeProblem({ ...base, items: [{ price: 4500, listPrice: 5000 }] }, 'b2b')).toMatch(/new B2B quotation/);
+    expect(util.typeChangeProblem({ ...base, salesDiscount: { percent: 10 } }, 'b2b')).toMatch(/sold with a discount on the total/);
+    // A B2B item price (below list) is not a discount on the total: allowed (owner 2026-11-28).
+    expect(util.typeChangeProblem({ ...base, items: [{ price: 4500, listPrice: 5000 }] }, 'b2b')).toBeNull();
     expect(util.typeChangeProblem({ ...base, buyerTypeCheck: { status: 'approved', changeCount: util.TYPE_CHANGE_MAX } }, 'b2b')).toMatch(/too many/);
   });
 });
@@ -205,9 +206,9 @@ describe('B2C → B2B', () => {
   it('refused when the order was sold with offers (money is never repriced)', async () => {
     const id = await acceptedOrder({ discount: { percent: 10, reason: 'Black Friday' } });
     await salesType.approveSalesType(accounts, id, { note: 'BF ok' }, req);
-    await expectFail(change(accounts, id, { to: 'b2b', reason: 'It is a dealer', buyer: COMPANY }), 409, /sold with offers/);
+    await expectFail(change(accounts, id, { to: 'b2b', reason: 'It is a dealer', buyer: COMPANY }), 409, /sold with a discount on the total/);
     const opt = await payLater.payLaterOptionFor(accounts, id);
-    expect(opt.typeChange).toMatchObject({ to: 'b2b', allowed: false, why: expect.stringMatching(/sold with offers/) });
+    expect(opt.typeChange).toMatchObject({ to: 'b2b', allowed: false, why: expect.stringMatching(/sold with a discount on the total/) });
     expect((await load(id)).totalAmount).toBe(4500);
   });
 

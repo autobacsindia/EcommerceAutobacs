@@ -7,7 +7,7 @@ import { adminKeys, reelKeys } from '@/hooks/queries/keys';
 import { formatCurrency } from '@/lib/utils';
 import { CAPTION_MAX, createTeamReel, errorText } from './api';
 import {
-  ACCEPTED_VIDEO_TYPES, WRONG_TYPE_MESSAGE, checkVideoFile, getReelUploadTarget, readVideoDuration, uploadVideoToStorage,
+  VIDEO_INPUT_ACCEPT, WRONG_TYPE_MESSAGE, checkVideoFile, getReelUploadTarget, readVideoDuration, uploadVideoToStorage,
   videoTypeOf,
 } from './videoUpload';
 
@@ -75,6 +75,7 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
     if (!f) return;
     if (!videoTypeOf(f)) {
       setError(WRONG_TYPE_MESSAGE);
+      if (fileRef.current) fileRef.current.value = ''; // so picking the same file again re-checks it
       return;
     }
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -123,6 +124,11 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
       setDone(true);
       onDone?.();
     } catch (err) {
+      // A 400/403 on save means the server refused the stored video and deleted it
+      // (wrong format, too long, HEVC…). Forget it, so the next try uploads again
+      // instead of re-sending a key that no longer exists.
+      const status = (err as { status?: unknown } | null)?.status;
+      if (status === 400 || status === 403) setUploaded(null);
       setError(errorText(err, 'Could not upload the reel. Please try again.'));
     } finally {
       setStage('idle');
@@ -151,10 +157,10 @@ export default function TeamReelUpload({ onDone }: { onDone?: () => void }) {
               </button>
             )}
           </div>
-          <input ref={fileRef} id={`${ids}-file`} type="file" accept={[...ACCEPTED_VIDEO_TYPES, '.mp4', '.mov', '.m4v'].join(',')} disabled={busy}
+          <input ref={fileRef} id={`${ids}-file`} type="file" accept={VIDEO_INPUT_ACCEPT} disabled={busy}
             onChange={(e) => pickFile(e.target.files?.[0] ?? null)} className="mt-2 block w-full max-w-[180px] text-xs" />
           <p className="mt-1 max-w-[180px] text-xs text-gray-500">
-            MP4 or MOV, up to 60 seconds. iPhone: set Camera → Formats → Most Compatible.
+            MP4, MOV or 3GP, up to 60 seconds. iPhone: set Camera → Formats → Most Compatible.
           </p>
         </div>
 

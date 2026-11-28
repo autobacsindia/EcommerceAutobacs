@@ -200,7 +200,7 @@ describe('CheckoutPage', () => {
 
     const fill = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fill('Full name', 'Rahul Menon');
-    fill('House / Flat / Building no.', 'Flat 4B');
+    fill('House name / flat / building no.', 'Flat 4B');
     fill('Street / Area', '12 MG Road');
     fill('City', 'Kochi');
     fill('State', 'Kerala');
@@ -286,14 +286,14 @@ describe('CheckoutPage', () => {
     render(<CheckoutPage />);
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByText('Old Customer')).toBeInTheDocument());
-    expect(screen.getByText(/Needs house \/ flat no\./)).toBeInTheDocument();
+    expect(screen.getByText(/Needs house name \/ flat no\./)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Old Customer'));
     fireEvent.click(screen.getByText(/deliver to this address/i));
     expect(await screen.findByText(/This saved address is missing some details/)).toBeInTheDocument();
     expect(screen.queryByTestId('payment-method-selector')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B, Jomer Symphony' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no.'), { target: { value: 'Flat 4B, Jomer Symphony' } });
     fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: 'MG Road, Edappally' } });
     fireEvent.click(screen.getByText(/continue to payment/i));
 
@@ -309,7 +309,7 @@ describe('CheckoutPage', () => {
     render(<CheckoutPage />);
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByText('Two Line Customer')).toBeInTheDocument());
-    expect(screen.queryByText(/Needs house \/ flat no\./)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Needs house name \/ flat no\./)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText(/deliver to this address/i));
     await waitFor(() => expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument());
@@ -333,7 +333,7 @@ describe('CheckoutPage', () => {
        expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no.'), { target: { value: 'Flat 4B' } });
     fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
@@ -384,7 +384,7 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no.'), { target: { value: 'Flat 4B' } });
     fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
@@ -419,7 +419,7 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no.'), { target: { value: 'Flat 4B' } });
     fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
@@ -449,7 +449,7 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no.'), { target: { value: 'Flat 4B' } });
     fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
@@ -488,7 +488,7 @@ describe('CheckoutPage', () => {
        expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no.'), { target: { value: 'Flat 4B' } });
     fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });
@@ -556,7 +556,7 @@ describe('CheckoutPage — purchase attribution', () => {
     fireEvent.click(screen.getByText(/continue to shipping/i));
     await waitFor(() => expect(screen.getByLabelText(/full name/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'John Doe' } });
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no.'), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no.'), { target: { value: 'Flat 4B' } });
     fireEvent.change(screen.getByLabelText('Street / Area'), { target: { value: '123 Main Street' } });
     fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText('State'), { target: { value: 'Maharashtra' } });

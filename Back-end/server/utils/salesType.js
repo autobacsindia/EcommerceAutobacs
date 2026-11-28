@@ -4,8 +4,10 @@
  *   B2C (retail)   → offers allowed as today: offer prices below the catalogue
  *                    price and a % discount on the total (e.g. "Black Friday").
  *                    Ship before payment is NOT available.
- *   B2B (business) → NO offers: every catalogue line at its catalogue price and no
- *                    % discount. Company name + GSTIN are required (they go on the
+ *   B2B (business) → no % discount on the total. Each catalogue line may carry a
+ *                    staff-set "B2B price" at or below its catalogue price (owner,
+ *                    2026-11-28) — the same server checks as a B2C offer price
+ *                    (₹1 minimum, never above list) and the same >10% approval. Company name + GSTIN are required (they go on the
  *                    tax invoice). Ship before payment is available once accounts
  *                    has approved the order as B2B.
  *
@@ -42,18 +44,22 @@ const offerLineCount = (lines) => (lines || []).filter((l) => !l.custom && Numbe
 
 /**
  * Why these money terms are not allowed on a B2B order — or null when they are.
- * @param {{discount?: object|null, lines: Array}} p  priced lines (order/quotation shape)
+ * Only the % discount on the total is refused: per-line B2B prices are allowed
+ * (owner, 2026-11-28) and are bounded by priceSalesLines + the >10% approval.
+ * @param {{discount?: object|null, lines?: Array}} p  priced lines (order/quotation shape)
  */
-export function b2bOfferProblem({ discount, lines }) {
+export function b2bOfferProblem({ discount }) {
   if (discount && Number(discount.percent) > 0) {
-    return 'B2B orders get no offers: remove the discount on the total.';
-  }
-  const n = offerLineCount(lines);
-  if (n) {
-    return `B2B orders get no offers: ${n === 1 ? 'one item is' : `${n} items are`} below the catalogue price. Use the catalogue price.`;
+    return 'B2B orders get no discount on the total: set a B2B price on each item instead.';
   }
   return null;
 }
+
+/** "B2B price on 2 items", or null — said on the B2B badge so accounts sees it. */
+const describeB2BPrices = (doc) => {
+  const n = offerLineCount(doc?.items);
+  return n ? `B2B price on ${n} item${n === 1 ? '' : 's'}` : null;
+};
 
 /** "10% off (Black Friday)", "offer prices on 2 items", or null. */
 function describeOffers(doc) {
@@ -144,10 +150,10 @@ export function typeChangeProblem(order, to) {
     return 'This order has been changed too many times. Speak to the admin.';
   }
   if (to === SALES_TYPES.B2B) {
-    // B2B gets no offers. We never reprice an existing order here: the customer
-    // agreed this total. If it carries offers it was sold as retail.
-    const offer = b2bOfferProblem({ discount: order.salesDiscount, lines: order.items });
-    if (offer) return `${offer} This order was sold with offers, so it cannot become B2B. Make a new B2B quotation instead.`;
+    // B2B gets no discount on the total. We never reprice an existing order here:
+    // the customer agreed this total. If it carries one it was sold as retail.
+    const offer = b2bOfferProblem({ discount: order.salesDiscount });
+    if (offer) return `${offer} This order was sold with a discount on the total, so it cannot become B2B. Make a new B2B quotation instead.`;
   }
   return null;
 }
@@ -167,12 +173,14 @@ export function shapeSalesType(doc) {
   // A legacy order (no check at all) keeps working as before: B2B on it needs no check.
   const approved = !check || check.status === 'approved';
   if (b2b) {
+    const prices = describeB2BPrices(doc);
+    const head = `Business order — ${prices ? `${prices}, ` : ''}no discount on the total.`;
     return {
       type: SALES_TYPES.B2B,
       label: 'B2B',
       reason: approved
-        ? 'Business order — no offers. Ship before payment allowed.'
-        : 'Business order — no offers. Ship before payment once accounts approves.',
+        ? `${head} Ship before payment allowed.`
+        : `${head} Ship before payment once accounts approves.`,
       shipBeforePayment: approved ? 'allowed' : 'needs_check',
       company: { legalName: doc.buyer.legalName || '', gstin: doc.buyer.gstin || '' },
       check,

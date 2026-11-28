@@ -55,10 +55,10 @@ describe('EditOrderAddress', () => {
   it('an old order (no house no.) must have it added before saving — nothing is sent', async () => {
     const old = { ...ADDRESS, houseNumber: undefined, addressLine1: 'Kochi' };
     render(<EditOrderAddress orderId="o1" address={old} onSaved={jest.fn()} onCancel={jest.fn()} />);
-    fireEvent.change(screen.getByLabelText('House / Flat / Building no. *'), { target: { value: '-' } });
+    fireEvent.change(screen.getByLabelText('House name / flat / building no. *'), { target: { value: '-' } });
     fireEvent.change(screen.getByLabelText('Why are you changing it? *'), { target: { value: 'Add flat no.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save address' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/house \/ flat number doesn't look right/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/house name \/ number doesn't look right/);
     expect(patch).not.toHaveBeenCalled();
   });
 

@@ -4,6 +4,8 @@
     { "name": "full address", "address": { "houseNumber": "Flat 4B, Jomer Symphony", "addressLine1": "MG Road, Edappally", "landmark": "Opp. Lulu Mall" }, "ok": true },
     { "name": "landmark is optional", "address": { "houseNumber": "12/345", "addressLine1": "Kaloor Kadavanthra Road" }, "ok": true },
     { "name": "short numeric house no.", "address": { "houseNumber": "7", "addressLine1": "Near St. Mary's Church, Aluva" }, "ok": true },
+    { "name": "house name only", "address": { "houseNumber": "Rose Villa", "addressLine1": "Temple Road, Thrissur" }, "ok": true },
+    { "name": "apartment name only", "address": { "houseNumber": "Jomer Symphony", "addressLine1": "MG Road, Edappally" }, "ok": true },
     { "name": "missing house no.", "address": { "houseNumber": "", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
     { "name": "house no. only spaces", "address": { "houseNumber": "   ", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
     { "name": "house no. dash", "address": { "houseNumber": "-", "addressLine1": "MG Road, Edappally" }, "ok": false, "field": "houseNumber" },
