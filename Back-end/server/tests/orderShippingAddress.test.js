@@ -161,7 +161,7 @@ describe('PATCH /orders/:id/shipping-address', () => {
     ['a bad phone', { address: { phone: '12345' }, reason: 'fix' }, /10-digit/],
     ['an emptied required field', { address: { houseNumber: 'Flat 4B', addressLine1: '  ' }, reason: 'fix' }, /street and area/],
     ['no actual change', { address: { city: 'Kochi' }, reason: 'fix' }, /Nothing changed/],
-    ['an old order saved without adding the house no.', { address: { phone: '9123456789' }, reason: 'fix' }, /house \/ flat \/ building number/],
+    ['an old order saved without adding the house no.', { address: { phone: '9123456789' }, reason: 'fix' }, /house name or flat \/ building number/],
     ['a one-word street', { address: { houseNumber: 'Flat 4B', addressLine1: 'Kochi' }, reason: 'fix' }, /one word/],
     ['a junk street', { address: { houseNumber: 'Flat 4B', addressLine1: 'aaaa' }, reason: 'fix' }, /doesn't look right/],
   ])('rejects %s (400)', async (label, body, msg) => {

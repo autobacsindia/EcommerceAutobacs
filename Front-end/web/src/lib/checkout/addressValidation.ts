@@ -4,7 +4,7 @@ import { checkHouseNumber, checkStreet, checkLandmark } from '@/lib/deliveryAddr
 /** The checkout delivery-address fields a customer types. */
 export interface CheckoutAddressInput {
   fullName: string;
-  /** House / Flat / Building no. — required (lib/deliveryAddress.ts). */
+  /** House name / flat / building no. — required (lib/deliveryAddress.ts). */
   houseNumber: string;
   /** Street / Area — saved as addressLine1. */
   street: string;

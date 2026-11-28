@@ -407,7 +407,7 @@ describe('User Journey Integration Flow', () => {
     const nameInput = screen.getByLabelText(/Full\ name/i);
     fireEvent.change(nameInput, { target: { value: 'Test User' } });
     
-    fireEvent.change(screen.getByLabelText(/House \/ Flat/), { target: { value: 'Flat 4B' } });
+    fireEvent.change(screen.getByLabelText(/House name \/ flat/), { target: { value: 'Flat 4B' } });
     fireEvent.change(screen.getByLabelText(/Street \/ Area/), { target: { value: '123 Main St' } });
     fireEvent.change(screen.getByLabelText(/City/i), { target: { value: 'Mumbai' } });
     fireEvent.change(screen.getByLabelText(/State/i), { target: { value: 'MH' } });

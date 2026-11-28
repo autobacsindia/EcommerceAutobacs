@@ -5,7 +5,7 @@
  * authority and re-checks every order) and Front-end/web/src/lib/deliveryAddress.ts.
  * Keep the logic identical: shared/delivery-address-cases.json is the case table.
  *
- *   houseNumber  — House / Flat / Building no. (required)  e.g. "Flat 4B, Jomer Symphony"
+ *   houseNumber  — House name / flat / building no. (required)  e.g. "Rose Villa" or "Flat 4B, Jomer Symphony"
  *   addressLine1 — Street / Area (required, real detail)   e.g. "MG Road, Edappally"
  *   landmark     — optional                                 e.g. "Opp. Lulu Mall"
  */
@@ -13,9 +13,9 @@
 export const ADDRESS_LIMITS = { houseNumber: 100, street: 200, landmark: 100 } as const;
 
 export const ADDRESS_MESSAGES = {
-  houseRequired: 'Enter your house / flat / building number, e.g. "Flat 4B, Jomer Symphony".',
-  houseJunk: 'That house / flat number doesn\'t look right. Enter it as the courier would read it, e.g. "12/345" or "Flat 4B".',
-  houseLong: `House / flat / building is too long (max ${ADDRESS_LIMITS.houseNumber} characters).`,
+  houseRequired: 'Enter your house name or flat / building number, e.g. "Rose Villa" or "Flat 4B, Jomer Symphony".',
+  houseJunk: 'That house name / number doesn\'t look right. Enter it as the courier would read it, e.g. "Rose Villa", "12/345" or "Flat 4B".',
+  houseLong: `House name / flat / building is too long (max ${ADDRESS_LIMITS.houseNumber} characters).`,
   streetRequired: 'Enter the street and area, e.g. "MG Road, Edappally".',
   streetShort: 'Add a little more detail: street AND area, e.g. "MG Road, Edappally" (one word isn\'t enough for the courier).',
   streetJunk: 'That street / area doesn\'t look right. Enter the real street and area, e.g. "MG Road, Edappally".',
@@ -26,7 +26,7 @@ export const ADDRESS_MESSAGES = {
 
 /** Labels and placeholders, the same on every form. */
 export const ADDRESS_FIELD_TEXT = {
-  houseNumber: { label: 'House / Flat / Building no.', placeholder: 'e.g. Flat 4B, Jomer Symphony' },
+  houseNumber: { label: 'House name / flat / building no.', placeholder: 'e.g. Rose Villa or Flat 4B, Jomer Symphony' },
   addressLine1: { label: 'Street / Area', placeholder: 'e.g. MG Road, Edappally' },
   landmark: { label: 'Landmark (optional)', placeholder: 'e.g. Opp. Lulu Mall' },
 } as const;

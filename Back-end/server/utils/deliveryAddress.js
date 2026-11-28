@@ -5,7 +5,7 @@
  * Every address a person types (website checkout, saved addresses, staff,
  * offline and sales-quotation orders, the admin address edit) now needs:
  *
- *   • houseNumber  — House / Flat / Building no. (required)   e.g. "Flat 4B, Jomer Symphony"
+ *   • houseNumber  — House name / flat / building no. (required)   e.g. "Rose Villa" or "Flat 4B, Jomer Symphony"
  *   • addressLine1 — Street / Area, real detail (required)    e.g. "MG Road, Edappally"
  *   • landmark     — optional                                  e.g. "Opp. Lulu Mall"
  *
@@ -23,9 +23,9 @@
 export const ADDRESS_LIMITS = Object.freeze({ houseNumber: 100, street: 200, landmark: 100 });
 
 export const ADDRESS_MESSAGES = Object.freeze({
-  houseRequired: 'Enter your house / flat / building number, e.g. "Flat 4B, Jomer Symphony".',
-  houseJunk: 'That house / flat number doesn\'t look right. Enter it as the courier would read it, e.g. "12/345" or "Flat 4B".',
-  houseLong: `House / flat / building is too long (max ${ADDRESS_LIMITS.houseNumber} characters).`,
+  houseRequired: 'Enter your house name or flat / building number, e.g. "Rose Villa" or "Flat 4B, Jomer Symphony".',
+  houseJunk: 'That house name / number doesn\'t look right. Enter it as the courier would read it, e.g. "Rose Villa", "12/345" or "Flat 4B".',
+  houseLong: `House name / flat / building is too long (max ${ADDRESS_LIMITS.houseNumber} characters).`,
   streetRequired: 'Enter the street and area, e.g. "MG Road, Edappally".',
   streetShort: 'Add a little more detail: street AND area, e.g. "MG Road, Edappally" (one word isn\'t enough for the courier).',
   streetJunk: 'That street / area doesn\'t look right. Enter the real street and area, e.g. "MG Road, Edappally".',
