@@ -112,7 +112,7 @@ async function subscribeAndSave(key: string, { fresh = false }: { fresh?: boolea
     sub = null;
   }
   sub = sub || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: want as BufferSource }));
-  await apiClient.post('/push/subscriptions', sub.toJSON());
+  await apiClient.post('/push/subscriptions', sub.toJSON(), { background: true });
   return sub;
 }
 

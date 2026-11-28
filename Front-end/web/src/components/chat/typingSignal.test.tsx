@@ -17,7 +17,7 @@ describe('useTypingSignal', () => {
     const { result } = renderHook(() => useTypingSignal('c1', null));
     result.current(); result.current(); result.current();
     expect(post).toHaveBeenCalledTimes(1);
-    expect(post).toHaveBeenCalledWith('/chat/channels/c1/typing', {});
+    expect(post).toHaveBeenCalledWith('/chat/channels/c1/typing', {}, { background: true });
     jest.setSystemTime(new Date('2026-11-02T10:00:03Z'));
     result.current();
     expect(post).toHaveBeenCalledTimes(2);
@@ -26,7 +26,7 @@ describe('useTypingSignal', () => {
   it('includes the thread when typing a reply', () => {
     const { result } = renderHook(() => useTypingSignal('c1', 'r1'));
     result.current();
-    expect(post).toHaveBeenCalledWith('/chat/channels/c1/typing', { threadRoot: 'r1' });
+    expect(post).toHaveBeenCalledWith('/chat/channels/c1/typing', { threadRoot: 'r1' }, { background: true });
   });
 
   it('a failed signal is ignored', async () => {

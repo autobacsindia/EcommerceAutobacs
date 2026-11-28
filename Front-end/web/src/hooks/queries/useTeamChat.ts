@@ -634,7 +634,7 @@ export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ channelId, seq, part }: { channelId: string; seq: number; part: ReadPart }) =>
-      apiClient.post(`/chat/channels/${channelId}/read`, { seq, part }),
+      apiClient.post(`/chat/channels/${channelId}/read`, { seq, part }, { background: true }),
     onMutate: ({ channelId, seq, part }) => {
       qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) =>
         list?.map((c) => {
@@ -755,7 +755,7 @@ export function useTypingSignal(channelId: string, threadRoot: string | null) {
     const now = Date.now();
     if (now - last.current < TYPING_SEND_EVERY_MS) return;
     last.current = now;
-    apiClient.post(`/chat/channels/${channelId}/typing`, threadRoot ? { threadRoot } : {}).catch(() => {});
+    apiClient.post(`/chat/channels/${channelId}/typing`, threadRoot ? { threadRoot } : {}, { background: true }).catch(() => {});
   }, [channelId, threadRoot]);
 }
 
