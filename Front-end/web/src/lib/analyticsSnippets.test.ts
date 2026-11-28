@@ -15,9 +15,9 @@ function runAt(path: string) {
   window.history.replaceState(null, '', path);
   document.head.innerHTML = '<script></script>'; // the snippets insert before the first script
   const w = window as W;
-  delete w.gtmDataLayer; delete w.dataLayer; delete w.gtag; delete w.fbq; delete w._fbq;
+  const g = window as unknown as Record<string, unknown>;
+  for (const k of ['gtmDataLayer', 'dataLayer', 'gtag', 'fbq', '_fbq']) delete g[k];
   for (const s of [gtmQueueSnippet, gtmLoaderSnippet, googleAdsSnippet, metaPixelSnippet]) {
-    // eslint-disable-next-line no-new-func
     new Function(s)();
   }
   const injected = [...document.querySelectorAll('script[src]')].map((s) => (s as HTMLScriptElement).src);
