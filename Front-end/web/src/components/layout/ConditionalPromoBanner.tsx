@@ -47,7 +47,7 @@ export default function ConditionalPromoBanner({ banner }: { banner: PromoBanner
     path === '/cart' ||
     path.startsWith('/checkout') ||
     path.startsWith('/admin') ||
-    path === '/team' || path.startsWith('/team/');
+    path === '/team' || path.startsWith('/team/') || path === '/hr' || path.startsWith('/hr/');
 
   if (hide || rewardRibbonShowing) return null;
 

@@ -29,6 +29,19 @@ const LeaveRequestSchema = new mongoose.Schema({
   firstHalfOnly: { type: Boolean, default: false }, // `from` is a half day
   secondHalfOnly: { type: Boolean, default: false }, // `to` is a half day
   halfDays: { type: Number, required: true, min: 1 },
+  // Calendar year the request is charged to (from/to never cross a year).
+  year: { type: Number, required: true, min: 2020, max: 2100 },
+  // SNAPSHOT of the charged days at apply time (≤ 62 rows): a holiday or shift
+  // edited later never changes what an approved request cost. Payroll and
+  // attendance read these through services/hr/leave leaveDaysInRange().
+  days: {
+    type: [new mongoose.Schema({
+      date: { type: String, required: true, match: DATE_RE },
+      halves: { type: Number, required: true, enum: [1, 2] },
+    }, { _id: false })],
+    default: [],
+  },
+  paid: { type: Boolean, required: true }, // snapshot of LeaveType.paid
   reason: { type: String, default: '', maxlength: 1000 },
   documentKey: { type: String, default: '', maxlength: 400 }, // private bucket
   clientRequestId: { type: String, required: true, maxlength: 64 },
@@ -45,8 +58,16 @@ LeaveRequestSchema.index({ number: 1 }, { name: 'hr_leave_number_unique', unique
 LeaveRequestSchema.index({ employee: 1, clientRequestId: 1 }, { name: 'hr_leave_idempotency', unique: true });
 LeaveRequestSchema.index({ employee: 1, createdAt: -1, _id: -1 }, { name: 'hr_leave_employee_created' });
 LeaveRequestSchema.index({ status: 1, createdAt: -1, _id: -1 }, { name: 'hr_leave_status_created' });
-LeaveRequestSchema.index({ approver: 1, status: 1, createdAt: -1 }, { name: 'hr_leave_approver_status' });
-// Overlap check: same employee, live requests whose range touches the new one.
-LeaveRequestSchema.index({ employee: 1, from: 1, to: 1 }, { name: 'hr_leave_employee_range' });
+// Head inbox: equality on (approver, status) then the keyset order, _id included —
+// without _id the planner can't serve the (createdAt, _id) sort from this index and
+// walked every pending_head row of every head instead (measured: 252 keys for 26 rows).
+LeaveRequestSchema.index({ approver: 1, status: 1, createdAt: -1, _id: -1 }, { name: 'hr_leave_approver_status_created' });
+// Pending reservation at apply/balance: (employee, year, status) instead of every
+// request the person ever made (which grows ~25 a year).
+LeaveRequestSchema.index({ employee: 1, year: 1, status: 1 }, { name: 'hr_leave_employee_year_status' });
+// Overlap check / approved-in-range: same employee, requests whose range touches
+// [from, to]. Keyed on `to` first so the bound `to ≥ from` skips the whole past
+// (on `from` first, `from ≤ to` scanned every older request of the person).
+LeaveRequestSchema.index({ employee: 1, to: 1, from: 1 }, { name: 'hr_leave_employee_to_from' });
 
 export default mongoose.models.LeaveRequest || mongoose.model('LeaveRequest', LeaveRequestSchema);

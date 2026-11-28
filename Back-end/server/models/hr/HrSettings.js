@@ -28,6 +28,18 @@ const HrSettingsSchema = new mongoose.Schema({
   deviceChangeCooldownDays: { type: Number, default: 30, min: 0, max: 365 },
   autoCloseTime: { type: String, default: '23:59' }, // IST; closes open days at the shift end
 
+  // Attendance policy (owner decisions 2026-11-26). Day-level rules (grace,
+  // early grace, half day, absent-below, overtime-after) live on HrShift.
+  // Every this-many late/early marks in a payroll month = ½ day LOP (0 = never).
+  marksPerHalfDayLop: { type: Number, default: 3, min: 0, max: 31 },
+  // Approved overtime is paid at this × the hourly rate (payroll reads it).
+  overtimeMultiplier: { type: Number, default: 2, min: 1, max: 5 },
+  // Punctuality bonus per month: full for ≤ fullMaxMarks, half for ≤ halfMaxMarks,
+  // none above that or with any unapproved absence (payroll reads it).
+  punctualityBonusPaise: { type: Number, default: 50000, min: 0 }, // ₹500
+  punctualityFullMaxMarks: { type: Number, default: 2, min: 0, max: 62 },
+  punctualityHalfMaxMarks: { type: Number, default: 4, min: 0, max: 62 },
+
   // Leave approval chain: head then HR (headStep false = HR only).
   leaveHeadStep: { type: Boolean, default: true },
 

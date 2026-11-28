@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { AlarmClock, BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Hourglass, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck, Bug } from 'lucide-react';
+import { AlarmClock, BookOpenCheck, GraduationCap, Handshake, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact, Megaphone, UserMinus, Coins, Hourglass, Star, Trophy, Calculator, MessageSquareQuote, ThumbsUp, IndianRupee, ClipboardCheck, UserCog, Bug } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -130,6 +130,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   // Sales sends Google review screenshots; the marketing head checks them (the API decides who may).
   if (team === 'sales' || (team === 'marketing' && isHead)) nav.push({ href: '/team/google-reviews', label: 'Google reviews', icon: ThumbsUp });
   if (isHead && team === 'sales') nav.push({ href: '/team/sales-ratings', label: 'Service ratings', icon: Star });
+  // HR team: its own panel at /hr (attendance, employees, leave, payroll). The HR API decides access.
+  if (team === 'hr') nav.push({ href: '/hr', label: 'HR panel', icon: UserCog });
   nav.push({ href: '/team/members', label: 'My team', icon: Users });
   // Every team: how to use the panel (lib/help/teamFaq.ts).
   nav.push({ href: '/team/help', label: 'Help', icon: LifeBuoy });

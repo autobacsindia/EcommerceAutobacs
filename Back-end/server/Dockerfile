@@ -24,6 +24,12 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy app source (node_modules excluded via .dockerignore)
 COPY . .
 
+# HR face-attendance models (self-hosted, never an outside API). URLs pinned to a
+# commit + SHA-256 in scripts/fetch-face-models.js. Non-fatal on purpose: a GitHub
+# hiccup must not block an unrelated deploy — face punches then report the missing
+# model (logged) until the next build fetches it.
+RUN node scripts/fetch-face-models.js || echo "WARNING: HR face models not fetched; face attendance is unavailable in this image"
+
 # Create logs directory and set ownership in one layer
 RUN mkdir -p /app/logs && chown -R nodejs:nodejs /app
 
