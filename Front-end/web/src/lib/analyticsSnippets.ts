@@ -43,6 +43,40 @@ import { META_PIXEL_ID } from './metaPixel';
 export const STAFF_PANEL_PATH_TEST = `/^\\/(admin|team)(\\/|$)/.test(location.pathname)`;
 
 /**
+ * Shop pages start the ad/tracking libraries once the page has LOADED, not while
+ * it is still loading.
+ *
+ * Measured on the live site 2026-11-28 (phone profile: 4x slower CPU, slow 4G):
+ * GTM (+ GA4 + Clarity), the Google Ads tag and the Meta Pixel are ~1 MB of
+ * JavaScript per page — twice the shop's own code — and they downloaded alongside
+ * the page's pictures, then froze the page while they ran. With them held back:
+ * home page main picture 8.1 s → 5.2 s, page frozen 0.78 s → 0.10 s, product
+ * list frozen 0.92 s → 0.28 s, page fully loaded 12.4 s → 5.2 s.
+ *
+ * Nothing tracked is lost by waiting: the queues (gtmDataLayer, dataLayer, fbq)
+ * exist from the first line of HTML and the libraries replay them in order when
+ * they land. The cost is a visitor who leaves within the first few seconds of a
+ * slow load is not counted, so the wait is capped at
+ * THIRD_PARTY_START_MAX_WAIT_MS — the same 4 s cap PostHog already uses.
+ *
+ * Checkout and order pages start them at once: the purchase conversion must
+ * never wait on a timer (a shopper may close the tab right after paying).
+ *
+ * The script URLs still appear verbatim in the served HTML, so Google's and
+ * Meta's tag-coverage checkers keep finding the tags.
+ *
+ * Returns a self-contained JS statement that runs `inject` exactly once. Each
+ * `inject` falls back to <head> if the script it was to sit beside has since been
+ * removed from the page (it now runs seconds later, after React has hydrated).
+ */
+export const THIRD_PARTY_START_MAX_WAIT_MS = 4000;
+export const START_AT_ONCE_PATH_TEST = `/^\\/(checkout|order)(\\/|$)/.test(location.pathname)`;
+const afterPageLoad = (inject: string) => `(function(){var done=0;function go(){if(done)return;done=1;${inject}}
+if(${START_AT_ONCE_PATH_TEST}||document.readyState==='complete'){go();return;}
+window.addEventListener('load',function(){var r=window.requestIdleCallback;if(r)r(go,{timeout:1500});else setTimeout(go,1);},{once:true});
+setTimeout(go,${THIRD_PARTY_START_MAX_WAIT_MS});})();`;
+
+/**
  * GTM's queue must exist before anything pushes to it: page-mount effects fire
  * the moment a route hydrates, and a push against an undefined array throws.
  * Note the name — `gtmDataLayer`, NOT the default `dataLayer` (see lib/gtm.ts:
@@ -66,7 +100,7 @@ export const gtmLoaderSnippet = `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;
-if(!${STAFF_PANEL_PATH_TEST})f.parentNode.insertBefore(j,f);
+if(!${STAFF_PANEL_PATH_TEST})${afterPageLoad('if(f&&f.parentNode)f.parentNode.insertBefore(j,f);else d.head.appendChild(j);')}
 })(window,document,'script','${GTM_DATA_LAYER}','${GTM_ID}');`;
 
 /**
@@ -99,7 +133,7 @@ gtag('js', new Date());
 gtag('config', '${GOOGLE_ADS_ID}');
 (function(){if(${STAFF_PANEL_PATH_TEST})return;var s=document.createElement('script');s.async=true;
 s.src='https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}';
-var f=document.getElementsByTagName('script')[0];f.parentNode.insertBefore(s,f);})();`;
+var f=document.getElementsByTagName('script')[0];${afterPageLoad('if(f&&f.parentNode)f.parentNode.insertBefore(s,f);else document.head.appendChild(s);')}})();`;
 
 /** Meta Pixel base. Fires PageView; the rest fire from their own pages. */
 export const metaPixelSnippet = `!function(f,b,e,v,n,t,s)
@@ -108,7 +142,7 @@ n.callMethod.apply(n,arguments):n.queue.push(arguments)};
 if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
 n.queue=[];if(${STAFF_PANEL_PATH_TEST})return;t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window,document,'script',
+${afterPageLoad('if(s&&s.parentNode)s.parentNode.insertBefore(t,s);else b.head.appendChild(t);')}}(window,document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
 fbq('init', '${META_PIXEL_ID}');
 fbq('track', 'PageView');`;
