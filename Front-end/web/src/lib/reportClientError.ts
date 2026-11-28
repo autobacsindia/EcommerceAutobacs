@@ -47,6 +47,13 @@ const IGNORED_MESSAGES = [
   /^AbortError/i,
   /The user aborted a request/i,
   /Non-Error promise rejection captured/i,
+  // In-app browsers (Instagram, Facebook, TikTok…) talk to their native app through
+  // a bridge they inject into every page. When the app is closing, that bridge
+  // throws inside their own code: "Error invoking postMessage: Java object is gone".
+  // ~60 a day on the Website errors page, none of them from our code.
+  /Java object is gone/i,
+  /Java exception was raised during method invocation/i,
+  /WebViewJavascriptBridge is not defined/i,
 ];
 
 let viewerIsStaff = false;
@@ -97,6 +104,8 @@ export function reportClientError(input: ClientErrorReport): void {
     if (IGNORED_MESSAGES.some((re) => re.test(message)) || name === 'AbortError') return;
     // Errors thrown by browser extensions are not ours to fix.
     if (/chrome-extension:|moz-extension:|safari-extension:/.test(stack)) return;
+    // Same for the scripts an in-app browser injects (iabjs://…).
+    if (/\biabjs:\/\//.test(stack)) return;
 
     const key = `${input.feature}|${input.step || ''}|${name}|${message}`.slice(0, 300);
     const now = Date.now();
