@@ -75,6 +75,18 @@ describe('reportClientError', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test('in-app browser bridge errors (Instagram / Facebook) are ignored', () => {
+    reportClientError({ feature: 'script', message: 'Error invoking postMessage: Java object is gone' });
+    reportClientError({ feature: 'script', message: 'Error invoking postMessage: Java exception was raised during method invocation' });
+    reportClientError({ feature: 'script', message: 'WebViewJavascriptBridge is not defined' });
+    const iab = new Error('bridge'); iab.stack = 'Error: bridge\n    at sendDataToNative (iabjs://abc:1:11722)';
+    reportClientError({ feature: 'script', error: iab });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // A real error from our own code still goes through.
+    reportClientError({ feature: 'script', message: 'Cannot read properties of undefined' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test('the same error is sent once per 30 seconds, and at most 15 per page load', () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
     try {

@@ -8,6 +8,12 @@ export interface FetchOptions extends RequestInit {
   retryDelay?: number;
   timeout?: number;
   params?: Record<string, any>;
+  /**
+   * Keep this request off the top-of-page loading bar. Reads (GET/HEAD) are
+   * always off it; set this on writes the page makes by itself (read receipts,
+   * typing pings, push sign-up) rather than because the person pressed something.
+   */
+  background?: boolean;
 }
 
 export interface RateLimitInfo {

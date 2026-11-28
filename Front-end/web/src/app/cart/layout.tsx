@@ -2,6 +2,9 @@ import { Metadata } from 'next';
 
 // SEO: Prevent indexing but allow following links (preserves link equity)
 export const metadata: Metadata = {
+  // Browser tab / bookmark name. Private page (robots.ts disallows /cart), so a
+  // fixed title here, not the PageSeo system.
+  title: 'Your cart',
   robots: {
     index: false,
     follow: true,

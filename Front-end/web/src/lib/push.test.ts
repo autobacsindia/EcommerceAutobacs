@@ -68,7 +68,7 @@ it('an allowed browser with no subscription is signed up and saved — without a
   expect(requestPermission).not.toHaveBeenCalled();
   expect(register).toHaveBeenCalledWith('/push-sw.js', { scope: '/' });
   expect(subscribe).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }));
-  expect(post).toHaveBeenCalledWith('/push/subscriptions', expect.objectContaining({ endpoint: 'https://fcm.googleapis.com/fcm/send/new' }));
+  expect(post).toHaveBeenCalledWith('/push/subscriptions', expect.objectContaining({ endpoint: 'https://fcm.googleapis.com/fcm/send/new' }), { background: true });
 });
 
 it('an existing subscription for the current key is re-saved, not replaced', async () => {
@@ -77,7 +77,7 @@ it('an existing subscription for the current key is re-saved, not replaced', asy
   expect(await resyncPush()).toBe('on');
   expect(subscribe).not.toHaveBeenCalled();
   expect(before.unsubscribe).not.toHaveBeenCalled();
-  expect(post).toHaveBeenCalledWith('/push/subscriptions', expect.objectContaining({ endpoint: before.endpoint }));
+  expect(post).toHaveBeenCalledWith('/push/subscriptions', expect.objectContaining({ endpoint: before.endpoint }), { background: true });
 });
 
 it('a subscription made with an old server key is replaced', async () => {
@@ -86,7 +86,7 @@ it('a subscription made with an old server key is replaced', async () => {
   expect(await resyncPush()).toBe('on');
   expect(old.unsubscribe).toHaveBeenCalled();
   expect(subscribe).toHaveBeenCalled();
-  expect(post).toHaveBeenCalledWith('/push/subscriptions', expect.objectContaining({ endpoint: 'https://fcm.googleapis.com/fcm/send/new' }));
+  expect(post).toHaveBeenCalledWith('/push/subscriptions', expect.objectContaining({ endpoint: 'https://fcm.googleapis.com/fcm/send/new' }), { background: true });
 });
 
 it('never asks the browser by itself: not yet allowed → "off", nothing saved', async () => {
