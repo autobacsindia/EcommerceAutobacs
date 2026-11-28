@@ -10,7 +10,7 @@ import { useChatWide } from './chatWide';
 import { useChatRail, useListWidth } from './chatLayout';
 import ListResizeHandle from './ListResizeHandle';
 import { firstToOpen, homeList, listWhen, totalPeopleUnread } from './chatList';
-import { useSSE } from '@/hooks/useSSE';
+import { useChatStream } from '@/hooks/useChatStream';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
 import {
@@ -358,9 +358,7 @@ export default function TeamChat({ fontClassName = '' }: { fontClassName?: strin
   useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
 
   useResetTypingOnUnmount();
-  useSSE({
-    url: '/api/v1/chat/stream',
-    token: null,
+  useChatStream({
     enabled: canChat,
     onMessage: (event) => {
       const e = event as unknown as {

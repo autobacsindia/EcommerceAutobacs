@@ -15,6 +15,7 @@ import ChampionBanner from '@/components/incentives/ChampionBanner';
 import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
 import CallProvider from '@/components/calls/CallProvider';
+import { ChatStreamProvider } from '@/hooks/useChatStream';
 import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
 import NewWorkPopup from '@/components/notifications/NewWorkPopup';
 import { LateTasksPrompt } from '@/components/tasks/lateDates';
@@ -180,6 +181,8 @@ export default function TeamLayoutClient({
   const { items: visible, more } = splitMore(items, TEAM_MORE_HREFS);
 
   return (
+    // One chat live stream per tab, shared by calls and the Chat page.
+    <ChatStreamProvider>
     <CallProvider>
       <PanelShell
         homeHref="/team"
@@ -216,5 +219,6 @@ export default function TeamLayoutClient({
         <LateTasksPrompt base="/team/tasks" />
       </PanelShell>
     </CallProvider>
+    </ChatStreamProvider>
   );
 }
