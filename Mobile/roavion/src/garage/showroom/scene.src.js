@@ -5,16 +5,22 @@
  * `sceneBundle.generated.ts` (one self-contained script string). Edit here, then
  * re-run the build; a test fails if the bundle is stale.
  *
- * The car, the garage and every part are drawn in code as a SAMPLE (no
- * artist-made 3D files exist yet). Each part is a named group on the car, so
- * swapping a sample part for a real model later only changes how that one group
- * is built.
+ * The car is a real 3D model (.glb) when the app has one for it (MODELS below):
+ * the page asks for it with {type:'want-model'} and the app sends the file in
+ * (base64 chunks on a phone, an ArrayBuffer on web). Until it arrives the stage
+ * stays behind the app's loading cover; if it never arrives or cannot be read,
+ * the code-drawn sample car is shown instead, so the garage always opens.
+ * The garage and every part are drawn in code. Each part is a named group on the
+ * car, so swapping a sample part for a real model later only changes how that
+ * one group is built.
  *
  * Page API (called from the app with injectJavaScript):
  *   window.showroom.setParts(['bumper', 'snorkel'])   – what is fitted
  *   window.showroom.setPaint('#a3151c')               – body colour
  *   window.showroom.setInsets(0.1, 0.4)               – share of the screen the
  *                                                       app covers, top / bottom
+ *   window.showroom.modelChunk(i, n, 'base64…')       – piece i of n of the .glb
+ *   window.showroom.modelFailed()                     – the app could not read it
  * The page posts {type:'ready'} once the first frame is drawn, and
  * {type:'error', message} if WebGL is unavailable.
  *
@@ -23,6 +29,7 @@
 import {
   ACESFilmicToneMapping,
   BackSide,
+  Box3,
   BoxGeometry,
   CanvasTexture,
   Color,
@@ -49,6 +56,8 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 const cfg = window.__SHOWROOM__ || {};
 const ACCENT = cfg.accent || '#0a5c33';
@@ -264,6 +273,106 @@ function buildWheel(x, z) {
   w.add(hub);
   w.position.set(x, WHEEL_R, z);
   return w;
+}
+
+// ── real car models ─────────────────────────────────────────────────────────
+// How to stand each car's .glb in the garage. Keys are car slugs (slots.ts).
+//   paint  – material names that carry the body colour (recoloured by setPaint)
+//   glass  – material names of the windows (tinted: the source files are clear)
+//   wheels – matches the pieces of each wheel; group 1 names which wheel it
+//            belongs to (four wheels; they grow with the lift kit)
+//   yaw    – turn (radians) so the car's front faces +X like the drawn car
+
+const MODELS = {
+  'toyota-hilux': {
+    paint: ['primary', 'hilux_mb01.7'],
+    glass: ['glass', 'glass.001'],
+    // three.js strips the dots from node names (wheel_rf.001 → wheel_rf001); both spellings match.
+    wheels: /^(wheel_rf(?:\.?\d{3})?)_wheel_rf\.?\d/,
+    yaw: -Math.PI / 2,
+  },
+};
+
+/** Waiting longer than this for the app to send the model shows the drawn car. */
+const MODEL_WAIT_MS = 30000;
+
+function base64Bytes(text) {
+  const bin = atob(text);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Parse a .glb and stand it in the garage: front to +X, wheels on y = 0, axles centred like the drawn car. */
+function placeModel(gltf, spec) {
+  const root = gltf.scene;
+  root.rotation.y = spec.yaw;
+  const holder = new Group();
+  holder.add(root);
+  holder.updateMatrixWorld(true);
+
+  const paintMats = [];
+  // Wheel pieces, grouped per wheel (compressing a model flattens its node tree,
+  // so the pieces are matched by name rather than by a parent "wheel" node).
+  const wheelParts = new Map();
+  root.traverse((o) => {
+    const wheel = (o.name || '').match(spec.wheels);
+    if (wheel) {
+      const key = wheel[1].replace('.', '');
+      if (!wheelParts.has(key)) wheelParts.set(key, []);
+      wheelParts.get(key).push(o);
+    }
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach((m) => {
+      if (!m) return;
+      if (spec.paint.includes(m.name)) {
+        // The source paint is a flat-colour texture; a plain colour is what setPaint can change.
+        m.map = null;
+        m.metalness = 0.55;
+        m.roughness = 0.28;
+        m.needsUpdate = true;
+        if (!paintMats.includes(m)) paintMats.push(m);
+      } else if (spec.glass.includes(m.name)) {
+        m.color.set('#0b1112');
+        m.opacity = 0.72;
+        m.metalness = 0.6;
+        m.roughness = 0.05;
+        m.transparent = true;
+      }
+    });
+  });
+
+  const box = new Box3().setFromObject(holder);
+  // Stand it on the floor and centre it across.
+  root.position.y -= box.min.y;
+  root.position.z -= (box.min.z + box.max.z) / 2;
+  // Centre the wheelbase where the drawn car's is, so the sample parts land in the same places.
+  holder.updateMatrixWorld(true);
+  const boxOf = (meshes) => meshes.reduce((b, m) => b.expandByObject(m), new Box3());
+  const wheelGroups = [...wheelParts.values()];
+  const centres = wheelGroups.map((meshes) => boxOf(meshes).getCenter(new Vector3()));
+  if (centres.length >= 2) {
+    const xs = centres.map((c) => c.x);
+    root.position.x += (AXLE_F + AXLE_R) / 2 - (Math.min(...xs) + Math.max(...xs)) / 2;
+  } else {
+    root.position.x -= (box.min.x + box.max.x) / 2;
+  }
+  holder.updateMatrixWorld(true);
+
+  // Each wheel moves to a pivot at its own centre, so the lift kit can grow it in place.
+  const wheels = wheelGroups.map((meshes) => {
+    const c = boxOf(meshes).getCenter(new Vector3());
+    const pivot = new Group();
+    pivot.position.copy(c);
+    pivot.userData.r = c.y;
+    holder.add(pivot);
+    pivot.updateMatrixWorld(true);
+    meshes.forEach((m) => pivot.attach(m));
+    return pivot;
+  });
+  return { body: holder, wheels, paintMats };
 }
 
 // ── sample parts ────────────────────────────────────────────────────────────
@@ -547,14 +656,81 @@ function start() {
 
   buildGarage(scene);
 
-  // The car, standing on the plinth.
+  // The car, standing on the plinth. Its body and wheels arrive in showCar():
+  // the real model when the app sends one, else the code-drawn sample.
   const car = new Group();
-  const body = buildBody();
-  const wheels = [buildWheel(AXLE_F, WHEEL_Z), buildWheel(AXLE_F, -WHEEL_Z), buildWheel(AXLE_R, WHEEL_Z), buildWheel(AXLE_R, -WHEEL_Z)];
-  car.add(body);
-  wheels.forEach((w) => car.add(w));
   car.position.y = PLINTH_H;
   scene.add(car);
+  let body = new Group();
+  let wheels = [];
+  let paintMats = [paint];
+  let carShown = false;
+
+  function showCar(next) {
+    body = next.body;
+    wheels = next.wheels;
+    paintMats = next.paintMats;
+    car.add(body);
+    // Wheels hang off the car, not the body, so the lift kit can raise the body over them.
+    wheels.forEach((w) => car.attach(w));
+    paintMats.forEach((m) => m.color.set(currentPaint));
+    carShown = true;
+    // Parts asked for before the car arrived are fitted now.
+    const keys = [...fitted.keys()];
+    fitted.clear();
+    setParts(keys);
+    // Drawn at once, not on the next animation frame (which a just-opened view may hold back).
+    draw();
+  }
+
+  function showDrawnCar() {
+    if (carShown) return;
+    const drawn = [buildWheel(AXLE_F, WHEEL_Z), buildWheel(AXLE_F, -WHEEL_Z), buildWheel(AXLE_R, WHEEL_Z), buildWheel(AXLE_R, -WHEEL_Z)];
+    drawn.forEach((w) => { w.userData.r = WHEEL_R; });
+    showCar({ body: buildBody(), wheels: drawn, paintMats: [paint] });
+  }
+
+  const spec = cfg.model ? MODELS[cfg.car] : null;
+  const chunks = [];
+  let modelTimer = 0;
+
+  function loadModel(bytes) {
+    if (carShown || !spec) return;
+    clearTimeout(modelTimer);
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    loader.parse(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      '',
+      (gltf) => {
+        try {
+          showCar(placeModel(gltf, spec));
+        } catch (err) {
+          modelFailed(err);
+        }
+      },
+      (err) => modelFailed(err),
+    );
+  }
+
+  function modelFailed(err) {
+    clearTimeout(modelTimer);
+    post({ type: 'model-failed', message: String((err && err.message) || err || 'unknown').slice(0, 200) });
+    showDrawnCar();
+  }
+
+  /** Piece i (0-based) of n of the model, base64. The last piece starts the load. */
+  function modelChunk(i, n, text) {
+    if (carShown || !spec || typeof text !== 'string' || !(n > 0) || i < 0 || i >= n) return;
+    chunks[i] = text;
+    if (chunks.filter((c) => typeof c === 'string').length < n) return;
+    try {
+      loadModel(base64Bytes(chunks.join('')));
+    } catch (err) {
+      modelFailed(err);
+    }
+    chunks.length = 0;
+  }
 
   const controls = new OrbitControls(camera, canvas);
   controls.target.set(0, TARGET_Y, 0);
@@ -572,6 +748,7 @@ function start() {
 
   // Fitted parts, by slot key. `fit` eases 0 → 1 so a new part grows into place.
   const fitted = new Map();
+  let currentPaint = cfg.paint || '#a3151c';
   let lift = 0;
   let liftTarget = 0;
   let insetTop = Number(cfg.insetTop) || 0;
@@ -583,6 +760,12 @@ function start() {
   function setParts(keys) {
     const want = new Set(Array.isArray(keys) ? keys : []);
     liftTarget = want.has(LIFT_KEY) ? 1 : 0;
+    if (!carShown) {
+      // Remembered (not built) until there is a car body to fit them on.
+      fitted.clear();
+      want.forEach((k) => fitted.set(k, null));
+      return;
+    }
     fitted.forEach((entry, k) => {
       if (!want.has(k)) {
         body.remove(entry.node);
@@ -602,7 +785,9 @@ function start() {
 
   function setPaint(hex) {
     try {
-      paint.color.set(hex);
+      if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+      currentPaint = hex;
+      paintMats.forEach((m) => m.color.set(hex));
       redraw();
     } catch {
       /* an unknown colour string leaves the paint as it was */
@@ -646,14 +831,16 @@ function start() {
       moving = true;
     }
     const wheelScale = 1 + (LIFT_WHEEL - 1) * lift;
+    let wheelR = WHEEL_R;
     wheels.forEach((w) => {
+      wheelR = w.userData.r;
       w.scale.set(wheelScale, wheelScale, 1);
-      w.position.y = WHEEL_R * wheelScale;
+      w.position.y = wheelR * wheelScale;
     });
-    body.position.y = LIFT_BODY * lift + WHEEL_R * (wheelScale - 1);
+    body.position.y = LIFT_BODY * lift + wheelR * (wheelScale - 1);
 
     fitted.forEach((entry) => {
-      if (entry.fit < 1) {
+      if (entry && entry.fit < 1) {
         entry.fit = Math.min(1, entry.fit + dt * 4);
         const e = 1 - Math.pow(1 - entry.fit, 3);
         entry.node.scale.setScalar(0.86 + 0.14 * e);
@@ -675,14 +862,15 @@ function start() {
   function draw() {
     renderer.render(scene, camera);
     dirty = false;
-    if (!ready) {
+    // "ready" lifts the app's loading cover, so it waits for the car itself.
+    if (!ready && carShown) {
       ready = true;
       post({ type: 'ready' });
     }
   }
 
   window.addEventListener('resize', resize);
-  window.showroom = { setParts, setPaint, setInsets };
+  window.showroom = { setParts, setPaint, setInsets, modelChunk, modelFailed: () => modelFailed('app-could-not-read') };
   // The web preview (an iframe) is driven by postMessage instead of injected script.
   window.addEventListener('message', (ev) => {
     let msg = ev.data;
@@ -695,10 +883,18 @@ function start() {
     if (msg.type === 'parts') setParts(msg.parts);
     if (msg.type === 'paint') setPaint(msg.paint);
     if (msg.type === 'insets') setInsets(msg.top, msg.bottom);
+    if (msg.type === 'model' && msg.bytes instanceof ArrayBuffer) loadModel(new Uint8Array(msg.bytes));
+    if (msg.type === 'model-failed') modelFailed('app-could-not-read');
   });
 
   resize();
   setParts(cfg.parts || []);
+  if (spec) {
+    modelTimer = setTimeout(() => modelFailed('timeout'), MODEL_WAIT_MS);
+    post({ type: 'want-model' });
+  } else {
+    showDrawnCar();
+  }
   // The first picture is drawn right away rather than on the next animation
   // frame: a browser may hold animation frames back (a throttled or just-opened
   // view), and the customer should never look at an empty stage meanwhile.

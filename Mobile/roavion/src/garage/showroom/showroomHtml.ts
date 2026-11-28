@@ -1,7 +1,8 @@
 /**
  * The self-contained page the showroom WebView shows: one canvas plus the bundled
  * scene script (three.js included). Nothing is fetched — it works offline and
- * cannot load anything from the network.
+ * cannot load anything from the network. A real car model (.glb) is handed in by
+ * the app after the page asks for it (see modelChunkScripts).
  *
  * Pure: runs under `node --test`.
  */
@@ -11,6 +12,10 @@ import { SCENE_JS } from './sceneBundle.generated';
 export const STAGE_BG = '#1a1b1b';
 
 export interface ShowroomInit {
+  /** Car slug (slots.ts) — picks how the scene stands that car's model. */
+  car: string;
+  /** The app will send a .glb for this car when the page asks; false shows the drawn sample car. */
+  model: boolean;
   /** Slot keys already fitted. */
   parts: string[];
   /** Body colour, #rrggbb. */
@@ -34,6 +39,8 @@ const share = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Mat
  */
 export function showroomConfig(init: ShowroomInit) {
   return {
+    car: typeof init.car === 'string' && SLOT.test(init.car) ? init.car : '',
+    model: init.model === true,
     parts: init.parts.filter((k) => SLOT.test(k)),
     paint: HEX.test(init.paint) ? init.paint : '#a3151c',
     accent: HEX.test(init.accent) ? init.accent : '#0a5c33',
@@ -73,3 +80,24 @@ export function setPaintScript(hex: string): string {
 export function setInsetsScript(top: number, bottom: number): string {
   return `window.showroom&&window.showroom.setInsets(${share(top)},${share(bottom)});true;`;
 }
+
+/** Base64 characters per injected script: big enough to be quick, small enough for any WebView bridge. */
+export const MODEL_CHUNK = 512 * 1024;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * The scripts that hand a .glb (as base64) to the page, one piece each, in order.
+ * Anything that is not plain base64 sends nothing (the page then shows the drawn car).
+ */
+export function modelChunkScripts(base64: string, chunk = MODEL_CHUNK): string[] {
+  if (!base64 || !BASE64.test(base64)) return [];
+  const n = Math.ceil(base64.length / chunk);
+  const out: string[] = [];
+  for (let i = 0; i < n; i += 1) {
+    out.push(`window.showroom&&window.showroom.modelChunk(${i},${n},'${base64.slice(i * chunk, (i + 1) * chunk)}');true;`);
+  }
+  return out;
+}
+
+/** Script the app injects when it could not read the model file: the page falls back to the drawn car. */
+export const MODEL_FAILED_SCRIPT = 'window.showroom&&window.showroom.modelFailed();true;';

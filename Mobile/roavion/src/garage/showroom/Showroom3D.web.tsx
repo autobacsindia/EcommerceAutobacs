@@ -6,20 +6,33 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { colors } from '../../theme';
 import type { Showroom3DProps } from './Showroom3D';
+import { readModelBytes } from './modelFile.web';
 import { showroomHtml, STAGE_BG } from './showroomHtml';
 
-function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
+function Showroom3D({ car, modelAsset, parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   // Built once from the first props; later changes are posted to the page.
-  const [html] = useState(() => showroomHtml({ parts, paint, accent: colors.green, still, insetTop, insetBottom }));
+  const [html] = useState(() => showroomHtml({ car, model: modelAsset != null, parts, paint, accent: colors.green, still, insetTop, insetBottom }));
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow || typeof e.data !== 'string') return;
       try {
         const msg = JSON.parse(e.data) as { type?: string };
-        if (msg.type === 'ready') {
+        if (msg.type === 'want-model') {
+          const target = frame.current?.contentWindow;
+          if (modelAsset == null) target?.postMessage(JSON.stringify({ type: 'model-failed' }), '*');
+          else
+            readModelBytes(modelAsset)
+              .then((bytes) => target?.postMessage({ type: 'model', bytes }, '*', [bytes]))
+              .catch((err: unknown) => {
+                console.warn('[showroom] could not read the car model', err);
+                target?.postMessage(JSON.stringify({ type: 'model-failed' }), '*');
+              });
+        } else if (msg.type === 'model-failed') {
+          console.warn('[showroom] real car model not shown, drawn car instead', msg);
+        } else if (msg.type === 'ready') {
           setReady(true);
           onReady();
         } else if (msg.type === 'error') onError();
@@ -29,7 +42,7 @@ function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onErr
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onReady, onError]);
+  }, [onReady, onError, modelAsset]);
 
   useEffect(() => {
     if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'parts', parts }), '*');

@@ -23,6 +23,7 @@ import { fetchProducts, type Product } from '../src/api/catalogue';
 import { Photo } from '../src/components/ui';
 import { displacedBy, fittedSlotKeys, paintHex, partCount, planCart, type BuildPart } from '../src/garage/build';
 import Showroom3D from '../src/garage/showroom/Showroom3D';
+import { showroomModel } from '../src/garage/showroom/models';
 import { STAGE_BG } from '../src/garage/showroom/showroomHtml';
 import { DEFAULT_SHOWROOM_CAR, findSlot, showroomCarBySlug, SLOT_GROUPS, slotsInGroup, type Slot, type SlotGroup } from '../src/garage/slots';
 import { useBuild } from '../src/garage/useBuild';
@@ -53,6 +54,7 @@ export default function ShowroomScreen() {
   const { height } = useWindowDimensions();
   const params = useLocalSearchParams<{ car?: string }>();
   const car = showroomCarBySlug(params.car) ?? DEFAULT_SHOWROOM_CAR;
+  const model = showroomModel(car.slug);
 
   const { cart, addItem } = useApp();
   const { build, loaded, fit, remove, paint, clear } = useBuild(car);
@@ -180,7 +182,7 @@ export default function ShowroomScreen() {
           // Mounted once the saved build and the panel's size are known, so the
           // car opens already fitted and already framed above the controls.
           loaded && panelH > 0 && (
-            <Showroom3D parts={fitted} paint={hex} still={reduce} insetTop={insetTop} insetBottom={insetBottom} onReady={onReady} onError={onFailed} />
+            <Showroom3D car={car.slug} modelAsset={model?.asset ?? null} parts={fitted} paint={hex} still={reduce} insetTop={insetTop} insetBottom={insetBottom} onReady={onReady} onError={onFailed} />
           )
         )}
         {stage === 'loading' && (
@@ -293,7 +295,7 @@ export default function ShowroomScreen() {
         </View>
 
         <View style={[s.controls, { paddingBottom: insets.bottom + spacing.sm }]}>
-          <Text style={s.disclaimer}>3D picture is a sample. The real car and parts may look different.</Text>
+          <Text style={s.disclaimer}>Parts in 3D are samples; the real parts may look different.{model ? ` ${model.credit}.` : ''}</Text>
 
           {/* ‹ Roll bar › — step through what can be changed in this group. */}
           <View style={s.stepper}>

@@ -7,10 +7,13 @@ import { DEFAULT_SHOWROOM_CAR as car, findSlot, showroomCarBySlug, showroomCarFo
 import {
   displacedBy, emptyBuild, fitPart, fittedSlotKeys, paintHex, parseBuild, partCount, planCart, removePart, serializeBuild, setPaint,
 } from '../build.ts';
-import { setInsetsScript, setPaintScript, setPartsScript, showroomConfig, showroomHtml } from '../showroom/showroomHtml.ts';
+import {
+  MODEL_FAILED_SCRIPT, modelChunkScripts, setInsetsScript, setPaintScript, setPartsScript, showroomConfig, showroomHtml,
+} from '../showroom/showroomHtml.ts';
 import { SCENE_JS, SCENE_SOURCE_HASH } from '../showroom/sceneBundle.generated.ts';
 import { sceneSourceHash } from '../../../scripts/build-showroom.mjs';
 import { readFileSync } from 'node:fs';
+import { Buffer } from 'node:buffer';
 
 const part = (id, extra = {}) => ({ productId: id, slug: `p-${id}`, name: `Part ${id}`, image: '', needsOption: false, ...extra });
 
@@ -161,4 +164,54 @@ test('nothing from a build can become markup or script in the 3D page', () => {
   assert.equal(setPaintScript(evil), 'true;');
   assert.equal(setInsetsScript(evil, 0.4126), 'window.showroom&&window.showroom.setInsets(0,0.413);true;');
   assert.equal(setPaintScript('#a3151c'), 'window.showroom&&window.showroom.setPaint("#a3151c");true;');
+});
+
+test('the car model is handed to the page in order, and only ever as plain base64', () => {
+  const b64 = Buffer.from('glTF-bytes-'.repeat(50)).toString('base64');
+  const scripts = modelChunkScripts(b64, 64);
+  assert.equal(scripts.length, Math.ceil(b64.length / 64));
+  // Every piece says its place and the total, and together they rebuild the file exactly.
+  const pieces = scripts.map((js, i) => {
+    const m = js.match(/^window\.showroom&&window\.showroom\.modelChunk\((\d+),(\d+),'([A-Za-z0-9+/=]*)'\);true;$/);
+    assert.ok(m, js);
+    assert.equal(Number(m[1]), i);
+    assert.equal(Number(m[2]), scripts.length);
+    return m[3];
+  });
+  assert.equal(pieces.join(''), b64);
+  // Anything that is not base64 could break out of the string: nothing is sent.
+  assert.deepEqual(modelChunkScripts("QUJD');alert(1);//"), []);
+  assert.deepEqual(modelChunkScripts(''), []);
+  assert.equal(MODEL_FAILED_SCRIPT, 'window.showroom&&window.showroom.modelFailed();true;');
+});
+
+test('the page config only takes a real car slug and a strict yes for the model', () => {
+  const ok = showroomConfig({ car: 'toyota-hilux', model: true, parts: [], paint: '#a3151c', accent: '#0a5c33', still: false });
+  assert.equal(ok.car, 'toyota-hilux');
+  assert.equal(ok.model, true);
+  const bad = showroomConfig({ car: '</script><script>x', model: 'yes', parts: [], paint: '#a3151c', accent: '#0a5c33', still: false });
+  assert.equal(bad.car, '');
+  assert.equal(bad.model, false);
+  assert.equal(showroomConfig({ parts: [], paint: '#a3151c', accent: '#0a5c33', still: false }).car, '');
+});
+
+test('the bundled Hilux model has what the scene relies on (paint, glass, four wheels) and a credit', () => {
+  const glb = readFileSync(new URL('../../../assets/models/toyota-hilux.glb', import.meta.url));
+  assert.equal(glb.toString('ascii', 0, 4), 'glTF');
+  const json = JSON.parse(glb.toString('utf8', 20, 20 + glb.readUInt32LE(12)));
+  const materials = json.materials.map((m) => m.name);
+  // Names the scene's MODELS['toyota-hilux'] uses; a re-exported model that renames them loses colour change silently.
+  for (const name of ['primary', 'hilux_mb01.7', 'glass', 'glass.001']) assert.ok(materials.includes(name), `missing material ${name}`);
+  // Same pattern as the scene's `wheels`: pieces grouped into exactly four wheels.
+  const wheels = new Set(json.nodes.map((n) => (n.name ?? '').match(/^(wheel_rf(?:\.?\d{3})?)_wheel_rf\.?\d/)?.[1]).filter(Boolean));
+  assert.equal(wheels.size, 4);
+  // Phones must be able to read it: only extensions three.js decodes offline.
+  for (const ext of json.extensionsRequired ?? []) assert.ok(['EXT_meshopt_compression', 'EXT_texture_webp', 'KHR_mesh_quantization', 'KHR_texture_transform'].includes(ext), ext);
+  assert.ok(glb.length < 8 * 1024 * 1024, 'keep the model small enough for a phone');
+  // CC BY 4.0: the credit must stay with the file and on screen.
+  assert.match(readFileSync(new URL('../../../assets/models/CREDITS.md', import.meta.url), 'utf8'), /BHP3D[\s\S]*CC BY 4\.0/);
+  const scene = readFileSync(new URL('../showroom/scene.src.js', import.meta.url), 'utf8');
+  assert.ok(scene.includes(String.raw`wheels: /^(wheel_rf(?:\.?\d{3})?)_wheel_rf\.?\d/,`), 'scene and test use the same wheel pattern');
+  assert.match(scene, /'toyota-hilux':\s*\{\s*paint: \['primary', 'hilux_mb01\.7'\]/);
+  assert.match(readFileSync(new URL('../showroom/models.ts', import.meta.url), 'utf8'), /BHP3D, CC BY 4\.0/);
 });

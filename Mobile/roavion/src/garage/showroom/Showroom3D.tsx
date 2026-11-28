@@ -13,11 +13,16 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { colors } from '../../theme';
-import { setInsetsScript, setPaintScript, setPartsScript, showroomHtml, STAGE_BG } from './showroomHtml';
+import { readModelBase64 } from './modelFile';
+import { MODEL_FAILED_SCRIPT, modelChunkScripts, setInsetsScript, setPaintScript, setPartsScript, showroomHtml, STAGE_BG } from './showroomHtml';
 
 const ORIGINS = ['about:*'];
 
 export interface Showroom3DProps {
+  /** Car slug (slots.ts). */
+  car: string;
+  /** Bundled .glb for this car, or null to show the drawn sample car. */
+  modelAsset: number | null;
   parts: string[];
   paint: string;
   still: boolean;
@@ -29,13 +34,13 @@ export interface Showroom3DProps {
   onError: () => void;
 }
 
-function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
+function Showroom3D({ car, modelAsset, parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
   // `WebView<object>`: the class's default type parameter makes its props `never` once a ref pins it.
   const web = useRef<WebView<object>>(null);
   const [ready, setReady] = useState(false);
   // Built once from the first props; later changes are injected, not re-rendered.
   // `page.n` goes up when the page is rebuilt after the OS kills the WebView (low memory).
-  const [page, setPage] = useState(() => ({ n: 0, html: showroomHtml({ parts, paint, accent: colors.green, still, insetTop, insetBottom }) }));
+  const [page, setPage] = useState(() => ({ n: 0, html: showroomHtml({ car, model: modelAsset != null, parts, paint, accent: colors.green, still, insetTop, insetBottom }) }));
 
   useEffect(() => {
     if (ready) web.current?.injectJavaScript(setPartsScript(parts));
@@ -49,6 +54,30 @@ function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onErr
     if (ready) web.current?.injectJavaScript(setInsetsScript(insetTop, insetBottom));
   }, [ready, insetTop, insetBottom]);
 
+  /**
+   * The page asked for the car model: read the bundled file and hand it in, piece
+   * by piece. Any failure tells the page, which then shows the drawn car.
+   */
+  const sendModel = useCallback(() => {
+    const view = web.current;
+    if (!view) return;
+    if (modelAsset == null) {
+      view.injectJavaScript(MODEL_FAILED_SCRIPT);
+      return;
+    }
+    readModelBase64(modelAsset)
+      .then((b64) => {
+        const scripts = modelChunkScripts(b64);
+        if (scripts.length === 0) throw new Error('model file is empty or not base64');
+        // Read the ref again: the page may have been rebuilt while the file was read.
+        scripts.forEach((js) => web.current?.injectJavaScript(js));
+      })
+      .catch((err: unknown) => {
+        console.warn('[showroom] could not read the car model', err);
+        web.current?.injectJavaScript(MODEL_FAILED_SCRIPT);
+      });
+  }, [modelAsset]);
+
   const onMessage = useCallback(
     (e: WebViewMessageEvent) => {
       let msg: { type?: string } | null = null;
@@ -57,14 +86,18 @@ function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onErr
       } catch {
         return;
       }
-      if (msg?.type === 'ready') {
+      if (msg?.type === 'want-model') {
+        sendModel();
+      } else if (msg?.type === 'model-failed') {
+        console.warn('[showroom] real car model not shown, drawn car instead', msg);
+      } else if (msg?.type === 'ready') {
         setReady(true);
         onReady();
       } else if (msg?.type === 'error') {
         onError();
       }
     },
-    [onReady, onError],
+    [onReady, onError, sendModel],
   );
 
   const onCrash = useCallback(() => {
@@ -74,8 +107,8 @@ function Showroom3D({ parts, paint, still, insetTop, insetBottom, onReady, onErr
       onError();
       return;
     }
-    setPage({ n: page.n + 1, html: showroomHtml({ parts, paint, accent: colors.green, still, insetTop, insetBottom }) });
-  }, [page.n, parts, paint, still, insetTop, insetBottom, onError]);
+    setPage({ n: page.n + 1, html: showroomHtml({ car, model: modelAsset != null, parts, paint, accent: colors.green, still, insetTop, insetBottom }) });
+  }, [car, modelAsset, page.n, parts, paint, still, insetTop, insetBottom, onError]);
 
   return (
     <View style={s.fill}>
