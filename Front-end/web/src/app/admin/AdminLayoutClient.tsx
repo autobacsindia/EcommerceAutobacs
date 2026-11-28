@@ -16,6 +16,7 @@ import NotificationBell from '@/components/notifications/NotificationBell';
 import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
 import { splitMore } from '@/components/panel/navMore';
 import CallProvider from '@/components/calls/CallProvider';
+import { ChatStreamProvider } from '@/hooks/useChatStream';
 import ProjectReminderPopup from '@/components/tasks/ProjectReminderPopup';
 import NewWorkPopup from '@/components/notifications/NewWorkPopup';
 import { LateTasksPrompt } from '@/components/tasks/lateDates';
@@ -253,6 +254,8 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
   const pageLabel = navSections.flatMap((s) => s.items).find((link) => link.href === activeHref)?.label;
 
   return (
+    // One chat live stream per tab, shared by calls and the Chat page.
+    <ChatStreamProvider>
     <CallProvider>
       <PanelShell
         homeHref="/admin"
@@ -300,5 +303,6 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         <LateTasksPrompt base="/admin/tasks" />
       </PanelShell>
     </CallProvider>
+    </ChatStreamProvider>
   );
 }

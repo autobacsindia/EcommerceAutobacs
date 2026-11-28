@@ -11,6 +11,7 @@ jest.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: ()
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ logout: jest.fn() }) }));
 jest.mock('@/hooks/queries/useTeamChat', () => ({
   useChatUnreadTotal: () => 0,
+  useCanChat: () => false,
   useChatUnreadSplit: () => ({ chat: 0, updates: 0, updatesChannelId: null }),
   useChatChannels: () => ({ data: [] }),
   countedUnread: () => ({ chat: 0, updates: 0 }),

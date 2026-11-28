@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
 import apiClient from '@/lib/api';
-import { useSSE } from '@/hooks/useSSE';
+import { useChatStream } from '@/hooks/useChatStream';
 import { useCanChat, useChatMe } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel } from '@/hooks/queries/useTeamChat';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -440,7 +440,7 @@ export default function CallProvider({ children }: { children: ReactNode }) {
     else if (phase === 'connecting' || phase === 'reconnecting') engineRef.current?.restartIce();
   }, [pickUpLiveCall]);
 
-  useSSE({ url: '/api/v1/chat/stream', token: null, enabled: canChat && !!meId, onMessage: onEvent, onConnect: onStreamConnect });
+  useChatStream({ enabled: canChat && !!meId, onMessage: onEvent, onConnect: onStreamConnect });
 
   useEffect(() => {
     if (!canChat || !meId) return;
