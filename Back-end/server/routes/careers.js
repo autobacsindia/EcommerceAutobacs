@@ -3,12 +3,19 @@
  *
  * Public read is uncached at the app layer (short list, rate-limited) but sends
  * `static-data` cache-control headers so the CDN/browser can hold it briefly;
- * admin writes bust the `careers` cache tag. Admin CRUD is guarded in-route with
- * protect + admin (the router is mounted under the public browsing rate limit).
+ * admin writes bust the `careers` cache tag. The `/admin/*` routes are guarded
+ * in-route with protect + careersManager (the router is mounted under the public
+ * browsing rate limit).
+ *
+ * careersManager = an admin (through the full `admin` gate, device-anomaly
+ * detection included) OR an active HR-team staff member (hrAuth.isHrUser) —
+ * HR runs hiring from the HR panel. Every other role/team is a 403; no token or
+ * a revoked one is a 401 from `protect`.
  */
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
+import { isAdminUser, hrOrAdmin } from '../middleware/hrAuth.js';
 import { cacheMiddleware } from '../middleware/cacheControl.js';
 import { contactFormRateLimit, consultationRateLimit } from '../middleware/rateLimitMiddleware.js';
 import {
@@ -39,26 +46,30 @@ import {
 
 const router = express.Router();
 
+// Admin keeps the full `admin` gate; anyone else must pass the HR check.
+export const careersManager = (req, res, next) =>
+  (isAdminUser(req.user) ? admin(req, res, next) : hrOrAdmin(req, res, next));
+
 // ── Admin categories (managed section vocabulary for grouping roles) ──
 // "/reorder" is declared before "/:id" so the literal wins over the param.
-router.get('/admin/categories', protect, admin, asyncHandler(listCategories));
-router.post('/admin/categories', protect, admin, asyncHandler(createCategory));
-router.put('/admin/categories/reorder', protect, admin, asyncHandler(reorderCategories));
-router.put('/admin/categories/:id', protect, admin, asyncHandler(updateCategory));
-router.delete('/admin/categories/:id', protect, admin, asyncHandler(deleteCategory));
+router.get('/admin/categories', protect, careersManager, asyncHandler(listCategories));
+router.post('/admin/categories', protect, careersManager, asyncHandler(createCategory));
+router.put('/admin/categories/reorder', protect, careersManager, asyncHandler(reorderCategories));
+router.put('/admin/categories/:id', protect, careersManager, asyncHandler(updateCategory));
+router.delete('/admin/categories/:id', protect, careersManager, asyncHandler(deleteCategory));
 
 // ── Admin postings (declared before public "/postings/:slug" so literals win) ──
-router.get('/admin/postings', protect, admin, asyncHandler(listAllPostings));
-router.get('/admin/postings/:id', protect, admin, asyncHandler(getPostingById));
-router.post('/admin/postings', protect, admin, asyncHandler(createPosting));
-router.put('/admin/postings/:id', protect, admin, asyncHandler(updatePosting));
-router.delete('/admin/postings/:id', protect, admin, asyncHandler(deletePosting));
+router.get('/admin/postings', protect, careersManager, asyncHandler(listAllPostings));
+router.get('/admin/postings/:id', protect, careersManager, asyncHandler(getPostingById));
+router.post('/admin/postings', protect, careersManager, asyncHandler(createPosting));
+router.put('/admin/postings/:id', protect, careersManager, asyncHandler(updatePosting));
+router.delete('/admin/postings/:id', protect, careersManager, asyncHandler(deletePosting));
 
 // ── Admin applications (review inbox) ──
-router.get('/admin/applications', protect, admin, asyncHandler(listApplications));
-router.get('/admin/applications/:id', protect, admin, asyncHandler(getApplication));
-router.patch('/admin/applications/:id', protect, admin, asyncHandler(updateApplication));
-router.post('/admin/applications/:id/reply', protect, admin, asyncHandler(replyToApplication));
+router.get('/admin/applications', protect, careersManager, asyncHandler(listApplications));
+router.get('/admin/applications/:id', protect, careersManager, asyncHandler(getApplication));
+router.patch('/admin/applications/:id', protect, careersManager, asyncHandler(updateApplication));
+router.post('/admin/applications/:id/reply', protect, careersManager, asyncHandler(replyToApplication));
 
 // ── Public postings ──
 router.get('/postings', cacheMiddleware('static-data'), asyncHandler(listOpenPostings));
