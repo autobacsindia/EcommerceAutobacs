@@ -8,7 +8,7 @@ import {
   displacedBy, emptyBuild, fitPart, fittedSlotKeys, paintHex, parseBuild, partCount, planCart, removePart, serializeBuild, setPaint,
 } from '../build.ts';
 import {
-  MODEL_FAILED_SCRIPT, modelChunkScripts, setInsetsScript, setPaintScript, setPartsScript, showroomConfig, showroomHtml,
+  MODEL_FAILED_SCRIPT, modelChunkScripts, setFocusScript, setInsetsScript, setPaintScript, setPartsScript, showroomConfig, showroomHtml,
 } from '../showroom/showroomHtml.ts';
 import { SCENE_JS, SCENE_SOURCE_HASH } from '../showroom/sceneBundle.generated.ts';
 import { sceneSourceHash } from '../../../scripts/build-showroom.mjs';
@@ -35,7 +35,7 @@ test('every slot is in a group, has a unique key, and only excludes real slots',
 test('every slot has a 3D part in the scene, and the scene has no orphan parts', () => {
   const src = readFileSync(new URL('../showroom/scene.src.js', import.meta.url), 'utf8');
   const block = src.slice(src.indexOf('const PART_BUILDERS = {'), src.indexOf('/** Not a bolt-on'));
-  const inScene = [...block.matchAll(/^  '?([a-z-]+)'?: \(\) =>/gm)].map((m) => m[1]);
+  const inScene = [...block.matchAll(/^  '?([a-z-]+)'?: \(f\) =>/gm)].map((m) => m[1]);
   const expected = car.slots.map((s) => s.key).filter((k) => k !== 'lift-kit');
   assert.deepEqual([...inScene].sort(), [...expected].sort());
   assert.match(src, /const LIFT_KEY = 'lift-kit'/);
@@ -214,4 +214,24 @@ test('the bundled Hilux model has what the scene relies on (paint, glass, four w
   assert.ok(scene.includes(String.raw`wheels: /^(wheel_rf(?:\.?\d{3})?)_wheel_rf\.?\d/,`), 'scene and test use the same wheel pattern');
   assert.match(scene, /'toyota-hilux':\s*\{\s*paint: \['primary', 'hilux_mb01\.7'\]/);
   assert.match(readFileSync(new URL('../showroom/models.ts', import.meta.url), 'utf8'), /BHP3D, CC BY 4\.0/);
+});
+
+test('the camera-focus script only ever carries a slot key', () => {
+  assert.equal(setFocusScript('roof-rack'), 'window.showroom&&window.showroom.focus("roof-rack");true;');
+  assert.equal(setFocusScript('paint'), 'window.showroom&&window.showroom.focus("paint");true;');
+  assert.equal(setFocusScript('");alert(1);//'), 'true;');
+});
+
+test('every slot has a camera view and a part builder fitted from the measured points', () => {
+  const scene = readFileSync(new URL('../showroom/scene.src.js', import.meta.url), 'utf8');
+  const focus = scene.slice(scene.indexOf('const FOCUS = {'), scene.indexOf('};', scene.indexOf('const FOCUS = {')));
+  for (const s of car.slots) assert.ok(focus.includes(`'${s.key}':`) || focus.includes(`\n  ${s.key}:`), `no camera view for ${s.key}`);
+  assert.ok(focus.includes('paint:'), 'no camera view for colours');
+  // Builders take the car's fit points; a part placed by fixed numbers would float on the real model.
+  const builders = scene.slice(scene.indexOf('const PART_BUILDERS = {'), scene.indexOf('const LIFT_KEY'));
+  const arities = [...builders.matchAll(/^  (?:'[a-z-]+'|[a-z]+): \((\w*)\) =>/gm)].map((m) => m[1]);
+  assert.equal(arities.length, car.slots.length - 1, 'one builder per slot except the lift kit');
+  assert.ok(arities.every((a) => a === 'f'), 'every builder takes the fit points');
+  // The drop-in animation must move a wrapper, never the part's own placement.
+  assert.match(scene, /const node = group\(build\(fit\)\);/);
 });

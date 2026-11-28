@@ -9,7 +9,7 @@ import type { Showroom3DProps } from './Showroom3D';
 import { readModelBytes } from './modelFile.web';
 import { showroomHtml, STAGE_BG } from './showroomHtml';
 
-function Showroom3D({ car, modelAsset, parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
+function Showroom3D({ car, modelAsset, focus, parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   // Built once from the first props; later changes are posted to the page.
@@ -47,6 +47,10 @@ function Showroom3D({ car, modelAsset, parts, paint, still, insetTop, insetBotto
   useEffect(() => {
     if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'parts', parts }), '*');
   }, [ready, parts]);
+
+  useEffect(() => {
+    if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'focus', key: focus }), '*');
+  }, [ready, focus]);
 
   useEffect(() => {
     if (ready) frame.current?.contentWindow?.postMessage(JSON.stringify({ type: 'paint', paint }), '*');

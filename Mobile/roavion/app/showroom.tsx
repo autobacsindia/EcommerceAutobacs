@@ -182,7 +182,7 @@ export default function ShowroomScreen() {
           // Mounted once the saved build and the panel's size are known, so the
           // car opens already fitted and already framed above the controls.
           loaded && panelH > 0 && (
-            <Showroom3D car={car.slug} modelAsset={model?.asset ?? null} parts={fitted} paint={hex} still={reduce} insetTop={insetTop} insetBottom={insetBottom} onReady={onReady} onError={onFailed} />
+            <Showroom3D car={car.slug} modelAsset={model?.asset ?? null} focus={current?.key ?? PAINT} parts={fitted} paint={hex} still={reduce} insetTop={insetTop} insetBottom={insetBottom} onReady={onReady} onError={onFailed} />
           )
         )}
         {stage === 'loading' && (

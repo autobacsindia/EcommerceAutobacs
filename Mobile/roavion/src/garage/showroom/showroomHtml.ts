@@ -76,6 +76,11 @@ export function setPaintScript(hex: string): string {
   return HEX.test(hex) ? `window.showroom&&window.showroom.setPaint(${inlineJson(hex)});true;` : 'true;';
 }
 
+/** Script the app injects to glide the camera to a slot ('paint' = the opening view). Slot keys only. */
+export function setFocusScript(key: string): string {
+  return SLOT.test(key) ? `window.showroom&&window.showroom.focus(${inlineJson(key)});true;` : 'true;';
+}
+
 /** Script the app injects when its own top/bottom controls change size. Numbers only. */
 export function setInsetsScript(top: number, bottom: number): string {
   return `window.showroom&&window.showroom.setInsets(${share(top)},${share(bottom)});true;`;

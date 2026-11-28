@@ -19,6 +19,7 @@
  *   window.showroom.setPaint('#a3151c')               – body colour
  *   window.showroom.setInsets(0.1, 0.4)               – share of the screen the
  *                                                       app covers, top / bottom
+ *   window.showroom.focus('bumper')                   – glide the camera to a part
  *   window.showroom.modelChunk(i, n, 'base64…')       – piece i of n of the .glb
  *   window.showroom.modelFailed()                     – the app could not read it
  * The page posts {type:'ready'} once the first frame is drawn, and
@@ -28,18 +29,20 @@
  */
 import {
   ACESFilmicToneMapping,
-  BackSide,
   Box3,
   BoxGeometry,
+  CatmullRomCurve3,
   CanvasTexture,
   Color,
   CylinderGeometry,
   DirectionalLight,
   ExtrudeGeometry,
+  Fog,
   Group,
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   PCFSoftShadowMap,
   PerspectiveCamera,
@@ -49,8 +52,10 @@ import {
   RepeatWrapping,
   Scene,
   Shape,
+  Spherical,
   SRGBColorSpace,
   TorusGeometry,
+  TubeGeometry,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -70,7 +75,8 @@ function post(msg) {
 
 // ── materials ───────────────────────────────────────────────────────────────
 
-const paint = new MeshStandardMaterial({ color: cfg.paint || '#a3151c', metalness: 0.6, roughness: 0.26 });
+// Car paint: a lacquered metallic, so the garage lights glint off a clear coat.
+const paint = new MeshPhysicalMaterial({ color: cfg.paint || '#a3151c', metalness: 0.5, roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.06 });
 const glass = new MeshStandardMaterial({ color: '#0d1413', metalness: 0.85, roughness: 0.08 });
 const trim = new MeshStandardMaterial({ color: '#151717', metalness: 0.25, roughness: 0.7 });
 const gloss = new MeshStandardMaterial({ color: '#0c0d0d', metalness: 0.7, roughness: 0.22 });
@@ -275,6 +281,72 @@ function buildWheel(x, z) {
   return w;
 }
 
+// ── where parts sit on each car ─────────────────────────────────────────────
+// Measured points of the car body (metres, body space: +X front, +Y up, +Z the
+// car's right). Parts are built from these, so the same part fits whichever car
+// is on stage. HILUX_FIT was measured off the real model by ray-casting.
+
+const HILUX_FIT = {
+  front: 2.59, // nose of the front bumper
+  bumperY: 0.82, // middle of the front bumper
+  bumperLow: 0.6,
+  rear: -2.69, // back of the rear bumper
+  rearBumperY: 0.8,
+  halfW: 0.91, // body side
+  axleF: 1.602,
+  axleR: -1.482,
+  wheelR: 0.382,
+  archTop: 1.1, // top of the wheel arch
+  sillY: 0.58, // underside of the sill (door bottom)
+  sillZ: 0.906,
+  bonnetX: 1.75,
+  bonnetY: 1.49,
+  bonnetSlope: -0.113, // height change per metre forward
+  cowlX: 1.2, // bottom of the windscreen
+  cowlY: 1.57,
+  roof: 2.0,
+  roofFront: 0.42,
+  roofBack: -0.88,
+  roofHalfW: 0.64,
+  pillarZ: 0.78, // A-pillar side at mid height
+  cabBack: -0.99,
+  bedRail: 1.495,
+  bedBack: -2.64,
+  bedHalfW: 0.8,
+  bedFloor: 1.02,
+};
+
+/** The same points on the code-drawn fallback car. */
+const DRAWN_FIT = {
+  front: 2.74,
+  bumperY: 0.72,
+  bumperLow: 0.5,
+  rear: -2.76,
+  rearBumperY: 0.62,
+  halfW: HALF_W,
+  axleF: AXLE_F,
+  axleR: AXLE_R,
+  wheelR: WHEEL_R,
+  archTop: 1.0,
+  sillY: 0.47,
+  sillZ: HALF_W,
+  bonnetX: 1.86,
+  bonnetY: 1.2,
+  bonnetSlope: -0.067,
+  cowlX: 1.3,
+  cowlY: 1.25,
+  roof: ROOF,
+  roofFront: 0.55,
+  roofBack: -0.75,
+  roofHalfW: CAB_HALF_W - 0.04,
+  pillarZ: CAB_HALF_W,
+  cabBack: -1.04,
+  bedRail: BELT,
+  bedBack: -2.66,
+  bedHalfW: HALF_W - 0.08,
+  bedFloor: 0.85,
+};
+
 // ── real car models ─────────────────────────────────────────────────────────
 // How to stand each car's .glb in the garage. Keys are car slugs (slots.ts).
 //   paint  – material names that carry the body colour (recoloured by setPaint)
@@ -290,6 +362,7 @@ const MODELS = {
     // three.js strips the dots from node names (wheel_rf.001 → wheel_rf001); both spellings match.
     wheels: /^(wheel_rf(?:\.?\d{3})?)_wheel_rf\.?\d/,
     yaw: -Math.PI / 2,
+    fit: HILUX_FIT,
   },
 };
 
@@ -311,7 +384,6 @@ function placeModel(gltf, spec) {
   holder.add(root);
   holder.updateMatrixWorld(true);
 
-  const paintMats = [];
   // Wheel pieces, grouped per wheel (compressing a model flattens its node tree,
   // so the pieces are matched by name rather than by a parent "wheel" node).
   const wheelParts = new Map();
@@ -328,12 +400,9 @@ function placeModel(gltf, spec) {
     mats.forEach((m) => {
       if (!m) return;
       if (spec.paint.includes(m.name)) {
-        // The source paint is a flat-colour texture; a plain colour is what setPaint can change.
-        m.map = null;
-        m.metalness = 0.55;
-        m.roughness = 0.28;
-        m.needsUpdate = true;
-        if (!paintMats.includes(m)) paintMats.push(m);
+        // The source paint is a flat-colour texture. Every body panel gets the one
+        // shared lacquer instead, which setPaint recolours (canopy included).
+        o.material = Array.isArray(o.material) ? o.material.map((x) => (x === m ? paint : x)) : paint;
       } else if (spec.glass.includes(m.name)) {
         m.color.set('#0b1112');
         m.opacity = 0.72;
@@ -372,118 +441,214 @@ function placeModel(gltf, spec) {
     meshes.forEach((m) => pivot.attach(m));
     return pivot;
   });
-  return { body: holder, wheels, paintMats };
+  return { body: holder, wheels, fit: spec.fit };
 }
 
 // ── sample parts ────────────────────────────────────────────────────────────
-// One builder per fit-on slot (keys match src/garage/slots.ts). Everything is in
-// the car body's own space, so a lift kit raises fitted parts with the body.
+// One builder per fit-on slot (keys match src/garage/slots.ts), each built from
+// the car's FIT points. Everything is in the car body's own space, so a lift kit
+// raises fitted parts with the body.
+
+const powder = new MeshStandardMaterial({ color: '#141515', metalness: 0.55, roughness: 0.42 });
+const ribbed = new MeshStandardMaterial({ color: '#2a2c2c', metalness: 0.7, roughness: 0.35 });
+const led = new MeshStandardMaterial({ color: '#fff8e8', emissive: '#ffe9b8', emissiveIntensity: 2.2, roughness: 0.2 });
 
 const side = (fn) => group(fn(1), fn(-1));
 
+/** A smooth bent tube through the given points (snorkels, hoops). */
+function bentTube(points, r, mat) {
+  const curve = new CatmullRomCurve3(points.map((p) => new Vector3(...p)), false, 'catmullrom', 0.2);
+  const m = new Mesh(new TubeGeometry(curve, 48, r, 12, false), mat);
+  m.castShadow = true;
+  return m;
+}
+
+/** A round lamp facing forward (+X). */
+function roundLamp(x, y, z, r) {
+  const can = new Mesh(new CylinderGeometry(r, r * 0.9, 0.08, 20), powder);
+  can.rotation.z = Math.PI / 2;
+  can.position.set(x, y, z);
+  const lens = new Mesh(new CylinderGeometry(r * 0.82, r * 0.82, 0.01, 20), led);
+  lens.rotation.z = Math.PI / 2;
+  lens.position.set(x + 0.041, y, z);
+  return group(can, lens);
+}
+
+/** A flat ring sector (wheel-arch flare) standing in the car's side plane. */
+function arch(inner, outer, from, to, depth, mat) {
+  const s = new Shape();
+  s.absarc(0, 0, outer, from, to, false);
+  s.absarc(0, 0, inner, to, from, true);
+  s.closePath();
+  const geo = new ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.012, bevelSegments: 2, curveSegments: 24 });
+  geo.translate(0, 0, -depth / 2);
+  const m = new Mesh(geo, mat);
+  m.castShadow = true;
+  return m;
+}
+
 const PART_BUILDERS = {
-  bumper: () => {
-    const z = HALF_W + 0.02;
+  // Steel bull-bar bumper: a full-width beam over the stock bumper, a centre
+  // hoop to the bonnet line, and two LED spot lamps. A matching rear step bumper.
+  bumper: (f) => {
+    const x = f.front + 0.05;
+    const top = f.bonnetY - 0.06 + f.bonnetSlope * (f.front - f.bonnetX);
+    const w = f.halfW + 0.03;
+    const beam = slab([[0.14, 0.18], [0.1, -0.12], [-0.22, -0.2], [-0.26, 0.18]], w * 2, powder, 0.02);
+    beam.position.set(x, f.bumperY, 0);
+    const skid = box(0.36, 0.03, 0.9, ribbed, x - 0.12, f.bumperLow - 0.04, 0);
+    skid.rotation.z = 0.25;
     return group(
-      box(0.2, 0.34, z * 2, steel, 2.8, 0.72, 0),
-      box(0.22, 0.1, z * 2 - 0.5, steel, 2.82, 0.5, 0),
-      tube([2.88, 0.86, 0.5], [2.92, 1.3, 0.42], 0.035, steel),
-      tube([2.88, 0.86, -0.5], [2.92, 1.3, -0.42], 0.035, steel),
-      tube([2.92, 1.3, 0.42], [2.92, 1.3, -0.42], 0.035, steel),
-      tube([2.9, 1.08, 0.46], [2.9, 1.08, -0.46], 0.025, steel),
-      box(0.03, 0.09, 0.2, lamp, 2.91, 0.7, 0.66),
-      box(0.03, 0.09, 0.2, lamp, 2.91, 0.7, -0.66),
-      // matching rear step bumper
-      box(0.2, 0.2, z * 2, steel, -2.84, 0.6, 0),
-      box(0.26, 0.03, 0.9, steel, -2.9, 0.71, 0),
+      beam,
+      skid,
+      // centre hoop
+      bentTube([[x - 0.02, f.bumperY + 0.16, 0.42], [x - 0.08, top, 0.38], [x - 0.08, top, -0.38], [x - 0.02, f.bumperY + 0.16, -0.42]], 0.032, powder),
+      tube([x - 0.06, top - 0.16, 0.4], [x - 0.06, top - 0.16, -0.4], 0.022, powder),
+      // wing tubes round the lamps
+      side((s) => bentTube([[x - 0.04, f.bumperY + 0.16, s * 0.42], [x - 0.12, f.bumperY + 0.3, s * (w - 0.12)], [x - 0.3, f.bumperY + 0.16, s * w]], 0.026, powder)),
+      roundLamp(x + 0.1, f.bumperY + 0.02, 0.62, 0.075),
+      roundLamp(x + 0.1, f.bumperY + 0.02, -0.62, 0.075),
+      // rear step bumper
+      box(0.2, 0.2, w * 2, powder, f.rear - 0.08, f.rearBumperY - 0.08, 0),
+      box(0.18, 0.025, 0.9, ribbed, f.rear - 0.12, f.rearBumperY + 0.03, 0),
     );
   },
-  winch: () => {
-    const drum = new Mesh(new CylinderGeometry(0.075, 0.075, 0.42, 18), chrome);
+  // Winch on a cradle under the grille (it sits inside the bull bar when both are fitted).
+  winch: (f) => {
+    const x = f.front + 0.16;
+    const y = f.bumperY - 0.05;
+    const drum = new Mesh(new CylinderGeometry(0.07, 0.07, 0.34, 20), ribbed);
     drum.rotation.x = Math.PI / 2;
-    drum.position.set(2.94, 0.72, 0);
+    drum.position.set(x, y, 0);
     drum.castShadow = true;
-    return group(
-      drum,
-      box(0.14, 0.17, 0.12, steel, 2.94, 0.72, 0.27),
-      box(0.14, 0.17, 0.12, steel, 2.94, 0.72, -0.27),
-      box(0.03, 0.08, 0.3, chrome, 3.03, 0.72, 0),
-    );
+    const motor = new Mesh(new CylinderGeometry(0.075, 0.075, 0.16, 20), powder);
+    motor.rotation.x = Math.PI / 2;
+    motor.position.set(x, y, 0.25);
+    const fairlead = box(0.03, 0.09, 0.26, steel, x + 0.1, y, 0);
+    const hook = new Mesh(new TorusGeometry(0.035, 0.01, 8, 16, Math.PI * 1.5), chrome);
+    hook.position.set(x + 0.14, y - 0.06, 0);
+    return group(drum, motor, box(0.14, 0.15, 0.1, powder, x, y, -0.22), fairlead, hook, box(0.2, 0.03, 0.6, powder, x - 0.02, y - 0.1, 0));
   },
-  snorkel: () => {
-    const zLow = -(HALF_W + 0.05);
-    const zHigh = -(CAB_HALF_W + 0.07);
-    return group(
-      tube([1.95, 1.1, zLow], [1.34, 1.2, zLow], 0.055, trim),
-      tube([1.34, 1.2, zLow], [0.64, ROOF - 0.02, zHigh], 0.05, trim),
-      tube([0.64, ROOF - 0.02, zHigh], [0.64, ROOF + 0.14, zHigh], 0.05, trim),
-      box(0.2, 0.15, 0.14, trim, 0.7, ROOF + 0.2, zHigh),
+  // Raised air intake: into the left fender ahead of the windscreen, up the A-pillar, ram head at roof height.
+  snorkel: (f) => {
+    const z = -(f.halfW + 0.035);
+    const zp = -(f.pillarZ + 0.11);
+    const xTop = f.roofFront + 0.12;
+    const yTop = f.roof + 0.08;
+    const pipe = bentTube(
+      [
+        [f.cowlX + 0.42, f.archTop + 0.14, z],
+        [f.cowlX + 0.1, f.archTop + 0.2, z],
+        [f.cowlX - 0.06, f.cowlY + 0.05, (z + zp) / 2],
+        [(f.cowlX + xTop) / 2 - 0.05, (f.cowlY + yTop) / 2 + 0.02, zp],
+        [xTop, yTop, zp],
+      ],
+      0.05,
+      powder,
     );
+    const head = slab([[0.16, 0.08], [0.18, -0.06], [-0.08, -0.08], [-0.1, 0.06]], 0.17, powder, 0.03);
+    head.position.set(xTop + 0.04, yTop + 0.06, zp);
+    return group(pipe, head, box(0.18, 0.12, 0.012, powder, f.cowlX + 0.42, f.archTop + 0.12, z - 0.02));
   },
-  'fender-flare': () => {
-    const flare = (x, sgn) => {
-      const m = new Mesh(new TorusGeometry(0.565, 0.07, 10, 28, Math.PI), trim);
-      m.position.set(x, WHEEL_R, sgn * (HALF_W + 0.01));
-      m.scale.z = 1.8;
-      m.castShadow = true;
+  // Bolt-on flares round all four arches.
+  'fender-flare': (f) => {
+    const r = f.archTop - f.wheelR;
+    const one = (x, s) => {
+      const m = arch(r - 0.03, r + 0.09, 0.12, Math.PI - 0.12, 0.12, powder);
+      m.position.set(x, f.wheelR, s * (f.sillZ + 0.03));
       return m;
     };
-    return group(flare(AXLE_F, 1), flare(AXLE_F, -1), flare(AXLE_R, 1), flare(AXLE_R, -1));
+    return group(one(f.axleF, 1), one(f.axleF, -1), one(f.axleR, 1), one(f.axleR, -1));
   },
-  'side-step': () =>
-    side((sgn) =>
-      group(
-        box(1.9, 0.05, 0.2, steel, 0.06, 0.44, sgn * (HALF_W + 0.1)),
-        box(1.6, 0.012, 0.13, chrome, 0.06, 0.472, sgn * (HALF_W + 0.1)),
-        box(0.06, 0.1, 0.12, steel, 0.8, 0.49, sgn * (HALF_W - 0.02)),
-        box(0.06, 0.1, 0.12, steel, -0.7, 0.49, sgn * (HALF_W - 0.02)),
-      ),
-    ),
-  'bonnet-hood': () => {
-    const scoop = box(0.6, 0.09, 0.6, gloss, 1.86, 1.215, 0);
-    scoop.rotation.z = -0.067;
-    const mouth = box(0.02, 0.05, 0.5, glass, 2.165, 1.195, 0);
-    return group(scoop, mouth);
+  // Steel side steps between the arches, with a ribbed tread.
+  'side-step': (f) => {
+    const x0 = f.axleF - (f.archTop - f.wheelR) - 0.06;
+    const x1 = f.axleR + (f.archTop - f.wheelR) + 0.06;
+    const len = x0 - x1;
+    const mid = (x0 + x1) / 2;
+    const y = f.sillY - 0.08;
+    return side((s) => {
+      const g = group(
+        box(len, 0.06, 0.24, powder, mid, y, s * (f.sillZ + 0.06)),
+        box(len - 0.12, 0.012, 0.18, ribbed, mid, y + 0.036, s * (f.sillZ + 0.06)),
+      );
+      [x0 - 0.35, mid, x1 + 0.35].forEach((bx) => g.add(box(0.05, 0.08, 0.16, powder, bx, y + 0.06, s * (f.sillZ - 0.02))));
+      return g;
+    });
   },
-  'roll-bar': () => {
-    const z = HALF_W - 0.14;
-    return group(
-      side((sgn) =>
-        group(
-          tube([-1.06, BELT, sgn * z], [-1.04, ROOF - 0.02, sgn * (z - 0.06)], 0.045, steel),
-          tube([-1.04, ROOF - 0.02, sgn * (z - 0.06)], [-1.8, BELT + 0.02, sgn * z], 0.04, steel),
-          tube([-1.3, BELT, sgn * z], [-1.25, 1.66, sgn * (z - 0.04)], 0.035, steel),
-        ),
-      ),
-      tube([-1.04, ROOF - 0.02, z - 0.06], [-1.04, ROOF - 0.02, -(z - 0.06)], 0.045, steel),
-      box(0.05, 0.08, 0.5, lamp, -1.02, ROOF + 0.06, 0),
+  // Bonnet scoop lying on the bonnet's slope.
+  'bonnet-hood': (f) => {
+    const scoop = slab([[0.4, -0.02], [0.33, 0.11], [-0.34, 0.05], [-0.4, -0.02]], 0.7, gloss, 0.03);
+    const mouth = box(0.02, 0.07, 0.56, rubber, 0.36, 0.05, 0);
+    const g = group(scoop, mouth);
+    g.position.set(f.bonnetX - 0.05, f.bonnetY + f.bonnetSlope * -0.05, 0);
+    g.rotation.z = Math.atan(f.bonnetSlope);
+    return g;
+  },
+  // Sports bar in the bed: hoop behind the cab, braces back to the rails, LED bar on top.
+  'roll-bar': (f) => {
+    const x = f.cabBack - 0.22;
+    const z = f.bedHalfW - 0.03;
+    const h = Math.min(f.roof - 0.04, f.bedRail + 0.48);
+    const g = group(
+      bentTube([[x, f.bedRail, z], [x, h - 0.08, z - 0.04], [x, h, z - 0.16], [x, h, -(z - 0.16)], [x, h - 0.08, -(z - 0.04)], [x, f.bedRail, -z]], 0.04, powder),
+      side((s) => tube([x - 0.02, h - 0.12, s * (z - 0.05)], [x - 0.85, f.bedRail + 0.02, s * z], 0.032, powder)),
+      side((s) => box(0.14, 0.02, 0.12, powder, x, f.bedRail + 0.01, s * z)),
     );
+    const bar = box(0.07, 0.07, 0.9, powder, x + 0.02, h + 0.06, 0);
+    const glow = box(0.01, 0.04, 0.86, led, x + 0.06, h + 0.06, 0);
+    g.add(bar, glow);
+    return g;
   },
-  'roller-shutter': () => {
-    const lid = group(box(1.72, 0.035, HALF_W * 2 - 0.1, steel, -1.8, BELT + 0.025, 0), box(0.2, 0.09, HALF_W * 2 - 0.12, trim, -1.02, BELT + 0.05, 0));
-    for (let i = 0; i < 12; i += 1) lid.add(box(0.012, 0.004, HALF_W * 2 - 0.16, chrome, -1.24 - i * 0.12, BELT + 0.045, 0));
+  // Roller shutter over the bed: canister at the front, slatted cover to the tailgate.
+  'roller-shutter': (f) => {
+    const x0 = f.cabBack - 0.05;
+    const len = x0 - (f.bedBack + 0.02);
+    const w = (f.bedHalfW + 0.04) * 2;
+    const lid = group(
+      box(len, 0.03, w, ribbed, x0 - len / 2, f.bedRail + 0.02, 0),
+      box(0.22, 0.12, w, powder, x0 - 0.11, f.bedRail + 0.06, 0),
+      side((s) => box(len, 0.04, 0.03, powder, x0 - len / 2, f.bedRail + 0.03, s * (w / 2))),
+    );
+    for (let i = 0; i < Math.floor((len - 0.3) / 0.09); i += 1) lid.add(box(0.012, 0.006, w - 0.04, steel, x0 - 0.3 - i * 0.09, f.bedRail + 0.038, 0));
     return lid;
   },
-  canopy: () =>
-    group(
-      box(1.78, ROOF - BELT, CAB_HALF_W * 2 + 0.06, paint, -1.8, (ROOF + BELT) / 2, 0),
-      box(1.3, 0.34, CAB_HALF_W * 2 + 0.08, glass, -1.8, 1.56, 0),
-      box(0.02, 0.4, 1.2, glass, -2.695, 1.54, 0),
-      box(1.8, 0.03, HALF_W * 2 - 0.04, trim, -1.8, BELT + 0.015, 0),
-    ),
-  'roof-rack': () => {
-    const y = ROOF + 0.12;
-    const z = CAB_HALF_W - 0.12;
-    const rack = group(
-      tube([0.5, y, z], [-0.7, y, z], 0.022, steel),
-      tube([0.5, y, -z], [-0.7, y, -z], 0.022, steel),
-      tube([0.5, y, z], [0.5, y, -z], 0.022, steel),
-      tube([-0.7, y, z], [-0.7, y, -z], 0.022, steel),
+  // Body-colour canopy over the bed, with tinted side and rear windows.
+  canopy: (f) => {
+    const x0 = f.cabBack - 0.04;
+    const x1 = f.bedBack + 0.02;
+    const len = x0 - x1;
+    const top = f.roof - 0.02;
+    const shell = slab([[0, 0], [0, top - f.bedRail], [-len + 0.12, top - f.bedRail - 0.02], [-len, top - f.bedRail - 0.12], [-len, 0]], (f.bedHalfW + 0.06) * 2, paint, 0.04);
+    shell.position.set(x0, f.bedRail, 0);
+    const winY = f.bedRail + (top - f.bedRail) * 0.58;
+    const winH = (top - f.bedRail) * 0.42;
+    return group(
+      shell,
+      side((s) => box(len - 0.4, winH, 0.01, glass, (x0 + x1) / 2 + 0.05, winY, s * (f.bedHalfW + 0.065))),
+      box(0.01, winH, (f.bedHalfW - 0.1) * 2, glass, x1 - 0.005, winY - 0.03, 0),
+      box(len, 0.03, (f.bedHalfW + 0.06) * 2, trim, (x0 + x1) / 2, f.bedRail + 0.01, 0),
     );
-    for (let i = 1; i < 6; i += 1) rack.add(tube([0.5 - i * 0.2, y, z], [0.5 - i * 0.2, y, -z], 0.014, steel));
-    [0.35, -0.55].forEach((x) => {
-      rack.add(tube([x, ROOF - 0.03, z], [x, y, z], 0.02, steel));
-      rack.add(tube([x, ROOF - 0.03, -z], [x, y, -z], 0.02, steel));
+  },
+  // Flat platform rack on the roof with a wind deflector at the front.
+  'roof-rack': (f) => {
+    const y = f.roof + 0.09;
+    const z = f.roofHalfW - 0.02;
+    const xf = f.roofFront - 0.02;
+    const xb = f.roofBack + 0.04;
+    const rack = group(
+      box(xf - xb, 0.04, 0.05, powder, (xf + xb) / 2, y, z),
+      box(xf - xb, 0.04, 0.05, powder, (xf + xb) / 2, y, -z),
+      box(0.05, 0.04, z * 2, powder, xf, y, 0),
+      box(0.05, 0.04, z * 2, powder, xb, y, 0),
+    );
+    for (let x = xf - 0.15; x > xb + 0.05; x -= 0.16) rack.add(box(0.06, 0.02, z * 2 - 0.04, ribbed, x, y + 0.005, 0));
+    const deflector = box(0.02, 0.09, z * 2, powder, xf + 0.03, y + 0.02, 0);
+    deflector.rotation.z = -0.5;
+    rack.add(deflector);
+    [xf - 0.12, (xf + xb) / 2, xb + 0.12].forEach((x) => {
+      rack.add(box(0.05, y - f.roof + 0.04, 0.05, powder, x, f.roof - 0.02 + (y - f.roof) / 2, z));
+      rack.add(box(0.05, y - f.roof + 0.04, 0.05, powder, x, f.roof - 0.02 + (y - f.roof) / 2, -z));
     });
     return rack;
   },
@@ -493,122 +658,425 @@ const PART_BUILDERS = {
 const LIFT_KEY = 'lift-kit';
 const LIFT_BODY = 0.13;
 const LIFT_WHEEL = 1.1;
+/** How far above its place a newly fitted part starts. */
+const PART_DROP = 0.35;
+
+/**
+ * Where the camera goes when a slot is chosen, so the part is in view (as in
+ * motorbike configurators). [turn around the car (0 = straight at the front,
+ * + towards its right side), height angle from straight down, distance].
+ */
+const FOCUS = {
+  paint: [0.78, 1.3, 1],
+  bumper: [0.35, 1.38, 0.78],
+  winch: [0.2, 1.4, 0.72],
+  'bonnet-hood': [0.45, 1.02, 0.82],
+  snorkel: [-0.75, 1.3, 0.85],
+  'fender-flare': [1.25, 1.42, 0.98],
+  'side-step': [1.45, 1.42, 1],
+  'lift-kit': [1.35, 1.45, 1],
+  'roll-bar': [2.35, 1.12, 0.9],
+  'roller-shutter': [2.5, 0.95, 0.9],
+  canopy: [2.3, 1.2, 0.95],
+  'roof-rack': [0.95, 0.85, 0.95],
+};
 
 // ── the garage ──────────────────────────────────────────────────────────────
+// An underground workshop: raw concrete with tags on it, neon on the walls,
+// strip lights and ducts overhead, a wet floor, tyres and tools lying about.
 
-const ROOM = 13; // half the room's width and depth
-const ROOM_H = 6.2;
-const PLINTH_H = 0.22;
+const ROOM_X = 8.5; // half the room's width (along the car)
+const ROOM_Z = 8.5; // half its depth
+const ROOM_H = 5.0;
+const PLINTH_H = 0; // the car stands on the floor, like in a real workshop
 
-/** A small repeating picture drawn in code, so the garage needs no image files. */
-function texture(size, draw, repeatX, repeatY) {
+/** A picture drawn in code, so the garage needs no image files. */
+function canvasTexture(w, h, draw, repeatX = 1, repeatY = 1) {
   const c = document.createElement('canvas');
-  c.width = size;
-  c.height = size;
-  draw(c.getContext('2d'), size);
+  c.width = w;
+  c.height = h;
+  draw(c.getContext('2d'), w, h);
   const t = new CanvasTexture(c);
   t.wrapS = RepeatWrapping;
   t.wrapT = RepeatWrapping;
   t.repeat.set(repeatX, repeatY);
   t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 4;
   return t;
 }
 
-function bricks(g, n) {
-  g.fillStyle = '#3a3835';
-  g.fillRect(0, 0, n, n);
-  const rows = 8;
-  const h = n / rows;
-  const w = n / 4;
-  const shades = ['#6d665f', '#746c64', '#655f59', '#7a7169', '#6a635c'];
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = -1; c < 5; c += 1) {
-      g.fillStyle = shades[(r * 3 + c * 7 + 20) % shades.length];
-      g.fillRect(c * w + (r % 2 ? w / 2 : 0) + 2, r * h + 2, w - 4, h - 4);
+/** Deterministic noise, so the garage looks the same every time it opens. */
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function grime(g, w, h, rand, base, spots) {
+  g.fillStyle = base;
+  g.fillRect(0, 0, w, h);
+  for (let i = 0; i < spots; i += 1) {
+    const x = rand() * w;
+    const y = rand() * h;
+    const r = 4 + rand() * 60;
+    const dark = rand() < 0.6;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, dark ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.06)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+}
+
+const TAG_COLOURS = ['#e2336b', '#2ec4d6', '#8b5cf6', '#f2c14e', '#e85d2a', '#ffffff', '#46d37d'];
+const TAG_WORDS = ['4X4', 'OFF ROAD', 'TRAIL', 'MUD', 'LIFTED', 'TORQUE', 'DIESEL', 'SEND IT'];
+
+function concreteWall(g, w, h) {
+  const rand = rng(7);
+  grime(g, w, h, rand, '#4a4846', 900);
+  // Formwork panel seams and tie holes.
+  g.strokeStyle = 'rgba(0,0,0,0.35)';
+  g.lineWidth = 3;
+  for (let x = 0; x <= w; x += w / 4) {
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.lineTo(x, h);
+    g.stroke();
+  }
+  g.beginPath();
+  g.moveTo(0, h * 0.5);
+  g.lineTo(w, h * 0.5);
+  g.stroke();
+  g.fillStyle = 'rgba(0,0,0,0.45)';
+  for (let x = w / 8; x < w; x += w / 4) {
+    for (const y of [h * 0.25, h * 0.75]) {
+      g.beginPath();
+      g.arc(x, y, 5, 0, Math.PI * 2);
+      g.fill();
     }
   }
-}
-
-function tiles(g, n) {
-  g.fillStyle = '#2b2d2d';
-  g.fillRect(0, 0, n, n);
-  const shades = ['#3b3e3e', '#404343', '#373a3a', '#3e4141'];
-  const t = n / 2;
-  for (let r = 0; r < 2; r += 1) {
-    for (let c = 0; c < 2; c += 1) {
-      g.fillStyle = shades[r * 2 + c];
-      g.fillRect(c * t + 2, r * t + 2, t - 4, t - 4);
+  // Water stains running down from the top.
+  for (let i = 0; i < 40; i += 1) {
+    const x = rand() * w;
+    const len = h * (0.15 + rand() * 0.5);
+    const grad = g.createLinearGradient(0, 0, 0, len);
+    grad.addColorStop(0, 'rgba(20,16,12,0.45)');
+    grad.addColorStop(1, 'rgba(20,16,12,0)');
+    g.fillStyle = grad;
+    g.fillRect(x, 0, 3 + rand() * 14, len);
+  }
+  // Graffiti tags along the lower half.
+  for (let i = 0; i < 14; i += 1) {
+    const x = (i + rand() * 0.4) * (w / 14);
+    const y = h * (0.45 + rand() * 0.45);
+    const colour = TAG_COLOURS[Math.floor(rand() * TAG_COLOURS.length)];
+    g.save();
+    g.translate(x, y);
+    g.rotate((rand() - 0.5) * 0.3);
+    if (rand() < 0.55) {
+      const word = TAG_WORDS[Math.floor(rand() * TAG_WORDS.length)];
+      g.font = `900 ${Math.round(h * (0.1 + rand() * 0.09))}px Impact, 'Arial Black', sans-serif`;
+      g.lineJoin = 'round';
+      g.lineWidth = 14;
+      g.strokeStyle = 'rgba(10,10,10,0.85)';
+      g.strokeText(word, 0, 0);
+      g.fillStyle = colour;
+      g.globalAlpha = 0.85;
+      g.fillText(word, 0, 0);
+    } else {
+      g.strokeStyle = colour;
+      g.globalAlpha = 0.8;
+      g.lineWidth = 3 + rand() * 4;
+      g.beginPath();
+      g.moveTo(0, 0);
+      for (let k = 0; k < 7; k += 1) g.bezierCurveTo(rand() * 90 - 20, -rand() * 70, rand() * 110, rand() * 40, 20 + k * 22, (rand() - 0.5) * 40);
+      g.stroke();
     }
+    g.restore();
   }
 }
 
-function planks(g, n) {
-  const shades = ['#6b4a2f', '#74512f', '#63432a', '#7a5634'];
-  const w = n / 4;
-  for (let c = 0; c < 4; c += 1) {
-    g.fillStyle = shades[c];
-    g.fillRect(c * w, 0, w, n);
-    g.fillStyle = '#3d2a1a';
-    g.fillRect(c * w, 0, 2, n);
+function concreteFloor(g, w, h) {
+  const rand = rng(11);
+  grime(g, w, h, rand, '#2e2f30', 700);
+  // Oil patches.
+  for (let i = 0; i < 10; i += 1) {
+    const x = rand() * w;
+    const y = rand() * h;
+    const r = 20 + rand() * 70;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(5,5,8,0.55)');
+    grad.addColorStop(1, 'rgba(5,5,8,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.ellipse(x, y, r, r * (0.5 + rand() * 0.5), rand() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  // Saw-cut joints.
+  g.strokeStyle = 'rgba(0,0,0,0.5)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(0, 1);
+  g.lineTo(w, 1);
+  g.moveTo(1, 0);
+  g.lineTo(1, h);
+  g.stroke();
+}
+
+function ceilingConcrete(g, w, h) {
+  grime(g, w, h, rng(3), '#242424', 300);
+}
+
+/** Bay lines painted on the floor round the car. */
+function bayLines(g, w, h) {
+  g.clearRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(230,230,220,0.75)';
+  g.lineWidth = 14;
+  g.strokeRect(20, 20, w - 40, h - 40);
+  g.globalAlpha = 0.85;
+  g.strokeStyle = ACCENT;
+  g.lineWidth = 10;
+  for (let x = 60; x < w - 60; x += 70) {
+    g.beginPath();
+    g.moveTo(x, h - 20);
+    g.lineTo(x + 40, h - 60);
+    g.stroke();
   }
 }
 
-function buildGarage(scene) {
-  const walls = new Mesh(
-    new BoxGeometry(ROOM * 2, ROOM_H, ROOM * 2),
-    new MeshStandardMaterial({ map: texture(256, bricks, 14, 4), roughness: 0.95, metalness: 0, side: BackSide }),
-  );
-  walls.position.y = ROOM_H / 2;
-  scene.add(walls);
+/** A glowing neon sign: the tube itself (text or a path) on a transparent board. */
+function neonTexture(draw, colour, w = 512, h = 256) {
+  return canvasTexture(w, h, (g) => {
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = colour;
+    g.fillStyle = colour;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (const [blur, alpha, width] of [[40, 0.5, 18], [18, 0.8, 10], [0, 1, 5]]) {
+      g.shadowColor = colour;
+      g.shadowBlur = blur;
+      g.globalAlpha = alpha;
+      g.lineWidth = width;
+      draw(g, w, h);
+    }
+    // The bright core of the tube.
+    g.shadowBlur = 0;
+    g.globalAlpha = 0.9;
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 2;
+    draw(g, w, h);
+  });
+}
 
-  const floor = new Mesh(new PlaneGeometry(ROOM * 2, ROOM * 2), new MeshStandardMaterial({ map: texture(256, tiles, 13, 13), roughness: 0.45, metalness: 0.15 }));
+function neonSign(tex, width, height) {
+  const m = new Mesh(new PlaneGeometry(width, height), new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
+  return m;
+}
+
+function tyre(r, wdt) {
+  const t = new Mesh(new TorusGeometry(r - wdt * 0.45, wdt * 0.5, 10, 28), rubber);
+  t.scale.z = 1.4;
+  t.castShadow = true;
+  t.receiveShadow = true;
+  const rim = new Mesh(new CylinderGeometry(r * 0.55, r * 0.55, wdt * 0.8, 20), powder);
+  rim.rotation.x = Math.PI / 2;
+  return group(t, rim);
+}
+
+function buildGarage(scene, lights) {
+  const wallTex = canvasTexture(2048, 512, concreteWall, 2, 1);
+  const wallMat = new MeshStandardMaterial({ map: wallTex, roughness: 0.92, metalness: 0 });
+  // Four walls as separate planes, so each gets the tags the right way up.
+  const walls = [
+    [ROOM_X * 2, [0, ROOM_H / 2, -ROOM_Z], 0],
+    [ROOM_X * 2, [0, ROOM_H / 2, ROOM_Z], Math.PI],
+    [ROOM_Z * 2, [-ROOM_X, ROOM_H / 2, 0], Math.PI / 2],
+    [ROOM_Z * 2, [ROOM_X, ROOM_H / 2, 0], -Math.PI / 2],
+  ];
+  walls.forEach(([len, pos, ry]) => {
+    const m = new Mesh(new PlaneGeometry(len, ROOM_H), wallMat);
+    m.position.set(...pos);
+    m.rotation.y = ry;
+    m.receiveShadow = true;
+    scene.add(m);
+  });
+
+  const floorMat = new MeshStandardMaterial({ map: canvasTexture(512, 512, concreteFloor, ROOM_X / 2, ROOM_Z / 2), roughness: 0.5, metalness: 0.12, envMapIntensity: 0.35 });
+  const floor = new Mesh(new PlaneGeometry(ROOM_X * 2, ROOM_Z * 2), floorMat);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0.005;
   floor.receiveShadow = true;
   scene.add(floor);
+  const bay = new Mesh(new PlaneGeometry(7.2, 3.8), new MeshStandardMaterial({ map: canvasTexture(1024, 540, bayLines), transparent: true, roughness: 0.5, depthWrite: false }));
+  bay.rotation.x = -Math.PI / 2;
+  bay.position.y = 0.004;
+  bay.receiveShadow = true;
+  scene.add(bay);
 
-  const ceiling = new Mesh(new PlaneGeometry(ROOM * 2, ROOM * 2), new MeshStandardMaterial({ color: '#1a1b1b', roughness: 1 }));
+  const ceiling = new Mesh(new PlaneGeometry(ROOM_X * 2, ROOM_Z * 2), new MeshStandardMaterial({ map: canvasTexture(256, 256, ceilingConcrete, 4, 4), roughness: 1 }));
   ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.y = ROOM_H - 0.01;
+  ceiling.position.y = ROOM_H;
   scene.add(ceiling);
 
-  // The low wooden stage the car stands on, edged in the brand colour.
-  const plinth = new Mesh(new BoxGeometry(7.4, PLINTH_H, 3.6), new MeshStandardMaterial({ map: texture(128, planks, 6, 1), roughness: 0.7, metalness: 0.05 }));
-  plinth.position.y = PLINTH_H / 2;
-  plinth.receiveShadow = true;
-  plinth.castShadow = true;
-  scene.add(plinth);
-  const edge = new Mesh(new BoxGeometry(7.44, 0.03, 3.64), new MeshBasicMaterial({ color: ACCENT }));
-  edge.position.y = 0.02;
-  scene.add(edge);
+  // Ducts and pipes overhead.
+  const duct = new MeshStandardMaterial({ color: '#3b3d3f', metalness: 0.7, roughness: 0.45 });
+  const pipeRed = new MeshStandardMaterial({ color: '#6d1a1a', metalness: 0.3, roughness: 0.6 });
+  const pipeGrey = new MeshStandardMaterial({ color: '#555a5c', metalness: 0.5, roughness: 0.5 });
+  scene.add(box(ROOM_X * 2, 0.45, 0.7, duct, 0, ROOM_H - 0.32, -ROOM_Z + 1.6));
+  scene.add(box(0.6, 0.4, ROOM_Z * 2, duct, -ROOM_X + 1.8, ROOM_H - 0.3, 0));
+  for (let x = -ROOM_X + 1; x < ROOM_X; x += 2.2) scene.add(box(0.05, 0.47, 0.72, pipeGrey, x, ROOM_H - 0.32, -ROOM_Z + 1.6));
+  scene.add(tube([-ROOM_X, ROOM_H - 0.15, -ROOM_Z + 0.4], [ROOM_X, ROOM_H - 0.15, -ROOM_Z + 0.4], 0.06, pipeRed));
+  scene.add(tube([-ROOM_X, ROOM_H - 0.25, ROOM_Z - 2.5], [ROOM_X, ROOM_H - 0.25, ROOM_Z - 2.5], 0.05, pipeGrey));
+  scene.add(tube([-ROOM_X + 0.15, 0, -ROOM_Z + 0.4], [-ROOM_X + 0.15, ROOM_H, -ROOM_Z + 0.4], 0.05, pipeRed));
+  scene.add(tube([ROOM_X - 0.15, 0, -ROOM_Z + 2.6], [ROOM_X - 0.15, ROOM_H, -ROOM_Z + 2.6], 0.04, pipeGrey));
 
-  // Hanging workshop lamps over the car.
-  const shade = new MeshStandardMaterial({ color: '#0e0f0f', roughness: 0.5, metalness: 0.4 });
-  const bulb = new MeshBasicMaterial({ color: '#fff3d6' });
-  const cord = new MeshBasicMaterial({ color: '#0a0a0a' });
-  for (let ix = -2; ix <= 2; ix += 1) {
-    for (let iz = -1; iz <= 1; iz += 1) {
-      const x = ix * 1.9;
-      const z = iz * 1.9;
-      const y = 4.3 + ((ix + iz + 4) % 2) * 0.25;
-      const cone = new Mesh(new CylinderGeometry(0.05, 0.3, 0.2, 16, 1, true), shade);
-      cone.position.set(x, y, z);
-      const glow = new Mesh(new CylinderGeometry(0.26, 0.26, 0.02, 16), bulb);
-      glow.position.set(x, y - 0.09, z);
-      const wire = new Mesh(new CylinderGeometry(0.008, 0.008, ROOM_H - y, 4), cord);
-      wire.position.set(x, (ROOM_H + y) / 2, z);
-      scene.add(cone, glow, wire);
+  // Fluorescent strip lights.
+  const stripLit = new MeshBasicMaterial({ color: '#f4f8ff', toneMapped: false });
+  const housing = new MeshStandardMaterial({ color: '#1b1c1d', metalness: 0.6, roughness: 0.5 });
+  [[-2.4, -1.6], [2.4, -1.6], [-2.4, 1.6], [2.4, 1.6], [0, 4.6], [-6, -4], [6, -4]].forEach(([x, z]) => {
+    scene.add(box(2.6, 0.08, 0.2, housing, x, ROOM_H - 0.08, z));
+    scene.add(box(2.4, 0.04, 0.07, stripLit, x, ROOM_H - 0.14, z));
+  });
+
+  // Neon: a pink tube on the left wall, signs on the back wall.
+  const pink = new MeshBasicMaterial({ color: '#ff4f8b', toneMapped: false });
+  const tubePink = box(4.5, 0.05, 0.05, pink, 4.5, 3.5, -ROOM_Z + 0.06);
+  scene.add(tubePink);
+  const word = neonSign(
+    neonTexture((g, w, h) => {
+      g.font = `900 ${Math.round(h * 0.55)}px 'Arial Black', Impact, sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.strokeText('GARAGE', w / 2, h / 2);
+    }, '#ff3d7f', 1024, 256),
+    3.4,
+    0.85,
+  );
+  word.position.set(-ROOM_X + 0.05, 3.1, 0.6);
+  word.rotation.y = Math.PI / 2;
+  scene.add(word);
+  const wrench = neonSign(
+    neonTexture((g, w, h) => {
+      // A spanner: two open jaws joined by a handle.
+      g.beginPath();
+      g.arc(w * 0.22, h * 0.5, h * 0.26, 0.6, Math.PI * 2 - 0.6);
+      g.moveTo(w * 0.22 + h * 0.2, h * 0.42);
+      g.lineTo(w * 0.78 - h * 0.2, h * 0.42);
+      g.moveTo(w * 0.22 + h * 0.2, h * 0.58);
+      g.lineTo(w * 0.78 - h * 0.2, h * 0.58);
+      g.moveTo(w * 0.78 + h * 0.1, h * 0.28);
+      g.arc(w * 0.78, h * 0.5, h * 0.26, Math.PI + 0.6, Math.PI - 0.6);
+      g.stroke();
+    }, '#2ee6f0'),
+    1.7,
+    0.85,
+  );
+  wrench.position.set(-3.6, 2.6, -ROOM_Z + 0.05);
+  scene.add(wrench);
+  const gear = neonSign(
+    neonTexture((g, w, h) => {
+      const cx = w / 2;
+      const cy = h / 2;
+      const R = h * 0.36;
+      g.beginPath();
+      for (let i = 0; i <= 24; i += 1) {
+        const a = (i / 24) * Math.PI * 2;
+        const r = i % 2 ? R : R * 0.8;
+        g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      }
+      g.moveTo(cx + R * 0.35, cy);
+      g.arc(cx, cy, R * 0.35, 0, Math.PI * 2);
+      g.stroke();
+    }, '#9b6bff', 256, 256),
+    1.1,
+    1.1,
+  );
+  gear.position.set(0.4, 2.7, -ROOM_Z + 0.05);
+  scene.add(gear);
+  const red = new MeshBasicMaterial({ color: '#ff2a3d', toneMapped: false });
+  const tubeRed = box(0.05, 0.05, 3.2, red, -ROOM_X + 0.06, 3.9, -4.5);
+  scene.add(tubeRed);
+  // The neon actually lights the room (and the car's paint).
+  lights.push([new PointLight('#ff3d7f', 9, 9, 1.6), [-2.5, 3.2, -ROOM_Z + 0.8]]);
+  lights.push([new PointLight('#7d5cff', 7, 8, 1.6), [0.4, 2.6, -ROOM_Z + 0.8]]);
+  lights.push([new PointLight('#25d9e6', 6, 8, 1.6), [-3.6, 2.5, -ROOM_Z + 0.8]]);
+  lights.push([new PointLight('#ff3d7f', 8, 9, 1.6), [-ROOM_X + 0.8, 3, 0.6]]);
+
+  // Metal stairs up the back-left corner.
+  const stairMat = new MeshStandardMaterial({ color: '#2c2f31', metalness: 0.7, roughness: 0.5 });
+  for (let i = 0; i < 14; i += 1) scene.add(box(0.28, 0.04, 1.1, stairMat, -ROOM_X + 0.6 + i * 0.27, 0.3 + i * 0.3, -ROOM_Z + 3.4));
+  scene.add(tube([-ROOM_X + 0.5, 1.2, -ROOM_Z + 2.85], [-ROOM_X + 4.3, 4.5, -ROOM_Z + 2.85], 0.03, stairMat));
+  scene.add(tube([-ROOM_X + 0.5, 1.2, -ROOM_Z + 3.95], [-ROOM_X + 4.3, 4.5, -ROOM_Z + 3.95], 0.03, stairMat));
+
+  // Shelving with boxes and cans against the right wall.
+  const shelfMat = new MeshStandardMaterial({ color: '#5a1d1d', metalness: 0.5, roughness: 0.55 });
+  const sx = ROOM_X - 0.45;
+  const sz = -ROOM_Z + 3;
+  [-1.1, 1.1].forEach((dz) => [-0.3, 0.3].forEach((dx) => scene.add(box(0.05, 2.6, 0.05, shelfMat, sx + dx, 1.3, sz + dz))));
+  const stock = ['#c23b22', '#2b6cb0', '#d69e2e', '#2f855a', '#e2e8f0', '#1a202c', '#9b2c2c'];
+  const rand = rng(5);
+  [0.4, 1.1, 1.8, 2.5].forEach((y) => {
+    scene.add(box(0.65, 0.04, 2.3, shelfMat, sx, y, sz));
+    for (let z = sz - 1; z < sz + 1; z += 0.22 + rand() * 0.18) {
+      const hgt = 0.12 + rand() * 0.3;
+      const mat = new MeshStandardMaterial({ color: stock[Math.floor(rand() * stock.length)], roughness: 0.6, metalness: rand() * 0.4 });
+      scene.add(rand() < 0.5 ? box(0.3 + rand() * 0.2, hgt, 0.16, mat, sx, y + 0.02 + hgt / 2, z) : new Mesh(new CylinderGeometry(0.06, 0.06, hgt, 12), mat).translateX(sx).translateY(y + 0.02 + hgt / 2).translateZ(z));
     }
-  }
+  });
+
+  // Red tool chest.
+  const chestMat = new MeshStandardMaterial({ color: '#8f1d1d', metalness: 0.45, roughness: 0.4 });
+  const cx = ROOM_X - 0.6;
+  const cz = -1.2;
+  scene.add(box(0.7, 1.0, 1.4, chestMat, cx, 0.55, cz));
+  for (let i = 0; i < 5; i += 1) scene.add(box(0.02, 0.02, 1.1, chrome, cx - 0.36, 0.25 + i * 0.17, cz));
+  scene.add(box(0.75, 0.04, 1.45, rubber, cx, 1.07, cz));
+
+  // Spare tyres: one stack and a few lying about.
+  [[-ROOM_X + 0.7, 4.6], [-ROOM_X + 0.7, 4.6], [-ROOM_X + 0.7, 4.6]].forEach(([x, z], i) => {
+    const t = tyre(0.42, 0.28);
+    t.rotation.x = Math.PI / 2;
+    t.position.set(x, 0.15 + i * 0.29, z);
+    scene.add(t);
+  });
+  [[-ROOM_X + 1.6, 3.6, 0.4], [3.2, -ROOM_Z + 1.1, -0.6]].forEach(([x, z, ry]) => {
+    const t = tyre(0.42, 0.28);
+    t.rotation.set(Math.PI / 2, 0, ry);
+    t.position.set(x, 0.15, z);
+    scene.add(t);
+  });
+  const lean = tyre(0.42, 0.28);
+  lean.rotation.set(0, 0.4, 0.2);
+  lean.position.set(2.2, 0.42, -ROOM_Z + 0.5);
+  scene.add(lean);
+
+  // Tools on the floor.
+  const toolMat = new MeshStandardMaterial({ color: '#9aa0a3', metalness: 0.9, roughness: 0.3 });
+  [[1.2, -3.2, 0.3], [2.1, -3.9, -0.8], [-4.1, 2.6, 1.2], [3.4, -3.1, 0.5], [-3.8, -3.2, -0.3]].forEach(([x, z, ry]) => {
+    const spanner = box(0.32, 0.015, 0.035, toolMat, x, 0.01, z);
+    spanner.rotation.y = ry;
+    scene.add(spanner);
+  });
+  const jack = group(box(0.6, 0.08, 0.28, chestMat, 0, 0.06, 0), tube([0.2, 0.1, 0], [0.9, 0.5, 0], 0.02, toolMat));
+  jack.position.set(-4.4, 0, -3.4);
+  jack.rotation.y = 0.6;
+  scene.add(jack);
 }
 
 // ── scene ───────────────────────────────────────────────────────────────────
 
-const CAMERA_START = [7.4, 2.7, 7.7];
 const TARGET_Y = PLINTH_H + 0.95;
-const START_DISTANCE = Math.hypot(CAMERA_START[0], CAMERA_START[1] - TARGET_Y, CAMERA_START[2]);
+/** Camera distance of the opening view; FOCUS distances are shares of it. Inside the room on every side. */
+const START_DISTANCE = 7.6;
 /** Half the car's width on screen in the three-quarter view it opens in. */
-const CAR_HALF_SPAN = 3.45;
+const CAR_HALF_SPAN = 3.0;
+
+/** Camera position for a FOCUS entry: turn from the car's front (+X) towards its right (+Z). */
+function focusPosition([turn, polar, share]) {
+  const sph = new Spherical(START_DISTANCE * share, polar, Math.PI / 2 - turn);
+  return new Vector3().setFromSpherical(sph).add(new Vector3(0, TARGET_Y, 0));
+}
 
 function start() {
   const canvas = document.getElementById('c');
@@ -627,34 +1095,65 @@ function start() {
   renderer.shadowMap.type = PCFSoftShadowMap;
 
   const scene = new Scene();
-  scene.background = new Color('#1a1b1b');
+  scene.background = new Color('#0d0d0f');
+  scene.fog = new Fog('#0d0d0f', 13, 26);
 
   const camera = new PerspectiveCamera(40, 1, 0.1, 80);
-  camera.position.set(...CAMERA_START);
+  camera.position.copy(focusPosition(FOCUS.paint));
 
   // The room environment is what the paint and chrome reflect.
   scene.environment = new PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.55;
-  scene.add(new HemisphereLight('#fff4e0', '#3a3a3a', 0.7));
-  // One shadow-casting key light from the lamps; a warm glow and a cool fill for shape.
-  const key = new DirectionalLight('#fff1dc', 2.2);
-  key.position.set(2.5, 9, 3.5);
+  scene.add(new HemisphereLight('#d8e2ff', '#1a1412', 0.35));
+  // The strip lights overhead: one shadow-casting key straight down on the car,
+  // two soft points for the bodywork, and a cool rim from behind.
+  const key = new DirectionalLight('#f3f6ff', 2.0);
+  key.position.set(1.5, 9, 2.5);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.left = -5;
   key.shadow.camera.right = 5;
   key.shadow.camera.top = 5;
   key.shadow.camera.bottom = -5;
-  key.shadow.radius = 5;
+  key.shadow.radius = 6;
+  key.shadow.bias = -0.0005;
   scene.add(key);
-  const warm = new PointLight('#ffd9a0', 60, 22, 2);
-  warm.position.set(0, 4.1, 0);
-  scene.add(warm);
-  const fill = new DirectionalLight('#cfe0ff', 0.5);
-  fill.position.set(-6, 4, -5);
-  scene.add(fill);
+  const stripA = new PointLight('#eef3ff', 12, 9, 1.8);
+  stripA.position.set(-2.4, 3.6, 1.6);
+  stripA.position.y = ROOM_H - 0.4;
+  const stripB = new PointLight('#eef3ff', 12, 9, 1.8);
+  stripB.position.set(2.4, 3.6, -1.6);
+  stripB.position.y = ROOM_H - 0.4;
+  const rim = new DirectionalLight('#9fb8ff', 0.8);
+  rim.position.set(-6, 3, -6);
+  scene.add(stripA, stripB, rim);
+  const neon = [];
+  buildGarage(scene, neon);
+  neon.forEach(([light, pos]) => {
+    light.position.set(...pos);
+    scene.add(light);
+  });
 
-  buildGarage(scene);
+  // A soft dark patch under the car, so it sits on the floor rather than floating.
+  const contact = new Mesh(
+    new PlaneGeometry(6.4, 3),
+    new MeshBasicMaterial({
+      map: canvasTexture(256, 128, (g, w, h) => {
+        const grad = g.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
+        grad.addColorStop(0, 'rgba(0,0,0,0.85)');
+        grad.addColorStop(0.55, 'rgba(0,0,0,0.5)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.setTransform(1, 0, 0, h / w, 0, 0);
+        g.fillStyle = grad;
+        g.fillRect(0, 0, w, w);
+      }),
+      transparent: true,
+      depthWrite: false,
+    }),
+  );
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.y = 0.008;
+  scene.add(contact);
 
   // The car, standing on the plinth. Its body and wheels arrive in showCar():
   // the real model when the app sends one, else the code-drawn sample.
@@ -663,17 +1162,17 @@ function start() {
   scene.add(car);
   let body = new Group();
   let wheels = [];
-  let paintMats = [paint];
+  let fit = DRAWN_FIT;
   let carShown = false;
 
   function showCar(next) {
     body = next.body;
     wheels = next.wheels;
-    paintMats = next.paintMats;
+    fit = next.fit;
     car.add(body);
     // Wheels hang off the car, not the body, so the lift kit can raise the body over them.
     wheels.forEach((w) => car.attach(w));
-    paintMats.forEach((m) => m.color.set(currentPaint));
+    paint.color.set(currentPaint);
     carShown = true;
     // Parts asked for before the car arrived are fitted now.
     const keys = [...fitted.keys()];
@@ -687,7 +1186,7 @@ function start() {
     if (carShown) return;
     const drawn = [buildWheel(AXLE_F, WHEEL_Z), buildWheel(AXLE_F, -WHEEL_Z), buildWheel(AXLE_R, WHEEL_Z), buildWheel(AXLE_R, -WHEEL_Z)];
     drawn.forEach((w) => { w.userData.r = WHEEL_R; });
-    showCar({ body: buildBody(), wheels: drawn, paintMats: [paint] });
+    showCar({ body: buildBody(), wheels: drawn, fit: DRAWN_FIT });
   }
 
   const spec = cfg.model ? MODELS[cfg.car] : null;
@@ -737,14 +1236,41 @@ function start() {
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 5.2;
-  controls.maxDistance = ROOM - 1.5; // never through a wall
-  controls.minPolarAngle = 0.55;
+  controls.minDistance = 4.2;
+  controls.maxDistance = START_DISTANCE + 0.3; // never through a wall
+  // Highest the camera may go: just under the ducts and strip lights.
+  controls.minPolarAngle = Math.acos((ROOM_H - 0.8 - TARGET_Y) / controls.maxDistance);
   controls.maxPolarAngle = Math.PI / 2 - 0.06;
   controls.autoRotate = !cfg.still;
   controls.autoRotateSpeed = 0.7;
   // The moment the customer takes hold of the car, it is theirs to turn.
-  controls.addEventListener('start', () => { controls.autoRotate = false; });
+  controls.addEventListener('start', () => {
+    controls.autoRotate = false;
+    glide = null;
+  });
+
+  // Camera glide to the chosen part (see FOCUS). Cancelled the moment the customer drags.
+  let glide = null;
+  function focus(key) {
+    const preset = FOCUS[key];
+    if (!preset) return;
+    const to = [preset[0], Math.max(preset[1], controls.minPolarAngle), preset[2]];
+    controls.autoRotate = false;
+    const end = focusPosition(to);
+    if (cfg.still) {
+      camera.position.copy(end);
+      controls.update();
+      redraw();
+      return;
+    }
+    const from = new Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+    const goal = new Spherical().setFromVector3(end.sub(controls.target));
+    // Turn the short way round.
+    let dTheta = goal.theta - from.theta;
+    dTheta = Math.atan2(Math.sin(dTheta), Math.cos(dTheta));
+    glide = { from, dTheta, goal, t: 0 };
+    redraw();
+  }
 
   // Fitted parts, by slot key. `fit` eases 0 → 1 so a new part grows into place.
   const fitted = new Map();
@@ -775,8 +1301,10 @@ function start() {
     want.forEach((k) => {
       const build = PART_BUILDERS[k];
       if (!build || fitted.has(k)) return;
-      const node = build();
-      node.scale.setScalar(cfg.still ? 1 : 0.86);
+      // Wrapped, so the drop-in below moves the wrapper and never the part's own placement.
+      const node = group(build(fit));
+      // A new part drops into place from just above.
+      node.position.y = cfg.still ? 0 : PART_DROP;
       body.add(node);
       fitted.set(k, { node, fit: cfg.still ? 1 : 0 });
     });
@@ -787,7 +1315,7 @@ function start() {
     try {
       if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
       currentPaint = hex;
-      paintMats.forEach((m) => m.color.set(hex));
+      paint.color.set(hex);
       redraw();
     } catch {
       /* an unknown colour string leaves the paint as it was */
@@ -822,7 +1350,18 @@ function start() {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
 
-    let moving = controls.update();
+    if (glide) {
+      glide.t = Math.min(1, glide.t + dt / 0.9);
+      const e = glide.t < 0.5 ? 4 * glide.t ** 3 : 1 - (-2 * glide.t + 2) ** 3 / 2;
+      const sph = new Spherical(
+        glide.from.radius + (glide.goal.radius - glide.from.radius) * e,
+        glide.from.phi + (glide.goal.phi - glide.from.phi) * e,
+        glide.from.theta + glide.dTheta * e,
+      );
+      camera.position.setFromSpherical(sph).add(controls.target);
+      if (glide.t >= 1) glide = null;
+    }
+    let moving = controls.update() || glide !== null;
     if (Math.abs(lift - liftTarget) > 0.001) {
       lift += (liftTarget - lift) * Math.min(1, dt * 6);
       moving = true;
@@ -843,7 +1382,7 @@ function start() {
       if (entry && entry.fit < 1) {
         entry.fit = Math.min(1, entry.fit + dt * 4);
         const e = 1 - Math.pow(1 - entry.fit, 3);
-        entry.node.scale.setScalar(0.86 + 0.14 * e);
+        entry.node.position.y = PART_DROP * (1 - e);
         moving = true;
       }
     });
@@ -870,7 +1409,7 @@ function start() {
   }
 
   window.addEventListener('resize', resize);
-  window.showroom = { setParts, setPaint, setInsets, modelChunk, modelFailed: () => modelFailed('app-could-not-read') };
+  window.showroom = { setParts, setPaint, setInsets, focus, modelChunk, modelFailed: () => modelFailed('app-could-not-read') };
   // The web preview (an iframe) is driven by postMessage instead of injected script.
   window.addEventListener('message', (ev) => {
     let msg = ev.data;
@@ -883,6 +1422,7 @@ function start() {
     if (msg.type === 'parts') setParts(msg.parts);
     if (msg.type === 'paint') setPaint(msg.paint);
     if (msg.type === 'insets') setInsets(msg.top, msg.bottom);
+    if (msg.type === 'focus' && typeof msg.key === 'string') focus(msg.key);
     if (msg.type === 'model' && msg.bytes instanceof ArrayBuffer) loadModel(new Uint8Array(msg.bytes));
     if (msg.type === 'model-failed') modelFailed('app-could-not-read');
   });

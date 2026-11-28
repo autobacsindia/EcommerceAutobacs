@@ -14,7 +14,7 @@ import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { colors } from '../../theme';
 import { readModelBase64 } from './modelFile';
-import { MODEL_FAILED_SCRIPT, modelChunkScripts, setInsetsScript, setPaintScript, setPartsScript, showroomHtml, STAGE_BG } from './showroomHtml';
+import { MODEL_FAILED_SCRIPT, modelChunkScripts, setFocusScript, setInsetsScript, setPaintScript, setPartsScript, showroomHtml, STAGE_BG } from './showroomHtml';
 
 const ORIGINS = ['about:*'];
 
@@ -24,6 +24,8 @@ export interface Showroom3DProps {
   /** Bundled .glb for this car, or null to show the drawn sample car. */
   modelAsset: number | null;
   parts: string[];
+  /** The slot being browsed ('paint' for colours): the camera glides to it. */
+  focus: string;
   paint: string;
   still: boolean;
   /** Share of the screen (0–0.8) the app's own controls cover, so the car is framed in what is left. */
@@ -34,7 +36,7 @@ export interface Showroom3DProps {
   onError: () => void;
 }
 
-function Showroom3D({ car, modelAsset, parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
+function Showroom3D({ car, modelAsset, focus, parts, paint, still, insetTop, insetBottom, onReady, onError }: Showroom3DProps) {
   // `WebView<object>`: the class's default type parameter makes its props `never` once a ref pins it.
   const web = useRef<WebView<object>>(null);
   const [ready, setReady] = useState(false);
@@ -45,6 +47,10 @@ function Showroom3D({ car, modelAsset, parts, paint, still, insetTop, insetBotto
   useEffect(() => {
     if (ready) web.current?.injectJavaScript(setPartsScript(parts));
   }, [ready, parts]);
+
+  useEffect(() => {
+    if (ready) web.current?.injectJavaScript(setFocusScript(focus));
+  }, [ready, focus]);
 
   useEffect(() => {
     if (ready) web.current?.injectJavaScript(setPaintScript(paint));
